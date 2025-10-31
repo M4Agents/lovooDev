@@ -1,4 +1,6 @@
-# Lovoo CRM - Analytics Comportamental para Landing Pages
+# 🚀 Lovoo CRM - Analytics Comportamental para Landing Pages
+
+**Versão**: 1.0.0 | **Status**: ✅ Produção | **URL**: https://app.lovoocrm.com/
 
 Plataforma SaaS multi-tenant completa para coletar, analisar e enviar dados comportamentais detalhados de visitantes em landing pages.
 

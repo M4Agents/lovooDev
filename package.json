@@ -2,6 +2,13 @@
   "name": "lovoo-crm",
   "private": true,
   "version": "1.0.0",
+  "description": "Plataforma SaaS para análise comportamental de visitantes em landing pages",
+  "homepage": "https://app.lovoocrm.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/M4Agents/loovocrm.git"
+  },
+  "keywords": ["analytics", "crm", "landing-pages", "saas", "tracking"],
   "type": "module",
   "scripts": {
     "dev": "vite",
