@@ -55,7 +55,7 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/visitor`, {
+        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/visitor`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(visitorData)
@@ -243,7 +243,7 @@
 
     sendEvent: async function(eventData) {
       try {
-        await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/event`, {
+        await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/event`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(eventData)
@@ -287,7 +287,7 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/convert`, {
+        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/convert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
