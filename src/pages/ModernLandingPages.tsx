@@ -179,10 +179,10 @@ export const ModernLandingPages: React.FC = () => {
   const copyTrackingCode = async () => {
     if (!selectedPage) return;
     
-    const trackingCode = `<!-- M4 Track Analytics -->
+    const trackingCode = `<!-- Lovoo CRM Analytics -->
 <script src="${window.location.origin}/m4track.js"></script>
 <script>
-  M4Track.init('${selectedPage.tracking_code}', '${window.location.origin}');
+  LovooCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
 </script>`;
 
     try {
