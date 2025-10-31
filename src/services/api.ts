@@ -516,8 +516,11 @@ export const api = {
 
       const html = await response.text();
       
-      // Verificar se contém o script do M4Track
-      const hasM4TrackScript = html.includes('m4track.js') || html.includes('LovooCRM');
+      // Verificar se contém o script do LovooCRM (aceita todas as variantes)
+      const hasLovooCRMScript = html.includes('m4track.js') || 
+                               html.includes('LovooCRM') || 
+                               html.includes('LovoCRM') || 
+                               html.includes('M4Track');
       
       // Verificar se contém o tracking code específico
       const hasTrackingCode = html.includes(trackingCode);
@@ -528,12 +531,12 @@ export const api = {
       const isInCorrectPosition = bodyCloseIndex > -1 && scriptIndex > -1 && scriptIndex < bodyCloseIndex;
       
       return {
-        isInstalled: hasM4TrackScript && hasTrackingCode,
-        hasScript: hasM4TrackScript,
+        isInstalled: hasLovooCRMScript && hasTrackingCode,
+        hasScript: hasLovooCRMScript,
         hasTrackingCode: hasTrackingCode,
         isInCorrectPosition: isInCorrectPosition,
         details: {
-          scriptFound: hasM4TrackScript,
+          scriptFound: hasLovooCRMScript,
           trackingCodeFound: hasTrackingCode,
           correctPosition: isInCorrectPosition,
           recommendations: []

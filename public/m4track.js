@@ -340,5 +340,13 @@
     }
   };
 
-  window.LovooCRM = LovooCRM;
+  // Disponibilizar o objeto com múltiplos nomes para compatibilidade
+  window.LovooCRM = LovooCRM;  // Nome atual (mantido para compatibilidade)
+  window.LovoCRM = LovooCRM;   // Nome novo e principal
+  window.M4Track = LovooCRM;   // Alias para códigos antigos (retrocompatibilidade)
+  
+  // Log de depreciação para desenvolvedores
+  if (typeof console !== 'undefined') {
+    console.info('LovooCRM Analytics carregado. Versões suportadas: LovoCRM (recomendado), LovooCRM (atual), M4Track (depreciado)');
+  }
 })();

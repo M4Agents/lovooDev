@@ -179,10 +179,10 @@ export const ModernLandingPages: React.FC = () => {
   const copyTrackingCode = async () => {
     if (!selectedPage) return;
     
-    const trackingCode = `<!-- Lovoo CRM Analytics -->
+    const trackingCode = `<!-- LovoCRM Analytics -->
 <script src="${window.location.origin}/m4track.js"></script>
 <script>
-  LovooCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
+  LovoCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
 </script>`;
 
     try {
@@ -511,12 +511,15 @@ export const ModernLandingPages: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-2">
                   Cole este código no final do HTML da sua landing page, <strong>antes da tag de fechamento</strong> <code className="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> (não no head):
                 </p>
+                <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                  💡 <strong>Novo:</strong> Agora usando <code>LovoCRM</code>. Códigos antigos com <code>LovooCRM</code> ou <code>M4Track</code> continuam funcionando.
+                </div>
                 <div className="relative">
                   <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl text-sm overflow-x-auto">
-{`<!-- Lovoo CRM Analytics -->
+{`<!-- LovoCRM Analytics -->
 <script src="${window.location.origin}/m4track.js"></script>
 <script>
-  LovooCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
+  LovoCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
 </script>`}
                   </pre>
                   <Button
@@ -608,7 +611,7 @@ export const ModernLandingPages: React.FC = () => {
                         <XCircle className="w-4 h-4 text-red-600" />
                       )}
                       <span className="text-sm">
-                        Script M4Track {verificationResult.hasScript ? 'encontrado' : 'não encontrado'}
+                        Script LovoCRM {verificationResult.hasScript ? 'encontrado' : 'não encontrado'}
                       </span>
                     </div>
                     
