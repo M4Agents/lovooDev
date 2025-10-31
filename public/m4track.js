@@ -55,15 +55,45 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/visitor`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(visitorData)
+        // First get the landing page ID
+        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/landing_pages?tracking_code=eq.${this.config.trackingCode}&status=eq.active&select=id`, {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+          }
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          this.config.visitorId = data.visitor_id;
+        if (pageResponse.ok) {
+          const pages = await pageResponse.json();
+          if (pages.length > 0) {
+            const pageId = pages[0].id;
+            
+            // Create visitor
+            const visitorResponse = await fetch(`${this.config.apiUrl}/rest/v1/visitors`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
+                'Prefer': 'return=representation'
+              },
+              body: JSON.stringify({
+                landing_page_id: pageId,
+                session_id: this.config.sessionId,
+                user_agent: navigator.userAgent,
+                device_type: this.getDeviceType(),
+                screen_resolution: `${window.screen.width}x${window.screen.height}`,
+                referrer: document.referrer || null
+              })
+            });
+
+            if (visitorResponse.ok) {
+              const visitors = await visitorResponse.json();
+              if (visitors.length > 0) {
+                this.config.visitorId = visitors[0].id;
+              }
+            }
+          }
         }
       } catch (error) {
         console.error('M4Track: Error creating visitor', error);
@@ -242,10 +272,15 @@
     },
 
     sendEvent: async function(eventData) {
+      if (!this.config.visitorId) return;
+      
       try {
-        await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/event`, {
+        await fetch(`${this.config.apiUrl}/rest/v1/behavior_events`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+          },
           body: JSON.stringify(eventData)
         });
       } catch (error) {
@@ -287,19 +322,40 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-public/convert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            visitor_id: this.config.visitorId,
-            tracking_code: this.config.trackingCode,
-            form_data: formData,
-            behavior_summary: behaviorSummary
-          })
+        // Get landing page ID first
+        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/landing_pages?tracking_code=eq.${this.config.trackingCode}&select=id`, {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+          }
         });
 
-        if (response.ok) {
-          console.log('M4Track: Conversion tracked successfully');
+        if (pageResponse.ok) {
+          const pages = await pageResponse.json();
+          if (pages.length > 0) {
+            const pageId = pages[0].id;
+            
+            const response = await fetch(`${this.config.apiUrl}/rest/v1/conversions`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+              },
+              body: JSON.stringify({
+                visitor_id: this.config.visitorId,
+                landing_page_id: pageId,
+                form_data: formData,
+                behavior_summary: behaviorSummary,
+                engagement_score: behaviorSummary.engagement_score,
+                time_to_convert: behaviorSummary.time_to_convert
+              })
+            });
+
+            if (response.ok) {
+              console.log('M4Track: Conversion tracked successfully');
+            }
+          }
         }
       } catch (error) {
         console.error('M4Track: Error tracking conversion', error);
