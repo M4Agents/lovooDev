@@ -17,7 +17,12 @@ import {
   Globe,
   Building2,
   Copy,
-  Check
+  Check,
+  Shield,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 export const ModernLandingPages: React.FC = () => {
@@ -30,6 +35,9 @@ export const ModernLandingPages: React.FC = () => {
   const [showTrackingCode, setShowTrackingCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [formData, setFormData] = useState({ name: '', url: '' });
+  const [verificationResult, setVerificationResult] = useState<any>(null);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verifyingPage, setVerifyingPage] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('ModernLandingPages: useEffect triggered, company:', company);
@@ -183,6 +191,27 @@ export const ModernLandingPages: React.FC = () => {
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (error) {
       console.error('Error copying code:', error);
+    }
+  };
+
+  const verifyTrackingTag = async (page: LandingPage) => {
+    setVerifyingPage(page.id);
+    try {
+      const result = await api.verifyTrackingTag(page.url, page.tracking_code);
+      setVerificationResult({ ...result, pageName: page.name, pageUrl: page.url });
+      setShowVerificationModal(true);
+    } catch (error) {
+      console.error('Error verifying tracking tag:', error);
+      setVerificationResult({
+        isInstalled: false,
+        error: 'Erro interno',
+        details: 'Ocorreu um erro durante a verificação.',
+        pageName: page.name,
+        pageUrl: page.url
+      });
+      setShowVerificationModal(true);
+    } finally {
+      setVerifyingPage(null);
     }
   };
 
@@ -364,6 +393,17 @@ export const ModernLandingPages: React.FC = () => {
                 <Button
                   size="sm"
                   variant="ghost"
+                  icon={verifyingPage === page.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                  onClick={() => verifyTrackingTag(page)}
+                  disabled={verifyingPage === page.id}
+                  className="text-green-600 hover:text-green-700"
+                >
+                  {verifyingPage === page.id ? 'Verificando...' : 'Verificar Tag'}
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant="ghost"
                   icon={<Trash2 className="w-4 h-4" />}
                   onClick={() => handleDelete(page.id)}
                   className="text-red-600 hover:text-red-700"
@@ -499,6 +539,141 @@ export const ModernLandingPages: React.FC = () => {
                   <li>3. Publique a página</li>
                   <li>4. Os dados começarão a aparecer no analytics</li>
                 </ol>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Verification Result Modal */}
+      {showVerificationModal && verificationResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="max-w-2xl w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Verificação da Tag de Tracking
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowVerificationModal(false);
+                  setVerificationResult(null);
+                }}
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Header com status */}
+              <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-dashed">
+                {verificationResult.isInstalled ? (
+                  <>
+                    <div className="p-2 bg-green-100 rounded-full">
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900">Tag Instalada Corretamente!</h3>
+                      <p className="text-sm text-green-700">
+                        A tag de tracking foi encontrada em <strong>{verificationResult.pageName}</strong>
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-2 bg-red-100 rounded-full">
+                      <XCircle className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-red-900">Tag Não Encontrada</h3>
+                      <p className="text-sm text-red-700">
+                        A tag de tracking não foi encontrada ou não está configurada corretamente
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Detalhes da verificação */}
+              {verificationResult.details && !verificationResult.error && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-gray-900">Detalhes da Verificação:</h4>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      {verificationResult.hasScript ? (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-600" />
+                      )}
+                      <span className="text-sm">
+                        Script M4Track {verificationResult.hasScript ? 'encontrado' : 'não encontrado'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {verificationResult.hasTrackingCode ? (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-600" />
+                      )}
+                      <span className="text-sm">
+                        Código de tracking {verificationResult.hasTrackingCode ? 'encontrado' : 'não encontrado'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {verificationResult.isInCorrectPosition ? (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-orange-500" />
+                      )}
+                      <span className="text-sm">
+                        Posição do script {verificationResult.isInCorrectPosition ? 'correta (antes do </body>)' : 'pode estar incorreta'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Erro ou limitações */}
+              {verificationResult.error && (
+                <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-orange-900">Limitação da Verificação</h4>
+                      <p className="text-sm text-orange-800 mt-1">
+                        {verificationResult.details}
+                      </p>
+                      {verificationResult.error === 'Erro de CORS' && (
+                        <p className="text-xs text-orange-700 mt-2">
+                          💡 <strong>Dica:</strong> Acesse sua landing page e verifique se o console do navegador mostra erros relacionados ao M4Track.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Instruções para correção */}
+              {!verificationResult.isInstalled && !verificationResult.error && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                  <h4 className="font-medium text-blue-900 mb-2">Como corrigir:</h4>
+                  <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                    <li>Acesse o código HTML da sua landing page</li>
+                    <li>Certifique-se de que o código de tracking está instalado antes da tag &lt;/body&gt;</li>
+                    <li>Verifique se o código está exatamente como fornecido (sem alterações)</li>
+                    <li>Publique as alterações e teste novamente</li>
+                  </ol>
+                </div>
+              )}
+
+              {/* Informações da página */}
+              <div className="text-xs text-gray-500 border-t pt-4">
+                <p><strong>Página:</strong> {verificationResult.pageName}</p>
+                <p><strong>URL:</strong> {verificationResult.pageUrl}</p>
               </div>
             </div>
           </Card>

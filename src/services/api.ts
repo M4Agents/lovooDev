@@ -414,10 +414,10 @@ export const api = {
     throw new Error('Email update requires server-side implementation');
   },
 
-  async resetUserPassword(userId: string, newPassword: string) {
+  async resetUserPassword(userId: string, _newPassword: string) {
     // Note: In a real implementation, you'd use Supabase Admin API
     // For now, we'll simulate the functionality
-    console.log('Resetting user password:', { userId, newPassword: '***' });
+    console.log('Resetting user password for userId:', userId);
     
     // This would require server-side implementation with admin privileges
     throw new Error('Password reset requires server-side implementation');
@@ -491,5 +491,71 @@ export const api = {
       },
       isSimulated: true
     };
+  },
+
+  async verifyTrackingTag(url: string, trackingCode: string) {
+    console.log('API: Verifying tracking tag for:', { url, trackingCode });
+    
+    try {
+      // Fazer uma requisição para verificar se a tag está instalada
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'User-Agent': 'M4Track-Verification-Bot/1.0'
+        }
+      });
+
+      if (!response.ok) {
+        return {
+          isInstalled: false,
+          error: `Erro HTTP: ${response.status} - ${response.statusText}`,
+          details: 'Não foi possível acessar a página para verificação.'
+        };
+      }
+
+      const html = await response.text();
+      
+      // Verificar se contém o script do M4Track
+      const hasM4TrackScript = html.includes('m4track.js') || html.includes('LovooCRM');
+      
+      // Verificar se contém o tracking code específico
+      const hasTrackingCode = html.includes(trackingCode);
+      
+      // Verificar se o script está no local correto (antes do </body>)
+      const bodyCloseIndex = html.lastIndexOf('</body>');
+      const scriptIndex = html.indexOf('m4track.js');
+      const isInCorrectPosition = bodyCloseIndex > -1 && scriptIndex > -1 && scriptIndex < bodyCloseIndex;
+      
+      return {
+        isInstalled: hasM4TrackScript && hasTrackingCode,
+        hasScript: hasM4TrackScript,
+        hasTrackingCode: hasTrackingCode,
+        isInCorrectPosition: isInCorrectPosition,
+        details: {
+          scriptFound: hasM4TrackScript,
+          trackingCodeFound: hasTrackingCode,
+          correctPosition: isInCorrectPosition,
+          recommendations: []
+        }
+      };
+    } catch (error) {
+      console.error('API: Error verifying tracking tag:', error);
+      
+      // Verificar se é erro de CORS
+      if (error instanceof TypeError && error.message.includes('CORS')) {
+        return {
+          isInstalled: false,
+          error: 'Erro de CORS',
+          details: 'Não foi possível verificar a tag devido a políticas de CORS. Isso é normal para muitos sites. Verifique manualmente se o código está instalado.'
+        };
+      }
+      
+      return {
+        isInstalled: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        details: 'Ocorreu um erro durante a verificação. Verifique se a URL está correta e acessível.'
+      };
+    }
   }
 };
