@@ -2,14 +2,12 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModernLayout } from './components/ModernLayout';
-import { ConfigurationScreen } from './components/ConfigurationScreen';
 import { Login } from './pages/Login';
 import { ModernDashboard } from './pages/ModernDashboard';
 import { ModernLandingPages } from './pages/ModernLandingPages';
 import { Analytics } from './pages/Analytics';
 import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
-import { isSupabaseConfigured } from './lib/supabase';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -104,11 +102,6 @@ function AppRoutes() {
 }
 
 function App() {
-  // Verificar se o Supabase está configurado
-  if (!isSupabaseConfigured()) {
-    return <ConfigurationScreen />;
-  }
-
   return (
     <BrowserRouter>
       <AuthProvider>
