@@ -1,0 +1,21 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/m4track.js
+  Content-Type: application/javascript
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000
+
+*.js
+  Content-Type: application/javascript
+
+*.css
+  Content-Type: text/css
+
+*.html
+  Content-Type: text/html; charset=utf-8
