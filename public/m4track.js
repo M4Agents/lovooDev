@@ -55,12 +55,16 @@
       };
 
       try {
-        // First get the landing page ID using CORS proxy
-        const pageResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/landing_pages?tracking_code=${this.config.trackingCode}&status=active`, {
-          method: 'GET',
+        // First get the landing page ID using RPC function
+        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+          method: 'POST',
           headers: { 
-            'Content-Type': 'application/json'
-          }
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+          },
+          body: JSON.stringify({
+            tracking_code_param: this.config.trackingCode
+          })
         });
 
         if (pageResponse.ok) {
@@ -68,19 +72,20 @@
           if (pages.length > 0) {
             const pageId = pages[0].id;
             
-            // Create visitor using CORS proxy
-            const visitorResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/visitors`, {
+            // Create visitor using RPC function
+            const visitorResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_visitor`, {
               method: 'POST',
               headers: { 
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
               },
               body: JSON.stringify({
-                landing_page_id: pageId,
-                session_id: this.config.sessionId,
-                user_agent: navigator.userAgent,
-                device_type: this.getDeviceType(),
-                screen_resolution: `${window.screen.width}x${window.screen.height}`,
-                referrer: document.referrer || null
+                landing_page_id_param: pageId,
+                session_id_param: this.config.sessionId,
+                user_agent_param: navigator.userAgent,
+                device_type_param: this.getDeviceType(),
+                screen_resolution_param: `${window.screen.width}x${window.screen.height}`,
+                referrer_param: document.referrer || null
               })
             });
 
@@ -272,12 +277,20 @@
       if (!this.config.visitorId) return;
       
       try {
-        await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/behavior_events`, {
+        await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_behavior_event`, {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
           },
-          body: JSON.stringify(eventData)
+          body: JSON.stringify({
+            visitor_id_param: eventData.visitor_id,
+            event_type_param: eventData.event_type,
+            event_data_param: eventData.event_data || {},
+            coordinates_param: eventData.coordinates || null,
+            element_selector_param: eventData.element_selector || null,
+            section_param: eventData.section || null
+          })
         });
       } catch (error) {
         console.error('M4Track: Error sending event', error);
@@ -318,12 +331,16 @@
       };
 
       try {
-        // Get landing page ID first using CORS proxy
-        const pageResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/landing_pages?tracking_code=${this.config.trackingCode}`, {
-          method: 'GET',
+        // Get landing page ID first using RPC function
+        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+          method: 'POST',
           headers: { 
-            'Content-Type': 'application/json'
-          }
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+          },
+          body: JSON.stringify({
+            tracking_code_param: this.config.trackingCode
+          })
         });
 
         if (pageResponse.ok) {
@@ -331,18 +348,19 @@
           if (pages.length > 0) {
             const pageId = pages[0].id;
             
-            const response = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/conversions`, {
+            const response = await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_conversion`, {
               method: 'POST',
               headers: { 
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
               },
               body: JSON.stringify({
-                visitor_id: this.config.visitorId,
-                landing_page_id: pageId,
-                form_data: formData,
-                behavior_summary: behaviorSummary,
-                engagement_score: behaviorSummary.engagement_score,
-                time_to_convert: behaviorSummary.time_to_convert
+                visitor_id_param: this.config.visitorId,
+                landing_page_id_param: pageId,
+                form_data_param: formData,
+                behavior_summary_param: behaviorSummary,
+                engagement_score_param: behaviorSummary.engagement_score,
+                time_to_convert_param: behaviorSummary.time_to_convert
               })
             });
 
