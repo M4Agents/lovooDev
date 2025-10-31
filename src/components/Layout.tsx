@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   TrendingUp,
-  Activity
+  Activity,
+  Building2
 } from 'lucide-react';
 
 type LayoutProps = {
@@ -32,6 +33,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
+    ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];
 
@@ -54,7 +56,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-xl text-slate-900">M4 Track</span>
+              <span className="font-bold text-xl text-slate-900">Lovoo CRM</span>
             </Link>
           </div>
 

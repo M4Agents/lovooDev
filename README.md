@@ -1,4 +1,4 @@
-# M4 Track - Analytics Comportamental para Landing Pages
+# Lovoo CRM - Analytics Comportamental para Landing Pages
 
 Plataforma SaaS multi-tenant completa para coletar, analisar e enviar dados comportamentais detalhados de visitantes em landing pages.
 
@@ -106,10 +106,10 @@ No menu "Landing Pages":
 Cole o código antes do fechamento da tag `</body>` na sua landing page:
 
 ```html
-<!-- M4 Track Analytics -->
+<!-- Lovoo CRM Analytics -->
 <script src="https://seu-dominio.com/m4track.js"></script>
 <script>
-  M4Track.init('SEU-TRACKING-CODE', 'https://seu-dominio.com');
+  LovooCRM.init('SEU-TRACKING-CODE', 'https://seu-dominio.com');
 </script>
 ```
 
@@ -118,7 +118,7 @@ Cole o código antes do fechamento da tag `</body>` na sua landing page:
 Quando um visitante converter (enviar formulário), chame:
 
 ```javascript
-M4Track.trackConversion({
+LovooCRM.trackConversion({
   name: 'João Silva',
   email: 'joao@email.com',
   phone: '11999999999'
@@ -305,7 +305,7 @@ As Edge Functions já estão deployadas no Supabase automaticamente.
 ### Domínio Personalizado
 Atualize a URL nos códigos de tracking para seu domínio:
 ```javascript
-M4Track.init('TRACKING-CODE', 'https://seu-dominio.com');
+LovooCRM.init('TRACKING-CODE', 'https://seu-dominio.com');
 ```
 
 ## 📝 Exemplo de Integração
@@ -334,16 +334,16 @@ M4Track.init('TRACKING-CODE', 'https://seu-dominio.com');
     </form>
   </section>
 
-  <!-- M4 Track -->
+  <!-- Lovoo CRM Analytics -->
   <script src="https://seu-dominio.com/m4track.js"></script>
   <script>
-    M4Track.init('SEU-TRACKING-CODE', 'https://seu-dominio.com');
+    LovooCRM.init('SEU-TRACKING-CODE', 'https://seu-dominio.com');
 
     document.getElementById('contact-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
 
-      M4Track.trackConversion({
+      LovooCRM.trackConversion({
         name: formData.get('name'),
         email: formData.get('email')
       });

@@ -78,13 +78,13 @@ export const LandingPages: React.FC = () => {
 
   const getTrackingCode = (page: LandingPage) => {
     const baseUrl = window.location.origin;
-    return `<!-- M4 Track Analytics -->
+    return `<!-- Lovoo CRM Analytics -->
 <script src="${baseUrl}/m4track.js"></script>
 <script>
-  M4Track.init('${page.tracking_code}', '${baseUrl}');
+  LovooCRM.init('${page.tracking_code}', '${baseUrl}');
 
   // Call this when user submits a form
-  // M4Track.trackConversion({
+  // LovooCRM.trackConversion({
   //   name: 'João Silva',
   //   email: 'joao@email.com',
   //   phone: '11999999999'
@@ -146,6 +146,12 @@ export const LandingPages: React.FC = () => {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-slate-900 mb-1">{page.name}</h3>
+                  {/* Mostrar empresa para super admin */}
+                  {company?.is_super_admin && (page as any).companies && (
+                    <p className="text-xs text-purple-600 font-medium mb-1">
+                      📊 {(page as any).companies.name}
+                    </p>
+                  )}
                   <a
                     href={page.url}
                     target="_blank"
@@ -200,9 +206,10 @@ export const LandingPages: React.FC = () => {
                 </button>
                 <button
                   onClick={() => handleDelete(page.id)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition-colors ml-auto"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
+                  Excluir
                 </button>
               </div>
 
@@ -275,8 +282,8 @@ export const LandingPages: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Código de Rastreamento</h2>
             <p className="text-slate-600 mb-4">
-              Copie e cole este código no HTML da sua landing page, antes do fechamento da tag{' '}
-              <code className="bg-slate-100 px-1 py-0.5 rounded">&lt;/body&gt;</code>
+              Copie e cole este código no final do HTML da sua landing page, <strong>antes da tag de fechamento</strong>{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded">&lt;/body&gt;</code> (não no head)
             </p>
             <div className="bg-slate-900 rounded-lg p-4 mb-4">
               <pre className="text-sm text-slate-100 overflow-x-auto">

@@ -1,12 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Layout } from './components/Layout';
+import { ModernLayout } from './components/ModernLayout';
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { LandingPages } from './pages/LandingPages';
+import { ModernDashboard } from './pages/ModernDashboard';
+import { ModernLandingPages } from './pages/ModernLandingPages';
 import { Analytics } from './pages/Analytics';
 import { Settings } from './pages/Settings';
+import { Companies } from './pages/Companies';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -23,7 +24,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/" replace />;
   }
 
-  return <Layout>{children}</Layout>;
+  return <ModernLayout>{children}</ModernLayout>;
 };
 
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -59,7 +60,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <ModernDashboard />
           </ProtectedRoute>
         }
       />
@@ -67,7 +68,7 @@ function AppRoutes() {
         path="/landing-pages"
         element={
           <ProtectedRoute>
-            <LandingPages />
+            <ModernLandingPages />
           </ProtectedRoute>
         }
       />
@@ -84,6 +85,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/companies"
+        element={
+          <ProtectedRoute>
+            <Companies />
           </ProtectedRoute>
         }
       />

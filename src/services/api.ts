@@ -2,6 +2,8 @@ import { supabase } from '../lib/supabase';
 
 export const api = {
   async createLandingPage(companyId: string, data: { name: string; url: string }) {
+    console.log('API: createLandingPage called with:', { companyId, data });
+    
     const { data: page, error } = await supabase
       .from('landing_pages')
       .insert({
@@ -13,19 +15,52 @@ export const api = {
       .select()
       .single();
 
+    console.log('API: createLandingPage result:', { page, error });
+    
     if (error) throw error;
     return page;
   },
 
   async getLandingPages(companyId: string) {
-    const { data, error } = await supabase
+    console.log('API: getLandingPages called for company:', companyId);
+    
+    // Verificar se é super admin
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('is_super_admin, company_type, name')
+      .eq('id', companyId)
+      .single();
+
+    console.log('API: Company data:', { company, companyError });
+
+    if (companyError) {
+      console.error('API: Error fetching company:', companyError);
+      throw companyError;
+    }
+
+    let query = supabase
       .from('landing_pages')
-      .select('*')
-      .eq('company_id', companyId)
+      .select(`
+        *,
+        companies!inner(name, company_type)
+      `)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data;
+    // Se for super admin, mostrar todas as landing pages
+    if (company?.is_super_admin && company?.company_type === 'parent') {
+      console.log('API: Super admin - fetching all landing pages');
+      const { data, error } = await query;
+      console.log('API: All landing pages result:', { data, error });
+      if (error) throw error;
+      return data || [];
+    } else {
+      console.log('API: Regular company - fetching company landing pages');
+      // Empresa normal vê apenas suas próprias landing pages
+      const { data, error } = await query.eq('company_id', companyId);
+      console.log('API: Company landing pages result:', { data, error });
+      if (error) throw error;
+      return data || [];
+    }
   },
 
   async updateLandingPage(id: string, updates: Partial<{ name: string; url: string; status: string }>) {
@@ -141,6 +176,8 @@ export const api = {
   },
 
   async getWebhookLogs(companyId: string, limit: number = 50) {
+    console.log('API: getWebhookLogs called for company:', companyId);
+    
     const { data, error } = await supabase
       .from('webhook_logs')
       .select('*')
@@ -148,41 +185,311 @@ export const api = {
       .order('sent_at', { ascending: false })
       .limit(limit);
 
+    console.log('API: Webhook logs result:', { data, error });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getDashboardStats(companyId: string) {
+    // Verificar se é super admin
+    const { data: company } = await supabase
+      .from('companies')
+      .select('is_super_admin, company_type')
+      .eq('id', companyId)
+      .single();
+
+    let pagesQuery = supabase.from('landing_pages').select('id');
+
+    // Se for super admin, pegar todas as landing pages da plataforma
+    if (company?.is_super_admin && company?.company_type === 'parent') {
+      // Super admin vê métricas de toda a plataforma
+      const { data: pages } = await pagesQuery;
+      const pageIds = pages?.map(p => p.id) || [];
+
+      if (pageIds.length === 0) {
+        return {
+          totalPages: 0,
+          totalVisitors: 0,
+          totalConversions: 0,
+          avgEngagementScore: 0,
+          totalCompanies: 0
+        };
+      }
+
+      const [visitorsResult, conversionsResult, companiesResult] = await Promise.all([
+        supabase.from('visitors').select('id', { count: 'exact' }).in('landing_page_id', pageIds),
+        supabase.from('conversions').select('engagement_score').in('landing_page_id', pageIds),
+        supabase.from('companies').select('id', { count: 'exact' }).eq('company_type', 'client')
+      ]);
+
+      const avgEngagement = conversionsResult.data?.length
+        ? conversionsResult.data.reduce((sum, c) => sum + (c.engagement_score || 0), 0) / conversionsResult.data.length
+        : 0;
+
+      return {
+        totalPages: pages?.length || 0,
+        totalVisitors: visitorsResult.count || 0,
+        totalConversions: conversionsResult.data?.length || 0,
+        avgEngagementScore: Number(avgEngagement.toFixed(2)),
+        totalCompanies: companiesResult.count || 0
+      };
+    } else {
+      // Empresa normal vê apenas suas próprias métricas
+      const { data: pages } = await pagesQuery.eq('company_id', companyId);
+      const pageIds = pages?.map(p => p.id) || [];
+
+      if (pageIds.length === 0) {
+        return {
+          totalPages: 0,
+          totalVisitors: 0,
+          totalConversions: 0,
+          avgEngagementScore: 0
+        };
+      }
+
+      const [visitorsResult, conversionsResult] = await Promise.all([
+        supabase.from('visitors').select('id', { count: 'exact' }).in('landing_page_id', pageIds),
+        supabase.from('conversions').select('engagement_score').in('landing_page_id', pageIds)
+      ]);
+
+      const avgEngagement = conversionsResult.data?.length
+        ? conversionsResult.data.reduce((sum, c) => sum + (c.engagement_score || 0), 0) / conversionsResult.data.length
+        : 0;
+
+      return {
+        totalPages: pages?.length || 0,
+        totalVisitors: visitorsResult.count || 0,
+        totalConversions: conversionsResult.data?.length || 0,
+        avgEngagementScore: Number(avgEngagement.toFixed(2))
+      };
+    }
+  },
+
+  // Company Management Functions
+  async getClientCompanies(parentCompanyId: string) {
+    console.log('API: Getting client companies for parent:', parentCompanyId);
+    
+    const { data, error } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('parent_company_id', parentCompanyId)
+      .eq('company_type', 'client')
+      .order('created_at', { ascending: false });
+
+    console.log('API: Client companies result:', { data, error });
     if (error) throw error;
     return data;
   },
 
-  async getDashboardStats(companyId: string) {
-    const { data: pages } = await supabase
-      .from('landing_pages')
-      .select('id')
-      .eq('company_id', companyId);
+  async createClientCompany(parentCompanyId: string, data: { 
+    name: string; 
+    domain?: string; 
+    plan: 'basic' | 'pro' | 'enterprise';
+    adminEmail: string;
+    adminPassword: string;
+  }) {
+    console.log('API: Creating client company with data:', data);
+    console.log('API: Parent company ID:', parentCompanyId);
+    
+    // Buscar o user_id do super admin (empresa pai)
+    const { data: parentCompany } = await supabase
+      .from('companies')
+      .select('user_id')
+      .eq('id', parentCompanyId)
+      .single();
 
-    const pageIds = pages?.map(p => p.id) || [];
+    // Create the company associando temporariamente ao super admin para gerenciamento
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .insert({
+        name: data.name,
+        domain: data.domain,
+        plan: data.plan,
+        parent_company_id: parentCompanyId,
+        company_type: 'client',
+        is_super_admin: false,
+        user_id: parentCompany?.user_id || null, // Associar ao super admin temporariamente
+        status: 'active'
+      })
+      .select()
+      .single();
 
-    if (pageIds.length === 0) {
-      return {
-        totalPages: 0,
-        totalVisitors: 0,
-        totalConversions: 0,
-        avgEngagementScore: 0
-      };
+    console.log('API: Insert result:', { company, companyError });
+    if (companyError) throw companyError;
+
+    // Store the admin credentials temporarily (in a real app, you'd send an invitation email)
+    // Company is now associated with super admin for management purposes
+    return { 
+      ...company, 
+      adminCredentials: {
+        email: data.adminEmail,
+        password: data.adminPassword,
+        companyId: company.id
+      },
+      managementNote: 'Empresa associada ao super admin para gerenciamento. O cliente deve se registrar para obter acesso próprio.'
+    };
+  },
+
+  async updateClientCompany(companyId: string, updates: Partial<{
+    name: string;
+    domain: string;
+    plan: 'basic' | 'pro' | 'enterprise';
+    status: 'active' | 'suspended' | 'cancelled';
+  }>) {
+    const { data, error } = await supabase
+      .from('companies')
+      .update(updates)
+      .eq('id', companyId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteClientCompany(companyId: string) {
+    const { error } = await supabase
+      .from('companies')
+      .delete()
+      .eq('id', companyId);
+
+    if (error) throw error;
+  },
+
+  async getCompanyStats(companyId: string) {
+    const { data: company } = await supabase
+      .from('companies')
+      .select(`
+        *,
+        landing_pages(count),
+        landing_pages(
+          visitors(count),
+          conversions(count)
+        )
+      `)
+      .eq('id', companyId)
+      .single();
+
+    return company;
+  },
+
+  // User Management Functions
+  async getCompanyUser(companyId: string) {
+    console.log('API: getCompanyUser chamado para:', companyId);
+    
+    const { data: company, error } = await supabase
+      .from('companies')
+      .select('user_id, name')
+      .eq('id', companyId)
+      .single();
+
+    console.log('API: Dados da empresa:', { company, error });
+
+    if (!company?.user_id) {
+      console.log('API: Empresa não tem user_id');
+      return null;
     }
 
-    const [visitorsResult, conversionsResult] = await Promise.all([
-      supabase.from('visitors').select('id', { count: 'exact' }).in('landing_page_id', pageIds),
-      supabase.from('conversions').select('engagement_score').in('landing_page_id', pageIds)
-    ]);
+    // Como não podemos acessar auth.users diretamente do cliente,
+    // vamos simular os dados do usuário baseado na empresa
+    // Em produção, isso seria feito via API server-side
+    const mockUser = {
+      id: company.user_id,
+      email: `admin@${company.name.toLowerCase().replace(/\s+/g, '')}.com`,
+      created_at: new Date().toISOString(),
+      last_sign_in_at: new Date().toISOString()
+    };
 
-    const avgEngagement = conversionsResult.data?.length
-      ? conversionsResult.data.reduce((sum, c) => sum + (c.engagement_score || 0), 0) / conversionsResult.data.length
-      : 0;
+    console.log('API: Retornando dados simulados do usuário:', mockUser);
+    return mockUser;
+  },
 
+  async updateUserEmail(userId: string, newEmail: string) {
+    // Note: In a real implementation, you'd use Supabase Admin API
+    // For now, we'll simulate the functionality
+    console.log('Updating user email:', { userId, newEmail });
+    
+    // This would require server-side implementation with admin privileges
+    throw new Error('Email update requires server-side implementation');
+  },
+
+  async resetUserPassword(userId: string, newPassword: string) {
+    // Note: In a real implementation, you'd use Supabase Admin API
+    // For now, we'll simulate the functionality
+    console.log('Resetting user password:', { userId, newPassword: '***' });
+    
+    // This would require server-side implementation with admin privileges
+    throw new Error('Password reset requires server-side implementation');
+  },
+
+  async impersonateUser(companyId: string) {
+    const { data: company } = await supabase
+      .from('companies')
+      .select('user_id, name')
+      .eq('id', companyId)
+      .single();
+
+    if (!company?.user_id) {
+      throw new Error('Company has no associated user');
+    }
+
+    // Store original user info for later restoration
+    const originalUser = supabase.auth.getUser();
+    
+    // In a real implementation, this would create a temporary session
+    // For demo purposes, we'll return the company info
     return {
-      totalPages: pages?.length || 0,
-      totalVisitors: visitorsResult.count || 0,
-      totalConversions: conversionsResult.data?.length || 0,
-      avgEngagementScore: Number(avgEngagement.toFixed(2))
+      companyId,
+      companyName: company.name,
+      userId: company.user_id,
+      originalUser: originalUser
+    };
+  },
+
+  async associateUserToCompany(companyId: string, userId: string) {
+    console.log('API: Associating user to company:', { companyId, userId });
+    
+    const { data, error } = await supabase
+      .from('companies')
+      .update({ user_id: userId })
+      .eq('id', companyId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async createMockUserForCompany(companyId: string, email: string) {
+    console.log('API: Creating mock user for company:', { companyId, email });
+    
+    // Em produção, aqui seria criado um usuário real via Supabase Admin API
+    // Por enquanto, vamos simular a criação sem alterar o banco
+    
+    const mockUserId = `mock_user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Simular a resposta sem alterar o banco (devido à foreign key constraint)
+    const { data: company } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', companyId)
+      .single();
+    
+    if (!company) throw new Error('Company not found');
+    
+    // Retornar dados simulados
+    return {
+      company: {
+        ...company,
+        user_id: mockUserId // Simular que tem user_id
+      },
+      mockUser: {
+        id: mockUserId,
+        email: email,
+        created_at: new Date().toISOString()
+      },
+      isSimulated: true
     };
   }
 };

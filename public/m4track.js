@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  const M4Track = {
+  const LovooCRM = {
     config: {
       trackingCode: null,
       apiUrl: null,
@@ -19,7 +19,7 @@
 
     init: function(trackingCode, apiUrl) {
       this.config.trackingCode = trackingCode;
-      this.config.apiUrl = apiUrl || 'http://localhost:5173';
+      this.config.apiUrl = apiUrl || 'https://etzdsywunlpbgxkphuil.supabase.co';
       this.config.sessionId = this.generateUUID();
       this.config.sessionStart = Date.now();
 
@@ -55,7 +55,7 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/api/track/visitor`, {
+        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/visitor`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(visitorData)
@@ -243,7 +243,7 @@
 
     sendEvent: async function(eventData) {
       try {
-        await fetch(`${this.config.apiUrl}/api/track/event`, {
+        await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/event`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(eventData)
@@ -287,7 +287,7 @@
       };
 
       try {
-        const response = await fetch(`${this.config.apiUrl}/api/track/convert`, {
+        const response = await fetch(`${this.config.apiUrl}/functions/v1/tracking-api/convert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -340,5 +340,5 @@
     }
   };
 
-  window.M4Track = M4Track;
+  window.LovooCRM = LovooCRM;
 })();

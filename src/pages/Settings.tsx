@@ -11,9 +11,25 @@ export const Settings: React.FC = () => {
   const [loadingLogs, setLoadingLogs] = useState(true);
 
   useEffect(() => {
+    console.log('Settings: useEffect triggered, company:', company);
+    
     if (company) {
       setWebhookUrl(company.webhook_url || '');
       loadWebhookLogs();
+    } 
+    // Se não tem company mas está impersonating, carregar logs pelo localStorage
+    else if (localStorage.getItem('lovoo_crm_impersonating') === 'true') {
+      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
+      console.log('Settings: No company but impersonating, using localStorage ID:', impersonatedCompanyId);
+      
+      if (impersonatedCompanyId) {
+        loadWebhookLogsById(impersonatedCompanyId);
+      }
+    }
+    // Se não tem company e não está impersonating, parar loading
+    else {
+      console.log('Settings: No company and not impersonating, stopping loading');
+      setLoadingLogs(false);
     }
   }, [company]);
 
@@ -26,6 +42,21 @@ export const Settings: React.FC = () => {
     } catch (error) {
       console.error('Error loading webhook logs:', error);
     } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const loadWebhookLogsById = async (companyId: string) => {
+    console.log('Settings: loadWebhookLogsById called for:', companyId);
+
+    try {
+      const data = await api.getWebhookLogs(companyId);
+      console.log('Settings: Webhook logs loaded:', data);
+      setLogs(data);
+    } catch (error) {
+      console.error('Settings: Error loading webhook logs by ID:', error);
+    } finally {
+      console.log('Settings: Setting loadingLogs to false');
       setLoadingLogs(false);
     }
   };

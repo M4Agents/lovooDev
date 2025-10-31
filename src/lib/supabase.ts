@@ -19,6 +19,9 @@ export type Company = {
   plan: 'basic' | 'pro' | 'enterprise';
   status: 'active' | 'suspended' | 'cancelled';
   user_id: string;
+  parent_company_id: string | null;
+  company_type: 'parent' | 'client';
+  is_super_admin: boolean;
   created_at: string;
   updated_at: string;
 };
