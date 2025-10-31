@@ -55,12 +55,11 @@
       };
 
       try {
-        // First get the landing page ID
-        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/landing_pages?tracking_code=eq.${this.config.trackingCode}&status=eq.active&select=id`, {
+        // First get the landing page ID using CORS proxy
+        const pageResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/landing_pages?tracking_code=${this.config.trackingCode}&status=active`, {
           method: 'GET',
           headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+            'Content-Type': 'application/json'
           }
         });
 
@@ -69,13 +68,11 @@
           if (pages.length > 0) {
             const pageId = pages[0].id;
             
-            // Create visitor
-            const visitorResponse = await fetch(`${this.config.apiUrl}/rest/v1/visitors`, {
+            // Create visitor using CORS proxy
+            const visitorResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/visitors`, {
               method: 'POST',
               headers: { 
-                'Content-Type': 'application/json',
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
-                'Prefer': 'return=representation'
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 landing_page_id: pageId,
@@ -275,11 +272,10 @@
       if (!this.config.visitorId) return;
       
       try {
-        await fetch(`${this.config.apiUrl}/rest/v1/behavior_events`, {
+        await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/behavior_events`, {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(eventData)
         });
@@ -322,12 +318,11 @@
       };
 
       try {
-        // Get landing page ID first
-        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/landing_pages?tracking_code=eq.${this.config.trackingCode}&select=id`, {
+        // Get landing page ID first using CORS proxy
+        const pageResponse = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/landing_pages?tracking_code=${this.config.trackingCode}`, {
           method: 'GET',
           headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+            'Content-Type': 'application/json'
           }
         });
 
@@ -336,11 +331,10 @@
           if (pages.length > 0) {
             const pageId = pages[0].id;
             
-            const response = await fetch(`${this.config.apiUrl}/rest/v1/conversions`, {
+            const response = await fetch(`${this.config.apiUrl}/functions/v1/cors-proxy/conversions`, {
               method: 'POST',
               headers: { 
-                'Content-Type': 'application/json',
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 visitor_id: this.config.visitorId,
