@@ -149,8 +149,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       
-      // Só buscar empresa se não estiver impersonating
-      if (session?.user && !localStorage.getItem('lovoo_crm_impersonating')) {
+      // Buscar empresa sempre que tiver usuário
+      if (session?.user) {
         fetchCompany(session.user.id);
       }
       setLoading(false);
@@ -160,10 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (async () => {
         setUser(session?.user ?? null);
         
-        // Só buscar empresa se não estiver impersonating
-        if (session?.user && !localStorage.getItem('lovoo_crm_impersonating')) {
+        // Buscar empresa sempre que tiver usuário
+        if (session?.user) {
           await fetchCompany(session.user.id);
-        } else if (!session?.user) {
+        } else {
           setCompany(null);
         }
       })();
