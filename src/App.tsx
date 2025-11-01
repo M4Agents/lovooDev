@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModernLayout } from './components/ModernLayout';
@@ -8,6 +8,7 @@ import { ModernLandingPages } from './pages/ModernLandingPages';
 import { Analytics } from './pages/Analytics';
 import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
+import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -102,6 +103,11 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    // Start automatic tracking queue processor
+    startTrackingQueueProcessor();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

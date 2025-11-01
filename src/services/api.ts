@@ -18,6 +18,31 @@ export const processTrackingQueue = async () => {
   }
 };
 
+// Auto-process tracking queue every 30 seconds
+let queueProcessorInterval: NodeJS.Timeout | null = null;
+
+export const startTrackingQueueProcessor = () => {
+  if (queueProcessorInterval) return; // Already running
+  
+  console.log('Starting tracking queue processor...');
+  
+  // Process immediately
+  processTrackingQueue();
+  
+  // Then process every 30 seconds
+  queueProcessorInterval = setInterval(() => {
+    processTrackingQueue();
+  }, 30000);
+};
+
+export const stopTrackingQueueProcessor = () => {
+  if (queueProcessorInterval) {
+    clearInterval(queueProcessorInterval);
+    queueProcessorInterval = null;
+    console.log('Stopped tracking queue processor');
+  }
+};
+
 export const api = {
   async createLandingPage(companyId: string, data: { name: string; url: string }) {
     console.log('API: createLandingPage called with:', { companyId, data });
