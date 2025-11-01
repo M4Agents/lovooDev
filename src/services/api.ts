@@ -611,5 +611,115 @@ export const api = {
         details: 'Ocorreu um erro durante a verificação. Verifique se a URL está correta e acessível.'
       };
     }
+  },
+
+  async getProfessionalAnalytics(landingPageId: string, startDate: string, endDate: string) {
+    console.log('API: getProfessionalAnalytics called with:', { landingPageId, startDate, endDate });
+    
+    try {
+      // Buscar visitantes no período
+      const { data: visitors, error: visitorsError } = await supabase
+        .from('visitors')
+        .select('*')
+        .eq('landing_page_id', landingPageId)
+        .gte('created_at', startDate + 'T00:00:00Z')
+        .lte('created_at', endDate + 'T23:59:59Z')
+        .order('created_at', { ascending: false });
+
+      if (visitorsError) {
+        console.error('Error fetching visitors:', visitorsError);
+        throw visitorsError;
+      }
+
+      // Buscar conversões no período
+      const { data: conversions, error: conversionsError } = await supabase
+        .from('conversions')
+        .select('*')
+        .eq('landing_page_id', landingPageId)
+        .gte('converted_at', startDate + 'T00:00:00Z')
+        .lte('converted_at', endDate + 'T23:59:59Z')
+        .order('converted_at', { ascending: false });
+
+      if (conversionsError) {
+        console.error('Error fetching conversions:', conversionsError);
+        throw conversionsError;
+      }
+
+      // Calcular métricas
+      const totalVisitors = visitors?.length || 0;
+      const uniqueVisitors = new Set(visitors?.map(v => v.visitor_id).filter(Boolean)).size;
+      const visitorCounts = visitors?.reduce((acc: Record<string, number>, v) => {
+        if (v.visitor_id) {
+          acc[v.visitor_id] = (acc[v.visitor_id] || 0) + 1;
+        }
+        return acc;
+      }, {}) || {};
+      
+      const returningVisitors = Object.values(visitorCounts).filter(count => count > 1).length;
+      const newVisitors = uniqueVisitors - returningVisitors;
+      const totalSessions = totalVisitors;
+      const avgSessionDuration = 120; // Placeholder - implementar cálculo real
+      const bounceRate = 45; // Placeholder - implementar cálculo real
+      const conversionRate = totalVisitors > 0 ? ((conversions?.length || 0) / totalVisitors) * 100 : 0;
+
+      // Segmentações
+      const deviceBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const device = v.device_type || 'unknown';
+        acc[device] = (acc[device] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const referrerBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const referrer = v.referrer || 'direct';
+        acc[referrer] = (acc[referrer] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const timezoneBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const timezone = v.timezone || 'unknown';
+        acc[timezone] = (acc[timezone] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const languageBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const language = v.language || 'unknown';
+        acc[language] = (acc[language] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const hourlyBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const hour = new Date(v.created_at).getHours().toString();
+        acc[hour] = (acc[hour] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const dailyBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const day = new Date(v.created_at).toISOString().split('T')[0];
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      return {
+        totalVisitors,
+        uniqueVisitors,
+        returningVisitors,
+        newVisitors,
+        totalSessions,
+        avgSessionDuration,
+        bounceRate,
+        conversionRate,
+        deviceBreakdown,
+        referrerBreakdown,
+        timezoneBreakdown,
+        languageBreakdown,
+        hourlyBreakdown,
+        dailyBreakdown,
+        visitors: visitors || [],
+        conversions: conversions || []
+      };
+    } catch (error) {
+      console.error('Error in getProfessionalAnalytics:', error);
+      throw error;
+    }
   }
 };
