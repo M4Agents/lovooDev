@@ -34,6 +34,7 @@ export const ModernLandingPages: React.FC = () => {
   const [selectedPage, setSelectedPage] = useState<LandingPage | null>(null);
   const [showTrackingCode, setShowTrackingCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [formData, setFormData] = useState({ name: '', url: '' });
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -542,6 +543,64 @@ export const ModernLandingPages: React.FC = () => {
                   <li>3. Publique a página</li>
                   <li>4. Os dados começarão a aparecer no analytics</li>
                 </ol>
+              </div>
+
+              {/* Webhook Section */}
+              <div className="border-t pt-6">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Globe className="w-4 h-4" />
+                  Webhook para Conversões
+                </h4>
+                
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Para registrar conversões (leads), configure seu formulário para enviar dados para este webhook:
+                  </p>
+                  
+                  <div className="relative">
+                    <div className="bg-gray-50 border rounded-lg p-3">
+                      <code className="text-sm text-gray-800 break-all">
+                        {window.location.origin}/webhook/conversion
+                      </code>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute top-2 right-2"
+                      icon={copiedWebhook ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/webhook/conversion`);
+                        setCopiedWebhook(true);
+                        setTimeout(() => setCopiedWebhook(false), 2000);
+                      }}
+                    >
+                      {copiedWebhook ? 'Copiado!' : 'Copiar'}
+                    </Button>
+                  </div>
+
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h5 className="font-medium text-green-900 mb-2">Parâmetros obrigatórios:</h5>
+                    <ul className="text-sm text-green-800 space-y-1">
+                      <li>• <code className="bg-green-100 px-1 rounded">tracking_code</code>: {selectedPage.tracking_code}</li>
+                      <li>• Dados do formulário (nome, email, telefone, etc.)</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h5 className="font-medium text-yellow-900 mb-2">Exemplo de uso:</h5>
+                    <pre className="text-xs text-yellow-800 bg-yellow-100 p-2 rounded overflow-x-auto">
+{`POST ${window.location.origin}/webhook/conversion
+Content-Type: application/json
+
+{
+  "tracking_code": "${selectedPage.tracking_code}",
+  "nome": "João Silva",
+  "email": "joao@email.com",
+  "telefone": "(11) 99999-9999"
+}`}
+                    </pre>
+                  </div>
+                </div>
               </div>
             </div>
           </Card>

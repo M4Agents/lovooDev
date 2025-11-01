@@ -7,6 +7,10 @@
       "destination": "/api/track"
     },
     {
+      "source": "/webhook/conversion",
+      "destination": "/api/webhook"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
