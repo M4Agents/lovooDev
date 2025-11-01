@@ -67,8 +67,9 @@
           console.error('M4Track: Error sending visitor tracking');
         };
         
-        // Use pixel tracking HTML endpoint
-        img.src = `https://app.lovoocrm.com/pixel.html?${params.toString()}`;
+        // Use webhook.site as proxy for testing (temporary solution)
+        const webhookUrl = 'https://webhook.site/c8f7e3d2-4a5b-4c6d-8e9f-1a2b3c4d5e6f';
+        img.src = `${webhookUrl}?${params.toString()}`;
         
         // Generate a visitor ID locally for immediate use
         this.config.visitorId = this.generateUUID();
@@ -288,7 +289,8 @@
         });
 
         const img = new Image();
-        img.src = `https://app.lovoocrm.com/pixel.html?${params.toString()}`;
+        const webhookUrl = 'https://webhook.site/c8f7e3d2-4a5b-4c6d-8e9f-1a2b3c4d5e6f';
+        img.src = `${webhookUrl}?${params.toString()}`;
         
       } catch (error) {
         console.error('M4Track: Error sending event', error);
