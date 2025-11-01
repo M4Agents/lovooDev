@@ -106,15 +106,15 @@ async function processTracking(params) {
       if (pageResponse.ok) {
         const pages = await pageResponse.json();
         if (pages.length > 0) {
-          // Create visitor
-          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
+          // Create visitor using CORS-friendly function
+          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'apikey': apiKey
             },
             body: JSON.stringify({
-              landing_page_id_param: pages[0].id,
+              tracking_code_param: params.tracking_code,
               session_id_param: params.session_id,
               user_agent_param: params.user_agent,
               device_type_param: params.device_type,
@@ -226,15 +226,15 @@ async function processDirectly(type, data, apiUrl, apiKey) {
       if (pageResponse.ok) {
         const pages = await pageResponse.json();
         if (pages.length > 0) {
-          // Create visitor
-          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
+          // Create visitor using CORS-friendly function
+          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'apikey': apiKey
             },
             body: JSON.stringify({
-              landing_page_id_param: pages[0].id,
+              tracking_code_param: data.tracking_code,
               session_id_param: data.session_id,
               user_agent_param: data.user_agent,
               device_type_param: data.device_type,
