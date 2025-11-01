@@ -466,8 +466,8 @@
           console.error(`M4Track: Error syncing ${type} record`);
         };
         
-        // Use httpbin.org as temporary proxy (accepts any request)
-        img.src = `https://httpbin.org/status/200?${params.toString()}`;
+        // Use our own tracking endpoint
+        img.src = `https://app.lovoocrm.com/track.gif?${params.toString()}`;
         
         // Also log the data for debugging
         console.log(`M4Track: Attempting to sync ${type}:`, data);
