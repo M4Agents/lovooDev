@@ -511,7 +511,7 @@ export const ModernLandingPages: React.FC = () => {
             <div className="space-y-4 overflow-y-auto flex-1">
               <div>
                 <p className="text-sm text-gray-600 mb-2">
-                  Cole este código no final do HTML da sua landing page, <strong>antes da tag de fechamento</strong> <code className="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> (não no head):
+                  Cole este código <strong>dentro da tag <code className="bg-gray-100 px-1 rounded">&lt;body&gt;</code></strong>, no final do body, imediatamente antes do fechamento <code className="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> (nunca no head):
                 </p>
                 <div className="mb-3 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded">
                   <span className="text-xs text-blue-700">
@@ -778,7 +778,7 @@ Content-Type: application/json
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <h3 className="font-semibold text-green-800 mb-2">🎯 Regra Principal</h3>
                 <p className="text-green-700">
-                  <strong>SEMPRE</strong> cole o código <strong>antes da tag <code>&lt;/body&gt;</code></strong> (fechamento do body), <strong>NUNCA</strong> no <code>&lt;head&gt;</code>
+                  <strong>SEMPRE</strong> cole o código <strong>dentro da tag <code>&lt;body&gt;</code></strong>, no final do body, imediatamente antes do fechamento <code>&lt;/body&gt;</code>. <strong>NUNCA</strong> no <code>&lt;head&gt;</code>
                 </p>
               </div>
 
@@ -804,7 +804,7 @@ Content-Type: application/json
     </script>
     <!-- ↑ ATÉ AQUI ↑ -->
     
-</body> <!-- ← Imediatamente antes desta linha -->
+</body> <!-- ← DENTRO do body, antes desta linha de fechamento -->
 </html>`}
                 </pre>
               </div>
@@ -909,8 +909,8 @@ Content-Type: application/json
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-800 mb-3">✅ Checklist de Verificação</h3>
                 <div className="grid md:grid-cols-2 gap-2 text-sm text-blue-700">
-                  <div>• ✅ Código está antes do &lt;/body&gt;?</div>
-                  <div>• ✅ Código está depois de todo conteúdo?</div>
+                  <div>• ✅ Código está DENTRO do &lt;body&gt;?</div>
+                  <div>• ✅ Código está no FINAL do body?</div>
                   <div>• ✅ NÃO está no &lt;head&gt;?</div>
                   <div>• ✅ Tracking code está correto?</div>
                   <div>• ✅ URL do script está correta?</div>
