@@ -658,6 +658,12 @@ export const api = {
         return acc;
       }, {}) || {};
 
+      const referrerBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
+        const referrer = v.referrer || 'direct';
+        acc[referrer] = (acc[referrer] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
       return {
         totalVisitors,
         uniqueVisitors,
@@ -668,7 +674,7 @@ export const api = {
         bounceRate: 45,
         conversionRate,
         deviceBreakdown,
-        referrerBreakdown: {},
+        referrerBreakdown,
         timezoneBreakdown: {},
         languageBreakdown: {},
         hourlyBreakdown: {},
