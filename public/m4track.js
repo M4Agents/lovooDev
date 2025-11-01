@@ -449,34 +449,8 @@
         const apiUrl = this.config.apiUrl;
         const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
         
-        // Emergency fix: Use direct RPC function call
-        if (type === 'visitor' && data.tracking_code) {
-          try {
-            const response = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_direct`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': apiKey
-              },
-              body: JSON.stringify({
-                tracking_code_param: data.tracking_code,
-                session_id_param: data.session_id,
-                user_agent_param: data.user_agent,
-                device_type_param: data.device_type,
-                screen_resolution_param: data.screen_resolution,
-                referrer_param: data.referrer
-              })
-            });
-            
-            if (response.ok) {
-              const result = await response.json();
-              console.log(`M4Track: Successfully created visitor directly:`, result);
-              return;
-            }
-          } catch (directError) {
-            console.log(`M4Track: Direct RPC failed, trying queue method`);
-          }
-        }
+        // Skip RPC direct due to CORS - go straight to alternatives
+        console.log(`M4Track: Attempting to sync ${type} with multiple methods...`);
         
         // Try direct insert into tracking_queue
         try {
@@ -495,6 +469,26 @@
           
           if (response.ok) {
             console.log(`M4Track: Successfully queued ${type} record via direct insert`);
+            
+            // Force process the queue immediately
+            try {
+              const processResponse = await fetch(`${apiUrl}/rest/v1/rpc/process_tracking_queue`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': apiKey
+                },
+                body: JSON.stringify({})
+              });
+              
+              if (processResponse.ok) {
+                const result = await processResponse.json();
+                console.log(`M4Track: Forced queue processing, processed ${result} records`);
+              }
+            } catch (processError) {
+              console.log(`M4Track: Could not force process queue, but data is queued`);
+            }
+            
             return;
           }
         } catch (directError) {
