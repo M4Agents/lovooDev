@@ -50,6 +50,8 @@ export const AdvancedAnalytics: React.FC = () => {
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [viewMode, setViewMode] = useState<'overview' | 'heatmap' | 'conversions'>('overview');
+  const [selectedVisitor, setSelectedVisitor] = useState<any>(null);
+  const [showVisitorDetails, setShowVisitorDetails] = useState(false);
 
   useEffect(() => {
     loadAnalytics();
@@ -448,6 +450,7 @@ export const AdvancedAnalytics: React.FC = () => {
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Dispositivo</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Origem</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data e Hora</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Detalhes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -482,6 +485,17 @@ export const AdvancedAnalytics: React.FC = () => {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          <button
+                            onClick={() => {
+                              setSelectedVisitor(visitor);
+                              setShowVisitorDetails(true);
+                            }}
+                            className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-xs font-medium"
+                          >
+                            Ver Detalhes
+                          </button>
                         </td>
                       </tr>
                     );
@@ -533,6 +547,96 @@ export const AdvancedAnalytics: React.FC = () => {
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes do Visitante */}
+      {showVisitorDetails && selectedVisitor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-slate-900">Detalhes do Visitante</h3>
+                <button
+                  onClick={() => setShowVisitorDetails(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">Identificação</h4>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Visitor ID:</span> {selectedVisitor.visitor_id || 'N/A'}</div>
+                      <div><span className="font-medium">Session ID:</span> {selectedVisitor.session_id || 'N/A'}</div>
+                      <div><span className="font-medium">ID Interno:</span> {selectedVisitor.id}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">Dispositivo</h4>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Tipo:</span> {selectedVisitor.device_type || 'N/A'}</div>
+                      <div><span className="font-medium">Resolução:</span> {selectedVisitor.screen_resolution || 'N/A'}</div>
+                      <div><span className="font-medium">Idioma:</span> {selectedVisitor.language || 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">Origem</h4>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Referrer:</span> {selectedVisitor.referrer || 'Direto'}</div>
+                      <div><span className="font-medium">IP:</span> {selectedVisitor.ip_address || 'N/A'}</div>
+                      <div><span className="font-medium">Timezone:</span> {selectedVisitor.timezone || 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">Visita</h4>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Data/Hora:</span> {new Date(selectedVisitor.created_at).toLocaleString('pt-BR', {
+                        timeZone: 'America/Sao_Paulo',
+                        day: '2-digit',
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                      })}</div>
+                      <div><span className="font-medium">Tipo:</span> {
+                        selectedVisitor.visitor_id && data?.visitors.filter(v => v.visitor_id === selectedVisitor.visitor_id).length > 1 
+                          ? 'Visitante Recorrente' 
+                          : 'Novo Visitante'
+                      }</div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedVisitor.user_agent && (
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">User Agent</h4>
+                    <div className="text-sm text-slate-600 break-all">
+                      {selectedVisitor.user_agent}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowVisitorDetails(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
