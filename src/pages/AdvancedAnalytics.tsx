@@ -364,10 +364,68 @@ export const AdvancedAnalytics: React.FC = () => {
               <div className="space-y-4">
                 {Object.entries(data.deviceBreakdown).map(([device, count]) => {
                   const percentage = (count / data.totalVisitors) * 100;
+                  
+                  // Ícone específico para cada dispositivo
+                  const getDeviceIcon = (deviceType: string) => {
+                    const deviceLower = deviceType.toLowerCase();
+                    if (deviceLower.includes('iphone')) {
+                      return '📱'; // iPhone
+                    }
+                    if (deviceLower.includes('ipad')) {
+                      return '📱'; // iPad
+                    }
+                    if (deviceLower.includes('android phone')) {
+                      return '📱'; // Android Phone
+                    }
+                    if (deviceLower.includes('android tablet')) {
+                      return '📱'; // Android Tablet
+                    }
+                    if (deviceLower.includes('mac')) {
+                      return '💻'; // Mac
+                    }
+                    if (deviceLower.includes('windows')) {
+                      return '🖥️'; // Windows
+                    }
+                    if (deviceLower.includes('linux')) {
+                      return '🖥️'; // Linux
+                    }
+                    if (deviceLower.includes('mobile')) {
+                      return '📱'; // Mobile genérico
+                    }
+                    if (deviceLower.includes('tablet')) {
+                      return '📱'; // Tablet genérico
+                    }
+                    return '🖥️'; // Desktop genérico
+                  };
+                  
+                  // Cor específica para cada tipo
+                  const getDeviceColor = (deviceType: string) => {
+                    const deviceLower = deviceType.toLowerCase();
+                    if (deviceLower.includes('iphone') || deviceLower.includes('ipad')) {
+                      return 'bg-blue-600'; // Apple azul
+                    }
+                    if (deviceLower.includes('android')) {
+                      return 'bg-green-600'; // Android verde
+                    }
+                    if (deviceLower.includes('mac')) {
+                      return 'bg-gray-600'; // Mac cinza
+                    }
+                    if (deviceLower.includes('windows')) {
+                      return 'bg-blue-500'; // Windows azul claro
+                    }
+                    if (deviceLower.includes('mobile') || deviceLower.includes('tablet')) {
+                      return 'bg-purple-600'; // Mobile roxo
+                    }
+                    return 'bg-slate-600'; // Desktop padrão
+                  };
+                  
                   return (
                     <div key={device} className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-700 capitalize">{device}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getDeviceIcon(device)}</span>
+                          <span className="text-sm font-medium text-slate-700">{device}</span>
+                        </div>
                         <div className="text-right">
                           <span className="text-sm font-semibold text-slate-900">{count}</span>
                           <span className="text-xs text-slate-500 ml-2">({percentage.toFixed(1)}%)</span>
@@ -375,7 +433,7 @@ export const AdvancedAnalytics: React.FC = () => {
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          className={`h-2 rounded-full transition-all ${getDeviceColor(device)}`}
                           style={{ width: `${percentage}%` }}
                         />
                       </div>

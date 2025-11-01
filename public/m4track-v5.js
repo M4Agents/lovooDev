@@ -63,13 +63,45 @@
     
     getDeviceType: function() {
       const userAgent = navigator.userAgent;
-      if (/tablet|ipad|playbook|silk/i.test(userAgent)) {
-        return 'tablet';
+      
+      // Detectar dispositivos específicos
+      if (/iPad/i.test(userAgent)) {
+        return 'iPad';
       }
-      if (/mobile|iphone|ipod|android|blackberry|opera|mini|windows\sce|palm|smartphone|iemobile/i.test(userAgent)) {
-        return 'mobile';
+      if (/iPhone/i.test(userAgent)) {
+        return 'iPhone';
       }
-      return 'desktop';
+      if (/iPod/i.test(userAgent)) {
+        return 'iPod';
+      }
+      if (/Android.*Mobile/i.test(userAgent)) {
+        return 'Android Phone';
+      }
+      if (/Android/i.test(userAgent)) {
+        return 'Android Tablet';
+      }
+      if (/BlackBerry/i.test(userAgent)) {
+        return 'BlackBerry';
+      }
+      if (/Windows Phone/i.test(userAgent)) {
+        return 'Windows Phone';
+      }
+      if (/tablet|playbook|silk/i.test(userAgent)) {
+        return 'Tablet';
+      }
+      if (/mobile|smartphone|iemobile/i.test(userAgent)) {
+        return 'Mobile';
+      }
+      if (/Macintosh/i.test(userAgent)) {
+        return 'Mac';
+      }
+      if (/Windows/i.test(userAgent)) {
+        return 'Windows';
+      }
+      if (/Linux/i.test(userAgent)) {
+        return 'Linux';
+      }
+      return 'Desktop';
     },
     
     trackVisitor: function() {
