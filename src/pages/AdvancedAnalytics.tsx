@@ -160,61 +160,87 @@ export const AdvancedAnalytics: React.FC = () => {
             </button>
           </div>
           
-          {/* Filtros de Data */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2">
-              {DATE_RANGES.map((range) => (
-                <button
-                  key={range.label}
-                  onClick={() => {
-                    setSelectedRange(range);
-                    setShowCustomRange(false);
-                  }}
-                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
-                    selectedRange.label === range.label && !showCustomRange
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCustomRange(!showCustomRange)}
-                className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  showCustomRange
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
+          {/* Seletor de Data Elegante */}
+          <div className="relative">
+            <button
+              onClick={() => setShowCustomRange(!showCustomRange)}
+              className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 min-w-[200px] justify-between"
+            >
+              <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                Personalizado
-              </button>
-              
-              {showCustomRange && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={customRange.start}
-                    onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                  <span className="text-slate-500">até</span>
-                  <input
-                    type="date"
-                    value={customRange.end}
-                    onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-              )}
-            </div>
+                <span>{selectedRange.label}</span>
+              </div>
+              <svg className={`w-4 h-4 transition-transform ${showCustomRange ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
             
-            {/* Controles */}
-            <div className="flex items-center gap-2">
+            {showCustomRange && (
+              <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                <div className="p-4">
+                  <div className="space-y-2">
+                    {DATE_RANGES.map((range) => (
+                      <button
+                        key={range.label}
+                        onClick={() => {
+                          setSelectedRange(range);
+                          setShowCustomRange(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                          selectedRange.label === range.label
+                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {range.label}
+                      </button>
+                    ))}
+                    
+                    <hr className="my-2" />
+                    
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-slate-700">Período Personalizado</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Data de início</label>
+                          <input
+                            type="date"
+                            value={customRange.start}
+                            onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Data de término</label>
+                          <input
+                            type="date"
+                            value={customRange.end}
+                            onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (customRange.start && customRange.end) {
+                            setSelectedRange({ start: customRange.start, end: customRange.end, label: 'Personalizado' });
+                            setShowCustomRange(false);
+                          }
+                        }}
+                        disabled={!customRange.start || !customRange.end}
+                        className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                      >
+                        Aplicar Período
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+            
+          {/* Controles */}
+          <div className="flex items-center gap-2">
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
                 className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors flex items-center gap-2 ${
