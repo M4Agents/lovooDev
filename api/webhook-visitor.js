@@ -17,14 +17,18 @@ export default async function handler(req, res) {
   }
   
   try {
+    console.log('Webhook received raw body:', req.body);
+    console.log('Webhook received headers:', req.headers);
+    
     const { tracking_code, session_id, user_agent, device_type, screen_resolution, referrer } = req.body;
     
     if (!tracking_code) {
+      console.error('Missing tracking_code in payload:', req.body);
       res.status(400).json({ error: 'tracking_code is required' });
       return;
     }
     
-    console.log('Webhook received visitor data:', { tracking_code, session_id, device_type });
+    console.log('Webhook received visitor data:', { tracking_code, session_id, device_type, user_agent });
     
     // Process data using direct SQL execution
     const result = await createVisitorDirectSQL({
