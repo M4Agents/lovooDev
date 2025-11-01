@@ -709,17 +709,14 @@ export const api = {
     }
   },
 
-  async updateCompany(companyId: string, updates: { name: string; domain: string; plan: string; status: string }) {
+  async updateCompany(companyId: string, updates: any) {
     console.log('API: updateCompany called with:', { companyId, updates });
     
     try {
       const { data, error } = await supabase
         .from('companies')
         .update({
-          name: updates.name,
-          domain: updates.domain,
-          plan: updates.plan,
-          status: updates.status,
+          ...updates,
           updated_at: new Date().toISOString()
         })
         .eq('id', companyId)

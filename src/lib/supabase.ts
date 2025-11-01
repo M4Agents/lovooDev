@@ -28,6 +28,47 @@ export type Company = {
   is_super_admin: boolean;
   created_at: string;
   updated_at: string;
+  
+  // Dados Principais
+  nome_fantasia?: string;
+  razao_social?: string;
+  cnpj?: string;
+  inscricao_estadual?: string;
+  inscricao_municipal?: string;
+  tipo_empresa?: string;
+  porte_empresa?: string;
+  ramo_atividade?: string;
+  data_fundacao?: string;
+  site_principal?: string;
+  descricao_empresa?: string;
+  
+  // Endereço
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  pais?: string;
+  endereco_correspondencia?: any;
+  
+  // Contatos
+  telefone_principal?: string;
+  telefone_secundario?: string;
+  whatsapp?: string;
+  email_principal?: string;
+  email_comercial?: string;
+  email_financeiro?: string;
+  email_suporte?: string;
+  responsavel_principal?: { nome: string; cargo: string };
+  contato_financeiro?: { nome: string; email: string; telefone: string };
+  
+  // Domínios e URLs
+  dominios_secundarios?: string[];
+  urls_landing_pages?: string[];
+  redes_sociais?: { facebook?: string; instagram?: string; linkedin?: string; twitter?: string; youtube?: string };
+  url_google_business?: string;
 };
 
 export type LandingPage = {

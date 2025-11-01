@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Key, Save, Clock, Building, Settings as SettingsIcon } from 'lucide-react';
+import { Webhook, Key, Save, Clock, Building, Settings as SettingsIcon, MapPin, Phone, Globe } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
@@ -11,9 +11,51 @@ export const Settings: React.FC = () => {
   const [loadingLogs, setLoadingLogs] = useState(true);
   
   // Estados para abas e dados da empresa
-  const [activeTab, setActiveTab] = useState<'settings' | 'company'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('settings');
   const [companyData, setCompanyData] = useState({
+    // Dados Principais
     name: '',
+    nome_fantasia: '',
+    razao_social: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
+    tipo_empresa: '',
+    porte_empresa: '',
+    ramo_atividade: '',
+    data_fundacao: '',
+    site_principal: '',
+    descricao_empresa: '',
+    
+    // Endereço
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
+    pais: 'Brasil',
+    endereco_correspondencia: null,
+    
+    // Contatos
+    telefone_principal: '',
+    telefone_secundario: '',
+    whatsapp: '',
+    email_principal: '',
+    email_comercial: '',
+    email_financeiro: '',
+    email_suporte: '',
+    responsavel_principal: { nome: '', cargo: '' },
+    contato_financeiro: { nome: '', email: '', telefone: '' },
+    
+    // Domínios e URLs
+    dominios_secundarios: [] as string[],
+    urls_landing_pages: [] as string[],
+    redes_sociais: { facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '' },
+    url_google_business: '',
+    
+    // Campos existentes
     domain: '',
     plan: 'basic',
     status: 'active'
@@ -29,12 +71,61 @@ export const Settings: React.FC = () => {
     
     if (company) {
       setWebhookUrl(company.webhook_url || '');
-      setCompanyData({
+      setCompanyData(prev => ({
+        ...prev,
+        // Dados básicos
         name: company.name || '',
         domain: company.domain || '',
         plan: company.plan || 'basic',
-        status: company.status || 'active'
-      });
+        status: company.status || 'active',
+        
+        // Dados Principais
+        nome_fantasia: company.nome_fantasia || '',
+        razao_social: company.razao_social || '',
+        cnpj: company.cnpj || '',
+        inscricao_estadual: company.inscricao_estadual || '',
+        inscricao_municipal: company.inscricao_municipal || '',
+        tipo_empresa: company.tipo_empresa || '',
+        porte_empresa: company.porte_empresa || '',
+        ramo_atividade: company.ramo_atividade || '',
+        data_fundacao: company.data_fundacao || '',
+        site_principal: company.site_principal || '',
+        descricao_empresa: company.descricao_empresa || '',
+        
+        // Endereço
+        cep: company.cep || '',
+        logradouro: company.logradouro || '',
+        numero: company.numero || '',
+        complemento: company.complemento || '',
+        bairro: company.bairro || '',
+        cidade: company.cidade || '',
+        estado: company.estado || '',
+        pais: company.pais || 'Brasil',
+        endereco_correspondencia: company.endereco_correspondencia || null,
+        
+        // Contatos
+        telefone_principal: company.telefone_principal || '',
+        telefone_secundario: company.telefone_secundario || '',
+        whatsapp: company.whatsapp || '',
+        email_principal: company.email_principal || '',
+        email_comercial: company.email_comercial || '',
+        email_financeiro: company.email_financeiro || '',
+        email_suporte: company.email_suporte || '',
+        responsavel_principal: company.responsavel_principal || { nome: '', cargo: '' },
+        contato_financeiro: company.contato_financeiro || { nome: '', email: '', telefone: '' },
+        
+        // Domínios e URLs
+        dominios_secundarios: company.dominios_secundarios || [],
+        urls_landing_pages: company.urls_landing_pages || [],
+        redes_sociais: {
+          facebook: company.redes_sociais?.facebook || '',
+          instagram: company.redes_sociais?.instagram || '',
+          linkedin: company.redes_sociais?.linkedin || '',
+          twitter: company.redes_sociais?.twitter || '',
+          youtube: company.redes_sociais?.youtube || ''
+        },
+        url_google_business: company.url_google_business || ''
+      }));
       loadWebhookLogs();
     } 
     // Se não tem company mas está impersonating, carregar logs pelo localStorage
@@ -104,15 +195,12 @@ export const Settings: React.FC = () => {
 
     setSavingCompany(true);
     try {
-      // Enviar apenas o nome da empresa (outros campos são apenas informativos)
-      await api.updateCompany(company.id, {
-        name: companyData.name,
-        domain: company.domain || '', // Manter domínio atual
-        plan: company.plan || 'basic', // Manter plano atual
-        status: company.status || 'active' // Manter status atual
-      });
+      // Preparar dados para envio (remover campos que não devem ser alterados)
+      const { domain, plan, status, ...updateData } = companyData;
+      
+      await api.updateCompany(company.id, updateData);
       await refreshCompany();
-      alert('Nome da empresa atualizado com sucesso!');
+      alert('Dados da empresa atualizados com sucesso!');
     } catch (error) {
       console.error('Error saving company data:', error);
       alert('Erro ao salvar dados da empresa');
@@ -147,15 +235,48 @@ export const Settings: React.FC = () => {
               Configurações
             </button>
             <button
-              onClick={() => setActiveTab('company')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                activeTab === 'company'
+              onClick={() => setActiveTab('dados-principais')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'dados-principais'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Building className="w-4 h-4" />
-              Dados da Empresa
+              Dados Principais
+            </button>
+            <button
+              onClick={() => setActiveTab('endereco')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'endereco'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              Endereço
+            </button>
+            <button
+              onClick={() => setActiveTab('contatos')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'contatos'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Phone className="w-4 h-4" />
+              Contatos
+            </button>
+            <button
+              onClick={() => setActiveTab('dominios')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'dominios'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              Domínios & URLs
             </button>
           </div>
         )}
@@ -402,21 +523,21 @@ export const Settings: React.FC = () => {
         </>
       )}
 
-      {/* Aba Dados da Empresa - Apenas para empresas filhas */}
-      {isChildCompany && activeTab === 'company' && (
+      {/* Aba Dados Principais - Apenas para empresas filhas */}
+      {isChildCompany && activeTab === 'dados-principais' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-orange-100 rounded-lg">
               <Building className="w-5 h-5 text-orange-600" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-900">Dados da Empresa</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Dados Principais</h2>
           </div>
 
           <form onSubmit={handleSaveCompany} className="space-y-6">
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nome da Empresa
+                  Nome da Empresa *
                 </label>
                 <input
                   type="text"
@@ -427,6 +548,157 @@ export const Settings: React.FC = () => {
                   required
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome Fantasia
+                </label>
+                <input
+                  type="text"
+                  value={companyData.nome_fantasia}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome fantasia"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Razão Social
+                </label>
+                <input
+                  type="text"
+                  value={companyData.razao_social}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, razao_social: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Razão social"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  CNPJ
+                </label>
+                <input
+                  type="text"
+                  value={companyData.cnpj}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Inscrição Estadual
+                </label>
+                <input
+                  type="text"
+                  value={companyData.inscricao_estadual}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_estadual: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Inscrição estadual"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Inscrição Municipal
+                </label>
+                <input
+                  type="text"
+                  value={companyData.inscricao_municipal}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_municipal: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Inscrição municipal"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tipo de Empresa
+                </label>
+                <select
+                  value={companyData.tipo_empresa}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, tipo_empresa: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Selecione</option>
+                  <option value="MEI">MEI</option>
+                  <option value="Ltda">Ltda</option>
+                  <option value="SA">SA</option>
+                  <option value="EIRELI">EIRELI</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Porte da Empresa
+                </label>
+                <select
+                  value={companyData.porte_empresa}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, porte_empresa: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Selecione</option>
+                  <option value="Micro">Micro</option>
+                  <option value="Pequena">Pequena</option>
+                  <option value="Média">Média</option>
+                  <option value="Grande">Grande</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Ramo de Atividade
+                </label>
+                <input
+                  type="text"
+                  value={companyData.ramo_atividade}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, ramo_atividade: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Ex: Tecnologia, Construção, Saúde"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Data de Fundação
+                </label>
+                <input
+                  type="date"
+                  value={companyData.data_fundacao}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, data_fundacao: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Site Principal
+                </label>
+                <input
+                  type="url"
+                  value={companyData.site_principal}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, site_principal: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="https://www.exemplo.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Descrição da Empresa
+              </label>
+              <textarea
+                value={companyData.descricao_empresa}
+                onChange={(e) => setCompanyData(prev => ({ ...prev, descricao_empresa: e.target.value }))}
+                rows={4}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                placeholder="Descreva brevemente a atividade da empresa..."
+              />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
