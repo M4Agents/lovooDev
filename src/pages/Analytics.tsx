@@ -298,28 +298,6 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-orange-100 rounded-lg">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
-                </div>
-              </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Engagement Médio</p>
-              <p className="text-3xl font-bold text-slate-900">{avgEngagement.toFixed(2)}</p>
-              <p className="text-xs text-slate-500 mt-2">de 10.0</p>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <Clock className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Tempo Médio p/ Converter</p>
-              <p className="text-3xl font-bold text-slate-900">{Math.round(avgTimeToConvert)}s</p>
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
