@@ -414,14 +414,24 @@ export const ModernLandingPages: React.FC = () => {
                 </Button>
               </div>
 
-              <Button
-                className="w-full"
-                variant="outline"
-                icon={<BarChart3 className="w-4 h-4" />}
-                onClick={() => window.location.href = `/analytics/${page.id}`}
-              >
-                Analytics Pro
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  icon={<BarChart3 className="w-4 h-4" />}
+                  onClick={() => window.location.href = `/analytics/${page.id}`}
+                  className="text-xs"
+                >
+                  Analytics
+                </Button>
+                <Button
+                  variant="outline"
+                  icon={<BarChart3 className="w-4 h-4" />}
+                  onClick={() => window.location.href = `/advanced-analytics/${page.id}`}
+                  className="text-xs bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-purple-100"
+                >
+                  Analytics Pro
+                </Button>
+              </div>
             </Card>
           ))}
         </div>

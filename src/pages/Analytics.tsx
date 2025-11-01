@@ -1,55 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
-import { 
-  Users, Target, TrendingUp, Clock, MousePointer, Calendar, 
-  Download, RefreshCw, Globe, Smartphone, Monitor,
-  UserCheck, MapPin, Languages, Eye
-} from 'lucide-react';
+import { Users, Target, TrendingUp, Clock, MousePointer } from 'lucide-react';
 import { Heatmap } from '../components/Heatmap';
 
 type AnalyticsData = {
-  totalVisitors: number;
-  uniqueVisitors: number;
-  returningVisitors: number;
-  newVisitors: number;
-  totalSessions: number;
-  avgSessionDuration: number;
-  bounceRate: number;
-  conversionRate: number;
-  deviceBreakdown: Record<string, number>;
-  referrerBreakdown: Record<string, number>;
-  timezoneBreakdown: Record<string, number>;
-  languageBreakdown: Record<string, number>;
-  hourlyBreakdown: Record<string, number>;
-  dailyBreakdown: Record<string, number>;
-  visitors: any[];
   conversions: any[];
-  totalConversions?: number; // Para compatibilidade
+  visitors: any[];
+  totalVisitors: number;
+  totalConversions: number;
+  conversionRate: number;
 };
-
-type DateRange = {
-  start: string;
-  end: string;
-  label: string;
-};
-
-const DATE_RANGES: DateRange[] = [
-  { start: '0', end: '0', label: 'Hoje' },
-  { start: '1', end: '1', label: 'Ontem' },
-  { start: '7', end: '0', label: 'Últimos 7 dias' },
-  { start: '30', end: '0', label: 'Últimos 30 dias' },
-  { start: '90', end: '0', label: 'Últimos 90 dias' },
-];
 
 export const Analytics: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'overview' | 'heatmap' | 'conversions'>('overview');
-  const [selectedRange, setSelectedRange] = useState<DateRange>(DATE_RANGES[2]); // 7 dias
-  const [customRange, setCustomRange] = useState({ start: '', end: '' });
-  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [viewMode, setViewMode] = useState<'overview' | 'heatmap'>('overview');
 
   useEffect(() => {
     loadAnalytics();
@@ -60,32 +27,15 @@ export const Analytics: React.FC = () => {
     }, 30000);
     
     return () => clearInterval(interval);
-  }, [id, selectedRange, customRange, showCustomRange]);
+  }, [id]);
 
   const loadAnalytics = async () => {
     if (!id) return;
 
     try {
-      console.log('Loading professional analytics for landing page ID:', id);
-      
-      // Determinar datas
-      let startDate, endDate;
-      if (showCustomRange && customRange.start && customRange.end) {
-        startDate = customRange.start;
-        endDate = customRange.end;
-      } else {
-        const now = new Date();
-        const start = new Date(now);
-        start.setDate(start.getDate() - parseInt(selectedRange.start));
-        const end = new Date(now);
-        end.setDate(end.getDate() - parseInt(selectedRange.end));
-        
-        startDate = start.toISOString().split('T')[0];
-        endDate = end.toISOString().split('T')[0];
-      }
-      
-      const analyticsData = await api.getProfessionalAnalytics(id, startDate, endDate);
-      console.log('Professional analytics data received:', analyticsData);
+      console.log('Loading analytics for landing page ID:', id);
+      const analyticsData = await api.getAnalytics(id);
+      console.log('Analytics data received:', analyticsData);
       setData(analyticsData);
     } catch (error) {
       console.error('Error loading analytics:', error);
@@ -126,105 +76,32 @@ export const Analytics: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header com Filtros */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Analytics Pro</h1>
-            <p className="text-slate-600 mt-1">Painel unificado com análises avançadas, heatmaps e conversões</p>
-          </div>
-          
-          {/* Navegação entre views */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('overview')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                viewMode === 'overview'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              Overview
-            </button>
-            <button
-              onClick={() => setViewMode('heatmap')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                viewMode === 'heatmap'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <MousePointer className="w-4 h-4" />
-              Heatmap
-            </button>
-            <button
-              onClick={() => setViewMode('conversions')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                viewMode === 'conversions'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <Target className="w-4 h-4" />
-              Conversões
-            </button>
-          </div>
-          
-          {/* Filtros de Data */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2">
-              {DATE_RANGES.map((range) => (
-                <button
-                  key={range.label}
-                  onClick={() => {
-                    setSelectedRange(range);
-                    setShowCustomRange(false);
-                  }}
-                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
-                    selectedRange.label === range.label && !showCustomRange
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
-            
-            {/* Período Customizado */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCustomRange(!showCustomRange)}
-                className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                  showCustomRange
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Personalizado
-              </button>
-              
-              {showCustomRange && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={customRange.start}
-                    onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                  <span className="text-slate-500">até</span>
-                  <input
-                    type="date"
-                    value={customRange.end}
-                    onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Analytics</h1>
+          <p className="text-slate-600 mt-1">Análise detalhada do comportamento dos visitantes</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('overview')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'overview'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setViewMode('heatmap')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'heatmap'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Heatmap
+          </button>
         </div>
       </div>
 
@@ -236,65 +113,41 @@ export const Analytics: React.FC = () => {
                 <div className="p-3 bg-blue-100 rounded-lg">
                   <Users className="w-6 h-6 text-blue-600" />
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500">vs período anterior</p>
-                  <p className="text-sm font-semibold text-green-600">+12.5%</p>
-                </div>
               </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Total de Visitantes</p>
-              <p className="text-3xl font-bold text-slate-900">{data.totalVisitors.toLocaleString()}</p>
-              <p className="text-xs text-slate-500 mt-2">Todas as sessões</p>
+              <p className="text-sm font-medium text-slate-600 mb-1">Total Visitantes</p>
+              <p className="text-3xl font-bold text-slate-900">{data.totalVisitors}</p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-green-100 rounded-lg">
-                  <UserCheck className="w-6 h-6 text-green-600" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500">Taxa de retorno</p>
-                  <p className="text-sm font-semibold text-blue-600">
-                    {data.totalVisitors > 0 ? ((data.returningVisitors / data.totalVisitors) * 100).toFixed(1) : 0}%
-                  </p>
+                  <Target className="w-6 h-6 text-green-600" />
                 </div>
               </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Visitantes Únicos</p>
-              <p className="text-3xl font-bold text-slate-900">{data.uniqueVisitors.toLocaleString()}</p>
-              <p className="text-xs text-slate-500 mt-2">
-                {data.returningVisitors} recorrentes, {data.newVisitors} novos
-              </p>
+              <p className="text-sm font-medium text-slate-600 mb-1">Conversões</p>
+              <p className="text-3xl font-bold text-slate-900">{data.totalConversions}</p>
+              <p className="text-xs text-slate-500 mt-2">Taxa: {data.conversionRate.toFixed(2)}%</p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-orange-100 rounded-lg">
-                  <Clock className="w-6 h-6 text-orange-600" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500">Taxa de rejeição</p>
-                  <p className="text-sm font-semibold text-red-600">{data.bounceRate.toFixed(1)}%</p>
+                  <TrendingUp className="w-6 h-6 text-orange-600" />
                 </div>
               </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Duração Média</p>
-              <p className="text-3xl font-bold text-slate-900">{Math.round(data.avgSessionDuration)}s</p>
-              <p className="text-xs text-slate-500 mt-2">{data.totalSessions} sessões</p>
+              <p className="text-sm font-medium text-slate-600 mb-1">Engagement Médio</p>
+              <p className="text-3xl font-bold text-slate-900">{avgEngagement.toFixed(2)}</p>
+              <p className="text-xs text-slate-500 mt-2">de 10.0</p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-purple-100 rounded-lg">
-                  <Target className="w-6 h-6 text-purple-600" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-500">Meta: 5%</p>
-                  <p className={`text-sm font-semibold ${data.conversionRate >= 5 ? 'text-green-600' : 'text-orange-600'}`}>
-                    {data.conversionRate >= 5 ? '✓' : '△'} {(data.conversionRate - 5).toFixed(1)}%
-                  </p>
+                  <Clock className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
-              <p className="text-sm font-medium text-slate-600 mb-1">Taxa de Conversão</p>
-              <p className="text-3xl font-bold text-slate-900">{data.conversionRate.toFixed(2)}%</p>
-              <p className="text-xs text-slate-500 mt-2">{data.conversions.length} conversões</p>
+              <p className="text-sm font-medium text-slate-600 mb-1">Tempo Médio p/ Converter</p>
+              <p className="text-3xl font-bold text-slate-900">{Math.round(avgTimeToConvert)}s</p>
             </div>
           </div>
 
@@ -406,61 +259,8 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
         </>
-      ) : viewMode === 'heatmap' ? (
-        <Heatmap landingPageId={id!} />
       ) : (
-        // Conversões
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Target className="w-5 h-5" />
-            Conversões Detalhadas
-          </h2>
-          <div className="space-y-4">
-            {data.conversions.length === 0 ? (
-              <div className="text-center py-12">
-                <Target className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-600">Nenhuma conversão registrada no período selecionado</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Lead</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Dispositivo</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Engagement</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Tempo p/ Converter</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.conversions.map((conversion) => (
-                      <tr key={conversion.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-3 px-4 text-sm text-slate-900">
-                          {conversion.form_data?.name || conversion.form_data?.email || 'Lead'}
-                        </td>
-                        <td className="py-3 px-4 text-sm text-slate-600 capitalize">
-                          {conversion.behavior_summary?.device_type || 'N/A'}
-                        </td>
-                        <td className="py-3 px-4 text-sm">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {conversion.engagement_score || 0}/10
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-slate-600">
-                          {conversion.time_to_convert ? `${conversion.time_to_convert}s` : 'N/A'}
-                        </td>
-                        <td className="py-3 px-4 text-sm text-slate-600">
-                          {new Date(conversion.converted_at).toLocaleString('pt-BR')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
+        <Heatmap landingPageId={id!} />
       )}
     </div>
   );
