@@ -60,11 +60,39 @@
         timestamp: Date.now()
       };
       
-      console.log('M4Track: Tracking visitor via server-side approach');
-      this.sendDataViaGet('visitor', visitorData);
+      console.log('M4Track: Tracking visitor via webhook approach');
+      this.sendDataViaWebhook('visitor', visitorData);
     },
     
-    sendDataViaGet: function(type, data) {
+    sendDataViaWebhook: function(type, data) {
+      try {
+        if (type === 'visitor') {
+          // Use fetch with no-cors mode for webhook
+          fetch(`${this.config.apiUrl}/api/webhook-visitor`, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+          }).then(() => {
+            console.log(`M4Track: Successfully sent ${type} data via webhook approach`);
+          }).catch(error => {
+            console.error(`M4Track: Webhook error:`, error);
+            // Fallback to image request
+            this.sendDataViaImage(type, data);
+          });
+        } else {
+          // For events, use image fallback
+          this.sendDataViaImage(type, data);
+        }
+      } catch (error) {
+        console.error('M4Track: Error in sendDataViaWebhook:', error);
+        this.sendDataViaImage(type, data);
+      }
+    },
+    
+    sendDataViaImage: function(type, data) {
       try {
         // Build URL with parameters
         const params = new URLSearchParams();
@@ -79,20 +107,20 @@
         // Use Image request (no CORS restrictions)
         const img = new Image();
         img.onload = () => {
-          console.log(`M4Track: Successfully sent ${type} data via server-side approach`);
+          console.log(`M4Track: Successfully sent ${type} data via image fallback`);
         };
         img.onerror = () => {
-          console.error(`M4Track: Error sending ${type} data`);
+          console.error(`M4Track: Error sending ${type} data via image`);
         };
         
         // Send to our collect endpoint
         const collectUrl = `${this.config.apiUrl}/api/collect?${params.toString()}`;
         img.src = collectUrl;
         
-        console.log(`M4Track: Sending ${type} data to:`, collectUrl);
+        console.log(`M4Track: Sending ${type} data via image to:`, collectUrl);
         
       } catch (error) {
-        console.error('M4Track: Error in sendDataViaGet:', error);
+        console.error('M4Track: Error in sendDataViaImage:', error);
       }
     },
     
@@ -108,7 +136,7 @@
       };
       
       console.log(`M4Track: Tracking event: ${eventType}`);
-      this.sendDataViaGet('event', event);
+      this.sendDataViaImage('event', event);
     },
     
     setupEventListeners: function() {
