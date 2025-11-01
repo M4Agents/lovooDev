@@ -104,9 +104,15 @@ export const Settings: React.FC = () => {
 
     setSavingCompany(true);
     try {
-      await api.updateCompany(company.id, companyData);
+      // Enviar apenas o nome da empresa (outros campos são apenas informativos)
+      await api.updateCompany(company.id, {
+        name: companyData.name,
+        domain: company.domain || '', // Manter domínio atual
+        plan: company.plan || 'basic', // Manter plano atual
+        status: company.status || 'active' // Manter status atual
+      });
       await refreshCompany();
-      alert('Dados da empresa atualizados com sucesso!');
+      alert('Nome da empresa atualizado com sucesso!');
     } catch (error) {
       console.error('Error saving company data:', error);
       alert('Erro ao salvar dados da empresa');
@@ -407,7 +413,7 @@ export const Settings: React.FC = () => {
           </div>
 
           <form onSubmit={handleSaveCompany} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Nome da Empresa
@@ -420,49 +426,6 @@ export const Settings: React.FC = () => {
                   placeholder="Nome da sua empresa"
                   required
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Domínio
-                </label>
-                <input
-                  type="text"
-                  value={companyData.domain}
-                  onChange={(e) => setCompanyData(prev => ({ ...prev, domain: e.target.value }))}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="exemplo.com.br"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Plano
-                </label>
-                <select
-                  value={companyData.plan}
-                  onChange={(e) => setCompanyData(prev => ({ ...prev, plan: e.target.value }))}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="basic">Básico</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Status
-                </label>
-                <select
-                  value={companyData.status}
-                  onChange={(e) => setCompanyData(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="active">Ativo</option>
-                  <option value="suspended">Suspenso</option>
-                  <option value="cancelled">Cancelado</option>
-                </select>
               </div>
             </div>
 
@@ -477,6 +440,35 @@ export const Settings: React.FC = () => {
                   <span className="font-medium text-orange-800">Tipo:</span>
                   <span className="ml-2 text-orange-700">Empresa Filha</span>
                 </div>
+                <div>
+                  <span className="font-medium text-orange-800">Plano:</span>
+                  <span className="ml-2 text-orange-700 capitalize">
+                    {company?.plan === 'basic' ? 'Básico' : 
+                     company?.plan === 'pro' ? 'Pro' : 
+                     company?.plan === 'enterprise' ? 'Enterprise' : 
+                     company?.plan || 'Não definido'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-orange-800">Status:</span>
+                  <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                    company?.status === 'active' ? 'bg-green-100 text-green-800' :
+                    company?.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                    company?.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {company?.status === 'active' ? 'Ativo' :
+                     company?.status === 'suspended' ? 'Suspenso' :
+                     company?.status === 'cancelled' ? 'Cancelado' :
+                     company?.status || 'Não definido'}
+                  </span>
+                </div>
+                {company?.domain && (
+                  <div className="md:col-span-2">
+                    <span className="font-medium text-orange-800">Domínio Principal:</span>
+                    <span className="ml-2 text-orange-700">{company.domain}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -486,7 +478,7 @@ export const Settings: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {savingCompany ? 'Salvando...' : 'Salvar Dados da Empresa'}
+              {savingCompany ? 'Salvando...' : 'Salvar Nome da Empresa'}
             </button>
           </form>
         </div>
