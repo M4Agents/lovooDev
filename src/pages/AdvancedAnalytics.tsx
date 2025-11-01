@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
-  Users, Target, Clock, Calendar, Download, UserCheck, 
-  TrendingUp, Smartphone, Monitor, Globe
+  Users, Target, Clock, Calendar, Download, RefreshCw, Globe, 
+  Smartphone, Monitor, UserCheck, MapPin, Languages, Eye, 
+  MousePointer, TrendingUp
 } from 'lucide-react';
+import { Heatmap } from '../components/Heatmap';
 
 type DateRange = {
   start: string;
@@ -22,6 +24,11 @@ type AnalyticsData = {
   bounceRate: number;
   conversionRate: number;
   deviceBreakdown: Record<string, number>;
+  referrerBreakdown: Record<string, number>;
+  timezoneBreakdown: Record<string, number>;
+  languageBreakdown: Record<string, number>;
+  hourlyBreakdown: Record<string, number>;
+  dailyBreakdown: Record<string, number>;
   visitors: any[];
   conversions: any[];
 };
@@ -41,9 +48,22 @@ export const AdvancedAnalytics: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState<DateRange>(DATE_RANGES[2]);
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [showCustomRange, setShowCustomRange] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [viewMode, setViewMode] = useState<'overview' | 'heatmap' | 'conversions'>('overview');
 
   useEffect(() => {
     loadAnalytics();
+    
+    let interval: NodeJS.Timeout;
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        loadAnalytics();
+      }, 60000); // Refresh a cada minuto
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [id, selectedRange, customRange, showCustomRange]);
 
   const loadAnalytics = async () => {
