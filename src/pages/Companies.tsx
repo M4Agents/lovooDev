@@ -673,6 +673,492 @@ export const Companies: React.FC = () => {
             </form>
           </div>
         )}
+
+        {/* Aba Endereço */}
+        {activeTab === 'endereco' && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <MapPin className="w-5 h-5 text-blue-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
+            </div>
+
+            <form onSubmit={handleSaveCompany} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    CEP
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.cep}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, cep: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="00000-000"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Logradouro
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.logradouro}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, logradouro: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Rua, Avenida, etc."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.numero}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, numero: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="123"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Complemento
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.complemento}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, complemento: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Sala, Andar, etc."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.bairro}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, bairro: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Bairro"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.cidade}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, cidade: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Cidade"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Estado/UF
+                  </label>
+                  <select
+                    value={companyData.estado}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, estado: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="AC">AC</option>
+                    <option value="AL">AL</option>
+                    <option value="AP">AP</option>
+                    <option value="AM">AM</option>
+                    <option value="BA">BA</option>
+                    <option value="CE">CE</option>
+                    <option value="DF">DF</option>
+                    <option value="ES">ES</option>
+                    <option value="GO">GO</option>
+                    <option value="MA">MA</option>
+                    <option value="MT">MT</option>
+                    <option value="MS">MS</option>
+                    <option value="MG">MG</option>
+                    <option value="PA">PA</option>
+                    <option value="PB">PB</option>
+                    <option value="PR">PR</option>
+                    <option value="PE">PE</option>
+                    <option value="PI">PI</option>
+                    <option value="RJ">RJ</option>
+                    <option value="RN">RN</option>
+                    <option value="RS">RS</option>
+                    <option value="RO">RO</option>
+                    <option value="RR">RR</option>
+                    <option value="SC">SC</option>
+                    <option value="SP">SP</option>
+                    <option value="SE">SE</option>
+                    <option value="TO">TO</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    País
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.pais}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, pais: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Brasil"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingCompany}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {savingCompany ? 'Salvando...' : 'Salvar Endereço'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Aba Contatos */}
+        {activeTab === 'contatos' && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Phone className="w-5 h-5 text-green-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-900">Contatos</h2>
+            </div>
+
+            <form onSubmit={handleSaveCompany} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Telefone Principal
+                  </label>
+                  <input
+                    type="tel"
+                    value={companyData.telefone_principal}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_principal: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Telefone Secundário
+                  </label>
+                  <input
+                    type="tel"
+                    value={companyData.telefone_secundario}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_secundario: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="(11) 3333-3333"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    WhatsApp
+                  </label>
+                  <input
+                    type="tel"
+                    value={companyData.whatsapp}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, whatsapp: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Principal
+                  </label>
+                  <input
+                    type="email"
+                    value={companyData.email_principal}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, email_principal: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="contato@empresa.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Comercial
+                  </label>
+                  <input
+                    type="email"
+                    value={companyData.email_comercial}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, email_comercial: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="comercial@empresa.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Financeiro
+                  </label>
+                  <input
+                    type="email"
+                    value={companyData.email_financeiro}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, email_financeiro: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="financeiro@empresa.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Suporte
+                  </label>
+                  <input
+                    type="email"
+                    value={companyData.email_suporte}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, email_suporte: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="suporte@empresa.com"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-medium text-green-900 mb-4">Responsável Principal</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Nome
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.responsavel_principal.nome}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        responsavel_principal: { ...prev.responsavel_principal, nome: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Nome do responsável"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Cargo
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.responsavel_principal.cargo}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        responsavel_principal: { ...prev.responsavel_principal, cargo: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Cargo/Função"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-medium text-green-900 mb-4">Contato Financeiro</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Nome
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.contato_financeiro.nome}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        contato_financeiro: { ...prev.contato_financeiro, nome: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="Nome"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.contato_financeiro.email}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        contato_financeiro: { ...prev.contato_financeiro, email: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="email@empresa.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Telefone
+                    </label>
+                    <input
+                      type="tel"
+                      value={companyData.contato_financeiro.telefone}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        contato_financeiro: { ...prev.contato_financeiro, telefone: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingCompany}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {savingCompany ? 'Salvando...' : 'Salvar Contatos'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Aba Domínios & URLs */}
+        {activeTab === 'dominios' && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Globe className="w-5 h-5 text-purple-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-900">Domínios & URLs</h2>
+            </div>
+
+            <form onSubmit={handleSaveCompany} className="space-y-6">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-900 mb-2">Domínio Principal</h4>
+                <p className="text-sm text-purple-700 mb-2">
+                  {company?.domain || 'Não definido'}
+                </p>
+                <p className="text-xs text-purple-600">
+                  O domínio principal é gerenciado pela empresa pai
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  URL do Google My Business
+                </label>
+                <input
+                  type="url"
+                  value={companyData.url_google_business}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, url_google_business: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="https://business.google.com/..."
+                />
+              </div>
+
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-900 mb-4">Redes Sociais</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      Facebook
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.facebook}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://facebook.com/empresa"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      Instagram
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.instagram}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://instagram.com/empresa"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      LinkedIn
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.linkedin}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, linkedin: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://linkedin.com/company/empresa"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      Twitter
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.twitter}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, twitter: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://twitter.com/empresa"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      YouTube
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.youtube}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, youtube: e.target.value }
+                      }))}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://youtube.com/c/empresa"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingCompany}
+                className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {savingCompany ? 'Salvando...' : 'Salvar Domínios & URLs'}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     );
   }
