@@ -60,10 +60,16 @@ async function createVisitorDirectSQL(params) {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
+    // Generate UUID for session_id if not valid
+    let sessionId = params.session_id;
+    if (!sessionId || !isValidUUID(sessionId)) {
+      sessionId = generateUUID();
+    }
+    
     // Execute the function directly
     const { data, error } = await supabase.rpc('public_create_visitor', {
       tracking_code_text: params.tracking_code,
-      session_id_text: params.session_id,
+      session_id_text: sessionId,
       user_agent_text: params.user_agent,
       device_type_text: params.device_type,
       screen_resolution_text: params.screen_resolution,
@@ -85,4 +91,17 @@ async function createVisitorDirectSQL(params) {
     console.error('Exception in createVisitorDirectSQL:', error);
     return { success: false, error: error.message };
   }
+}
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+function isValidUUID(str) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
 }
