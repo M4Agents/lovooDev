@@ -483,7 +483,39 @@
         // Skip queue method since it's blocked by CORS
         console.log(`M4Track: Skipping queue method (CORS blocked), using fallback only`);
         
-        // Fallback: Use image request with endpoint that inserts into queue
+        // Enhanced fallback: Multiple attempts with different methods
+        console.log(`M4Track: Attempting enhanced fallback for ${type}:`, data);
+        
+        // Method 1: Try direct RPC call with different approach
+        if (type === 'visitor' && data.tracking_code) {
+          try {
+            // Use fetch with no-cors mode
+            fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': apiKey
+              },
+              body: JSON.stringify({
+                tracking_code_text: data.tracking_code,
+                session_id_text: data.session_id,
+                user_agent_text: data.user_agent,
+                device_type_text: data.device_type,
+                screen_resolution_text: data.screen_resolution,
+                referrer_text: data.referrer
+              })
+            }).then(() => {
+              console.log(`M4Track: No-CORS request sent for ${type}`);
+            }).catch(() => {
+              console.log(`M4Track: No-CORS request failed for ${type}`);
+            });
+          } catch (error) {
+            console.log(`M4Track: No-CORS method failed:`, error);
+          }
+        }
+        
+        // Method 2: Image request fallback
         const params = new URLSearchParams();
         params.set('action', `queue_${type}`);
         
@@ -497,17 +529,32 @@
         // Create image request (no CORS restrictions)
         const img = new Image();
         img.onload = () => {
-          console.log(`M4Track: Successfully queued ${type} record via fallback`);
+          console.log(`M4Track: Successfully queued ${type} record via image fallback`);
         };
         img.onerror = () => {
-          console.error(`M4Track: Error queueing ${type} record via fallback`);
+          console.error(`M4Track: Error queueing ${type} record via image fallback`);
         };
         
         // Use our tracking endpoint that will insert into queue
         img.src = `https://app.lovoocrm.com/track.gif?${params.toString()}`;
         
-        // Also log the data for debugging
-        console.log(`M4Track: Attempting to queue ${type} via fallback:`, data);
+        // Method 3: Beacon API as last resort
+        if (navigator.sendBeacon) {
+          try {
+            const beaconData = new FormData();
+            beaconData.append('action', `queue_${type}`);
+            Object.keys(data).forEach(key => {
+              if (data[key] !== null && data[key] !== undefined) {
+                beaconData.append(key, data[key].toString());
+              }
+            });
+            
+            navigator.sendBeacon('https://app.lovoocrm.com/track.gif', beaconData);
+            console.log(`M4Track: Beacon sent for ${type}`);
+          } catch (beaconError) {
+            console.log(`M4Track: Beacon failed:`, beaconError);
+          }
+        }
         
       } catch (error) {
         console.error(`M4Track: Error queueing single ${type} record`, error);
