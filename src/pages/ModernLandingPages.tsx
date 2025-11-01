@@ -35,6 +35,7 @@ export const ModernLandingPages: React.FC = () => {
   const [showTrackingCode, setShowTrackingCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [formData, setFormData] = useState({ name: '', url: '' });
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -512,8 +513,18 @@ export const ModernLandingPages: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-2">
                   Cole este código no final do HTML da sua landing page, <strong>antes da tag de fechamento</strong> <code className="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> (não no head):
                 </p>
-                <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                  💡 <strong>Novo:</strong> Agora usando <code>LovoCRM</code>. Códigos antigos com <code>LovooCRM</code> ou <code>M4Track</code> continuam funcionando.
+                <div className="mb-3 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded">
+                  <span className="text-xs text-blue-700">
+                    📖 <strong>Precisa de ajuda?</strong> Veja onde colocar este código
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-6 px-2"
+                    onClick={() => setShowInstallGuide(true)}
+                  >
+                    Guia de Instalação
+                  </Button>
                 </div>
                 <div className="relative">
                   <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl text-sm overflow-x-auto">
@@ -741,6 +752,187 @@ Content-Type: application/json
               </div>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Modal de Guia de Instalação */}
+      {showInstallGuide && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">
+                📖 Guia de Instalação - LovoCRM Analytics
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowInstallGuide(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              {/* Regra Principal */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-2">🎯 Regra Principal</h3>
+                <p className="text-green-700">
+                  <strong>SEMPRE</strong> cole o código <strong>antes da tag <code>&lt;/body&gt;</code></strong> (fechamento do body), <strong>NUNCA</strong> no <code>&lt;head&gt;</code>
+                </p>
+              </div>
+
+              {/* Posição Correta */}
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-3">✅ Posição Correta</h3>
+                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
+{`<!DOCTYPE html>
+<html>
+<head>
+    <title>Minha Landing Page</title>
+    <!-- CSS, meta tags, etc. -->
+</head>
+<body>
+    <!-- Todo o conteúdo da página -->
+    <h1>Título da Landing Page</h1>
+    <p>Conteúdo da página...</p>
+    
+    <!-- ↓ COLE SEU CÓDIGO AQUI ↓ -->
+    <script src="https://app.lovoocrm.com/m4track-v3.js?v=123"></script>
+    <script>
+      LovoCRM.init('seu-tracking-code', 'https://app.lovoocrm.com');
+    </script>
+    <!-- ↑ ATÉ AQUI ↑ -->
+    
+</body> <!-- ← Imediatamente antes desta linha -->
+</html>`}
+                </pre>
+              </div>
+
+              {/* Posição Incorreta */}
+              <div>
+                <h3 className="font-semibold text-red-800 mb-3">❌ Posição Incorreta</h3>
+                <pre className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm overflow-x-auto">
+{`<head>
+    <title>Minha Landing Page</title>
+    <!-- ❌ NÃO COLOCAR AQUI -->
+    <script src="https://app.lovoocrm.com/m4track-v3.js"></script>
+    <!-- ❌ MUITO CEDO - DOM não carregou ainda -->
+</head>`}
+                </pre>
+              </div>
+
+              {/* Exemplos por Plataforma */}
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-3">🛠️ Exemplos por Plataforma</h3>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600 mb-2">WordPress</h4>
+                    <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+{`<!-- No arquivo footer.php do tema -->
+<?php wp_footer(); ?>
+
+<!-- CÓDIGO LOVOOCRM AQUI -->
+<script src="..."></script>
+<script>LovoCRM.init(...);</script>
+
+</body>
+</html>`}
+                    </pre>
+                  </div>
+
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600 mb-2">Elementor/Divi</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>1. Configurações → Avançado</p>
+                      <p>2. "Código antes do &lt;/body&gt;"</p>
+                      <p>3. Cole o código lá</p>
+                      <p>4. Salvar e publicar</p>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600 mb-2">HTML Puro</h4>
+                    <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+{`<!-- Final da página -->
+    <!-- Conteúdo -->
+    
+    <!-- CÓDIGO AQUI -->
+    <script src="..."></script>
+</body>`}
+                    </pre>
+                  </div>
+
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600 mb-2">Google Tag Manager</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>1. Criar nova tag "HTML Personalizado"</p>
+                      <p>2. Cole o código na tag</p>
+                      <p>3. Trigger: "All Pages"</p>
+                      <p>4. Publicar container</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Por que esta posição */}
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-3">🚨 Por que Esta Posição é Importante?</h3>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium text-green-800 mb-2">✅ Vantagens do Final do Body</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                      <li>• DOM completamente carregado</li>
+                      <li>• Não bloqueia carregamento da página</li>
+                      <li>• Acesso a todos os elementos</li>
+                      <li>• Melhor performance</li>
+                      <li>• Compatibilidade garantida</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h4 className="font-medium text-red-800 mb-2">❌ Problemas do Head</h4>
+                    <ul className="text-sm text-red-700 space-y-1">
+                      <li>• DOM ainda não existe</li>
+                      <li>• Bloqueia carregamento</li>
+                      <li>• Pode gerar erros JavaScript</li>
+                      <li>• Performance ruim</li>
+                      <li>• Usuário espera mais</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Checklist */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-800 mb-3">✅ Checklist de Verificação</h3>
+                <div className="grid md:grid-cols-2 gap-2 text-sm text-blue-700">
+                  <div>• ✅ Código está antes do &lt;/body&gt;?</div>
+                  <div>• ✅ Código está depois de todo conteúdo?</div>
+                  <div>• ✅ NÃO está no &lt;head&gt;?</div>
+                  <div>• ✅ Tracking code está correto?</div>
+                  <div>• ✅ URL do script está correta?</div>
+                  <div>• ✅ Página foi publicada?</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t bg-gray-50">
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  💡 <strong>Dica:</strong> Após instalar, use o botão "Verificar Tag" para confirmar se está funcionando
+                </p>
+                <Button
+                  onClick={() => setShowInstallGuide(false)}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Entendi, Fechar
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
