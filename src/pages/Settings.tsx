@@ -126,79 +126,7 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* Webhook de Conversão */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Webhook className="w-5 h-5 text-purple-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-900">Webhook de Conversão</h2>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                URL do Webhook para Formulários
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={company?.api_key ? 
-                    `https://app.lovoocrm.com/api/webhook-conversion?api_key=${company.api_key}` : 
-                    'Carregando API key...'
-                  }
-                  readOnly
-                  className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
-                />
-                <button
-                  onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook-conversion?api_key=${company?.api_key || ''}`)}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
-                >
-                  Copiar
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 mt-2">
-                Use esta URL nos seus formulários para capturar conversões automaticamente
-              </p>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-2">Como usar no formulário:</h4>
-              <div className="space-y-2 text-sm text-blue-800">
-                <p><strong>Método:</strong> POST</p>
-                <p><strong>Content-Type:</strong> application/json</p>
-                <p><strong>Dados obrigatórios:</strong></p>
-                <ul className="list-disc list-inside ml-4 space-y-1">
-                  <li><code>tracking_code</code>: Código da landing page</li>
-                  <li><code>form_data</code>: Dados do formulário (nome, email, telefone, etc.)</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <h4 className="font-medium text-green-900 mb-2">Script automático para formulários:</h4>
-              <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
-                <div className="text-slate-600">{`<!-- Adicionar no final da página -->`}</div>
-                <div>{`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>`}</div>
-                <div>{`<script>`}</div>
-                <div className="ml-2">{`ConversionTracker.init('SEU_TRACKING_CODE');`}</div>
-                <div className="ml-2">{`ConversionTracker.autoTrack(); // Captura todos os formulários`}</div>
-                <div>{`</script>`}</div>
-              </div>
-              <button
-                onClick={() => copyToClipboard(`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>
-<script>
-  ConversionTracker.init('SEU_TRACKING_CODE');
-  ConversionTracker.autoTrack();
-</script>`)}
-                className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-medium transition-colors"
-              >
-                Copiar Script
-              </button>
-            </div>
-          </div>
-        </div>
-
+        {/* Webhook Personalizado - Movido para cima */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-green-100 rounded-lg">
@@ -296,6 +224,83 @@ export const Settings: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Webhook de Conversão - Nova seção em largura completa */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-purple-100 rounded-lg">
+            <Webhook className="w-5 h-5 text-purple-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900">Webhook de Conversão</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                URL do Webhook para Formulários
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={company?.api_key ? 
+                    `https://app.lovoocrm.com/api/webhook-conversion?api_key=${company.api_key}` : 
+                    'Carregando API key...'
+                  }
+                  readOnly
+                  className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                />
+                <button
+                  onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook-conversion?api_key=${company?.api_key || ''}`)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Use esta URL nos seus formulários para capturar conversões automaticamente
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Como usar no formulário:</h4>
+              <div className="space-y-2 text-sm text-blue-800">
+                <p><strong>Método:</strong> POST</p>
+                <p><strong>Content-Type:</strong> application/json</p>
+                <p><strong>Dados obrigatórios:</strong></p>
+                <ul className="list-disc list-inside ml-4 space-y-1">
+                  <li><code>tracking_code</code>: Código da landing page</li>
+                  <li><code>form_data</code>: Dados do formulário (nome, email, telefone, etc.)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="font-medium text-green-900 mb-2">Script automático para formulários:</h4>
+              <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                <div className="text-slate-600">{`<!-- Adicionar no final da página -->`}</div>
+                <div>{`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>`}</div>
+                <div>{`<script>`}</div>
+                <div className="ml-2">{`ConversionTracker.init('SEU_TRACKING_CODE');`}</div>
+                <div className="ml-2">{`ConversionTracker.autoTrack(); // Captura todos os formulários`}</div>
+                <div>{`</script>`}</div>
+              </div>
+              <button
+                onClick={() => copyToClipboard(`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>
+<script>
+  ConversionTracker.init('SEU_TRACKING_CODE');
+  ConversionTracker.autoTrack();
+</script>`)}
+                className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-medium transition-colors"
+              >
+                Copiar Script
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm p-6 text-white">
