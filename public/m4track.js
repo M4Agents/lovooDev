@@ -108,7 +108,7 @@
         event_type: 'click',
         event_data: {
           tag: target.tagName,
-          classes: target.className,
+          classes: typeof target.className === 'string' ? target.className : target.className.toString(),
           text: target.textContent?.substring(0, 100),
           is_cta: isCTA
         },
@@ -236,7 +236,8 @@
       let current = element;
       while (current && current !== document.body) {
         if (current.tagName === 'SECTION' || current.hasAttribute('data-section')) {
-          return current.id || current.className || 'unnamed-section';
+          const className = typeof current.className === 'string' ? current.className : current.className.toString();
+          return current.id || className || 'unnamed-section';
         }
         current = current.parentElement;
       }
@@ -255,13 +256,32 @@
       if (!this.config.visitorId) return;
       
       try {
-        // Use pixel tracking for events
+        // Use pixel tracking for events - avoid circular references
+        const cleanEventData = {};
+        const cleanCoordinates = {};
+        
+        // Safely copy event_data without circular references
+        if (eventData.event_data && typeof eventData.event_data === 'object') {
+          Object.keys(eventData.event_data).forEach(key => {
+            const value = eventData.event_data[key];
+            if (typeof value !== 'object' || value === null) {
+              cleanEventData[key] = value;
+            }
+          });
+        }
+        
+        // Safely copy coordinates
+        if (eventData.coordinates && typeof eventData.coordinates === 'object') {
+          if (eventData.coordinates.x !== undefined) cleanCoordinates.x = eventData.coordinates.x;
+          if (eventData.coordinates.y !== undefined) cleanCoordinates.y = eventData.coordinates.y;
+        }
+        
         const params = new URLSearchParams({
           action: 'create_event',
           visitor_id: eventData.visitor_id,
           event_type: eventData.event_type,
-          event_data: JSON.stringify(eventData.event_data || {}),
-          coordinates: JSON.stringify(eventData.coordinates || {}),
+          event_data: JSON.stringify(cleanEventData),
+          coordinates: JSON.stringify(cleanCoordinates),
           element_selector: eventData.element_selector || '',
           section: eventData.section || '',
           timestamp: Date.now()
