@@ -452,19 +452,19 @@
         // Try CORS-friendly function that works better
         if (type === 'visitor' && data.tracking_code) {
           try {
-            const response = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
+            const response = await fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'apikey': apiKey
               },
               body: JSON.stringify({
-                tracking_code_param: data.tracking_code,
-                session_id_param: data.session_id,
-                user_agent_param: data.user_agent,
-                device_type_param: data.device_type,
-                screen_resolution_param: data.screen_resolution,
-                referrer_param: data.referrer
+                tracking_code_text: data.tracking_code,
+                session_id_text: data.session_id,
+                user_agent_text: data.user_agent,
+                device_type_text: data.device_type,
+                screen_resolution_text: data.screen_resolution,
+                referrer_text: data.referrer
               })
             });
             

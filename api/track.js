@@ -106,20 +106,20 @@ async function processTracking(params) {
       if (pageResponse.ok) {
         const pages = await pageResponse.json();
         if (pages.length > 0) {
-          // Create visitor using CORS-friendly function
-          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
+          // Create visitor using public function
+          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'apikey': apiKey
             },
             body: JSON.stringify({
-              tracking_code_param: params.tracking_code,
-              session_id_param: params.session_id,
-              user_agent_param: params.user_agent,
-              device_type_param: params.device_type,
-              screen_resolution_param: params.screen_resolution,
-              referrer_param: params.referrer
+              tracking_code_text: params.tracking_code,
+              session_id_text: params.session_id,
+              user_agent_text: params.user_agent,
+              device_type_text: params.device_type,
+              screen_resolution_text: params.screen_resolution,
+              referrer_text: params.referrer
             })
           });
           
@@ -226,20 +226,20 @@ async function processDirectly(type, data, apiUrl, apiKey) {
       if (pageResponse.ok) {
         const pages = await pageResponse.json();
         if (pages.length > 0) {
-          // Create visitor using CORS-friendly function
-          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
+          // Create visitor using public function
+          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'apikey': apiKey
             },
             body: JSON.stringify({
-              tracking_code_param: data.tracking_code,
-              session_id_param: data.session_id,
-              user_agent_param: data.user_agent,
-              device_type_param: data.device_type,
-              screen_resolution_param: data.screen_resolution,
-              referrer_param: data.referrer
+              tracking_code_text: data.tracking_code,
+              session_id_text: data.session_id,
+              user_agent_text: data.user_agent,
+              device_type_text: data.device_type,
+              screen_resolution_text: data.screen_resolution,
+              referrer_text: data.referrer
             })
           });
           
