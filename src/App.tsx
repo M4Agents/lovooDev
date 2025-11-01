@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { ModernDashboard } from './pages/ModernDashboard';
 import { ModernLandingPages } from './pages/ModernLandingPages';
 import { Analytics } from './pages/Analytics';
+import { AdvancedAnalytics } from './pages/AdvancedAnalytics';
 import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
 import { startTrackingQueueProcessor } from './services/api';
@@ -85,7 +86,7 @@ function AppRoutes() {
         path="/advanced-analytics/:id"
         element={
           <ProtectedRoute>
-            <Analytics />
+            <AdvancedAnalytics />
           </ProtectedRoute>
         }
       />
