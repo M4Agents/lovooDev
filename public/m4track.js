@@ -449,28 +449,54 @@
         const apiUrl = this.config.apiUrl;
         const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
         
-        // Insert directly into tracking_queue table (no CORS issues)
-        const response = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': apiKey,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({
-            action: type,
-            data: data
-          })
-        });
-        
-        if (response.ok) {
-          console.log(`M4Track: Successfully queued ${type} record`);
-        } else {
-          console.error(`M4Track: Error queueing ${type} record:`, response.status);
+        // Try direct insert into tracking_queue first
+        try {
+          const response = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apiKey,
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              action: type,
+              data: data
+            })
+          });
+          
+          if (response.ok) {
+            console.log(`M4Track: Successfully queued ${type} record via direct insert`);
+            return;
+          }
+        } catch (directError) {
+          console.log(`M4Track: Direct insert failed, trying fallback method`);
         }
         
+        // Fallback: Use image request with endpoint that inserts into queue
+        const params = new URLSearchParams();
+        params.set('action', `queue_${type}`);
+        
+        // Add all data as URL parameters
+        Object.keys(data).forEach(key => {
+          if (data[key] !== null && data[key] !== undefined) {
+            params.set(key, data[key].toString());
+          }
+        });
+        
+        // Create image request (no CORS restrictions)
+        const img = new Image();
+        img.onload = () => {
+          console.log(`M4Track: Successfully queued ${type} record via fallback`);
+        };
+        img.onerror = () => {
+          console.error(`M4Track: Error queueing ${type} record via fallback`);
+        };
+        
+        // Use our tracking endpoint that will insert into queue
+        img.src = `https://app.lovoocrm.com/track.gif?${params.toString()}`;
+        
         // Also log the data for debugging
-        console.log(`M4Track: Attempting to queue ${type}:`, data);
+        console.log(`M4Track: Attempting to queue ${type} via fallback:`, data);
         
       } catch (error) {
         console.error(`M4Track: Error queueing single ${type} record`, error);

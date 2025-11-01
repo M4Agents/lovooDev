@@ -40,6 +40,41 @@ async function processTracking(params) {
   const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
   
   try {
+    // Handle queue actions (fallback method)
+    if (action && action.startsWith('queue_')) {
+      const queueType = action.replace('queue_', '');
+      
+      // Prepare data object from URL parameters
+      const data = {};
+      Object.keys(params).forEach(key => {
+        if (key !== 'action') {
+          data[key] = params[key];
+        }
+      });
+      
+      // Insert into tracking_queue
+      const queueResponse = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey
+        },
+        body: JSON.stringify({
+          action: queueType,
+          data: data
+        })
+      });
+      
+      if (queueResponse.ok) {
+        console.log(`Successfully queued ${queueType} via fallback`);
+      } else {
+        console.error(`Error queueing ${queueType}:`, await queueResponse.text());
+      }
+      
+      return;
+    }
+    
+    // Handle direct processing (legacy)
     if (action === 'sync_visitor' && params.tracking_code) {
       console.log('Processing visitor:', params.tracking_code);
       
