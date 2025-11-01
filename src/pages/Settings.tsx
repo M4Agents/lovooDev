@@ -750,7 +750,163 @@ export const Settings: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {savingCompany ? 'Salvando...' : 'Salvar Nome da Empresa'}
+              {savingCompany ? 'Salvando...' : 'Salvar Dados Principais'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Aba Endereço - Apenas para empresas filhas */}
+      {isChildCompany && activeTab === 'endereco' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <MapPin className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
+          </div>
+
+          <form onSubmit={handleSaveCompany} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={companyData.cep}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, cep: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="00000-000"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Logradouro
+                </label>
+                <input
+                  type="text"
+                  value={companyData.logradouro}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, logradouro: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Rua, Avenida, etc."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Número
+                </label>
+                <input
+                  type="text"
+                  value={companyData.numero}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, numero: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="123"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Complemento
+                </label>
+                <input
+                  type="text"
+                  value={companyData.complemento}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, complemento: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Sala, Andar, etc."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Bairro
+                </label>
+                <input
+                  type="text"
+                  value={companyData.bairro}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, bairro: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Bairro"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Cidade
+                </label>
+                <input
+                  type="text"
+                  value={companyData.cidade}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, cidade: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Cidade"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Estado/UF
+                </label>
+                <select
+                  value={companyData.estado}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, estado: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Selecione</option>
+                  <option value="AC">AC</option>
+                  <option value="AL">AL</option>
+                  <option value="AP">AP</option>
+                  <option value="AM">AM</option>
+                  <option value="BA">BA</option>
+                  <option value="CE">CE</option>
+                  <option value="DF">DF</option>
+                  <option value="ES">ES</option>
+                  <option value="GO">GO</option>
+                  <option value="MA">MA</option>
+                  <option value="MT">MT</option>
+                  <option value="MS">MS</option>
+                  <option value="MG">MG</option>
+                  <option value="PA">PA</option>
+                  <option value="PB">PB</option>
+                  <option value="PR">PR</option>
+                  <option value="PE">PE</option>
+                  <option value="PI">PI</option>
+                  <option value="RJ">RJ</option>
+                  <option value="RN">RN</option>
+                  <option value="RS">RS</option>
+                  <option value="RO">RO</option>
+                  <option value="RR">RR</option>
+                  <option value="SC">SC</option>
+                  <option value="SP">SP</option>
+                  <option value="SE">SE</option>
+                  <option value="TO">TO</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  País
+                </label>
+                <input
+                  type="text"
+                  value={companyData.pais}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, pais: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Brasil"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingCompany}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {savingCompany ? 'Salvando...' : 'Salvar Endereço'}
             </button>
           </form>
         </div>
