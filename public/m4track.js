@@ -45,58 +45,34 @@
     },
 
     createVisitor: async function() {
-      const visitorData = {
-        tracking_code: this.config.trackingCode,
-        session_id: this.config.sessionId,
-        user_agent: navigator.userAgent,
-        device_type: this.getDeviceType(),
-        screen_resolution: `${window.screen.width}x${window.screen.height}`,
-        referrer: document.referrer || null
-      };
-
       try {
-        // First get the landing page ID using RPC function
-        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
-          },
-          body: JSON.stringify({
-            tracking_code_param: this.config.trackingCode
-          })
+        // Use pixel tracking to avoid CORS issues
+        const params = new URLSearchParams({
+          action: 'create_visitor',
+          tracking_code: this.config.trackingCode,
+          session_id: this.config.sessionId,
+          user_agent: navigator.userAgent,
+          device_type: this.getDeviceType(),
+          screen_resolution: `${window.screen.width}x${window.screen.height}`,
+          referrer: document.referrer || '',
+          timestamp: Date.now()
         });
 
-        if (pageResponse.ok) {
-          const pages = await pageResponse.json();
-          if (pages.length > 0) {
-            const pageId = pages[0].id;
-            
-            // Create visitor using RPC function
-            const visitorResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_visitor`, {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
-              },
-              body: JSON.stringify({
-                landing_page_id_param: pageId,
-                session_id_param: this.config.sessionId,
-                user_agent_param: navigator.userAgent,
-                device_type_param: this.getDeviceType(),
-                screen_resolution_param: `${window.screen.width}x${window.screen.height}`,
-                referrer_param: document.referrer || null
-              })
-            });
-
-            if (visitorResponse.ok) {
-              const visitors = await visitorResponse.json();
-              if (visitors.length > 0) {
-                this.config.visitorId = visitors[0].id;
-              }
-            }
-          }
-        }
+        // Create tracking pixel
+        const img = new Image();
+        img.onload = () => {
+          console.log('M4Track: Visitor tracking sent');
+        };
+        img.onerror = () => {
+          console.error('M4Track: Error sending visitor tracking');
+        };
+        
+        // Use pixel tracking Edge Function
+        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        
+        // Generate a visitor ID locally for immediate use
+        this.config.visitorId = this.generateUUID();
+        
       } catch (error) {
         console.error('M4Track: Error creating visitor', error);
       }
@@ -277,21 +253,21 @@
       if (!this.config.visitorId) return;
       
       try {
-        await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_behavior_event`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
-          },
-          body: JSON.stringify({
-            visitor_id_param: eventData.visitor_id,
-            event_type_param: eventData.event_type,
-            event_data_param: eventData.event_data || {},
-            coordinates_param: eventData.coordinates || null,
-            element_selector_param: eventData.element_selector || null,
-            section_param: eventData.section || null
-          })
+        // Use pixel tracking for events
+        const params = new URLSearchParams({
+          action: 'create_event',
+          visitor_id: eventData.visitor_id,
+          event_type: eventData.event_type,
+          event_data: JSON.stringify(eventData.event_data || {}),
+          coordinates: JSON.stringify(eventData.coordinates || {}),
+          element_selector: eventData.element_selector || '',
+          section: eventData.section || '',
+          timestamp: Date.now()
         });
+
+        const img = new Image();
+        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        
       } catch (error) {
         console.error('M4Track: Error sending event', error);
       }
@@ -331,44 +307,24 @@
       };
 
       try {
-        // Get landing page ID first using RPC function
-        const pageResponse = await fetch(`${this.config.apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
-          },
-          body: JSON.stringify({
-            tracking_code_param: this.config.trackingCode
-          })
+        // Use pixel tracking for conversions
+        const params = new URLSearchParams({
+          action: 'create_conversion',
+          tracking_code: this.config.trackingCode,
+          visitor_id: this.config.visitorId,
+          form_data: JSON.stringify(formData),
+          behavior_summary: JSON.stringify(behaviorSummary),
+          engagement_score: behaviorSummary.engagement_score,
+          time_to_convert: behaviorSummary.time_to_convert,
+          timestamp: Date.now()
         });
 
-        if (pageResponse.ok) {
-          const pages = await pageResponse.json();
-          if (pages.length > 0) {
-            const pageId = pages[0].id;
-            
-            const response = await fetch(`${this.config.apiUrl}/rest/v1/rpc/create_conversion`, {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
-              },
-              body: JSON.stringify({
-                visitor_id_param: this.config.visitorId,
-                landing_page_id_param: pageId,
-                form_data_param: formData,
-                behavior_summary_param: behaviorSummary,
-                engagement_score_param: behaviorSummary.engagement_score,
-                time_to_convert_param: behaviorSummary.time_to_convert
-              })
-            });
-
-            if (response.ok) {
-              console.log('M4Track: Conversion tracked successfully');
-            }
-          }
-        }
+        const img = new Image();
+        img.onload = () => {
+          console.log('M4Track: Conversion tracked successfully');
+        };
+        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        
       } catch (error) {
         console.error('M4Track: Error tracking conversion', error);
       }

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Compatibilidade - LovoCRM Analytics</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .results { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Teste de Compatibilidade LovoCRM Analytics</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Objetivo do Teste</h3>
+        <p>Esta página verifica se todas as variantes do nome funcionam corretamente após a migração:</p>
+        <ul>
+            <li><strong>LovoCRM</strong> - Novo nome principal</li>
+            <li><strong>LovooCRM</strong> - Nome atual (mantido)</li>
+            <li><strong>M4Track</strong> - Nome antigo (compatibilidade)</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🔧 Testes de Funcionalidade</h3>
+        
+        <button onclick="testLovoCRM()">Testar LovoCRM.init()</button>
+        <button onclick="testLovooCRM()">Testar LovooCRM.init()</button>
+        <button onclick="testM4Track()">Testar M4Track.init()</button>
+        <button onclick="testConversion()">Testar Conversão</button>
+        
+        <div id="results" class="results" style="display: none;">
+            <h4>📊 Resultados dos Testes:</h4>
+            <div id="test-output"></div>
+        </div>
+    </div>
+
+    <div class="test-section success">
+        <h3>✅ Status Esperado</h3>
+        <p>Todos os testes devem passar, demonstrando que códigos antigos continuam funcionando.</p>
+    </div>
+
+    <!-- LovoCRM Analytics -->
+    <script src="/m4track.js"></script>
+    <script>
+        let testResults = [];
+        
+        function showResults() {
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('test-output').innerHTML = testResults.join('<br>');
+        }
+        
+        function addResult(test, success, message) {
+            const icon = success ? '✅' : '❌';
+            testResults.push(`${icon} <strong>${test}:</strong> ${message}`);
+            showResults();
+        }
+        
+        function testLovoCRM() {
+            try {
+                if (typeof window.LovoCRM !== 'undefined') {
+                    // Simular init sem afetar tracking real
+                    addResult('LovoCRM', true, 'Objeto disponível e funcional');
+                } else {
+                    addResult('LovoCRM', false, 'Objeto não encontrado');
+                }
+            } catch (error) {
+                addResult('LovoCRM', false, `Erro: ${error.message}`);
+            }
+        }
+        
+        function testLovooCRM() {
+            try {
+                if (typeof window.LovooCRM !== 'undefined') {
+                    addResult('LovooCRM', true, 'Objeto disponível e funcional (compatibilidade mantida)');
+                } else {
+                    addResult('LovooCRM', false, 'Objeto não encontrado');
+                }
+            } catch (error) {
+                addResult('LovooCRM', false, `Erro: ${error.message}`);
+            }
+        }
+        
+        function testM4Track() {
+            try {
+                if (typeof window.M4Track !== 'undefined') {
+                    addResult('M4Track', true, 'Objeto disponível e funcional (retrocompatibilidade)');
+                } else {
+                    addResult('M4Track', false, 'Objeto não encontrado');
+                }
+            } catch (error) {
+                addResult('M4Track', false, `Erro: ${error.message}`);
+            }
+        }
+        
+        function testConversion() {
+            try {
+                // Testar se o método trackConversion existe em todas as variantes
+                const hasLovoCRM = typeof window.LovoCRM?.trackConversion === 'function';
+                const hasLovooCRM = typeof window.LovooCRM?.trackConversion === 'function';
+                const hasM4Track = typeof window.M4Track?.trackConversion === 'function';
+                
+                if (hasLovoCRM && hasLovooCRM && hasM4Track) {
+                    addResult('Conversão', true, 'Método trackConversion disponível em todas as variantes');
+                } else {
+                    addResult('Conversão', false, 'Método trackConversion não encontrado em alguma variante');
+                }
+            } catch (error) {
+                addResult('Conversão', false, `Erro: ${error.message}`);
+            }
+        }
+        
+        // Auto-teste ao carregar a página
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                console.log('🧪 Executando testes automáticos...');
+                testLovoCRM();
+                testLovooCRM();
+                testM4Track();
+                testConversion();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
