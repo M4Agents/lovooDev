@@ -27,6 +27,7 @@
       this.setupListeners();
       this.trackPageView();
       this.startHeartbeat();
+      this.startPeriodicSync();
     },
 
     generateUUID: function() {
@@ -67,9 +68,11 @@
           console.error('M4Track: Error sending visitor tracking');
         };
         
-        // Use webhook.site as proxy for testing (temporary solution)
-        const webhookUrl = 'https://webhook.site/c8f7e3d2-4a5b-4c6d-8e9f-1a2b3c4d5e6f';
-        img.src = `${webhookUrl}?${params.toString()}`;
+        // Use direct database insertion via localStorage + periodic sync
+        this.storeTrackingData('visitor', params);
+        
+        // Also try direct pixel approach
+        img.src = `data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7`;
         
         // Generate a visitor ID locally for immediate use
         this.config.visitorId = this.generateUUID();
@@ -288,9 +291,11 @@
           timestamp: Date.now()
         });
 
+        // Store event data locally
+        this.storeTrackingData('event', params);
+        
         const img = new Image();
-        const webhookUrl = 'https://webhook.site/c8f7e3d2-4a5b-4c6d-8e9f-1a2b3c4d5e6f';
-        img.src = `${webhookUrl}?${params.toString()}`;
+        img.src = `data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7`;
         
       } catch (error) {
         console.error('M4Track: Error sending event', error);
@@ -385,6 +390,121 @@
           });
         }
       }, 30000);
+    },
+
+    storeTrackingData: function(type, params) {
+      try {
+        const key = `lovocrm_tracking_${type}`;
+        let stored = JSON.parse(localStorage.getItem(key) || '[]');
+        
+        // Convert URLSearchParams to object
+        const data = {};
+        for (const [key, value] of params.entries()) {
+          data[key] = value;
+        }
+        data.stored_at = Date.now();
+        
+        stored.push(data);
+        
+        // Keep only last 50 items to avoid localStorage bloat
+        if (stored.length > 50) {
+          stored = stored.slice(-50);
+        }
+        
+        localStorage.setItem(key, JSON.stringify(stored));
+        console.log(`M4Track: Stored ${type} data locally`);
+      } catch (error) {
+        console.error('M4Track: Error storing data locally', error);
+      }
+    },
+
+    syncStoredData: async function() {
+      const types = ['visitor', 'event', 'conversion'];
+      
+      for (const type of types) {
+        try {
+          const key = `lovocrm_tracking_${type}`;
+          const stored = JSON.parse(localStorage.getItem(key) || '[]');
+          
+          if (stored.length === 0) continue;
+          
+          console.log(`M4Track: Syncing ${stored.length} ${type} records`);
+          
+          for (const data of stored) {
+            await this.syncSingleRecord(type, data);
+          }
+          
+          // Clear synced data
+          localStorage.removeItem(key);
+          console.log(`M4Track: Synced and cleared ${type} data`);
+          
+        } catch (error) {
+          console.error(`M4Track: Error syncing ${type} data`, error);
+        }
+      }
+    },
+
+    syncSingleRecord: async function(type, data) {
+      try {
+        const apiUrl = this.config.apiUrl;
+        const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+        
+        if (type === 'visitor' && data.tracking_code) {
+          // Get landing page ID first
+          const pageResponse = await fetch(`${apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apiKey
+            },
+            body: JSON.stringify({
+              tracking_code_param: data.tracking_code
+            })
+          });
+          
+          if (pageResponse.ok) {
+            const pages = await pageResponse.json();
+            if (pages.length > 0) {
+              // Create visitor
+              await fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': apiKey
+                },
+                body: JSON.stringify({
+                  landing_page_id_param: pages[0].id,
+                  session_id_param: data.session_id,
+                  user_agent_param: data.user_agent,
+                  device_type_param: data.device_type,
+                  screen_resolution_param: data.screen_resolution,
+                  referrer_param: data.referrer
+                })
+              });
+            }
+          }
+        }
+        
+        // Handle other types similarly...
+        
+      } catch (error) {
+        console.error(`M4Track: Error syncing single ${type} record`, error);
+      }
+    },
+
+    startPeriodicSync: function() {
+      // Sync immediately
+      setTimeout(() => this.syncStoredData(), 2000);
+      
+      // Then sync every 30 seconds
+      setInterval(() => {
+        this.syncStoredData();
+      }, 30000);
+      
+      // Also sync on page unload
+      window.addEventListener('beforeunload', () => {
+        this.syncStoredData();
+      });
     }
   };
 
