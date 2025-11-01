@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Key, Save, Clock } from 'lucide-react';
+import { Webhook, Key, Save, Clock, Building, Settings as SettingsIcon } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
@@ -9,6 +9,19 @@ export const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  
+  // Estados para abas e dados da empresa
+  const [activeTab, setActiveTab] = useState<'settings' | 'company'>('settings');
+  const [companyData, setCompanyData] = useState({
+    name: '',
+    domain: '',
+    plan: 'basic',
+    status: 'active'
+  });
+  const [savingCompany, setSavingCompany] = useState(false);
+  
+  // Verificar se é empresa filha (não é super admin e não tem parent_company_id null)
+  const isChildCompany = company && !company.is_super_admin;
 
   useEffect(() => {
     console.log('Settings: useEffect triggered, company:', company);
@@ -16,6 +29,12 @@ export const Settings: React.FC = () => {
     
     if (company) {
       setWebhookUrl(company.webhook_url || '');
+      setCompanyData({
+        name: company.name || '',
+        domain: company.domain || '',
+        plan: company.plan || 'basic',
+        status: company.status || 'active'
+      });
       loadWebhookLogs();
     } 
     // Se não tem company mas está impersonating, carregar logs pelo localStorage
@@ -79,6 +98,23 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+
+    setSavingCompany(true);
+    try {
+      await api.updateCompany(company.id, companyData);
+      await refreshCompany();
+      alert('Dados da empresa atualizados com sucesso!');
+    } catch (error) {
+      console.error('Error saving company data:', error);
+      alert('Erro ao salvar dados da empresa');
+    } finally {
+      setSavingCompany(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert('Copiado para a área de transferência!');
@@ -89,9 +125,39 @@ export const Settings: React.FC = () => {
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
+        
+        {/* Abas - Apenas para empresas filhas */}
+        {isChildCompany && (
+          <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <SettingsIcon className="w-4 h-4" />
+              Configurações
+            </button>
+            <button
+              onClick={() => setActiveTab('company')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'company'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building className="w-4 h-4" />
+              Dados da Empresa
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Conteúdo das Abas */}
+      {(!isChildCompany || activeTab === 'settings') && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -162,9 +228,11 @@ export const Settings: React.FC = () => {
             </button>
           </form>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Webhook de Conversão - Movido para cima */}
+      {(!isChildCompany || activeTab === 'settings') && (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-purple-100 rounded-lg">
@@ -325,7 +393,104 @@ export const Settings: React.FC = () => {
   }
 }`}
         </pre>
-      </div>
+        </div>
+      )}
+
+      {/* Aba Dados da Empresa - Apenas para empresas filhas */}
+      {isChildCompany && activeTab === 'company' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Building className="w-5 h-5 text-orange-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">Dados da Empresa</h2>
+          </div>
+
+          <form onSubmit={handleSaveCompany} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome da Empresa
+                </label>
+                <input
+                  type="text"
+                  value={companyData.name}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome da sua empresa"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Domínio
+                </label>
+                <input
+                  type="text"
+                  value={companyData.domain}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, domain: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="exemplo.com.br"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Plano
+                </label>
+                <select
+                  value={companyData.plan}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, plan: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="basic">Básico</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Status
+                </label>
+                <select
+                  value={companyData.status}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="active">Ativo</option>
+                  <option value="suspended">Suspenso</option>
+                  <option value="cancelled">Cancelado</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <h4 className="font-medium text-orange-900 mb-2">Informações da Conta</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-orange-800">API Key:</span>
+                  <span className="ml-2 font-mono text-orange-700">{company?.api_key?.substring(0, 8)}...</span>
+                </div>
+                <div>
+                  <span className="font-medium text-orange-800">Tipo:</span>
+                  <span className="ml-2 text-orange-700">Empresa Filha</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingCompany}
+              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {savingCompany ? 'Salvando...' : 'Salvar Dados da Empresa'}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

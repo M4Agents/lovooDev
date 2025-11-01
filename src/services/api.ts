@@ -707,5 +707,32 @@ export const api = {
       console.error('Error in getProfessionalAnalytics:', error);
       throw error;
     }
+  },
+
+  async updateCompany(companyId: string, updates: { name: string; domain: string; plan: string; status: string }) {
+    console.log('API: updateCompany called with:', { companyId, updates });
+    
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .update({
+          name: updates.name,
+          domain: updates.domain,
+          plan: updates.plan,
+          status: updates.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', companyId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      console.log('API: Company updated successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in updateCompany:', error);
+      throw error;
+    }
   }
 };
