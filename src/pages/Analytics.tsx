@@ -1,22 +1,55 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
-import { Users, Target, TrendingUp, Clock, MousePointer } from 'lucide-react';
+import { 
+  Users, Target, TrendingUp, Clock, MousePointer, Calendar, 
+  Download, RefreshCw, Globe, Smartphone, Monitor,
+  UserCheck, MapPin, Languages, Eye
+} from 'lucide-react';
 import { Heatmap } from '../components/Heatmap';
 
 type AnalyticsData = {
-  conversions: any[];
-  visitors: any[];
   totalVisitors: number;
-  totalConversions: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  newVisitors: number;
+  totalSessions: number;
+  avgSessionDuration: number;
+  bounceRate: number;
   conversionRate: number;
+  deviceBreakdown: Record<string, number>;
+  referrerBreakdown: Record<string, number>;
+  timezoneBreakdown: Record<string, number>;
+  languageBreakdown: Record<string, number>;
+  hourlyBreakdown: Record<string, number>;
+  dailyBreakdown: Record<string, number>;
+  visitors: any[];
+  conversions: any[];
+  totalConversions?: number; // Para compatibilidade
 };
+
+type DateRange = {
+  start: string;
+  end: string;
+  label: string;
+};
+
+const DATE_RANGES: DateRange[] = [
+  { start: '0', end: '0', label: 'Hoje' },
+  { start: '1', end: '1', label: 'Ontem' },
+  { start: '7', end: '0', label: 'Últimos 7 dias' },
+  { start: '30', end: '0', label: 'Últimos 30 dias' },
+  { start: '90', end: '0', label: 'Últimos 90 dias' },
+];
 
 export const Analytics: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'overview' | 'heatmap'>('overview');
+  const [viewMode, setViewMode] = useState<'overview' | 'heatmap' | 'conversions'>('overview');
+  const [selectedRange, setSelectedRange] = useState<DateRange>(DATE_RANGES[2]); // 7 dias
+  const [customRange, setCustomRange] = useState({ start: '', end: '' });
+  const [showCustomRange, setShowCustomRange] = useState(false);
 
   useEffect(() => {
     loadAnalytics();
@@ -33,9 +66,26 @@ export const Analytics: React.FC = () => {
     if (!id) return;
 
     try {
-      console.log('Loading analytics for landing page ID:', id);
-      const analyticsData = await api.getAnalytics(id);
-      console.log('Analytics data received:', analyticsData);
+      console.log('Loading professional analytics for landing page ID:', id);
+      
+      // Determinar datas
+      let startDate, endDate;
+      if (showCustomRange && customRange.start && customRange.end) {
+        startDate = customRange.start;
+        endDate = customRange.end;
+      } else {
+        const now = new Date();
+        const start = new Date(now);
+        start.setDate(start.getDate() - parseInt(selectedRange.start));
+        const end = new Date(now);
+        end.setDate(end.getDate() - parseInt(selectedRange.end));
+        
+        startDate = start.toISOString().split('T')[0];
+        endDate = end.toISOString().split('T')[0];
+      }
+      
+      const analyticsData = await api.getProfessionalAnalytics(id, startDate, endDate);
+      console.log('Professional analytics data received:', analyticsData);
       setData(analyticsData);
     } catch (error) {
       console.error('Error loading analytics:', error);

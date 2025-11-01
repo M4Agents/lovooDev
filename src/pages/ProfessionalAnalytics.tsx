@@ -4,8 +4,9 @@ import { api } from '../services/api';
 import { 
   Users, Target, Clock, Calendar, 
   Download, RefreshCw, Globe, Smartphone, Monitor,
-  UserCheck, MapPin, Languages, Eye
+  UserCheck, MapPin, Languages, Eye, MousePointer, TrendingUp
 } from 'lucide-react';
+import { Heatmap } from '../components/Heatmap';
 
 type DateRange = {
   start: string;
@@ -48,6 +49,7 @@ export const ProfessionalAnalytics: React.FC = () => {
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [viewMode, setViewMode] = useState<'overview' | 'heatmap' | 'conversions'>('overview');
 
   useEffect(() => {
     loadAnalytics();
@@ -151,8 +153,45 @@ export const ProfessionalAnalytics: React.FC = () => {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Analytics Profissional</h1>
-            <p className="text-slate-600 mt-1">Análise avançada com filtros de data e segmentação para remarketing</p>
+            <h1 className="text-3xl font-bold text-slate-900">Analytics Pro</h1>
+            <p className="text-slate-600 mt-1">Painel unificado com análises avançadas, heatmaps e conversões</p>
+          </div>
+          
+          {/* Navegação entre views */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('overview')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                viewMode === 'overview'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              Overview
+            </button>
+            <button
+              onClick={() => setViewMode('heatmap')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                viewMode === 'heatmap'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <MousePointer className="w-4 h-4" />
+              Heatmap
+            </button>
+            <button
+              onClick={() => setViewMode('conversions')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                viewMode === 'conversions'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Target className="w-4 h-4" />
+              Conversões
+            </button>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
@@ -235,8 +274,11 @@ export const ProfessionalAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Conteúdo baseado na view selecionada */}
+      {viewMode === 'overview' ? (
+        <>
+          {/* Métricas Principais */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -534,7 +576,63 @@ export const ProfessionalAnalytics: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+        </>
+      ) : viewMode === 'heatmap' ? (
+        <Heatmap landingPageId={id!} />
+      ) : (
+        // Conversões
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Conversões Detalhadas
+          </h2>
+          <div className="space-y-4">
+            {data.conversions.length === 0 ? (
+              <div className="text-center py-12">
+                <Target className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                <p className="text-slate-600">Nenhuma conversão registrada no período selecionado</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Lead</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Dispositivo</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Engagement</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Tempo p/ Converter</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.conversions.map((conversion) => (
+                      <tr key={conversion.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-3 px-4 text-sm text-slate-900">
+                          {conversion.form_data?.name || conversion.form_data?.email || 'Lead'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-slate-600 capitalize">
+                          {conversion.behavior_summary?.device_type || 'N/A'}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {conversion.engagement_score || 0}/10
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-slate-600">
+                          {conversion.time_to_convert ? `${conversion.time_to_convert}s` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-slate-600">
+                          {new Date(conversion.converted_at).toLocaleString('pt-BR')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
