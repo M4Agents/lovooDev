@@ -36,6 +36,23 @@
       return this.generateUUID();
     },
     
+    getOrCreateVisitorId: function() {
+      try {
+        let visitorId = localStorage.getItem('lovocrm_visitor_id');
+        if (!visitorId) {
+          visitorId = this.generateUUID();
+          localStorage.setItem('lovocrm_visitor_id', visitorId);
+          console.log('M4Track: New visitor ID created:', visitorId);
+        } else {
+          console.log('M4Track: Returning visitor ID:', visitorId);
+        }
+        return visitorId;
+      } catch (error) {
+        console.log('M4Track: localStorage not available, using session ID');
+        return this.generateUUID();
+      }
+    },
+    
     generateUUID: function() {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0;
@@ -61,10 +78,13 @@
       const visitorData = {
         tracking_code: this.config.trackingCode,
         session_id: this.config.sessionId,
+        visitor_id: this.getOrCreateVisitorId(),
         user_agent: navigator.userAgent,
         device_type: this.getDeviceType(),
         screen_resolution: `${screen.width}x${screen.height}`,
-        referrer: document.referrer || 'direct'
+        referrer: document.referrer || 'direct',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language: navigator.language
       };
       
       console.log('M4Track: Tracking visitor via webhook approach');

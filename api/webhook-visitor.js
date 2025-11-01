@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     console.log('Webhook received raw body:', req.body);
     console.log('Webhook received headers:', req.headers);
     
-    const { tracking_code, session_id, user_agent, device_type, screen_resolution, referrer } = req.body;
+    const { tracking_code, session_id, visitor_id, user_agent, device_type, screen_resolution, referrer, timezone, language } = req.body;
     
     if (!tracking_code) {
       console.error('Missing tracking_code in payload:', req.body);
@@ -34,10 +34,13 @@ export default async function handler(req, res) {
     const result = await createVisitorDirectSQL({
       tracking_code,
       session_id: session_id || `webhook_${Date.now()}`,
+      visitor_id: visitor_id || null,
       user_agent: user_agent || 'Webhook Tracking',
       device_type: device_type || 'unknown',
       screen_resolution: screen_resolution || '1920x1080',
-      referrer: referrer || 'direct'
+      referrer: referrer || 'direct',
+      timezone: timezone || null,
+      language: language || null
     });
     
     if (result.success) {
@@ -70,14 +73,17 @@ async function createVisitorDirectSQL(params) {
       sessionId = generateUUID();
     }
     
-    // Execute the function directly
-    const { data, error } = await supabase.rpc('public_create_visitor', {
+    // Execute the enhanced function with remarketing data
+    const { data, error } = await supabase.rpc('public_create_visitor_enhanced', {
       tracking_code_text: params.tracking_code,
       session_id_text: sessionId,
+      visitor_id_text: params.visitor_id,
       user_agent_text: params.user_agent,
       device_type_text: params.device_type,
       screen_resolution_text: params.screen_resolution,
-      referrer_text: params.referrer
+      referrer_text: params.referrer,
+      timezone_text: params.timezone,
+      language_text: params.language
     });
     
     if (error) {
