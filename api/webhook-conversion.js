@@ -19,6 +19,7 @@ export default async function handler(req, res) {
   try {
     console.log('Conversion webhook received:', req.body);
     console.log('Conversion webhook headers:', req.headers);
+    console.log('Conversion webhook query params:', req.query);
     
     const { 
       tracking_code, 
@@ -30,6 +31,15 @@ export default async function handler(req, res) {
       device_type,
       referrer
     } = req.body;
+    
+    // Verificar API key (pode vir via query param ou header)
+    const apiKey = req.query.api_key || req.headers['x-api-key'] || req.body.api_key;
+    
+    if (!apiKey) {
+      console.error('Missing API key in conversion request');
+      res.status(401).json({ error: 'API key is required' });
+      return;
+    }
     
     if (!tracking_code) {
       console.error('Missing tracking_code in conversion payload:', req.body);
@@ -51,6 +61,7 @@ export default async function handler(req, res) {
     
     // Process conversion using direct SQL execution
     const result = await createConversionDirectSQL({
+      api_key: apiKey,
       tracking_code,
       visitor_id: visitor_id || null,
       session_id: session_id || null,
@@ -89,17 +100,34 @@ async function createConversionDirectSQL(params) {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Find landing page by tracking code
+    // Validate API key and get company
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id, name')
+      .eq('api_key', params.api_key)
+      .single();
+    
+    if (companyError || !company) {
+      console.error('Invalid API key:', params.api_key);
+      return { success: false, error: 'Invalid API key' };
+    }
+    
+    console.log('API key validated for company:', company.name);
+    
+    // Find landing page by tracking code and company
     const { data: landingPage, error: landingError } = await supabase
       .from('landing_pages')
-      .select('id')
+      .select('id, title')
       .eq('tracking_code', params.tracking_code)
+      .eq('company_id', company.id)
       .single();
     
     if (landingError || !landingPage) {
-      console.error('Landing page not found for tracking code:', params.tracking_code);
-      return { success: false, error: 'Invalid tracking code' };
+      console.error('Landing page not found for tracking code and company:', params.tracking_code, company.id);
+      return { success: false, error: 'Invalid tracking code for this company' };
     }
+    
+    console.log('Landing page found:', landingPage.title);
     
     // Generate UUID for conversion if not valid
     let sessionId = params.session_id;
