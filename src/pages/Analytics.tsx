@@ -20,13 +20,22 @@ export const Analytics: React.FC = () => {
 
   useEffect(() => {
     loadAnalytics();
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      loadAnalytics();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [id]);
 
   const loadAnalytics = async () => {
     if (!id) return;
 
     try {
+      console.log('Loading analytics for landing page ID:', id);
       const analyticsData = await api.getAnalytics(id);
+      console.log('Analytics data received:', analyticsData);
       setData(analyticsData);
     } catch (error) {
       console.error('Error loading analytics:', error);
@@ -154,9 +163,9 @@ export const Analytics: React.FC = () => {
                   return (
                     <div key={device}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-slate-700 capitalize">{device}</span>
+                        <span className="text-sm font-medium text-slate-700 capitalize">{String(device)}</span>
                         <span className="text-sm text-slate-600">
-                          {count} ({percentage.toFixed(1)}%)
+                          {String(count)} ({percentage.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="w-full bg-slate-200 rounded-full h-2">
