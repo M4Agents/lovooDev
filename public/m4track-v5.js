@@ -1,10 +1,10 @@
-// LovoCRM Analytics V5 - Server-Side Approach with Enhanced Device Detection
-// Contorna CORS enviando dados via webhook
+// LovoCRM Analytics V5.2 - Server-Side Approach
+// Contorna CORS enviando dados via GET request
 
 (function() {
   'use strict';
   
-  console.log('LovoCRM Analytics V5.1 carregado - Enhanced Device Detection (Cache Bust)');
+  console.log('LovoCRM Analytics V5.2 carregado - Restored Working Version (Cache Bust)');
   
   const M4Track = {
     config: {
@@ -63,83 +63,32 @@
     
     getDeviceType: function() {
       const userAgent = navigator.userAgent;
-      
-      // Detectar dispositivos específicos
-      if (/iPad/i.test(userAgent)) {
-        return 'iPad';
+      if (/tablet|ipad|playbook|silk/i.test(userAgent)) {
+        return 'tablet';
       }
-      if (/iPhone/i.test(userAgent)) {
-        return 'iPhone';
+      if (/mobile|iphone|ipod|android|blackberry|opera|mini|windows\sce|palm|smartphone|iemobile/i.test(userAgent)) {
+        return 'mobile';
       }
-      if (/iPod/i.test(userAgent)) {
-        return 'iPod';
-      }
-      if (/Android.*Mobile/i.test(userAgent)) {
-        return 'Android Phone';
-      }
-      if (/Android/i.test(userAgent)) {
-        return 'Android Tablet';
-      }
-      if (/BlackBerry/i.test(userAgent)) {
-        return 'BlackBerry';
-      }
-      if (/Windows Phone/i.test(userAgent)) {
-        return 'Windows Phone';
-      }
-      if (/tablet|playbook|silk/i.test(userAgent)) {
-        return 'Tablet';
-      }
-      if (/mobile|smartphone|iemobile/i.test(userAgent)) {
-        return 'Mobile';
-      }
-      if (/Macintosh/i.test(userAgent)) {
-        return 'Mac';
-      }
-      if (/Windows/i.test(userAgent)) {
-        return 'Windows';
-      }
-      if (/Linux/i.test(userAgent)) {
-        return 'Linux';
-      }
-      return 'Desktop';
+      return 'desktop';
     },
     
     trackVisitor: function() {
       if (!this.config.isInitialized) return;
       
-      try {
-        const visitorData = {
-          tracking_code: this.config.trackingCode,
-          session_id: this.config.sessionId,
-          visitor_id: this.getOrCreateVisitorId(),
-          user_agent: navigator.userAgent,
-          device_type: this.getDeviceType(),
-          screen_resolution: `${screen.width}x${screen.height}`,
-          referrer: document.referrer || 'direct',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          language: navigator.language
-        };
-        
-        console.log('M4Track: Tracking visitor via webhook approach');
-        console.log('M4Track: Visitor data prepared:', visitorData);
-        this.sendDataViaWebhook('visitor', visitorData);
-      } catch (error) {
-        console.error('M4Track: Error in trackVisitor:', error);
-        // Fallback com device_type simples
-        const fallbackData = {
-          tracking_code: this.config.trackingCode,
-          session_id: this.config.sessionId,
-          visitor_id: this.getOrCreateVisitorId(),
-          user_agent: navigator.userAgent,
-          device_type: 'unknown',
-          screen_resolution: '1920x1080',
-          referrer: 'direct',
-          timezone: null,
-          language: 'en'
-        };
-        console.log('M4Track: Using fallback data:', fallbackData);
-        this.sendDataViaWebhook('visitor', fallbackData);
-      }
+      const visitorData = {
+        tracking_code: this.config.trackingCode,
+        session_id: this.config.sessionId,
+        visitor_id: this.getOrCreateVisitorId(),
+        user_agent: navigator.userAgent,
+        device_type: this.getDeviceType(),
+        screen_resolution: `${screen.width}x${screen.height}`,
+        referrer: document.referrer || 'direct',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language: navigator.language
+      };
+      
+      console.log('M4Track: Tracking visitor via webhook approach');
+      this.sendDataViaWebhook('visitor', visitorData);
     },
     
     sendDataViaWebhook: function(type, data) {
