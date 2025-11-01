@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Tracking</title>
+</head>
+<body>
+<script>
+// Pixel tracking processor
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    
+    if (action) {
+        // Process tracking data using RPC functions
+        const apiUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
+        const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+        
+        if (action === 'create_visitor') {
+            const trackingCode = params.get('tracking_code');
+            if (trackingCode) {
+                // Get landing page ID first
+                fetch(`${apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': apiKey
+                    },
+                    body: JSON.stringify({
+                        tracking_code_param: trackingCode
+                    })
+                })
+                .then(response => response.json())
+                .then(pages => {
+                    if (pages.length > 0) {
+                        // Create visitor
+                        return fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': apiKey
+                            },
+                            body: JSON.stringify({
+                                landing_page_id_param: pages[0].id,
+                                session_id_param: params.get('session_id'),
+                                user_agent_param: params.get('user_agent'),
+                                device_type_param: params.get('device_type'),
+                                screen_resolution_param: params.get('screen_resolution'),
+                                referrer_param: params.get('referrer')
+                            })
+                        });
+                    }
+                })
+                .catch(error => console.error('Tracking error:', error));
+            }
+        }
+        
+        else if (action === 'create_event') {
+            const visitorId = params.get('visitor_id');
+            if (visitorId) {
+                fetch(`${apiUrl}/rest/v1/rpc/create_behavior_event`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': apiKey
+                    },
+                    body: JSON.stringify({
+                        visitor_id_param: visitorId,
+                        event_type_param: params.get('event_type'),
+                        event_data_param: JSON.parse(params.get('event_data') || '{}'),
+                        coordinates_param: JSON.parse(params.get('coordinates') || 'null'),
+                        element_selector_param: params.get('element_selector'),
+                        section_param: params.get('section')
+                    })
+                })
+                .catch(error => console.error('Event tracking error:', error));
+            }
+        }
+        
+        else if (action === 'create_conversion') {
+            const trackingCode = params.get('tracking_code');
+            const visitorId = params.get('visitor_id');
+            
+            if (trackingCode && visitorId) {
+                // Get landing page ID first
+                fetch(`${apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': apiKey
+                    },
+                    body: JSON.stringify({
+                        tracking_code_param: trackingCode
+                    })
+                })
+                .then(response => response.json())
+                .then(pages => {
+                    if (pages.length > 0) {
+                        // Create conversion
+                        return fetch(`${apiUrl}/rest/v1/rpc/create_conversion`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': apiKey
+                            },
+                            body: JSON.stringify({
+                                visitor_id_param: visitorId,
+                                landing_page_id_param: pages[0].id,
+                                form_data_param: JSON.parse(params.get('form_data') || '{}'),
+                                behavior_summary_param: JSON.parse(params.get('behavior_summary') || '{}'),
+                                engagement_score_param: parseFloat(params.get('engagement_score') || '0'),
+                                time_to_convert_param: parseInt(params.get('time_to_convert') || '0')
+                            })
+                        });
+                    }
+                })
+                .catch(error => console.error('Conversion tracking error:', error));
+            }
+        }
+    }
+    
+    // Return 1x1 transparent GIF
+    document.body.innerHTML = '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="1" height="1" style="position:absolute;top:-9999px;">';
+})();
+</script>
+</body>
+</html>

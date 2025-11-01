@@ -67,8 +67,8 @@
           console.error('M4Track: Error sending visitor tracking');
         };
         
-        // Use pixel tracking Edge Function
-        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        // Use pixel tracking HTML endpoint
+        img.src = `https://app.lovoocrm.com/pixel.html?${params.toString()}`;
         
         // Generate a visitor ID locally for immediate use
         this.config.visitorId = this.generateUUID();
@@ -245,7 +245,9 @@
 
     getSelector: function(element) {
       if (element.id) return `#${element.id}`;
-      if (element.className) return `.${element.className.split(' ')[0]}`;
+      if (element.className && typeof element.className === 'string') {
+        return `.${element.className.split(' ')[0]}`;
+      }
       return element.tagName.toLowerCase();
     },
 
@@ -266,7 +268,7 @@
         });
 
         const img = new Image();
-        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        img.src = `https://app.lovoocrm.com/pixel.html?${params.toString()}`;
         
       } catch (error) {
         console.error('M4Track: Error sending event', error);
@@ -323,7 +325,7 @@
         img.onload = () => {
           console.log('M4Track: Conversion tracked successfully');
         };
-        img.src = `${this.config.apiUrl}/functions/v1/pixel-track?${params.toString()}`;
+        img.src = `https://app.lovoocrm.com/pixel.html?${params.toString()}`;
         
       } catch (error) {
         console.error('M4Track: Error tracking conversion', error);
