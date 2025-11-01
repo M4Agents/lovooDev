@@ -385,14 +385,19 @@ export const Companies: React.FC = () => {
     }
   };
 
-  if (!company?.is_super_admin) {
+  // Mostrar abas cadastrais sempre (tanto para super admin quanto empresa filha)
+  const showCompanyTabs = true;
+
+  if (showCompanyTabs) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Empresas</h1>
-          <p className="text-slate-600 mt-1">Gerencie os dados da sua empresa</p>
+          <p className="text-slate-600 mt-1">
+            {company?.is_super_admin ? 'Gerencie os dados das empresas' : 'Gerencie os dados da sua empresa'}
+          </p>
           
-          {/* Abas para empresas filhas */}
+          {/* Abas cadastrais para todas as empresas */}
           <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('dados-principais')}
@@ -628,7 +633,9 @@ export const Companies: React.FC = () => {
                   </div>
                   <div>
                     <span className="font-medium text-orange-800">Tipo:</span>
-                    <span className="ml-2 text-orange-700">Empresa Filha</span>
+                    <span className="ml-2 text-orange-700">
+                      {company?.is_super_admin ? 'Super Admin' : 'Empresa Filha'}
+                    </span>
                   </div>
                   <div>
                     <span className="font-medium text-orange-800">Plano:</span>
