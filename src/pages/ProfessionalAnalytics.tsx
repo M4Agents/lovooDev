@@ -355,11 +355,23 @@ export const ProfessionalAnalytics: React.FC = () => {
           <div className="space-y-4">
             {Object.entries(data.referrerBreakdown).slice(0, 5).map(([referrer, count]) => {
               const percentage = (count / data.totalVisitors) * 100;
-              const displayName = referrer === 'direct' ? 'Direto' : 
-                                 referrer.includes('google') ? 'Google' :
-                                 referrer.includes('facebook') ? 'Facebook' :
-                                 referrer.includes('instagram') ? 'Instagram' :
-                                 new URL(referrer).hostname;
+              let displayName = 'Desconhecido';
+              
+              if (referrer === 'direct') {
+                displayName = 'Direto';
+              } else if (referrer.includes('google')) {
+                displayName = 'Google';
+              } else if (referrer.includes('facebook')) {
+                displayName = 'Facebook';
+              } else if (referrer.includes('instagram')) {
+                displayName = 'Instagram';
+              } else {
+                try {
+                  displayName = new URL(referrer).hostname;
+                } catch {
+                  displayName = referrer.length > 20 ? referrer.substring(0, 20) + '...' : referrer;
+                }
+              }
               
               return (
                 <div key={referrer} className="space-y-2">
@@ -473,8 +485,10 @@ export const ProfessionalAnalytics: React.FC = () => {
             </thead>
             <tbody>
               {data.visitors.slice(0, 50).map((visitor) => {
-                const isReturning = data.visitors.filter(v => v.visitor_id === visitor.visitor_id).length > 1;
-                const hasConverted = data.conversions.some(c => c.visitor_id === visitor.visitor_id);
+                const isReturning = visitor.visitor_id ? 
+                  data.visitors.filter(v => v.visitor_id === visitor.visitor_id).length > 1 : false;
+                const hasConverted = visitor.visitor_id ? 
+                  data.conversions.some(c => c.visitor_id === visitor.visitor_id) : false;
                 
                 return (
                   <tr key={visitor.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -495,8 +509,14 @@ export const ProfessionalAnalytics: React.FC = () => {
                       {visitor.timezone ? visitor.timezone.split('/')[1]?.replace('_', ' ') : 'N/A'}
                     </td>
                     <td className="py-3 px-4 text-sm text-slate-600">
-                      {visitor.referrer === 'direct' ? 'Direto' : 
-                       visitor.referrer ? new URL(visitor.referrer).hostname : 'N/A'}
+                      {(() => {
+                        if (!visitor.referrer || visitor.referrer === 'direct') return 'Direto';
+                        try {
+                          return new URL(visitor.referrer).hostname;
+                        } catch {
+                          return visitor.referrer.length > 15 ? visitor.referrer.substring(0, 15) + '...' : visitor.referrer;
+                        }
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-sm text-slate-600">
                       {new Date(visitor.created_at).toLocaleString('pt-BR')}

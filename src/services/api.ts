@@ -645,15 +645,19 @@ export const api = {
         throw conversionsError;
       }
 
-      // Calcular métricas
+      // Calcular métricas (com fallback para dados sem visitor_id)
       const totalVisitors = visitors?.length || 0;
-      const uniqueVisitors = new Set(visitors?.map(v => v.visitor_id).filter(Boolean)).size;
-      const visitorCounts = visitors?.reduce((acc: Record<string, number>, v) => {
+      const visitorsWithId = visitors?.filter(v => v.visitor_id) || [];
+      const uniqueVisitors = visitorsWithId.length > 0 
+        ? new Set(visitorsWithId.map(v => v.visitor_id)).size 
+        : totalVisitors; // Fallback: assume todos únicos se não há visitor_id
+      
+      const visitorCounts = visitorsWithId.reduce((acc: Record<string, number>, v) => {
         if (v.visitor_id) {
           acc[v.visitor_id] = (acc[v.visitor_id] || 0) + 1;
         }
         return acc;
-      }, {}) || {};
+      }, {});
       
       const returningVisitors = Object.values(visitorCounts).filter(count => count > 1).length;
       const newVisitors = uniqueVisitors - returningVisitors;
@@ -670,7 +674,17 @@ export const api = {
       }, {}) || {};
 
       const referrerBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
-        const referrer = v.referrer || 'direct';
+        let referrer = v.referrer || 'direct';
+        // Sanitizar referrer para evitar URLs inválidas
+        if (referrer !== 'direct') {
+          try {
+            // Tentar criar URL para validar
+            new URL(referrer);
+          } catch {
+            // Se URL inválida, usar apenas o domínio ou 'unknown'
+            referrer = referrer.includes('.') ? referrer.split('/')[0] : 'unknown';
+          }
+        }
         acc[referrer] = (acc[referrer] || 0) + 1;
         return acc;
       }, {}) || {};
