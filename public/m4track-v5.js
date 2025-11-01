@@ -64,8 +64,7 @@
         user_agent: navigator.userAgent,
         device_type: this.getDeviceType(),
         screen_resolution: `${screen.width}x${screen.height}`,
-        referrer: document.referrer || 'direct',
-        timestamp: Date.now()
+        referrer: document.referrer || 'direct'
       };
       
       console.log('M4Track: Tracking visitor via webhook approach');
