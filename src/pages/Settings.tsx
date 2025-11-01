@@ -12,6 +12,7 @@ export const Settings: React.FC = () => {
 
   useEffect(() => {
     console.log('Settings: useEffect triggered, company:', company);
+    console.log('Settings: company.api_key:', company?.api_key);
     
     if (company) {
       setWebhookUrl(company.webhook_url || '');
@@ -107,7 +108,7 @@ export const Settings: React.FC = () => {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={company?.api_key || ''}
+                  value={company?.api_key || 'Carregando...'}
                   readOnly
                   className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
                 />
@@ -142,7 +143,10 @@ export const Settings: React.FC = () => {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={`https://app.lovoocrm.com/api/webhook-conversion?api_key=${company?.api_key || 'SUA_API_KEY'}`}
+                  value={company?.api_key ? 
+                    `https://app.lovoocrm.com/api/webhook-conversion?api_key=${company.api_key}` : 
+                    'Carregando API key...'
+                  }
                   readOnly
                   className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
                 />
