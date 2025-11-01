@@ -74,18 +74,28 @@
     sendDataViaWebhook: function(type, data) {
       try {
         if (type === 'visitor') {
-          // Use fetch with no-cors mode for webhook
+          console.log('M4Track: Sending webhook data:', data);
+          
+          // Try normal fetch first (can see errors)
           fetch(`${this.config.apiUrl}/api/webhook-visitor`, {
             method: 'POST',
-            mode: 'no-cors',
             headers: {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
-          }).then(() => {
-            console.log(`M4Track: Successfully sent ${type} data via webhook approach`);
+          }).then(response => {
+            if (response.ok) {
+              console.log(`M4Track: Successfully sent ${type} data via webhook approach`);
+              return response.json();
+            } else {
+              console.error(`M4Track: Webhook failed with status:`, response.status);
+              throw new Error(`HTTP ${response.status}`);
+            }
+          }).then(result => {
+            console.log('M4Track: Webhook response:', result);
           }).catch(error => {
             console.error(`M4Track: Webhook error:`, error);
+            console.log('M4Track: Falling back to image request');
             // Fallback to image request
             this.sendDataViaImage(type, data);
           });
