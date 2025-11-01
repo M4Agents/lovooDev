@@ -128,6 +128,9 @@ export const api = {
   },
 
   async getAnalytics(landingPageId: string, dateRange?: { start: string; end: string }) {
+    console.log('API: getAnalytics called with landingPageId:', landingPageId);
+    console.log('API: dateRange:', dateRange);
+    
     let query = supabase
       .from('conversions')
       .select(`
@@ -147,6 +150,7 @@ export const api = {
     }
 
     const { data, error } = await query;
+    console.log('API: conversions query result:', { data, error });
     if (error) throw error;
 
     const visitorsQuery = supabase
@@ -161,15 +165,19 @@ export const api = {
     }
 
     const { data: visitors, error: visitorsError } = await visitorsQuery;
+    console.log('API: visitors query result:', { visitors, visitorsError });
     if (visitorsError) throw visitorsError;
 
-    return {
+    const result = {
       conversions: data,
       visitors,
       totalVisitors: visitors?.length || 0,
       totalConversions: data?.length || 0,
       conversionRate: visitors?.length ? ((data?.length || 0) / visitors.length) * 100 : 0
     };
+    
+    console.log('API: getAnalytics final result:', result);
+    return result;
   },
 
   async getBehaviorEvents(visitorId: string) {
