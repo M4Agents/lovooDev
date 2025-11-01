@@ -52,23 +52,35 @@ async function processTracking(params) {
         }
       });
       
-      // Insert into tracking_queue
-      const queueResponse = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': apiKey
-        },
-        body: JSON.stringify({
-          action: queueType,
-          data: data
-        })
-      });
+      console.log(`Fallback tracking received: ${queueType}`, data);
       
-      if (queueResponse.ok) {
-        console.log(`Successfully queued ${queueType} via fallback`);
-      } else {
-        console.error(`Error queueing ${queueType}:`, await queueResponse.text());
+      // Try to insert into tracking_queue
+      try {
+        const queueResponse = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': apiKey
+          },
+          body: JSON.stringify({
+            action: queueType,
+            data: data
+          })
+        });
+        
+        if (queueResponse.ok) {
+          console.log(`Successfully queued ${queueType} via fallback`);
+        } else {
+          const errorText = await queueResponse.text();
+          console.error(`Error queueing ${queueType}:`, queueResponse.status, errorText);
+          
+          // If queue fails, process directly
+          await processDirectly(queueType, data, apiUrl, apiKey);
+        }
+      } catch (error) {
+        console.error(`Queue insert failed, processing directly:`, error);
+        // If queue fails, process directly
+        await processDirectly(queueType, data, apiUrl, apiKey);
       }
       
       return;
@@ -190,5 +202,80 @@ async function processTracking(params) {
     
   } catch (error) {
     console.error('Error processing tracking:', error);
+  }
+}
+
+async function processDirectly(type, data, apiUrl, apiKey) {
+  try {
+    console.log(`Processing ${type} directly:`, data);
+    
+    if (type === 'visitor' && data.tracking_code) {
+      // Get landing page ID
+      const pageResponse = await fetch(`${apiUrl}/rest/v1/rpc/get_landing_page_by_tracking_code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey
+        },
+        body: JSON.stringify({
+          tracking_code_param: data.tracking_code
+        })
+      });
+      
+      if (pageResponse.ok) {
+        const pages = await pageResponse.json();
+        if (pages.length > 0) {
+          // Create visitor
+          const visitorResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apiKey
+            },
+            body: JSON.stringify({
+              landing_page_id_param: pages[0].id,
+              session_id_param: data.session_id,
+              user_agent_param: data.user_agent,
+              device_type_param: data.device_type,
+              screen_resolution_param: data.screen_resolution,
+              referrer_param: data.referrer
+            })
+          });
+          
+          if (visitorResponse.ok) {
+            console.log('Visitor created successfully via direct processing');
+          } else {
+            console.error('Error creating visitor:', await visitorResponse.text());
+          }
+        }
+      }
+    }
+    
+    else if (type === 'event' && data.visitor_id) {
+      const eventResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_behavior_event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey
+        },
+        body: JSON.stringify({
+          visitor_id_param: data.visitor_id,
+          event_type_param: data.event_type,
+          event_data_param: data.event_data ? JSON.parse(data.event_data) : {},
+          coordinates_param: data.coordinates ? JSON.parse(data.coordinates) : null,
+          element_selector_param: data.element_selector,
+          section_param: data.section
+        })
+      });
+      
+      if (eventResponse.ok) {
+        console.log('Event created successfully via direct processing');
+      } else {
+        console.error('Error creating event:', await eventResponse.text());
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error in direct processing:', error);
   }
 }
