@@ -652,9 +652,30 @@ export const api = {
       const newVisitors = uniqueVisitors - returningVisitors;
       const conversionRate = totalVisitors > 0 ? ((conversions?.length || 0) / totalVisitors) * 100 : 0;
 
+      const getSpecificDeviceType = (userAgent: string, deviceType: string) => {
+        if (!userAgent) return deviceType || 'unknown';
+        
+        const ua = userAgent.toLowerCase();
+        
+        // Detectar dispositivos específicos baseado no User Agent
+        if (ua.includes('iphone')) return 'iPhone';
+        if (ua.includes('ipad')) return 'iPad';
+        if (ua.includes('ipod')) return 'iPod';
+        if (ua.includes('android') && ua.includes('mobile')) return 'Android Phone';
+        if (ua.includes('android')) return 'Android Tablet';
+        if (ua.includes('blackberry')) return 'BlackBerry';
+        if (ua.includes('windows phone')) return 'Windows Phone';
+        if (ua.includes('macintosh') || ua.includes('mac os')) return 'Mac';
+        if (ua.includes('windows')) return 'Windows';
+        if (ua.includes('linux')) return 'Linux';
+        
+        // Fallback para o tipo básico
+        return deviceType || 'unknown';
+      };
+
       const deviceBreakdown = visitors?.reduce((acc: Record<string, number>, v) => {
-        const device = v.device_type || 'unknown';
-        acc[device] = (acc[device] || 0) + 1;
+        const specificDevice = getSpecificDeviceType(v.user_agent, v.device_type);
+        acc[specificDevice] = (acc[specificDevice] || 0) + 1;
         return acc;
       }, {}) || {};
 
