@@ -1,10 +1,10 @@
-// LovoCRM Analytics V4 - Server-Side Approach
-// Contorna CORS enviando dados via GET request
+// LovoCRM Analytics V5 - Server-Side Approach with Enhanced Device Detection
+// Contorna CORS enviando dados via webhook
 
 (function() {
   'use strict';
   
-  console.log('LovoCRM Analytics V5 carregado - Server-Side Approach (Force Update)');
+  console.log('LovoCRM Analytics V5.1 carregado - Enhanced Device Detection (Cache Bust)');
   
   const M4Track = {
     config: {
@@ -107,20 +107,39 @@
     trackVisitor: function() {
       if (!this.config.isInitialized) return;
       
-      const visitorData = {
-        tracking_code: this.config.trackingCode,
-        session_id: this.config.sessionId,
-        visitor_id: this.getOrCreateVisitorId(),
-        user_agent: navigator.userAgent,
-        device_type: this.getDeviceType(),
-        screen_resolution: `${screen.width}x${screen.height}`,
-        referrer: document.referrer || 'direct',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        language: navigator.language
-      };
-      
-      console.log('M4Track: Tracking visitor via webhook approach');
-      this.sendDataViaWebhook('visitor', visitorData);
+      try {
+        const visitorData = {
+          tracking_code: this.config.trackingCode,
+          session_id: this.config.sessionId,
+          visitor_id: this.getOrCreateVisitorId(),
+          user_agent: navigator.userAgent,
+          device_type: this.getDeviceType(),
+          screen_resolution: `${screen.width}x${screen.height}`,
+          referrer: document.referrer || 'direct',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          language: navigator.language
+        };
+        
+        console.log('M4Track: Tracking visitor via webhook approach');
+        console.log('M4Track: Visitor data prepared:', visitorData);
+        this.sendDataViaWebhook('visitor', visitorData);
+      } catch (error) {
+        console.error('M4Track: Error in trackVisitor:', error);
+        // Fallback com device_type simples
+        const fallbackData = {
+          tracking_code: this.config.trackingCode,
+          session_id: this.config.sessionId,
+          visitor_id: this.getOrCreateVisitorId(),
+          user_agent: navigator.userAgent,
+          device_type: 'unknown',
+          screen_resolution: '1920x1080',
+          referrer: 'direct',
+          timezone: null,
+          language: 'en'
+        };
+        console.log('M4Track: Using fallback data:', fallbackData);
+        this.sendDataViaWebhook('visitor', fallbackData);
+      }
     },
     
     sendDataViaWebhook: function(type, data) {
