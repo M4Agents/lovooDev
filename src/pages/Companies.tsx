@@ -385,10 +385,344 @@ export const Companies: React.FC = () => {
     }
   };
 
-  // Mostrar abas cadastrais sempre (tanto para super admin quanto empresa filha)
-  const showCompanyTabs = true;
+  if (!company?.is_super_admin) {
+    // Empresas filhas não veem nada aqui - abas estão nas Configurações
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">Acesse suas informações em Configurações</p>
+        </div>
+      </div>
+    );
+  }
 
-  if (showCompanyTabs) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Super Admin vê a lista de empresas
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Empresas</h1>
+          <p className="text-slate-600 mt-1">Gerencie suas empresas clientes</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Empresa
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {companies.map((comp) => (
+          <div key={comp.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{comp.name}</h3>
+                  <p className="text-sm text-slate-600">{comp.domain}</p>
+                </div>
+              </div>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(comp.status)}`}>
+                {comp.status === 'active' ? 'Ativo' : comp.status === 'suspended' ? 'Suspenso' : 'Cancelado'}
+              </span>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <Users className="w-4 h-4" />
+                <span>Plano: {comp.plan}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <TrendingUp className="w-4 h-4" />
+                <span>Criada em: {new Date(comp.created_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleImpersonate(comp.id)}
+                className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                Entrar
+              </button>
+              <button
+                onClick={() => {
+                  setManagingCompany(comp);
+                  setUserFormData({ email: '', newPassword: '' });
+                  setShowUserModal(true);
+                }}
+                className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <UserCog className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  setEditingCompany(comp);
+                  setFormData({
+                    name: comp.name,
+                    domain: comp.domain || '',
+                    plan: comp.plan,
+                    adminEmail: '',
+                    adminPassword: ''
+                  });
+                  setShowModal(true);
+                }}
+                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(comp.id)}
+                className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modal de criação/edição de empresa */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-900">
+                {editingCompany ? 'Editar Empresa' : 'Nova Empresa'}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome da Empresa
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Domínio (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.domain}
+                  onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="exemplo.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Plano
+                </label>
+                <select
+                  value={formData.plan}
+                  onChange={(e) => setFormData({ ...formData, plan: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="basic">Básico</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+
+              {!editingCompany && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email do Administrador
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.adminEmail}
+                      onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={!editingCompany}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Senha do Administrador
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.adminPassword}
+                      onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={!editingCompany}
+                      minLength={6}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingCompany(null);
+                    setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '' });
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  {editingCompany ? 'Salvar' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de gerenciamento de usuário */}
+      {showUserModal && managingCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Gerenciar Usuário - {managingCompany.name}
+              </h2>
+            </div>
+
+            <form onSubmit={handleUserSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Mail className="w-4 h-4 inline mr-2" />
+                  Email do Usuário
+                </label>
+                <input
+                  type="email"
+                  value={userFormData.email}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  required
+                  placeholder="usuario@empresa.com"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Este será o novo email de login do usuário
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Key className="w-4 h-4 inline mr-2" />
+                  Nova Senha (opcional)
+                </label>
+                <input
+                  type="password"
+                  value={userFormData.newPassword}
+                  onChange={(e) => setUserFormData({ ...userFormData, newPassword: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  minLength={6}
+                  placeholder="Deixe em branco para manter a atual"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Mínimo 6 caracteres. Deixe em branco para não alterar.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">ℹ️ Informações:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• As alterações são aplicadas imediatamente</li>
+                  <li>• O usuário será notificado por email</li>
+                  <li>• Em caso de alteração de senha, será enviado um link de confirmação</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUserModal(false);
+                    setManagingCompany(null);
+                    setUserFormData({ email: '', newPassword: '' });
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {createdCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-900">Empresa Criada!</h2>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-medium text-green-900 mb-2">✅ Empresa criada com sucesso!</h3>
+                <div className="space-y-2 text-sm text-green-800">
+                  <p><strong>Nome:</strong> {createdCompany.name}</p>
+                  <p><strong>API Key:</strong> <code className="bg-green-100 px-2 py-1 rounded">{createdCompany.api_key}</code></p>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">📧 Próximos passos:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• O usuário receberá um email de confirmação</li>
+                  <li>• Ele deve confirmar o email para ativar a conta</li>
+                  <li>• Após confirmação, poderá fazer login normalmente</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={() => setCreatedCompany(null)}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Esta parte nunca será executada agora
+  if (false) {
     return (
       <div className="space-y-6">
         <div>

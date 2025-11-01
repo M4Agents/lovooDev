@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Key, Save, Clock } from 'lucide-react';
+import { Webhook, Key, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
@@ -9,6 +9,58 @@ export const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  
+  // Estados para abas cadastrais (apenas para empresas filhas ou quando super admin acessa configurações)
+  const [activeTab, setActiveTab] = useState<'settings' | 'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('settings');
+  const [companyData, setCompanyData] = useState({
+    // Dados Principais
+    name: '',
+    nome_fantasia: '',
+    razao_social: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
+    tipo_empresa: '',
+    porte_empresa: '',
+    ramo_atividade: '',
+    data_fundacao: '',
+    site_principal: '',
+    descricao_empresa: '',
+    
+    // Endereço
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
+    pais: 'Brasil',
+    endereco_correspondencia: null,
+    
+    // Contatos
+    telefone_principal: '',
+    telefone_secundario: '',
+    whatsapp: '',
+    email_principal: '',
+    email_comercial: '',
+    email_financeiro: '',
+    email_suporte: '',
+    responsavel_principal: { nome: '', cargo: '' },
+    contato_financeiro: { nome: '', email: '', telefone: '' },
+    
+    // Domínios e URLs
+    dominios_secundarios: [] as string[],
+    urls_landing_pages: [] as string[],
+    redes_sociais: { facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '' },
+    url_google_business: '',
+    
+    // Campos existentes
+    domain: '',
+    plan: 'basic',
+    status: 'active'
+  });
+  const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
     console.log('Settings: useEffect triggered, company:', company);
@@ -17,6 +69,63 @@ export const Settings: React.FC = () => {
     if (company) {
       setWebhookUrl(company.webhook_url || '');
       loadWebhookLogs();
+      
+      // Carregar dados da empresa para as abas cadastrais
+      setCompanyData(prev => ({
+        ...prev,
+        // Dados básicos
+        name: company.name || '',
+        domain: company.domain || '',
+        plan: company.plan || 'basic',
+        status: company.status || 'active',
+        
+        // Dados Principais
+        nome_fantasia: company.nome_fantasia || '',
+        razao_social: company.razao_social || '',
+        cnpj: company.cnpj || '',
+        inscricao_estadual: company.inscricao_estadual || '',
+        inscricao_municipal: company.inscricao_municipal || '',
+        tipo_empresa: company.tipo_empresa || '',
+        porte_empresa: company.porte_empresa || '',
+        ramo_atividade: company.ramo_atividade || '',
+        data_fundacao: company.data_fundacao || '',
+        site_principal: company.site_principal || '',
+        descricao_empresa: company.descricao_empresa || '',
+        
+        // Endereço
+        cep: company.cep || '',
+        logradouro: company.logradouro || '',
+        numero: company.numero || '',
+        complemento: company.complemento || '',
+        bairro: company.bairro || '',
+        cidade: company.cidade || '',
+        estado: company.estado || '',
+        pais: company.pais || 'Brasil',
+        endereco_correspondencia: company.endereco_correspondencia || null,
+        
+        // Contatos
+        telefone_principal: company.telefone_principal || '',
+        telefone_secundario: company.telefone_secundario || '',
+        whatsapp: company.whatsapp || '',
+        email_principal: company.email_principal || '',
+        email_comercial: company.email_comercial || '',
+        email_financeiro: company.email_financeiro || '',
+        email_suporte: company.email_suporte || '',
+        responsavel_principal: company.responsavel_principal || { nome: '', cargo: '' },
+        contato_financeiro: company.contato_financeiro || { nome: '', email: '', telefone: '' },
+        
+        // Domínios e URLs
+        dominios_secundarios: company.dominios_secundarios || [],
+        urls_landing_pages: company.urls_landing_pages || [],
+        redes_sociais: {
+          facebook: company.redes_sociais?.facebook || '',
+          instagram: company.redes_sociais?.instagram || '',
+          linkedin: company.redes_sociais?.linkedin || '',
+          twitter: company.redes_sociais?.twitter || '',
+          youtube: company.redes_sociais?.youtube || ''
+        },
+        url_google_business: company.url_google_business || ''
+      }));
     } 
     // Se não tem company mas está impersonating, carregar logs pelo localStorage
     else if (localStorage.getItem('lovoo_crm_impersonating') === 'true') {
@@ -79,6 +188,26 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+
+    setSavingCompany(true);
+    try {
+      // Preparar dados para envio (remover campos que não devem ser alterados)
+      const { domain, plan, status, ...updateData } = companyData;
+      
+      await api.updateCompany(company.id, updateData);
+      await refreshCompany();
+      alert('Dados da empresa atualizados com sucesso!');
+    } catch (error) {
+      console.error('Error saving company data:', error);
+      alert('Erro ao salvar dados da empresa');
+    } finally {
+      setSavingCompany(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert('Copiado para a área de transferência!');
@@ -89,9 +218,70 @@ export const Settings: React.FC = () => {
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
+        
+        {/* Abas - Configurações sempre visível, abas cadastrais para todos */}
+        <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <SettingsIcon className="w-4 h-4" />
+            Configurações
+          </button>
+          <button
+            onClick={() => setActiveTab('dados-principais')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'dados-principais'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            Dados Principais
+          </button>
+          <button
+            onClick={() => setActiveTab('endereco')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'endereco'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <MapPin className="w-4 h-4" />
+            Endereço
+          </button>
+          <button
+            onClick={() => setActiveTab('contatos')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'contatos'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Phone className="w-4 h-4" />
+            Contatos
+          </button>
+          <button
+            onClick={() => setActiveTab('dominios')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'dominios'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            Domínios & URLs
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Aba Configurações Técnicas */}
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -326,6 +516,113 @@ export const Settings: React.FC = () => {
 }`}
         </pre>
       </div>
+        </div>
+      )}
+
+      {/* Aba Dados Principais */}
+      {activeTab === 'dados-principais' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Building className="w-5 h-5 text-orange-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">Dados Principais</h2>
+          </div>
+
+          <form onSubmit={handleSaveCompany} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome da Empresa *
+                </label>
+                <input
+                  type="text"
+                  value={companyData.name}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome da sua empresa"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome Fantasia
+                </label>
+                <input
+                  type="text"
+                  value={companyData.nome_fantasia}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome fantasia"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  CNPJ
+                </label>
+                <input
+                  type="text"
+                  value={companyData.cnpj}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tipo de Empresa
+                </label>
+                <select
+                  value={companyData.tipo_empresa}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, tipo_empresa: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Selecione</option>
+                  <option value="MEI">MEI</option>
+                  <option value="Ltda">Ltda</option>
+                  <option value="SA">SA</option>
+                  <option value="EIRELI">EIRELI</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <h4 className="font-medium text-orange-900 mb-2">Informações da Conta</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-orange-800">Tipo:</span>
+                  <span className="ml-2 text-orange-700">
+                    {company?.is_super_admin ? 'Super Admin' : 'Empresa Filha'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-orange-800">Plano:</span>
+                  <span className="ml-2 text-orange-700 capitalize">
+                    {company?.plan === 'basic' ? 'Básico' : 
+                     company?.plan === 'pro' ? 'Pro' : 
+                     company?.plan === 'enterprise' ? 'Enterprise' : 
+                     company?.plan || 'Não definido'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingCompany}
+              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {savingCompany ? 'Salvando...' : 'Salvar Dados Principais'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Outras abas serão adicionadas aqui */}
     </div>
   );
 };
