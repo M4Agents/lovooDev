@@ -1,5 +1,23 @@
 import { supabase } from '../lib/supabase';
 
+// Process tracking queue
+export const processTrackingQueue = async () => {
+  try {
+    const { data, error } = await supabase.rpc('process_tracking_queue');
+    
+    if (error) {
+      console.error('Error processing tracking queue:', error);
+      return { success: false, error };
+    }
+    
+    console.log(`Processed ${data} tracking records`);
+    return { success: true, processed: data };
+  } catch (error) {
+    console.error('Error calling process_tracking_queue:', error);
+    return { success: false, error };
+  }
+};
+
 export const api = {
   async createLandingPage(companyId: string, data: { name: string; url: string }) {
     console.log('API: createLandingPage called with:', { companyId, data });

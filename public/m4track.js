@@ -446,34 +446,34 @@
 
     syncSingleRecord: async function(type, data) {
       try {
-        // Use image request to bypass CORS completely
-        const params = new URLSearchParams();
-        params.set('action', `sync_${type}`);
+        const apiUrl = this.config.apiUrl;
+        const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
         
-        // Add all data as URL parameters
-        Object.keys(data).forEach(key => {
-          if (data[key] !== null && data[key] !== undefined) {
-            params.set(key, data[key].toString());
-          }
+        // Insert directly into tracking_queue table (no CORS issues)
+        const response = await fetch(`${apiUrl}/rest/v1/tracking_queue`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': apiKey,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            action: type,
+            data: data
+          })
         });
         
-        // Create image request (no CORS restrictions)
-        const img = new Image();
-        img.onload = () => {
-          console.log(`M4Track: Successfully synced ${type} record`);
-        };
-        img.onerror = () => {
-          console.error(`M4Track: Error syncing ${type} record`);
-        };
-        
-        // Use our own tracking endpoint
-        img.src = `https://app.lovoocrm.com/track.gif?${params.toString()}`;
+        if (response.ok) {
+          console.log(`M4Track: Successfully queued ${type} record`);
+        } else {
+          console.error(`M4Track: Error queueing ${type} record:`, response.status);
+        }
         
         // Also log the data for debugging
-        console.log(`M4Track: Attempting to sync ${type}:`, data);
+        console.log(`M4Track: Attempting to queue ${type}:`, data);
         
       } catch (error) {
-        console.error(`M4Track: Error syncing single ${type} record`, error);
+        console.error(`M4Track: Error queueing single ${type} record`, error);
       }
     },
 
