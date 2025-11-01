@@ -447,7 +447,7 @@ export const AdvancedAnalytics: React.FC = () => {
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Tipo</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Dispositivo</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Origem</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data e Hora</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -474,7 +474,14 @@ export const AdvancedAnalytics: React.FC = () => {
                           {visitor.referrer === 'direct' ? 'Direto' : visitor.referrer || 'N/A'}
                         </td>
                         <td className="py-3 px-4 text-sm text-slate-600">
-                          {new Date(visitor.created_at).toLocaleDateString('pt-BR')}
+                          {new Date(visitor.created_at).toLocaleString('pt-BR', {
+                            timeZone: 'America/Sao_Paulo',
+                            day: '2-digit',
+                            month: '2-digit', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
                         </td>
                       </tr>
                     );
