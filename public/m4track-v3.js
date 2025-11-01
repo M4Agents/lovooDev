@@ -449,34 +449,34 @@
         const apiUrl = this.config.apiUrl;
         const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
         
-        // Try public function that bypasses CORS completely
+        // Try CORS-friendly function that works better
         if (type === 'visitor' && data.tracking_code) {
           try {
-            const response = await fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
+            const response = await fetch(`${apiUrl}/rest/v1/rpc/create_visitor_cors_friendly`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'apikey': apiKey
               },
               body: JSON.stringify({
-                tracking_code_text: data.tracking_code,
-                session_id_text: data.session_id,
-                user_agent_text: data.user_agent,
-                device_type_text: data.device_type,
-                screen_resolution_text: data.screen_resolution,
-                referrer_text: data.referrer
+                tracking_code_param: data.tracking_code,
+                session_id_param: data.session_id,
+                user_agent_param: data.user_agent,
+                device_type_param: data.device_type,
+                screen_resolution_param: data.screen_resolution,
+                referrer_param: data.referrer
               })
             });
             
             if (response.ok) {
               const result = await response.json();
               if (result.success) {
-                console.log(`M4Track: Successfully created visitor via public function:`, result.visitor_id);
+                console.log(`M4Track: Successfully created visitor via CORS-friendly function:`, result.visitor_id);
                 return;
               }
             }
-          } catch (publicError) {
-            console.log(`M4Track: Public function failed, trying queue method`);
+          } catch (corsError) {
+            console.log(`M4Track: CORS-friendly function failed, trying enhanced fallback`);
           }
         }
         
