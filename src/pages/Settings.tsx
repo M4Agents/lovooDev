@@ -164,69 +164,7 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-purple-100 rounded-lg">
-            <Clock className="w-5 h-5 text-purple-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900">Logs de Webhook</h2>
-        </div>
-
-        {loadingLogs ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          </div>
-        ) : logs.length === 0 ? (
-          <p className="text-slate-600 text-center py-8">Nenhum webhook enviado ainda</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data/Hora</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">URL</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Resposta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 px-4 text-sm text-slate-900">
-                      {new Date(log.sent_at).toLocaleString('pt-BR')}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-slate-600 max-w-xs truncate">
-                      {log.webhook_url}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {log.response_status ? (
-                        <span
-                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            log.response_status >= 200 && log.response_status < 300
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {log.response_status}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Erro
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-slate-600 max-w-md truncate">
-                      {log.error_message || log.response_body || 'Sucesso'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Webhook de Conversão - Nova seção em largura completa */}
+      {/* Webhook de Conversão - Movido para cima */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-purple-100 rounded-lg">
@@ -301,6 +239,69 @@ export const Settings: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Logs de Webhook - Movido para baixo do Webhook de Conversão */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-purple-100 rounded-lg">
+            <Clock className="w-5 h-5 text-purple-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900">Logs de Webhook</h2>
+        </div>
+
+        {loadingLogs ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="text-slate-600 text-center py-8">Nenhum webhook enviado ainda</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data/Hora</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">URL</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Status</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Resposta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-3 px-4 text-sm text-slate-900">
+                      {new Date(log.sent_at).toLocaleString('pt-BR')}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600 max-w-xs truncate">
+                      {log.webhook_url}
+                    </td>
+                    <td className="py-3 px-4 text-sm">
+                      {log.response_status ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            log.response_status >= 200 && log.response_status < 300
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {log.response_status}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          Erro
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600 max-w-md truncate">
+                      {log.error_message || log.response_body || 'Sucesso'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm p-6 text-white">
