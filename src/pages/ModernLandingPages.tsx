@@ -518,7 +518,7 @@ export const ModernLandingPages: React.FC = () => {
                 <div className="relative">
                   <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl text-sm overflow-x-auto">
 {`<!-- LovoCRM Analytics -->
-<script src="${window.location.origin}/m4track-v2.js?v=${new Date().getTime()}"></script>
+<script src="${window.location.origin}/m4track-v3.js?v=${new Date().getTime()}"></script>
 <script>
   LovoCRM.init('${selectedPage.tracking_code}', '${window.location.origin}');
 </script>`}
