@@ -11,6 +11,9 @@
     const params = new URLSearchParams(window.location.search);
     const action = params.get('action');
     
+    // Log for debugging
+    console.log('Pixel tracking:', action, params.toString());
+    
     if (action) {
         // Process tracking data using RPC functions
         const apiUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
@@ -30,10 +33,15 @@
                         tracking_code_param: trackingCode
                     })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Landing page response:', response.status);
+                    return response.json();
+                })
                 .then(pages => {
+                    console.log('Landing pages found:', pages);
                     if (pages.length > 0) {
                         // Create visitor
+                        console.log('Creating visitor for page:', pages[0].id);
                         return fetch(`${apiUrl}/rest/v1/rpc/create_visitor`, {
                             method: 'POST',
                             headers: {
@@ -48,10 +56,19 @@
                                 screen_resolution_param: params.get('screen_resolution'),
                                 referrer_param: params.get('referrer')
                             })
+                        })
+                        .then(response => {
+                            console.log('Visitor creation response:', response.status);
+                            return response.json();
+                        })
+                        .then(result => {
+                            console.log('Visitor created:', result);
                         });
                     }
                 })
-                .catch(error => console.error('Tracking error:', error));
+                .catch(error => {
+                    console.error('Visitor tracking error:', error);
+                });
             }
         }
         
