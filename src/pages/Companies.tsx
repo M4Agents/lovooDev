@@ -607,8 +607,14 @@ export const Companies: React.FC = () => {
                     url_google_business: comp.url_google_business || ''
                     });
                     setEditActiveTab('dados-principais');
+                    console.log('🚀 Definindo showEditModal = true');
                     setShowEditModal(true);
-                    console.log('Modal deve abrir agora - showEditModal:', true);
+                    console.log('✅ Modal deve abrir agora - showEditModal:', true);
+                    
+                    // Forçar re-render após um pequeno delay
+                    setTimeout(() => {
+                      console.log('🔄 Verificando estado após timeout:', showEditModal);
+                    }, 100);
                   } catch (error) {
                     console.error('Erro ao abrir modal:', error);
                     alert('Erro ao abrir modal de edição');
@@ -2091,7 +2097,10 @@ export const Companies: React.FC = () => {
       )}
 
       {/* Modal de Edição Funcional */}
-      {showEditModal && (
+      {(() => {
+        console.log('🔍 Verificando condição do modal:', { showEditModal, editingCompanyData });
+        return showEditModal;
+      })() && (
         <div 
           style={{
             position: 'fixed',
