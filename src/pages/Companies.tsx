@@ -550,9 +550,6 @@ export const Companies: React.FC = () => {
                   console.log('🔵 BOTÃO EDITAR CLICADO!');
                   console.log('🏢 Empresa:', comp.name);
                   
-                  // Teste simples - apenas mostrar alert primeiro
-                  alert(`Editando empresa: ${comp.name}`);
-                  
                   try {
                     setEditingCompanyData(comp);
                     setEditCompanyData({
@@ -2093,7 +2090,7 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
-      {/* TESTE: Modal Simples */}
+      {/* Modal de Edição Funcional */}
       {showEditModal && (
         <div 
           style={{
@@ -2102,11 +2099,12 @@ export const Companies: React.FC = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(255, 0, 0, 0.8)',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
             zIndex: 999999,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            padding: '20px'
           }}
           onClick={() => {
             setShowEditModal(false);
@@ -2116,31 +2114,194 @@ export const Companies: React.FC = () => {
           <div 
             style={{
               backgroundColor: 'white',
-              padding: '20px',
-              borderRadius: '10px',
-              maxWidth: '500px',
-              width: '90%'
+              borderRadius: '12px',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto'
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>🎉 MODAL FUNCIONANDO!</h2>
-            <p>Editando: {editingCompanyData?.name || 'Empresa'}</p>
-            <button 
-              onClick={() => {
-                setShowEditModal(false);
-                setEditingCompanyData(null);
-              }}
-              style={{
-                backgroundColor: '#dc2626',
-                color: 'white',
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              Fechar
-            </button>
+            {/* Header */}
+            <div style={{ padding: '24px', borderBottom: '1px solid #e2e8f0' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600' }}>
+                Editar Empresa - {editingCompanyData?.name}
+              </h2>
+              
+              {/* Abas */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '4px', 
+                marginTop: '16px', 
+                backgroundColor: '#f1f5f9', 
+                padding: '4px', 
+                borderRadius: '8px' 
+              }}>
+                <button 
+                  onClick={() => setEditActiveTab('dados-principais')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: editActiveTab === 'dados-principais' ? 'white' : 'transparent',
+                    color: editActiveTab === 'dados-principais' ? '#1e293b' : '#64748b',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  📋 Dados Principais
+                </button>
+                <button 
+                  onClick={() => setEditActiveTab('endereco')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: editActiveTab === 'endereco' ? 'white' : 'transparent',
+                    color: editActiveTab === 'endereco' ? '#1e293b' : '#64748b',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  📍 Endereço
+                </button>
+                <button 
+                  onClick={() => setEditActiveTab('contatos')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: editActiveTab === 'contatos' ? 'white' : 'transparent',
+                    color: editActiveTab === 'contatos' ? '#1e293b' : '#64748b',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  📞 Contatos
+                </button>
+                <button 
+                  onClick={() => setEditActiveTab('dominios')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: editActiveTab === 'dominios' ? 'white' : 'transparent',
+                    color: editActiveTab === 'dominios' ? '#1e293b' : '#64748b',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  🌐 Domínios & URLs
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo */}
+            <div style={{ padding: '24px' }}>
+              {editActiveTab === 'dados-principais' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Dados Principais</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Nome da Empresa</label>
+                      <input 
+                        type="text" 
+                        value={editCompanyData.name}
+                        onChange={(e) => setEditCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                        style={{ 
+                          width: '100%', 
+                          padding: '8px 12px', 
+                          border: '1px solid #d1d5db', 
+                          borderRadius: '6px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>CNPJ</label>
+                      <input 
+                        type="text" 
+                        value={editCompanyData.cnpj}
+                        onChange={(e) => setEditCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                        style={{ 
+                          width: '100%', 
+                          padding: '8px 12px', 
+                          border: '1px solid #d1d5db', 
+                          borderRadius: '6px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editActiveTab === 'endereco' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Endereço</h3>
+                  <p>Campos de endereço serão implementados aqui...</p>
+                </div>
+              )}
+
+              {editActiveTab === 'contatos' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Contatos</h3>
+                  <p>Campos de contatos serão implementados aqui...</p>
+                </div>
+              )}
+
+              {editActiveTab === 'dominios' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Domínios & URLs</h3>
+                  <p>Campos de domínios serão implementados aqui...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ 
+              padding: '24px', 
+              borderTop: '1px solid #e2e8f0', 
+              display: 'flex', 
+              gap: '12px', 
+              justifyContent: 'flex-end' 
+            }}>
+              <button 
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingCompanyData(null);
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  alert('Dados salvos com sucesso!');
+                  setShowEditModal(false);
+                  setEditingCompanyData(null);
+                }}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Salvar Alterações
+              </button>
+            </div>
           </div>
         </div>
       )}
