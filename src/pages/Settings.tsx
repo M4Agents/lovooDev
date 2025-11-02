@@ -11,7 +11,8 @@ export const Settings: React.FC = () => {
   const [loadingLogs, setLoadingLogs] = useState(true);
   
   // Estados para abas cadastrais (apenas para empresas filhas ou quando super admin acessa configurações)
-  const [activeTab, setActiveTab] = useState<'settings' | 'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'empresas'>('settings');
+  const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   const [companyData, setCompanyData] = useState({
     // Dados Principais
     name: '',
@@ -219,7 +220,7 @@ export const Settings: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
         
-        {/* Abas - Configurações sempre visível, abas cadastrais para todos */}
+        {/* Abas principais */}
         <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
           <button
             onClick={() => setActiveTab('settings')}
@@ -233,48 +234,15 @@ export const Settings: React.FC = () => {
             Configurações
           </button>
           <button
-            onClick={() => setActiveTab('dados-principais')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'dados-principais'
+            onClick={() => setActiveTab('empresas')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'empresas'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Building className="w-4 h-4" />
-            Dados Principais
-          </button>
-          <button
-            onClick={() => setActiveTab('endereco')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'endereco'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            Endereço
-          </button>
-          <button
-            onClick={() => setActiveTab('contatos')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'contatos'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Phone className="w-4 h-4" />
-            Contatos
-          </button>
-          <button
-            onClick={() => setActiveTab('dominios')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'dominios'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Globe className="w-4 h-4" />
-            Domínios & URLs
+            Empresas
           </button>
         </div>
       </div>

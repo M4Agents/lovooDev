@@ -11,6 +11,60 @@ export const Companies: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [createdCompany, setCreatedCompany] = useState<any>(null);
+  
+  // Estados para modal de edição com abas cadastrais
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCompanyData, setEditingCompanyData] = useState<any>(null);
+  const [editActiveTab, setEditActiveTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
+  const [editCompanyData, setEditCompanyData] = useState({
+    // Dados Principais
+    name: '',
+    nome_fantasia: '',
+    razao_social: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
+    tipo_empresa: '',
+    porte_empresa: '',
+    ramo_atividade: '',
+    data_fundacao: '',
+    site_principal: '',
+    descricao_empresa: '',
+    
+    // Endereço
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
+    pais: 'Brasil',
+    endereco_correspondencia: null,
+    
+    // Contatos
+    telefone_principal: '',
+    telefone_secundario: '',
+    whatsapp: '',
+    email_principal: '',
+    email_comercial: '',
+    email_financeiro: '',
+    email_suporte: '',
+    responsavel_principal: { nome: '', cargo: '' },
+    contato_financeiro: { nome: '', email: '', telefone: '' },
+    
+    // Domínios e URLs
+    dominios_secundarios: [] as string[],
+    urls_landing_pages: [] as string[],
+    redes_sociais: { facebook: '', instagram: '', linkedin: '', twitter: '', youtube: '' },
+    url_google_business: '',
+    
+    // Campos existentes
+    domain: '',
+    plan: 'basic',
+    status: 'active'
+  });
+  const [savingEditCompany, setSavingEditCompany] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [managingCompany, setManagingCompany] = useState<Company | null>(null);
   const [userFormData, setUserFormData] = useState({
@@ -302,6 +356,27 @@ export const Companies: React.FC = () => {
     }
   };
 
+  const handleEditCompanySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompanyData) return;
+
+    setSavingEditCompany(true);
+    try {
+      // Preparar dados para envio (remover campos que não devem ser alterados por Super Admin)
+      const { domain, plan, status, ...updateData } = editCompanyData;
+      
+      await api.updateCompany(editingCompanyData.id, updateData);
+      await loadCompanies(); // Recarregar lista
+      alert('Dados da empresa atualizados com sucesso!');
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Error saving company data:', error);
+      alert('Erro ao salvar dados da empresa');
+    } finally {
+      setSavingEditCompany(false);
+    }
+  };
+
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!managingCompany) return;
@@ -385,18 +460,6 @@ export const Companies: React.FC = () => {
     }
   };
 
-  if (!company?.is_super_admin) {
-    // Empresas filhas não veem nada aqui - abas estão nas Configurações
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Acesse suas informações em Configurações</p>
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -405,7 +468,17 @@ export const Companies: React.FC = () => {
     );
   }
 
-  // Super Admin vê a lista de empresas
+  if (!company?.is_super_admin) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">Acesso restrito a administradores</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -471,15 +544,63 @@ export const Companies: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  setEditingCompany(comp);
-                  setFormData({
-                    name: comp.name,
+                  setEditingCompanyData(comp);
+                  setEditCompanyData({
+                    // Dados básicos
+                    name: comp.name || '',
                     domain: comp.domain || '',
-                    plan: comp.plan,
-                    adminEmail: '',
-                    adminPassword: ''
+                    plan: comp.plan || 'basic',
+                    status: comp.status || 'active',
+                    
+                    // Dados Principais
+                    nome_fantasia: comp.nome_fantasia || '',
+                    razao_social: comp.razao_social || '',
+                    cnpj: comp.cnpj || '',
+                    inscricao_estadual: comp.inscricao_estadual || '',
+                    inscricao_municipal: comp.inscricao_municipal || '',
+                    tipo_empresa: comp.tipo_empresa || '',
+                    porte_empresa: comp.porte_empresa || '',
+                    ramo_atividade: comp.ramo_atividade || '',
+                    data_fundacao: comp.data_fundacao || '',
+                    site_principal: comp.site_principal || '',
+                    descricao_empresa: comp.descricao_empresa || '',
+                    
+                    // Endereço
+                    cep: comp.cep || '',
+                    logradouro: comp.logradouro || '',
+                    numero: comp.numero || '',
+                    complemento: comp.complemento || '',
+                    bairro: comp.bairro || '',
+                    cidade: comp.cidade || '',
+                    estado: comp.estado || '',
+                    pais: comp.pais || 'Brasil',
+                    endereco_correspondencia: comp.endereco_correspondencia || null,
+                    
+                    // Contatos
+                    telefone_principal: comp.telefone_principal || '',
+                    telefone_secundario: comp.telefone_secundario || '',
+                    whatsapp: comp.whatsapp || '',
+                    email_principal: comp.email_principal || '',
+                    email_comercial: comp.email_comercial || '',
+                    email_financeiro: comp.email_financeiro || '',
+                    email_suporte: comp.email_suporte || '',
+                    responsavel_principal: comp.responsavel_principal || { nome: '', cargo: '' },
+                    contato_financeiro: comp.contato_financeiro || { nome: '', email: '', telefone: '' },
+                    
+                    // Domínios e URLs
+                    dominios_secundarios: comp.dominios_secundarios || [],
+                    urls_landing_pages: comp.urls_landing_pages || [],
+                    redes_sociais: {
+                      facebook: comp.redes_sociais?.facebook || '',
+                      instagram: comp.redes_sociais?.instagram || '',
+                      linkedin: comp.redes_sociais?.linkedin || '',
+                      twitter: comp.redes_sociais?.twitter || '',
+                      youtube: comp.redes_sociais?.youtube || ''
+                    },
+                    url_google_business: comp.url_google_business || ''
                   });
-                  setShowModal(true);
+                  setEditActiveTab('dados-principais');
+                  setShowEditModal(true);
                 }}
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
@@ -1953,6 +2074,303 @@ export const Companies: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição com Abas Cadastrais */}
+      {showEditModal && editingCompanyData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Editar Empresa - {editingCompanyData.name}
+              </h2>
+              
+              {/* Abas */}
+              <div className="flex space-x-1 mt-4 bg-slate-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setEditActiveTab('dados-principais')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                    editActiveTab === 'dados-principais'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Building className="w-4 h-4" />
+                  Dados Principais
+                </button>
+                <button
+                  onClick={() => setEditActiveTab('endereco')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                    editActiveTab === 'endereco'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MapPin className="w-4 h-4" />
+                  Endereço
+                </button>
+                <button
+                  onClick={() => setEditActiveTab('contatos')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                    editActiveTab === 'contatos'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Phone className="w-4 h-4" />
+                  Contatos
+                </button>
+                <button
+                  onClick={() => setEditActiveTab('dominios')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                    editActiveTab === 'dominios'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  Domínios & URLs
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              <form onSubmit={handleEditCompanySubmit}>
+                {/* Aba Dados Principais */}
+                {editActiveTab === 'dados-principais' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Nome da Empresa *
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.name}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Nome Fantasia
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.nome_fantasia}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          CNPJ
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.cnpj}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Razão Social
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.razao_social}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, razao_social: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Aba Endereço */}
+                {editActiveTab === 'endereco' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          CEP
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.cep}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, cep: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Logradouro
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.logradouro}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, logradouro: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Cidade
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.cidade}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, cidade: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Estado/UF
+                        </label>
+                        <select
+                          value={editCompanyData.estado}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, estado: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Selecione</option>
+                          <option value="AC">Acre</option>
+                          <option value="AL">Alagoas</option>
+                          <option value="AP">Amapá</option>
+                          <option value="AM">Amazonas</option>
+                          <option value="BA">Bahia</option>
+                          <option value="CE">Ceará</option>
+                          <option value="DF">Distrito Federal</option>
+                          <option value="ES">Espírito Santo</option>
+                          <option value="GO">Goiás</option>
+                          <option value="MA">Maranhão</option>
+                          <option value="MT">Mato Grosso</option>
+                          <option value="MS">Mato Grosso do Sul</option>
+                          <option value="MG">Minas Gerais</option>
+                          <option value="PA">Pará</option>
+                          <option value="PB">Paraíba</option>
+                          <option value="PR">Paraná</option>
+                          <option value="PE">Pernambuco</option>
+                          <option value="PI">Piauí</option>
+                          <option value="RJ">Rio de Janeiro</option>
+                          <option value="RN">Rio Grande do Norte</option>
+                          <option value="RS">Rio Grande do Sul</option>
+                          <option value="RO">Rondônia</option>
+                          <option value="RR">Roraima</option>
+                          <option value="SC">Santa Catarina</option>
+                          <option value="SP">São Paulo</option>
+                          <option value="SE">Sergipe</option>
+                          <option value="TO">Tocantins</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Aba Contatos */}
+                {editActiveTab === 'contatos' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Telefone Principal
+                        </label>
+                        <input
+                          type="text"
+                          value={editCompanyData.telefone_principal}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, telefone_principal: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Email Principal
+                        </label>
+                        <input
+                          type="email"
+                          value={editCompanyData.email_principal}
+                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, email_principal: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Aba Domínios & URLs */}
+                {editActiveTab === 'dominios' && (
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        URL do Google My Business
+                      </label>
+                      <input
+                        type="url"
+                        value={editCompanyData.url_google_business}
+                        onChange={(e) => setEditCompanyData(prev => ({ ...prev, url_google_business: e.target.value }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Facebook
+                        </label>
+                        <input
+                          type="url"
+                          value={editCompanyData.redes_sociais.facebook}
+                          onChange={(e) => setEditCompanyData(prev => ({ 
+                            ...prev, 
+                            redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
+                          }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Instagram
+                        </label>
+                        <input
+                          type="url"
+                          value={editCompanyData.redes_sociais.instagram}
+                          onChange={(e) => setEditCompanyData(prev => ({ 
+                            ...prev, 
+                            redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
+                          }))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-6 mt-6 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingCompanyData(null);
+                    }}
+                    className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEditCompany}
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingEditCompany ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
