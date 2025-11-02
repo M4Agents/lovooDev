@@ -405,6 +405,118 @@ export const Settings: React.FC = () => {
                       placeholder="Razão social da empresa"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Inscrição Estadual
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.inscricao_estadual}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_estadual: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Inscrição estadual"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Inscrição Municipal
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.inscricao_municipal}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_municipal: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Inscrição municipal"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Tipo de Empresa
+                    </label>
+                    <select
+                      value={companyData.tipo_empresa}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, tipo_empresa: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Selecionar</option>
+                      <option value="MEI">MEI</option>
+                      <option value="LTDA">Ltda</option>
+                      <option value="SA">S.A.</option>
+                      <option value="EIRELI">EIRELI</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Porte da Empresa
+                    </label>
+                    <select
+                      value={companyData.porte_empresa}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, porte_empresa: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Selecionar</option>
+                      <option value="Microempresa">Microempresa</option>
+                      <option value="Pequena">Pequena</option>
+                      <option value="Média">Média</option>
+                      <option value="Grande">Grande</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Ramo de Atividade
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.ramo_atividade}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, ramo_atividade: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Ramo de atividade"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Data de Fundação
+                    </label>
+                    <input
+                      type="date"
+                      value={companyData.data_fundacao}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, data_fundacao: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Site Principal
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.site_principal}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, site_principal: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="https://www.empresa.com"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Descrição da Empresa
+                  </label>
+                  <textarea
+                    value={companyData.descricao_empresa}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, descricao_empresa: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 resize-vertical"
+                    placeholder="Descreva brevemente sua empresa..."
+                  />
                 </div>
 
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -479,6 +591,32 @@ export const Settings: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Número
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.numero}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, numero: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Número"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Bairro
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.bairro}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, bairro: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Bairro"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Cidade
                     </label>
                     <input
@@ -500,13 +638,60 @@ export const Settings: React.FC = () => {
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Selecione</option>
-                      <option value="SP">São Paulo</option>
-                      <option value="RJ">Rio de Janeiro</option>
+                      <option value="AC">Acre</option>
+                      <option value="AL">Alagoas</option>
+                      <option value="AP">Amapá</option>
+                      <option value="AM">Amazonas</option>
+                      <option value="BA">Bahia</option>
+                      <option value="CE">Ceará</option>
+                      <option value="DF">Distrito Federal</option>
+                      <option value="ES">Espírito Santo</option>
+                      <option value="GO">Goiás</option>
+                      <option value="MA">Maranhão</option>
+                      <option value="MT">Mato Grosso</option>
+                      <option value="MS">Mato Grosso do Sul</option>
                       <option value="MG">Minas Gerais</option>
-                      <option value="RS">Rio Grande do Sul</option>
+                      <option value="PA">Pará</option>
+                      <option value="PB">Paraíba</option>
                       <option value="PR">Paraná</option>
+                      <option value="PE">Pernambuco</option>
+                      <option value="PI">Piauí</option>
+                      <option value="RJ">Rio de Janeiro</option>
+                      <option value="RN">Rio Grande do Norte</option>
+                      <option value="RS">Rio Grande do Sul</option>
+                      <option value="RO">Rondônia</option>
+                      <option value="RR">Roraima</option>
                       <option value="SC">Santa Catarina</option>
+                      <option value="SP">São Paulo</option>
+                      <option value="SE">Sergipe</option>
+                      <option value="TO">Tocantins</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Complemento
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.complemento}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, complemento: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Apto, Sala, etc."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      País
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.pais}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, pais: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="País"
+                    />
                   </div>
                 </div>
 
@@ -548,6 +733,32 @@ export const Settings: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Telefone Secundário
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.telefone_secundario}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_secundario: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.whatsapp}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, whatsapp: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Email Principal
                     </label>
                     <input
@@ -557,6 +768,134 @@ export const Settings: React.FC = () => {
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       placeholder="contato@empresa.com"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email Comercial
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.email_comercial}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, email_comercial: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="comercial@empresa.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email Financeiro
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.email_financeiro}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, email_financeiro: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="financeiro@empresa.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email Suporte
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.email_suporte}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, email_suporte: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="suporte@empresa.com"
+                    />
+                  </div>
+                </div>
+
+                {/* Responsável Principal */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-4">Responsável Principal</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Nome
+                      </label>
+                      <input
+                        type="text"
+                        value={companyData.responsavel_principal.nome}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          responsavel_principal: { ...prev.responsavel_principal, nome: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="Nome do responsável"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Cargo
+                      </label>
+                      <input
+                        type="text"
+                        value={companyData.responsavel_principal.cargo}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          responsavel_principal: { ...prev.responsavel_principal, cargo: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="Cargo do responsável"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contato Financeiro */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-4">Contato Financeiro</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Nome
+                      </label>
+                      <input
+                        type="text"
+                        value={companyData.contato_financeiro.nome}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          contato_financeiro: { ...prev.contato_financeiro, nome: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="Nome do contato financeiro"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={companyData.contato_financeiro.email}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          contato_financeiro: { ...prev.contato_financeiro, email: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="email@empresa.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Telefone
+                      </label>
+                      <input
+                        type="text"
+                        value={companyData.contato_financeiro.telefone}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          contato_financeiro: { ...prev.contato_financeiro, telefone: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -595,37 +934,122 @@ export const Settings: React.FC = () => {
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Facebook
-                    </label>
-                    <input
-                      type="url"
-                      value={companyData.redes_sociais.facebook}
-                      onChange={(e) => setCompanyData(prev => ({ 
-                        ...prev, 
-                        redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
-                      }))}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="https://facebook.com/..."
-                    />
+                {/* Redes Sociais */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-medium text-purple-900 mb-4">Redes Sociais</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Facebook
+                      </label>
+                      <input
+                        type="url"
+                        value={companyData.redes_sociais.facebook}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="https://facebook.com/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Instagram
+                      </label>
+                      <input
+                        type="url"
+                        value={companyData.redes_sociais.instagram}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="https://instagram.com/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        LinkedIn
+                      </label>
+                      <input
+                        type="url"
+                        value={companyData.redes_sociais.linkedin}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          redes_sociais: { ...prev.redes_sociais, linkedin: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="https://linkedin.com/company/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Twitter
+                      </label>
+                      <input
+                        type="url"
+                        value={companyData.redes_sociais.twitter}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          redes_sociais: { ...prev.redes_sociais, twitter: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="https://twitter.com/..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        YouTube
+                      </label>
+                      <input
+                        type="url"
+                        value={companyData.redes_sociais.youtube}
+                        onChange={(e) => setCompanyData(prev => ({ 
+                          ...prev, 
+                          redes_sociais: { ...prev.redes_sociais, youtube: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="https://youtube.com/..."
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Instagram
-                    </label>
-                    <input
-                      type="url"
-                      value={companyData.redes_sociais.instagram}
-                      onChange={(e) => setCompanyData(prev => ({ 
-                        ...prev, 
-                        redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
-                      }))}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="https://instagram.com/..."
-                    />
-                  </div>
+                </div>
+
+                {/* Domínios Secundários */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Domínios Secundários
+                  </label>
+                  <textarea
+                    value={Array.isArray(companyData.dominios_secundarios) ? companyData.dominios_secundarios.join('\n') : ''}
+                    onChange={(e) => setCompanyData(prev => ({ 
+                      ...prev, 
+                      dominios_secundarios: e.target.value.split('\n').filter(domain => domain.trim() !== '')
+                    }))}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-vertical"
+                    placeholder="Digite os domínios secundários, um por linha&#10;exemplo.com&#10;outro-dominio.com.br"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Digite um domínio por linha</p>
+                </div>
+
+                {/* URLs Landing Pages */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    URLs Landing Pages
+                  </label>
+                  <textarea
+                    value={Array.isArray(companyData.urls_landing_pages) ? companyData.urls_landing_pages.join('\n') : ''}
+                    onChange={(e) => setCompanyData(prev => ({ 
+                      ...prev, 
+                      urls_landing_pages: e.target.value.split('\n').filter(url => url.trim() !== '')
+                    }))}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-vertical"
+                    placeholder="Digite as URLs das landing pages, uma por linha&#10;https://landing1.com&#10;https://landing2.com"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Digite uma URL por linha</p>
                 </div>
 
                 <button
