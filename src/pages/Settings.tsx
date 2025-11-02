@@ -232,7 +232,7 @@ export const Settings: React.FC = () => {
             }`}
           >
             <SettingsIcon className="w-4 h-4" />
-            Configurações
+            Integrações
           </button>
           <button
             onClick={() => setActiveTab('empresas')}
