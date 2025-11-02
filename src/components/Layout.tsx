@@ -11,7 +11,8 @@ import {
   X,
   TrendingUp,
   Activity,
-  Building2
+  Building2,
+  Users
 } from 'lucide-react';
 
 type LayoutProps = {
@@ -33,6 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
+    { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];

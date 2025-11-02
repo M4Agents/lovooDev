@@ -731,5 +731,397 @@ export const api = {
       console.error('Error in updateCompany:', error);
       throw error;
     }
+  },
+
+  // Leads Management Functions
+  async createLead(data: {
+    company_id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    origin?: string;
+    status?: string;
+    interest?: string;
+    responsible_user_id?: string;
+    visitor_id?: string;
+    custom_fields?: Record<string, any>;
+  }) {
+    console.log('API: createLead called with:', data);
+    
+    try {
+      const { custom_fields, ...leadData } = data;
+      
+      const { data: lead, error } = await supabase
+        .from('leads')
+        .insert(leadData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Se há campos personalizados, inserir os valores
+      if (custom_fields && Object.keys(custom_fields).length > 0) {
+        const customValues = Object.entries(custom_fields).map(([fieldId, value]) => ({
+          lead_id: lead.id,
+          field_id: fieldId,
+          value: String(value)
+        }));
+
+        const { error: customError } = await supabase
+          .from('lead_custom_values')
+          .insert(customValues);
+
+        if (customError) {
+          console.error('Error inserting custom field values:', customError);
+        }
+      }
+
+      console.log('API: Lead created successfully:', lead);
+      return lead;
+    } catch (error) {
+      console.error('Error in createLead:', error);
+      throw error;
+    }
+  },
+
+  async getLeads(companyId: string, filters?: {
+    status?: string;
+    origin?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    console.log('API: getLeads called for company:', companyId);
+    
+    try {
+      let query = supabase
+        .from('leads')
+        .select(`
+          *,
+          lead_custom_values (
+            field_id,
+            value,
+            lead_custom_fields (
+              field_name,
+              field_label,
+              field_type
+            )
+          )
+        `)
+        .eq('company_id', companyId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (filters?.status) {
+        query = query.eq('status', filters.status);
+      }
+
+      if (filters?.origin) {
+        query = query.eq('origin', filters.origin);
+      }
+
+      if (filters?.search) {
+        query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+      }
+
+      if (filters?.limit) {
+        query = query.limit(filters.limit);
+      }
+
+      if (filters?.offset) {
+        query = query.range(filters.offset, filters.offset + (filters.limit || 50) - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      console.log('API: Leads retrieved successfully:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getLeads:', error);
+      throw error;
+    }
+  },
+
+  async updateLead(leadId: number, updates: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    origin?: string;
+    status?: string;
+    interest?: string;
+    responsible_user_id?: string;
+    visitor_id?: string;
+    custom_fields?: Record<string, any>;
+  }) {
+    console.log('API: updateLead called with:', { leadId, updates });
+    
+    try {
+      const { custom_fields, ...leadUpdates } = updates;
+      
+      const { data: lead, error } = await supabase
+        .from('leads')
+        .update(leadUpdates)
+        .eq('id', leadId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualizar campos personalizados se fornecidos
+      if (custom_fields) {
+        // Primeiro, deletar valores existentes
+        await supabase
+          .from('lead_custom_values')
+          .delete()
+          .eq('lead_id', leadId);
+
+        // Inserir novos valores
+        if (Object.keys(custom_fields).length > 0) {
+          const customValues = Object.entries(custom_fields).map(([fieldId, value]) => ({
+            lead_id: leadId,
+            field_id: fieldId,
+            value: String(value)
+          }));
+
+          const { error: customError } = await supabase
+            .from('lead_custom_values')
+            .insert(customValues);
+
+          if (customError) {
+            console.error('Error updating custom field values:', customError);
+          }
+        }
+      }
+
+      console.log('API: Lead updated successfully:', lead);
+      return lead;
+    } catch (error) {
+      console.error('Error in updateLead:', error);
+      throw error;
+    }
+  },
+
+  async deleteLead(leadId: number, softDelete: boolean = true) {
+    console.log('API: deleteLead called with:', { leadId, softDelete });
+    
+    try {
+      if (softDelete) {
+        const { data, error } = await supabase
+          .from('leads')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', leadId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } else {
+        const { error } = await supabase
+          .from('leads')
+          .delete()
+          .eq('id', leadId);
+
+        if (error) throw error;
+        return { success: true };
+      }
+    } catch (error) {
+      console.error('Error in deleteLead:', error);
+      throw error;
+    }
+  },
+
+  async getLeadById(leadId: number) {
+    console.log('API: getLeadById called with:', leadId);
+    
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select(`
+          *,
+          lead_custom_values (
+            field_id,
+            value,
+            lead_custom_fields (
+              field_name,
+              field_label,
+              field_type,
+              options
+            )
+          )
+        `)
+        .eq('id', leadId)
+        .is('deleted_at', null)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in getLeadById:', error);
+      throw error;
+    }
+  },
+
+  // Custom Fields Management
+  async getCustomFields(companyId: string) {
+    console.log('API: getCustomFields called for company:', companyId);
+    
+    try {
+      const { data, error } = await supabase
+        .from('lead_custom_fields')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error in getCustomFields:', error);
+      throw error;
+    }
+  },
+
+  async createCustomField(data: {
+    company_id: string;
+    field_name: string;
+    field_label: string;
+    field_type: 'text' | 'number' | 'date' | 'boolean' | 'select';
+    options?: any[];
+    is_required?: boolean;
+  }) {
+    console.log('API: createCustomField called with:', data);
+    
+    try {
+      const { data: field, error } = await supabase
+        .from('lead_custom_fields')
+        .insert(data)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return field;
+    } catch (error) {
+      console.error('Error in createCustomField:', error);
+      throw error;
+    }
+  },
+
+  async updateCustomField(fieldId: string, updates: {
+    field_label?: string;
+    field_type?: 'text' | 'number' | 'date' | 'boolean' | 'select';
+    options?: any[];
+    is_required?: boolean;
+  }) {
+    console.log('API: updateCustomField called with:', { fieldId, updates });
+    
+    try {
+      const { data, error } = await supabase
+        .from('lead_custom_fields')
+        .update(updates)
+        .eq('id', fieldId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error in updateCustomField:', error);
+      throw error;
+    }
+  },
+
+  async deleteCustomField(fieldId: string) {
+    console.log('API: deleteCustomField called with:', fieldId);
+    
+    try {
+      const { error } = await supabase
+        .from('lead_custom_fields')
+        .delete()
+        .eq('id', fieldId);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error in deleteCustomField:', error);
+      throw error;
+    }
+  },
+
+  // Bulk Import Functions
+  async importLeads(companyId: string, leads: Array<{
+    name: string;
+    email?: string;
+    phone?: string;
+    origin?: string;
+    status?: string;
+    interest?: string;
+    [key: string]: any;
+  }>) {
+    console.log('API: importLeads called with:', { companyId, count: leads.length });
+    
+    try {
+      const leadsToInsert = leads.map(lead => ({
+        ...lead,
+        company_id: companyId,
+        origin: lead.origin || 'import'
+      }));
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert(leadsToInsert)
+        .select();
+
+      if (error) throw error;
+
+      console.log('API: Leads imported successfully:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error in importLeads:', error);
+      throw error;
+    }
+  },
+
+  async getLeadStats(companyId: string) {
+    console.log('API: getLeadStats called for company:', companyId);
+    
+    try {
+      const { data: leads, error } = await supabase
+        .from('leads')
+        .select('status, origin, created_at')
+        .eq('company_id', companyId)
+        .is('deleted_at', null);
+
+      if (error) throw error;
+
+      const totalLeads = leads?.length || 0;
+      const statusBreakdown = leads?.reduce((acc: Record<string, number>, lead) => {
+        acc[lead.status] = (acc[lead.status] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const originBreakdown = leads?.reduce((acc: Record<string, number>, lead) => {
+        acc[lead.origin] = (acc[lead.origin] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      const leadsThisMonth = leads?.filter(lead => 
+        new Date(lead.created_at) >= thisMonth
+      ).length || 0;
+
+      return {
+        totalLeads,
+        leadsThisMonth,
+        statusBreakdown,
+        originBreakdown,
+        conversionRate: statusBreakdown['convertido'] ? 
+          (statusBreakdown['convertido'] / totalLeads) * 100 : 0
+      };
+    } catch (error) {
+      console.error('Error in getLeadStats:', error);
+      throw error;
+    }
   }
 };

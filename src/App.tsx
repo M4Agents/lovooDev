@@ -9,6 +9,7 @@ import { Analytics } from './pages/Analytics';
 import { AdvancedAnalytics } from './pages/AdvancedAnalytics';
 import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
+import { Leads } from './pages/Leads';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -103,6 +104,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Companies />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leads"
+        element={
+          <ProtectedRoute>
+            <Leads />
           </ProtectedRoute>
         }
       />
