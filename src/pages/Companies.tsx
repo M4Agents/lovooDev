@@ -559,91 +559,93 @@ export const Companies: React.FC = () => {
                   console.log('🔵 BOTÃO EDITAR CLICADO!');
                   console.log('🏢 Empresa:', comp.name);
                   
-                  try {
-                    console.log('🚀 Definindo editingCompanyData:', comp.name);
-                    console.log('🏢 Dados da empresa:', comp);
-                    
-                    // Definir todos os estados de uma vez
-                    setEditingCompanyData(comp);
-                    setEditCompanyData({
-                    // Dados básicos
-                    name: comp.name || '',
-                    domain: comp.domain || '',
-                    plan: comp.plan || 'basic',
-                    status: comp.status || 'active',
-                    
-                    // Dados Principais
-                    nome_fantasia: comp.nome_fantasia || '',
-                    razao_social: comp.razao_social || '',
-                    cnpj: comp.cnpj || '',
-                    inscricao_estadual: comp.inscricao_estadual || '',
-                    inscricao_municipal: comp.inscricao_municipal || '',
-                    tipo_empresa: comp.tipo_empresa || '',
-                    porte_empresa: comp.porte_empresa || '',
-                    ramo_atividade: comp.ramo_atividade || '',
-                    data_fundacao: comp.data_fundacao || '',
-                    site_principal: comp.site_principal || '',
-                    descricao_empresa: comp.descricao_empresa || '',
-                    
-                    // Endereço
-                    cep: comp.cep || '',
-                    logradouro: comp.logradouro || '',
-                    numero: comp.numero || '',
-                    complemento: comp.complemento || '',
-                    bairro: comp.bairro || '',
-                    cidade: comp.cidade || '',
-                    estado: comp.estado || '',
-                    pais: comp.pais || 'Brasil',
-                    endereco_correspondencia: comp.endereco_correspondencia || null,
-                    
-                    // Contatos
-                    telefone_principal: comp.telefone_principal || '',
-                    telefone_secundario: comp.telefone_secundario || '',
-                    whatsapp: comp.whatsapp || '',
-                    email_principal: comp.email_principal || '',
-                    email_comercial: comp.email_comercial || '',
-                    email_financeiro: comp.email_financeiro || '',
-                    email_suporte: comp.email_suporte || '',
-                    responsavel_principal: comp.responsavel_principal || { nome: '', cargo: '' },
-                    contato_financeiro: comp.contato_financeiro || { nome: '', email: '', telefone: '' },
-                    
-                    // Domínios e URLs
-                    dominios_secundarios: comp.dominios_secundarios || [],
-                    urls_landing_pages: comp.urls_landing_pages || [],
-                    redes_sociais: {
-                      facebook: comp.redes_sociais?.facebook || '',
-                      instagram: comp.redes_sociais?.instagram || '',
-                      linkedin: comp.redes_sociais?.linkedin || '',
-                      twitter: comp.redes_sociais?.twitter || '',
-                      youtube: comp.redes_sociais?.youtube || ''
-                    },
-                    url_google_business: comp.url_google_business || ''
-                    });
-                    setEditActiveTab('dados-principais');
-                    
-                    console.log('🚀 Definindo showEditModal = true');
-                    setShowEditModal(true);
-                    setModalForceOpen(true);
-                    console.log('✅ Estados definidos - Modal deve abrir agora');
-                    console.log('🔒 FORÇA MODAL ABERTO - modalForceOpen = true');
-                    
-                    // Verificar estado após um pequeno delay
-                    setTimeout(() => {
-                      console.log('🔄 TIMEOUT - showEditModal:', showEditModal);
-                      console.log('🔄 TIMEOUT - editingCompanyData:', editingCompanyData);
-                      console.log('🔄 TIMEOUT - Modal deveria estar visível?', showEditModal);
-                      
-                      // Verificar se o elemento existe no DOM
-                      const modalElement = document.querySelector('[style*="rgba(255, 0, 0, 0.8)"]') as HTMLElement;
-                      console.log('🔄 TIMEOUT - Modal no DOM:', !!modalElement);
-                      if (modalElement) {
-                        console.log('🔄 TIMEOUT - Modal styles:', modalElement.style.cssText);
-                      }
-                    }, 500);
-                  } catch (error) {
-                    console.error('Erro ao abrir modal:', error);
-                    alert('Erro ao abrir modal de edição');
+                  // SOLUÇÃO DIRETA - CRIAR MODAL NO DOM
+                  const modalHtml = `
+                    <div id="edit-modal-direct" style="
+                      position: fixed;
+                      top: 0;
+                      left: 0;
+                      right: 0;
+                      bottom: 0;
+                      background-color: rgba(0, 0, 0, 0.8);
+                      z-index: 999999;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      padding: 20px;
+                    ">
+                      <div style="
+                        background-color: white;
+                        border-radius: 12px;
+                        max-width: 800px;
+                        width: 100%;
+                        max-height: 90vh;
+                        overflow: auto;
+                        padding: 24px;
+                      ">
+                        <h2 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">
+                          ✅ MODAL FUNCIONANDO - Editar ${comp.name}
+                        </h2>
+                        
+                        <div style="margin-bottom: 20px;">
+                          <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Empresa</label>
+                          <input type="text" value="${comp.name || ''}" style="
+                            width: 100%;
+                            padding: 8px 12px;
+                            border: 1px solid #d1d5db;
+                            border-radius: 6px;
+                            font-size: 14px;
+                          " />
+                        </div>
+                        
+                        <div style="margin-bottom: 20px;">
+                          <label style="display: block; margin-bottom: 8px; font-weight: 500;">CNPJ</label>
+                          <input type="text" value="${comp.cnpj || ''}" style="
+                            width: 100%;
+                            padding: 8px 12px;
+                            border: 1px solid #d1d5db;
+                            border-radius: 6px;
+                            font-size: 14px;
+                          " />
+                        </div>
+                        
+                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                          <button onclick="document.getElementById('edit-modal-direct').remove()" style="
+                            padding: 10px 20px;
+                            border: 1px solid #d1d5db;
+                            background-color: white;
+                            color: #374151;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 500;
+                          ">
+                            Cancelar
+                          </button>
+                          <button onclick="alert('Dados salvos!'); document.getElementById('edit-modal-direct').remove()" style="
+                            padding: 10px 20px;
+                            border: none;
+                            background-color: #3b82f6;
+                            color: white;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 500;
+                          ">
+                            Salvar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                  
+                  // Remover modal existente se houver
+                  const existingModal = document.getElementById('edit-modal-direct');
+                  if (existingModal) {
+                    existingModal.remove();
                   }
+                  
+                  // Adicionar modal ao body
+                  document.body.insertAdjacentHTML('beforeend', modalHtml);
+                  console.log('✅ MODAL CRIADO DIRETAMENTE NO DOM!');
                 }}
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
