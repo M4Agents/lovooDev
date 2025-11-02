@@ -994,7 +994,7 @@ export const Companies: React.FC = () => {
                   
                   // OTIMIZAÇÕES: Máscaras, Validações e API de CEP
                   setTimeout(() => {
-                    console.log('🔧 INICIANDO OTIMIZAÇÕES NO MODAL...');
+                    console.log('🔧 INICIANDO DEBUG COMPLETO DO MODAL...');
                     
                     const modal = document.getElementById('edit-modal-direct');
                     if (!modal) {
@@ -1005,166 +1005,226 @@ export const Companies: React.FC = () => {
                     const allInputs = modal.querySelectorAll('input');
                     console.log(`📊 Modal encontrado com ${allInputs.length} inputs`);
                     
-                    // Função para detectar tipo de campo por múltiplas estratégias
-                    const detectFieldType = (input: any, index: number) => {
+                    // Debug completo da estrutura
+                    allInputs.forEach((input: any, index: number) => {
                       const prevLabel = input.previousElementSibling?.textContent || '';
                       const container = input.closest('div');
                       const containerLabel = container?.querySelector('label')?.textContent || '';
                       const placeholder = input.placeholder || '';
                       const value = input.value || '';
                       
-                      console.log(`Input ${index}:`, {
+                      console.log(`🔍 Input ${index} DEBUG:`, {
                         prevLabel,
                         containerLabel, 
                         placeholder,
-                        value: value.substring(0, 10) + '...'
+                        value: value.substring(0, 20),
+                        type: input.type,
+                        id: input.id,
+                        className: input.className
                       });
-                      
-                      return { prevLabel, containerLabel, placeholder, value };
-                    };
+                    });
                     
-                    allInputs.forEach((input: any, index: number) => {
-                      const field = detectFieldType(input, index);
-                      
-                      // Detectar CNPJ por múltiplas estratégias
-                      if (field.prevLabel.includes('CNPJ') || 
-                          field.containerLabel.includes('CNPJ') ||
-                          field.placeholder.toLowerCase().includes('cnpj') ||
-                          (field.value.replace(/\\D/g, '').length >= 11 && field.value.replace(/\\D/g, '').length <= 14)) {
-                        
-                        input.addEventListener('input', (e: any) => {
-                          let value = e.target.value.replace(/\\D/g, '');
+                    // Função para aplicar máscara CNPJ
+                    const applyMaskCNPJ = (input: any) => {
+                      // Aplicar máscara no valor atual se existir
+                      if (input.value) {
+                        const cleanValue = input.value.replace(/\\D/g, '');
+                        if (cleanValue.length >= 11) {
+                          let value = cleanValue;
                           value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
                           value = value.replace(/(\\d{3})(\\d)/, '$1.$2');
                           value = value.replace(/(\\d{3})(\\d)/, '$1/$2');
                           value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
-                          e.target.value = value.substring(0, 18);
-                        });
-                        
-                        input.addEventListener('blur', (e: any) => {
-                          const cnpj = e.target.value.replace(/\\D/g, '');
-                          if (cnpj.length === 14) {
-                            let sum = 0;
-                            let weight = 5;
-                            for (let i = 0; i < 12; i++) {
-                              sum += parseInt(cnpj.charAt(i)) * weight;
-                              weight = weight === 2 ? 9 : weight - 1;
-                            }
-                            let digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-                            
-                            sum = 0;
-                            weight = 6;
-                            for (let i = 0; i < 13; i++) {
-                              sum += parseInt(cnpj.charAt(i)) * weight;
-                              weight = weight === 2 ? 9 : weight - 1;
-                            }
-                            let digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-                            
-                            const isValid = digit1 === parseInt(cnpj.charAt(12)) && digit2 === parseInt(cnpj.charAt(13));
-                            e.target.style.borderColor = isValid ? '#d1d5db' : '#ef4444';
-                            
-                            if (!isValid) {
-                              console.log('❌ CNPJ inválido:', e.target.value);
-                            }
-                          }
-                        });
-                        console.log('✅ Máscara CNPJ aplicada no input', index);
+                          input.value = value.substring(0, 18);
+                          console.log('✅ CNPJ formatado imediatamente:', input.value);
+                        }
                       }
                       
-                      // Detectar CEP por múltiplas estratégias
-                      if (field.prevLabel.includes('CEP') || 
-                          field.containerLabel.includes('CEP') ||
-                          field.placeholder.toLowerCase().includes('cep') ||
-                          (field.value.match(/^\d{5}-?\d{3}$/) || field.value.match(/^\d{8}$/))) {
-                        
-                        input.addEventListener('input', (e: any) => {
-                          let value = e.target.value.replace(/\\D/g, '');
+                      // Adicionar event listeners
+                      input.addEventListener('input', (e: any) => {
+                        let value = e.target.value.replace(/\\D/g, '');
+                        value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
+                        value = value.replace(/(\\d{3})(\\d)/, '$1.$2');
+                        value = value.replace(/(\\d{3})(\\d)/, '$1/$2');
+                        value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                        e.target.value = value.substring(0, 18);
+                      });
+                      
+                      input.addEventListener('blur', (e: any) => {
+                        const cnpj = e.target.value.replace(/\\D/g, '');
+                        if (cnpj.length === 14) {
+                          let sum = 0;
+                          let weight = 5;
+                          for (let i = 0; i < 12; i++) {
+                            sum += parseInt(cnpj.charAt(i)) * weight;
+                            weight = weight === 2 ? 9 : weight - 1;
+                          }
+                          let digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+                          
+                          sum = 0;
+                          weight = 6;
+                          for (let i = 0; i < 13; i++) {
+                            sum += parseInt(cnpj.charAt(i)) * weight;
+                            weight = weight === 2 ? 9 : weight - 1;
+                          }
+                          let digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+                          
+                          const isValid = digit1 === parseInt(cnpj.charAt(12)) && digit2 === parseInt(cnpj.charAt(13));
+                          e.target.style.borderColor = isValid ? '#d1d5db' : '#ef4444';
+                          
+                          if (!isValid) {
+                            console.log('❌ CNPJ inválido:', e.target.value);
+                          }
+                        }
+                      });
+                    };
+                    
+                    // Função para aplicar máscara CEP
+                    const applyMaskCEP = (input: any) => {
+                      // Aplicar máscara no valor atual se existir
+                      if (input.value) {
+                        const cleanValue = input.value.replace(/\\D/g, '');
+                        if (cleanValue.length === 8) {
+                          let value = cleanValue;
                           value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
-                          e.target.value = value.substring(0, 9);
-                        });
-                        
-                        input.addEventListener('blur', async (e: any) => {
-                          const cep = e.target.value.replace(/\\D/g, '');
-                          if (cep.length === 8) {
-                            try {
-                              console.log('🔍 Buscando CEP:', cep);
-                              const response = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
-                              const data = await response.json();
-                              
-                              if (!data.erro) {
-                                console.log('📍 Dados do CEP:', data);
-                                
-                                // Buscar e preencher todos os campos relacionados
-                                const allModalInputs = modal.querySelectorAll('input, select');
-                                allModalInputs.forEach((inp: any) => {
-                                  const inputLabel = inp.previousElementSibling?.textContent || '';
-                                  const inputContainerLabel = inp.closest('div')?.querySelector('label')?.textContent || '';
-                                  const inputPlaceholder = inp.placeholder || '';
-                                  
-                                  // Preencher logradouro/endereço
-                                  if ((inputLabel.toLowerCase().includes('logradouro') || 
-                                       inputContainerLabel.toLowerCase().includes('logradouro') ||
-                                       inputPlaceholder.toLowerCase().includes('logradouro') ||
-                                       inputLabel.toLowerCase().includes('endereço') ||
-                                       inputContainerLabel.toLowerCase().includes('endereço')) && data.logradouro) {
-                                    inp.value = data.logradouro;
-                                    console.log('✅ Logradouro preenchido:', data.logradouro);
-                                  }
-                                  
-                                  // Preencher bairro
-                                  if ((inputLabel.toLowerCase().includes('bairro') || 
-                                       inputContainerLabel.toLowerCase().includes('bairro') ||
-                                       inputPlaceholder.toLowerCase().includes('bairro')) && data.bairro) {
-                                    inp.value = data.bairro;
-                                    console.log('✅ Bairro preenchido:', data.bairro);
-                                  }
-                                  
-                                  // Preencher cidade
-                                  if (inputLabel.toLowerCase().includes('cidade') || 
-                                      inputContainerLabel.toLowerCase().includes('cidade') ||
-                                      inputPlaceholder.toLowerCase().includes('cidade')) {
-                                    inp.value = data.localidade;
-                                    console.log('✅ Cidade preenchida:', data.localidade);
-                                  }
-                                  
-                                  // Preencher estado (select)
-                                  if (inp.tagName === 'SELECT' && (inputLabel.toLowerCase().includes('estado') ||
-                                      inputContainerLabel.toLowerCase().includes('estado'))) {
-                                    inp.value = data.uf;
-                                    console.log('✅ Estado preenchido:', data.uf);
-                                  }
-                                });
-                                
-                                console.log('✅ CEP preenchido automaticamente:', data.localidade, data.uf);
-                              } else {
-                                console.log('❌ CEP não encontrado');
-                              }
-                            } catch (error) {
-                              console.log('❌ Erro ao buscar CEP:', error);
-                            }
-                          }
-                        });
-                        console.log('✅ API de CEP aplicada no input', index);
+                          input.value = value;
+                          console.log('✅ CEP formatado imediatamente:', input.value);
+                        }
                       }
                       
-                      // Detectar telefone por múltiplas estratégias
-                      if (field.prevLabel.toLowerCase().includes('telefone') || 
-                          field.containerLabel.toLowerCase().includes('telefone') ||
-                          field.placeholder.toLowerCase().includes('telefone') ||
-                          (field.value.match(/^\(\d{2}\)\s?\d{4,5}-?\d{4}$/) || field.value.match(/^\d{10,11}$/))) {
-                        
-                        input.addEventListener('input', (e: any) => {
-                          let value = e.target.value.replace(/\\D/g, '');
+                      // Adicionar event listeners
+                      input.addEventListener('input', (e: any) => {
+                        let value = e.target.value.replace(/\\D/g, '');
+                        value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
+                        e.target.value = value.substring(0, 9);
+                      });
+                      
+                      input.addEventListener('blur', async (e: any) => {
+                        const cep = e.target.value.replace(/\\D/g, '');
+                        if (cep.length === 8) {
+                          try {
+                            console.log('🔍 Buscando CEP:', cep);
+                            const response = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
+                            const data = await response.json();
+                            
+                            if (!data.erro) {
+                              console.log('📍 Dados do CEP:', data);
+                              
+                              // Buscar e preencher todos os campos relacionados
+                              const allModalInputs = modal.querySelectorAll('input, select');
+                              allModalInputs.forEach((inp: any) => {
+                                const inputLabel = inp.previousElementSibling?.textContent || '';
+                                const inputContainerLabel = inp.closest('div')?.querySelector('label')?.textContent || '';
+                                const inputPlaceholder = inp.placeholder || '';
+                                
+                                // Preencher logradouro/endereço
+                                if ((inputLabel.toLowerCase().includes('logradouro') || 
+                                     inputContainerLabel.toLowerCase().includes('logradouro') ||
+                                     inputPlaceholder.toLowerCase().includes('logradouro') ||
+                                     inputLabel.toLowerCase().includes('endereço') ||
+                                     inputContainerLabel.toLowerCase().includes('endereço')) && data.logradouro) {
+                                  inp.value = data.logradouro;
+                                  console.log('✅ Logradouro preenchido:', data.logradouro);
+                                }
+                                
+                                // Preencher bairro
+                                if ((inputLabel.toLowerCase().includes('bairro') || 
+                                     inputContainerLabel.toLowerCase().includes('bairro') ||
+                                     inputPlaceholder.toLowerCase().includes('bairro')) && data.bairro) {
+                                  inp.value = data.bairro;
+                                  console.log('✅ Bairro preenchido:', data.bairro);
+                                }
+                                
+                                // Preencher cidade
+                                if (inputLabel.toLowerCase().includes('cidade') || 
+                                    inputContainerLabel.toLowerCase().includes('cidade') ||
+                                    inputPlaceholder.toLowerCase().includes('cidade')) {
+                                  inp.value = data.localidade;
+                                  console.log('✅ Cidade preenchida:', data.localidade);
+                                }
+                                
+                                // Preencher estado (select)
+                                if (inp.tagName === 'SELECT' && (inputLabel.toLowerCase().includes('estado') ||
+                                    inputContainerLabel.toLowerCase().includes('estado'))) {
+                                  inp.value = data.uf;
+                                  console.log('✅ Estado preenchido:', data.uf);
+                                }
+                              });
+                              
+                              console.log('✅ CEP preenchido automaticamente:', data.localidade, data.uf);
+                            } else {
+                              console.log('❌ CEP não encontrado');
+                            }
+                          } catch (error) {
+                            console.log('❌ Erro ao buscar CEP:', error);
+                          }
+                        }
+                      });
+                    };
+                    
+                    // Função para aplicar máscara telefone
+                    const applyMaskPhone = (input: any) => {
+                      // Aplicar máscara no valor atual se existir
+                      if (input.value) {
+                        const cleanValue = input.value.replace(/\\D/g, '');
+                        if (cleanValue.length >= 10) {
+                          let value = cleanValue;
                           value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
                           value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
-                          e.target.value = value.substring(0, 15);
-                        });
-                        console.log('✅ Máscara telefone aplicada no input', index);
+                          input.value = value.substring(0, 15);
+                          console.log('✅ Telefone formatado imediatamente:', input.value);
+                        }
+                      }
+                      
+                      // Adicionar event listeners
+                      input.addEventListener('input', (e: any) => {
+                        let value = e.target.value.replace(/\\D/g, '');
+                        value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
+                        value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                        e.target.value = value.substring(0, 15);
+                      });
+                    };
+                    
+                    // Aplicar máscaras por múltiplas estratégias
+                    allInputs.forEach((input: any, index: number) => {
+                      const prevLabel = input.previousElementSibling?.textContent || '';
+                      const container = input.closest('div');
+                      const containerLabel = container?.querySelector('label')?.textContent || '';
+                      const placeholder = input.placeholder || '';
+                      const value = input.value || '';
+                      
+                      // Detectar e aplicar CNPJ
+                      if (prevLabel.includes('CNPJ') || 
+                          containerLabel.includes('CNPJ') ||
+                          placeholder.toLowerCase().includes('cnpj') ||
+                          (value.replace(/\\D/g, '').length >= 11 && value.replace(/\\D/g, '').length <= 14)) {
+                        applyMaskCNPJ(input);
+                        console.log(`✅ Máscara CNPJ aplicada no input ${index} (${prevLabel || containerLabel})`);
+                      }
+                      
+                      // Detectar e aplicar CEP
+                      if (prevLabel.includes('CEP') || 
+                          containerLabel.includes('CEP') ||
+                          placeholder.toLowerCase().includes('cep') ||
+                          (value.replace(/\\D/g, '').length === 8)) {
+                        applyMaskCEP(input);
+                        console.log(`✅ Máscara CEP aplicada no input ${index} (${prevLabel || containerLabel})`);
+                      }
+                      
+                      // Detectar e aplicar telefone
+                      if (prevLabel.toLowerCase().includes('telefone') || 
+                          containerLabel.toLowerCase().includes('telefone') ||
+                          placeholder.toLowerCase().includes('telefone') ||
+                          prevLabel.toLowerCase().includes('whatsapp') ||
+                          containerLabel.toLowerCase().includes('whatsapp') ||
+                          (value.replace(/\\D/g, '').length >= 10 && value.replace(/\\D/g, '').length <= 11)) {
+                        applyMaskPhone(input);
+                        console.log(`✅ Máscara telefone aplicada no input ${index} (${prevLabel || containerLabel})`);
                       }
                     });
                     
-                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM SUCESSO!');
-                  }, 500);
+                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM DEBUG COMPLETO!');
+                  }, 1000);
                   
                   // Adicionar funcionalidade das abas após inserir o modal
                   const showTab = (tabName: string) => {
