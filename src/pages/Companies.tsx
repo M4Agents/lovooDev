@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { Company } from '../lib/supabase';
@@ -2088,23 +2089,28 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Edição com Abas Cadastrais */}
+      {/* Modal de Edição com Abas Cadastrais usando Portal */}
       {showEditModal && editingCompanyData && (() => {
-        console.log('Renderizando modal - showEditModal:', showEditModal, 'editingCompanyData:', editingCompanyData);
-        return true;
-      })() && (
-        <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
-          style={{ 
-            zIndex: 99999, 
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)'
-          }}
-        >
+        console.log('Renderizando modal via Portal - showEditModal:', showEditModal, 'editingCompanyData:', editingCompanyData);
+        return createPortal(
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+            style={{ 
+              zIndex: 99999, 
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)'
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowEditModal(false);
+                setEditingCompanyData(null);
+              }
+            }}
+          >
           <div 
             className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
             style={{ 
@@ -2404,8 +2410,10 @@ export const Companies: React.FC = () => {
               </form>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      );
+      })()}
     </div>
   );
 };
