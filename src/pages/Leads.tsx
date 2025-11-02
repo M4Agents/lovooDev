@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { LeadModal } from '../components/LeadModal';
+import { LeadViewModal } from '../components/LeadViewModal';
+import { CustomFieldsModal } from '../components/CustomFieldsModal';
+import { ImportLeadsModal } from '../components/ImportLeadsModal';
 import {
   Users,
   Plus,
   Search,
   Filter,
-  Download,
   Upload,
   Settings,
   Eye,
@@ -43,14 +46,6 @@ interface Lead {
   }>;
 }
 
-interface CustomField {
-  id: string;
-  field_name: string;
-  field_label: string;
-  field_type: 'text' | 'number' | 'date' | 'boolean' | 'select';
-  options?: any[];
-  is_required: boolean;
-}
 
 interface LeadStats {
   totalLeads: number;
@@ -63,7 +58,6 @@ interface LeadStats {
 export const Leads: React.FC = () => {
   const { company } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [stats, setStats] = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,19 +81,17 @@ export const Leads: React.FC = () => {
     
     try {
       setLoading(true);
-      const [leadsData, customFieldsData, statsData] = await Promise.all([
+      const [leadsData, statsData] = await Promise.all([
         api.getLeads(company.id, {
           search: searchTerm,
           status: statusFilter || undefined,
           origin: originFilter || undefined,
           limit: 100
         }),
-        api.getCustomFields(company.id),
         api.getLeadStats(company.id)
       ]);
       
       setLeads(leadsData);
-      setCustomFields(customFieldsData);
       setStats(statsData);
     } catch (error) {
       console.error('Error loading leads data:', error);
@@ -437,57 +429,43 @@ export const Leads: React.FC = () => {
         </div>
       </div>
 
-      {/* Modals serão implementados nas próximas etapas */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Criar Novo Lead</h2>
-            <p className="text-gray-600">Modal de criação será implementado na próxima etapa.</p>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modais Funcionais */}
+      <LeadModal
+        isOpen={showCreateModal || showEditModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          setShowEditModal(false);
+          setSelectedLead(null);
+        }}
+        lead={showEditModal ? selectedLead : null}
+        onSave={loadData}
+      />
 
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Importar Leads</h2>
-            <p className="text-gray-600">Modal de importação será implementado na próxima etapa.</p>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LeadViewModal
+        isOpen={showViewModal}
+        onClose={() => {
+          setShowViewModal(false);
+          setSelectedLead(null);
+        }}
+        lead={selectedLead}
+        onEdit={(lead) => {
+          setSelectedLead(lead);
+          setShowViewModal(false);
+          setShowEditModal(true);
+        }}
+      />
 
-      {showCustomFieldsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">Campos Personalizados</h2>
-            <p className="text-gray-600">Modal de campos personalizados será implementado na próxima etapa.</p>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowCustomFieldsModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CustomFieldsModal
+        isOpen={showCustomFieldsModal}
+        onClose={() => setShowCustomFieldsModal(false)}
+        onSave={loadData}
+      />
+
+      <ImportLeadsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={loadData}
+      />
     </div>
   );
 };
