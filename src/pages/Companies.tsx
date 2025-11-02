@@ -994,7 +994,7 @@ export const Companies: React.FC = () => {
                   
                   // OTIMIZAÇÕES: Máscaras, Validações e API de CEP
                   setTimeout(() => {
-                    console.log('🔧 Aplicando otimizações no modal...');
+                    console.log('🔧 INICIANDO OTIMIZAÇÕES NO MODAL...');
                     
                     const modal = document.getElementById('edit-modal-direct');
                     if (!modal) {
@@ -1003,16 +1003,35 @@ export const Companies: React.FC = () => {
                     }
                     
                     const allInputs = modal.querySelectorAll('input');
-                    console.log(`📊 Encontrados ${allInputs.length} inputs no modal`);
+                    console.log(`📊 Modal encontrado com ${allInputs.length} inputs`);
+                    
+                    // Função para detectar tipo de campo por múltiplas estratégias
+                    const detectFieldType = (input: any, index: number) => {
+                      const prevLabel = input.previousElementSibling?.textContent || '';
+                      const container = input.closest('div');
+                      const containerLabel = container?.querySelector('label')?.textContent || '';
+                      const placeholder = input.placeholder || '';
+                      const value = input.value || '';
+                      
+                      console.log(`Input ${index}:`, {
+                        prevLabel,
+                        containerLabel, 
+                        placeholder,
+                        value: value.substring(0, 10) + '...'
+                      });
+                      
+                      return { prevLabel, containerLabel, placeholder, value };
+                    };
                     
                     allInputs.forEach((input: any, index: number) => {
-                      const label = input.previousElementSibling;
-                      const labelText = label?.textContent || '';
+                      const field = detectFieldType(input, index);
                       
-                      console.log(`Input ${index}: label="${labelText}"`);
-                      
-                      // Detectar CNPJ por label anterior
-                      if (labelText.includes('CNPJ')) {
+                      // Detectar CNPJ por múltiplas estratégias
+                      if (field.prevLabel.includes('CNPJ') || 
+                          field.containerLabel.includes('CNPJ') ||
+                          field.placeholder.toLowerCase().includes('cnpj') ||
+                          (field.value.replace(/\\D/g, '').length >= 11 && field.value.replace(/\\D/g, '').length <= 14)) {
+                        
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
@@ -1025,7 +1044,6 @@ export const Companies: React.FC = () => {
                         input.addEventListener('blur', (e: any) => {
                           const cnpj = e.target.value.replace(/\\D/g, '');
                           if (cnpj.length === 14) {
-                            // Validação básica de CNPJ
                             let sum = 0;
                             let weight = 5;
                             for (let i = 0; i < 12; i++) {
@@ -1050,11 +1068,15 @@ export const Companies: React.FC = () => {
                             }
                           }
                         });
-                        console.log('✅ Máscara CNPJ aplicada');
+                        console.log('✅ Máscara CNPJ aplicada no input', index);
                       }
                       
-                      // Detectar CEP por label anterior
-                      if (labelText.includes('CEP')) {
+                      // Detectar CEP por múltiplas estratégias
+                      if (field.prevLabel.includes('CEP') || 
+                          field.containerLabel.includes('CEP') ||
+                          field.placeholder.toLowerCase().includes('cep') ||
+                          (field.value.match(/^\\d{5}-?\\d{3}$/) || field.value.match(/^\\d{8}$/))) {
+                        
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
@@ -1070,19 +1092,44 @@ export const Companies: React.FC = () => {
                               const data = await response.json();
                               
                               if (!data.erro) {
-                                // Buscar campos de cidade e estado para preencher
+                                console.log('📍 Dados do CEP:', data);
+                                
+                                // Buscar e preencher todos os campos relacionados
                                 const allModalInputs = modal.querySelectorAll('input, select');
                                 allModalInputs.forEach((inp: any) => {
                                   const inputLabel = inp.previousElementSibling?.textContent || '';
+                                  const inputContainerLabel = inp.closest('div')?.querySelector('label')?.textContent || '';
+                                  const inputPlaceholder = inp.placeholder || '';
+                                  
+                                  // Preencher logradouro/endereço
+                                  if ((inputLabel.toLowerCase().includes('logradouro') || 
+                                       inputContainerLabel.toLowerCase().includes('logradouro') ||
+                                       inputPlaceholder.toLowerCase().includes('logradouro') ||
+                                       inputLabel.toLowerCase().includes('endereço') ||
+                                       inputContainerLabel.toLowerCase().includes('endereço')) && data.logradouro) {
+                                    inp.value = data.logradouro;
+                                    console.log('✅ Logradouro preenchido:', data.logradouro);
+                                  }
+                                  
+                                  // Preencher bairro
+                                  if ((inputLabel.toLowerCase().includes('bairro') || 
+                                       inputContainerLabel.toLowerCase().includes('bairro') ||
+                                       inputPlaceholder.toLowerCase().includes('bairro')) && data.bairro) {
+                                    inp.value = data.bairro;
+                                    console.log('✅ Bairro preenchido:', data.bairro);
+                                  }
                                   
                                   // Preencher cidade
-                                  if (inputLabel.toLowerCase().includes('cidade')) {
+                                  if (inputLabel.toLowerCase().includes('cidade') || 
+                                      inputContainerLabel.toLowerCase().includes('cidade') ||
+                                      inputPlaceholder.toLowerCase().includes('cidade')) {
                                     inp.value = data.localidade;
                                     console.log('✅ Cidade preenchida:', data.localidade);
                                   }
                                   
                                   // Preencher estado (select)
-                                  if (inp.tagName === 'SELECT' && inputLabel.toLowerCase().includes('estado')) {
+                                  if (inp.tagName === 'SELECT' && (inputLabel.toLowerCase().includes('estado') ||
+                                      inputContainerLabel.toLowerCase().includes('estado'))) {
                                     inp.value = data.uf;
                                     console.log('✅ Estado preenchido:', data.uf);
                                   }
@@ -1097,23 +1144,27 @@ export const Companies: React.FC = () => {
                             }
                           }
                         });
-                        console.log('✅ API de CEP aplicada');
+                        console.log('✅ API de CEP aplicada no input', index);
                       }
                       
-                      // Detectar telefone por label anterior
-                      if (labelText.toLowerCase().includes('telefone')) {
+                      // Detectar telefone por múltiplas estratégias
+                      if (field.prevLabel.toLowerCase().includes('telefone') || 
+                          field.containerLabel.toLowerCase().includes('telefone') ||
+                          field.placeholder.toLowerCase().includes('telefone') ||
+                          (field.value.match(/^\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}$/) || field.value.match(/^\\d{10,11}$/))) {
+                        
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
                           value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
                           e.target.value = value.substring(0, 15);
                         });
-                        console.log('✅ Máscara telefone aplicada');
+                        console.log('✅ Máscara telefone aplicada no input', index);
                       }
                     });
                     
                     console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM SUCESSO!');
-                  }, 300);
+                  }, 500);
                   
                   // Adicionar funcionalidade das abas após inserir o modal
                   const showTab = (tabName: string) => {
