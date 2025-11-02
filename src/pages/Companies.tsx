@@ -992,6 +992,105 @@ export const Companies: React.FC = () => {
                   document.body.insertAdjacentHTML('beforeend', modalHtml);
                   console.log('✅ MODAL CRIADO DIRETAMENTE NO DOM!');
                   
+                  // OTIMIZAÇÕES: Máscaras, Validações e API de CEP
+                  setTimeout(() => {
+                    console.log('🔧 Aplicando otimizações no modal...');
+                    
+                    // Função para aplicar máscara de CNPJ
+                    const maskCNPJ = (value: string) => {
+                      return value
+                        .replace(/\\D/g, '')
+                        .replace(/(\\d{2})(\\d)/, '$1.$2')
+                        .replace(/(\\d{3})(\\d)/, '$1.$2')
+                        .replace(/(\\d{3})(\\d)/, '$1/$2')
+                        .replace(/(\\d{4})(\\d)/, '$1-$2')
+                        .replace(/(-\\d{2})\\d+?$/, '$1');
+                    };
+                    
+                    // Função para aplicar máscara de CEP
+                    const maskCEP = (value: string) => {
+                      return value
+                        .replace(/\\D/g, '')
+                        .replace(/(\\d{5})(\\d)/, '$1-$2')
+                        .replace(/(-\\d{3})\\d+?$/, '$1');
+                    };
+                    
+                    // Função para aplicar máscara de telefone
+                    const maskPhone = (value: string) => {
+                      return value
+                        .replace(/\\D/g, '')
+                        .replace(/(\\d{2})(\\d)/, '($1) $2')
+                        .replace(/(\\d{4})(\\d)/, '$1-$2')
+                        .replace(/(\\d{4})-\\d+?$/, '$1');
+                    };
+                    
+                    // Buscar campos CNPJ e aplicar máscaras
+                    const cnpjInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
+                    cnpjInputs.forEach(input => {
+                      if (input.value === \`${comp.cnpj || ''}\` || input.placeholder?.includes('CNPJ')) {
+                        input.addEventListener('input', (e) => {
+                          const target = e.target as HTMLInputElement;
+                          target.value = maskCNPJ(target.value);
+                        });
+                        console.log('✅ Máscara CNPJ aplicada');
+                      }
+                    });
+                    
+                    // Buscar campos CEP e aplicar máscaras + API
+                    const cepInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
+                    cepInputs.forEach(input => {
+                      if (input.placeholder?.includes('CEP') || input.value?.includes('-')) {
+                        input.addEventListener('input', (e) => {
+                          const target = e.target as HTMLInputElement;
+                          target.value = maskCEP(target.value);
+                        });
+                        
+                        input.addEventListener('blur', async (e) => {
+                          const target = e.target as HTMLInputElement;
+                          const cep = target.value.replace(/\\D/g, '');
+                          
+                          if (cep.length === 8) {
+                            try {
+                              const response = await fetch(\`https://viacep.com.br/ws/\${cep}/json/\`);
+                              const data = await response.json();
+                              
+                              if (!data.erro) {
+                                // Buscar campos de cidade e estado para preencher
+                                const allInputs = document.querySelectorAll('#edit-modal-direct input, #edit-modal-direct select') as NodeListOf<HTMLInputElement | HTMLSelectElement>;
+                                allInputs.forEach(inp => {
+                                  if (inp.placeholder?.toLowerCase().includes('cidade')) {
+                                    (inp as HTMLInputElement).value = data.localidade;
+                                  }
+                                  if (inp.tagName === 'SELECT' && inp.innerHTML.includes('SP')) {
+                                    (inp as HTMLSelectElement).value = data.uf;
+                                  }
+                                });
+                                console.log('✅ CEP preenchido automaticamente:', data);
+                              }
+                            } catch (error) {
+                              console.log('❌ Erro ao buscar CEP:', error);
+                            }
+                          }
+                        });
+                        console.log('✅ API de CEP aplicada');
+                      }
+                    });
+                    
+                    // Buscar campos de telefone e aplicar máscaras
+                    const phoneInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
+                    phoneInputs.forEach(input => {
+                      if (input.placeholder?.toLowerCase().includes('telefone')) {
+                        input.addEventListener('input', (e) => {
+                          const target = e.target as HTMLInputElement;
+                          target.value = maskPhone(target.value);
+                        });
+                        console.log('✅ Máscara telefone aplicada');
+                      }
+                    });
+                    
+                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM SUCESSO!');
+                  }, 300);
+                  
                   // Adicionar funcionalidade das abas após inserir o modal
                   const showTab = (tabName: string) => {
                     // Esconder todas as abas
