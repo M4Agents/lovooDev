@@ -128,9 +128,11 @@ export const Settings: React.FC = () => {
   }, [company]);
 
   const loadWebhookLogs = async () => {
+    if (!company?.id) return;
+    
     try {
       setLoadingLogs(true);
-      const response = await api.getWebhookLogs();
+      const response = await api.getWebhookLogs(company.id);
       setLogs(response || []);
     } catch (error) {
       console.error('Error loading webhook logs:', error);
@@ -166,12 +168,23 @@ export const Settings: React.FC = () => {
       // Preparar dados para envio (remover campos que não devem ser alterados)
       const { domain, plan, status, ...updateData } = companyData;
       
+      console.log('🔄 Salvando dados da empresa:', { companyId: company.id, updateData });
+      
       await api.updateCompany(company.id, updateData);
       await refreshCompany();
+      
+      console.log('✅ Dados salvos com sucesso!');
       alert('Dados da empresa atualizados com sucesso!');
     } catch (error) {
-      console.error('Error saving company data:', error);
-      alert('Erro ao salvar dados da empresa');
+      console.error('❌ Error saving company data:', error);
+      
+      // Mostrar erro mais detalhado
+      let errorMessage = 'Erro ao salvar dados da empresa';
+      if (error instanceof Error) {
+        errorMessage += ': ' + error.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       setSavingCompany(false);
     }
