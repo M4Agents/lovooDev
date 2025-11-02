@@ -551,6 +551,10 @@ export const Companies: React.FC = () => {
                   console.log('🏢 Empresa:', comp.name);
                   
                   try {
+                    console.log('🚀 Definindo editingCompanyData:', comp.name);
+                    console.log('🏢 Dados da empresa:', comp);
+                    
+                    // Definir todos os estados de uma vez
                     setEditingCompanyData(comp);
                     setEditCompanyData({
                     // Dados básicos
@@ -607,15 +611,15 @@ export const Companies: React.FC = () => {
                     url_google_business: comp.url_google_business || ''
                     });
                     setEditActiveTab('dados-principais');
-                    console.log('🚀 Definindo showEditModal = true');
-                    console.log('🏢 editingCompanyData definido:', !!comp);
-                    setShowEditModal(true);
-                    console.log('✅ Modal deve abrir agora - showEditModal:', true);
-                    console.log('✅ editingCompanyData:', editingCompanyData);
                     
-                    // Forçar re-render após um pequeno delay
+                    console.log('🚀 Definindo showEditModal = true');
+                    setShowEditModal(true);
+                    console.log('✅ Estados definidos - Modal deve abrir agora');
+                    
+                    // Verificar estado após um pequeno delay
                     setTimeout(() => {
-                      console.log('🔄 Verificando estado após timeout:', showEditModal);
+                      console.log('🔄 Verificando estado após timeout - showEditModal:', showEditModal);
+                      console.log('🔄 Verificando estado após timeout - editingCompanyData:', editingCompanyData);
                     }, 100);
                   } catch (error) {
                     console.error('Erro ao abrir modal:', error);
@@ -2099,9 +2103,9 @@ export const Companies: React.FC = () => {
       )}
 
       {/* Modal de Edição Funcional */}
-      {(() => {
-        console.log('🔍 Verificando condição do modal:', { showEditModal, editingCompanyData });
-        return showEditModal && editingCompanyData;
+      {showEditModal && editingCompanyData && (() => {
+        console.log('🔍 Renderizando modal - showEditModal:', showEditModal, 'editingCompanyData:', !!editingCompanyData);
+        return true;
       })() && (
         <div 
           style={{
