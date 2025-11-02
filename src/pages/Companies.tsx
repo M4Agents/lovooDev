@@ -729,7 +729,7 @@ export const Companies: React.FC = () => {
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">CNPJ</label>
-                                <input type="text" value="${comp.cnpj || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                <input type="text" placeholder="00.000.000/0000-00" value="${comp.cnpj || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">Razão Social</label>
@@ -788,7 +788,7 @@ export const Companies: React.FC = () => {
                             <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">CEP</label>
-                                <input type="text" value="${comp.cep || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                <input type="text" placeholder="00000-000" value="${comp.cep || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">Logradouro</label>
@@ -855,15 +855,15 @@ export const Companies: React.FC = () => {
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone Principal</label>
-                                <input type="text" value="${comp.telefone_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                <input type="text" placeholder="(00) 00000-0000" value="${comp.telefone_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone Secundário</label>
-                                <input type="text" value="${comp.telefone_secundario || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                <input type="text" placeholder="(00) 00000-0000" value="${comp.telefone_secundario || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">WhatsApp</label>
-                                <input type="text" value="${comp.whatsapp || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                <input type="text" placeholder="(00) 00000-0000" value="${comp.whatsapp || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
                                 <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Principal</label>
@@ -912,7 +912,7 @@ export const Companies: React.FC = () => {
                                 </div>
                                 <div>
                                   <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone</label>
-                                  <input type="text" value="${comp.contato_financeiro?.telefone || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                                  <input type="text" placeholder="(00) 00000-0000" value="${comp.contato_financeiro?.telefone || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                               </div>
                             </div>
