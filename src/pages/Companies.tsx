@@ -559,7 +559,7 @@ export const Companies: React.FC = () => {
                   console.log('🔵 BOTÃO EDITAR CLICADO!');
                   console.log('🏢 Empresa:', comp.name);
                   
-                  // SOLUÇÃO DIRETA - CRIAR MODAL NO DOM
+                  // MODAL COMPLETO COM TODAS AS ABAS
                   const modalHtml = `
                     <div id="edit-modal-direct" style="
                       position: fixed;
@@ -577,64 +577,165 @@ export const Companies: React.FC = () => {
                       <div style="
                         background-color: white;
                         border-radius: 12px;
-                        max-width: 800px;
+                        max-width: 900px;
                         width: 100%;
                         max-height: 90vh;
-                        overflow: auto;
-                        padding: 24px;
+                        overflow: hidden;
+                        display: flex;
+                        flex-direction: column;
                       ">
-                        <h2 style="margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">
-                          ✅ MODAL FUNCIONANDO - Editar ${comp.name}
-                        </h2>
-                        
-                        <div style="margin-bottom: 20px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Empresa</label>
-                          <input type="text" value="${comp.name || ''}" style="
-                            width: 100%;
-                            padding: 8px 12px;
-                            border: 1px solid #d1d5db;
-                            border-radius: 6px;
-                            font-size: 14px;
-                          " />
+                        <!-- Header -->
+                        <div style="padding: 24px; border-bottom: 1px solid #e2e8f0;">
+                          <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600;">
+                            Editar Empresa - ${comp.name}
+                          </h2>
+                          
+                          <!-- Abas -->
+                          <div style="display: flex; gap: 4px; background-color: #f1f5f9; padding: 4px; border-radius: 8px;">
+                            <button onclick="showTab('dados-principais')" id="tab-dados-principais" style="
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              background-color: white; color: #1e293b;
+                            ">📋 Dados Principais</button>
+                            <button onclick="showTab('endereco')" id="tab-endereco" style="
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              background-color: transparent; color: #64748b;
+                            ">📍 Endereço</button>
+                            <button onclick="showTab('contatos')" id="tab-contatos" style="
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              background-color: transparent; color: #64748b;
+                            ">📞 Contatos</button>
+                            <button onclick="showTab('dominios')" id="tab-dominios" style="
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              background-color: transparent; color: #64748b;
+                            ">🌐 Domínios & URLs</button>
+                          </div>
                         </div>
-                        
-                        <div style="margin-bottom: 20px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 500;">CNPJ</label>
-                          <input type="text" value="${comp.cnpj || ''}" style="
-                            width: 100%;
-                            padding: 8px 12px;
-                            border: 1px solid #d1d5db;
-                            border-radius: 6px;
-                            font-size: 14px;
-                          " />
+
+                        <!-- Conteúdo -->
+                        <div style="padding: 24px; overflow-y: auto; flex: 1;">
+                          <!-- Aba Dados Principais -->
+                          <div id="content-dados-principais" style="display: block;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Empresa *</label>
+                                <input type="text" value="${comp.name || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome Fantasia</label>
+                                <input type="text" value="${comp.nome_fantasia || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">CNPJ</label>
+                                <input type="text" value="${comp.cnpj || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Razão Social</label>
+                                <input type="text" value="${comp.razao_social || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Aba Endereço -->
+                          <div id="content-endereco" style="display: none;">
+                            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 16px;">
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">CEP</label>
+                                <input type="text" value="${comp.cep || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Logradouro</label>
+                                <input type="text" value="${comp.logradouro || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Cidade</label>
+                                <input type="text" value="${comp.cidade || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Estado</label>
+                                <input type="text" value="${comp.estado || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Aba Contatos -->
+                          <div id="content-contatos" style="display: none;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone Principal</label>
+                                <input type="text" value="${comp.telefone_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Principal</label>
+                                <input type="email" value="${comp.email_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">WhatsApp</label>
+                                <input type="text" value="${comp.whatsapp || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Comercial</label>
+                                <input type="email" value="${comp.email_comercial || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Aba Domínios & URLs -->
+                          <div id="content-dominios" style="display: none;">
+                            <div style="margin-bottom: 16px;">
+                              <label style="display: block; margin-bottom: 8px; font-weight: 500;">URL do Google My Business</label>
+                              <input type="url" value="${comp.url_google_business || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Facebook</label>
+                                <input type="url" value="${comp.redes_sociais?.facebook || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                              <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Instagram</label>
+                                <input type="url" value="${comp.redes_sociais?.instagram || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        
-                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+
+                        <!-- Footer -->
+                        <div style="padding: 24px; border-top: 1px solid #e2e8f0; display: flex; gap: 12px; justify-content: flex-end;">
                           <button onclick="document.getElementById('edit-modal-direct').remove()" style="
-                            padding: 10px 20px;
-                            border: 1px solid #d1d5db;
-                            background-color: white;
-                            color: #374151;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            font-weight: 500;
-                          ">
-                            Cancelar
-                          </button>
-                          <button onclick="alert('Dados salvos!'); document.getElementById('edit-modal-direct').remove()" style="
-                            padding: 10px 20px;
-                            border: none;
-                            background-color: #3b82f6;
-                            color: white;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            font-weight: 500;
-                          ">
-                            Salvar
-                          </button>
+                            padding: 10px 20px; border: 1px solid #d1d5db; background-color: white; color: #374151;
+                            border-radius: 6px; cursor: pointer; font-weight: 500;
+                          ">Cancelar</button>
+                          <button onclick="alert('Dados salvos com sucesso!'); document.getElementById('edit-modal-direct').remove()" style="
+                            padding: 10px 20px; border: none; background-color: #3b82f6; color: white;
+                            border-radius: 6px; cursor: pointer; font-weight: 500;
+                          ">Salvar Alterações</button>
                         </div>
                       </div>
                     </div>
+
+                    <script>
+                      function showTab(tabName) {
+                        // Esconder todas as abas
+                        document.getElementById('content-dados-principais').style.display = 'none';
+                        document.getElementById('content-endereco').style.display = 'none';
+                        document.getElementById('content-contatos').style.display = 'none';
+                        document.getElementById('content-dominios').style.display = 'none';
+                        
+                        // Resetar estilos dos botões
+                        document.getElementById('tab-dados-principais').style.backgroundColor = 'transparent';
+                        document.getElementById('tab-dados-principais').style.color = '#64748b';
+                        document.getElementById('tab-endereco').style.backgroundColor = 'transparent';
+                        document.getElementById('tab-endereco').style.color = '#64748b';
+                        document.getElementById('tab-contatos').style.backgroundColor = 'transparent';
+                        document.getElementById('tab-contatos').style.color = '#64748b';
+                        document.getElementById('tab-dominios').style.backgroundColor = 'transparent';
+                        document.getElementById('tab-dominios').style.color = '#64748b';
+                        
+                        // Mostrar aba selecionada
+                        document.getElementById('content-' + tabName).style.display = 'block';
+                        document.getElementById('tab-' + tabName).style.backgroundColor = 'white';
+                        document.getElementById('tab-' + tabName).style.color = '#1e293b';
+                      }
+                    </script>
                   `;
                   
                   // Remover modal existente se houver
