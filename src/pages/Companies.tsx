@@ -1075,7 +1075,7 @@ export const Companies: React.FC = () => {
                       if (field.prevLabel.includes('CEP') || 
                           field.containerLabel.includes('CEP') ||
                           field.placeholder.toLowerCase().includes('cep') ||
-                          (field.value.match(/^\\d{5}-?\\d{3}$/) || field.value.match(/^\\d{8}$/))) {
+                          (field.value.match(/^\d{5}-?\d{3}$/) || field.value.match(/^\d{8}$/))) {
                         
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
@@ -1151,7 +1151,7 @@ export const Companies: React.FC = () => {
                       if (field.prevLabel.toLowerCase().includes('telefone') || 
                           field.containerLabel.toLowerCase().includes('telefone') ||
                           field.placeholder.toLowerCase().includes('telefone') ||
-                          (field.value.match(/^\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}$/) || field.value.match(/^\\d{10,11}$/))) {
+                          (field.value.match(/^\(\d{2}\)\s?\d{4,5}-?\d{4}$/) || field.value.match(/^\d{10,11}$/))) {
                         
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
