@@ -1027,20 +1027,18 @@ export const Companies: React.FC = () => {
                     // Função para aplicar máscara CNPJ
                     const applyMaskCNPJ = (input: any) => {
                       // Aplicar máscara no valor atual se existir
-                      if (input.value) {
+                      if (input.value && input.value.replace(/\\D/g, '').length >= 11) {
                         const cleanValue = input.value.replace(/\\D/g, '');
-                        if (cleanValue.length >= 11) {
-                          let value = cleanValue;
-                          value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
-                          value = value.replace(/(\\d{3})(\\d)/, '$1.$2');
-                          value = value.replace(/(\\d{3})(\\d)/, '$1/$2');
-                          value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
-                          input.value = value.substring(0, 18);
-                          console.log('✅ CNPJ formatado imediatamente:', input.value);
-                        }
+                        let value = cleanValue;
+                        value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
+                        value = value.replace(/(\\d{3})(\\d)/, '$1.$2');
+                        value = value.replace(/(\\d{3})(\\d)/, '$1/$2');
+                        value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                        input.value = value.substring(0, 18);
+                        console.log('✅ CNPJ formatado imediatamente:', input.value);
                       }
                       
-                      // Adicionar event listeners
+                      // SEMPRE adicionar event listeners (mesmo se campo vazio)
                       input.addEventListener('input', (e: any) => {
                         let value = e.target.value.replace(/\\D/g, '');
                         value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
@@ -1072,27 +1070,27 @@ export const Companies: React.FC = () => {
                           const isValid = digit1 === parseInt(cnpj.charAt(12)) && digit2 === parseInt(cnpj.charAt(13));
                           e.target.style.borderColor = isValid ? '#d1d5db' : '#ef4444';
                           
-                          if (!isValid) {
+                          if (!isValid && e.target.value) {
                             console.log('❌ CNPJ inválido:', e.target.value);
                           }
                         }
                       });
+                      
+                      console.log('✅ Event listeners CNPJ adicionados');
                     };
                     
                     // Função para aplicar máscara CEP
                     const applyMaskCEP = (input: any) => {
                       // Aplicar máscara no valor atual se existir
-                      if (input.value) {
+                      if (input.value && input.value.replace(/\\D/g, '').length === 8) {
                         const cleanValue = input.value.replace(/\\D/g, '');
-                        if (cleanValue.length === 8) {
-                          let value = cleanValue;
-                          value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
-                          input.value = value;
-                          console.log('✅ CEP formatado imediatamente:', input.value);
-                        }
+                        let value = cleanValue;
+                        value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
+                        input.value = value;
+                        console.log('✅ CEP formatado imediatamente:', input.value);
                       }
                       
-                      // Adicionar event listeners
+                      // SEMPRE adicionar event listeners (mesmo se campo vazio)
                       input.addEventListener('input', (e: any) => {
                         let value = e.target.value.replace(/\\D/g, '');
                         value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
@@ -1160,29 +1158,31 @@ export const Companies: React.FC = () => {
                           }
                         }
                       });
+                      
+                      console.log('✅ Event listeners CEP adicionados');
                     };
                     
                     // Função para aplicar máscara telefone
                     const applyMaskPhone = (input: any) => {
                       // Aplicar máscara no valor atual se existir
-                      if (input.value) {
+                      if (input.value && input.value.replace(/\\D/g, '').length >= 10) {
                         const cleanValue = input.value.replace(/\\D/g, '');
-                        if (cleanValue.length >= 10) {
-                          let value = cleanValue;
-                          value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
-                          value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
-                          input.value = value.substring(0, 15);
-                          console.log('✅ Telefone formatado imediatamente:', input.value);
-                        }
+                        let value = cleanValue;
+                        value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
+                        value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                        input.value = value.substring(0, 15);
+                        console.log('✅ Telefone formatado imediatamente:', input.value);
                       }
                       
-                      // Adicionar event listeners
+                      // SEMPRE adicionar event listeners (mesmo se campo vazio)
                       input.addEventListener('input', (e: any) => {
                         let value = e.target.value.replace(/\\D/g, '');
                         value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
                         value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
                         e.target.value = value.substring(0, 15);
                       });
+                      
+                      console.log('✅ Event listeners telefone adicionados');
                     };
                     
                     // Aplicar máscaras por múltiplas estratégias
