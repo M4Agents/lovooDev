@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
+import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import {
   X,
   Save,
@@ -14,7 +16,9 @@ import {
   CheckSquare,
   Type,
   Hash,
-  List
+  List,
+  MapPin,
+  Globe
 } from 'lucide-react';
 
 interface Lead {
@@ -27,6 +31,18 @@ interface Lead {
   interest?: string;
   responsible_user_id?: string;
   visitor_id?: string;
+  // Campos da empresa
+  company_name?: string;
+  company_cnpj?: string;
+  company_razao_social?: string;
+  company_nome_fantasia?: string;
+  company_cep?: string;
+  company_cidade?: string;
+  company_estado?: string;
+  company_endereco?: string;
+  company_telefone?: string;
+  company_email?: string;
+  company_site?: string;
   lead_custom_values?: Array<{
     field_id: string;
     value: string;
@@ -63,6 +79,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -73,7 +90,21 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     responsible_user_id: '',
     visitor_id: ''
   });
+  const [companyData, setCompanyData] = useState({
+    company_name: '',
+    company_cnpj: '',
+    company_razao_social: '',
+    company_nome_fantasia: '',
+    company_cep: '',
+    company_cidade: '',
+    company_estado: '',
+    company_endereco: '',
+    company_telefone: '',
+    company_email: '',
+    company_site: ''
+  });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isOpen && company?.id) {
@@ -89,6 +120,21 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           interest: lead.interest || '',
           responsible_user_id: lead.responsible_user_id || '',
           visitor_id: lead.visitor_id || ''
+        });
+
+        // Preencher dados da empresa
+        setCompanyData({
+          company_name: lead.company_name || '',
+          company_cnpj: lead.company_cnpj || '',
+          company_razao_social: lead.company_razao_social || '',
+          company_nome_fantasia: lead.company_nome_fantasia || '',
+          company_cep: lead.company_cep || '',
+          company_cidade: lead.company_cidade || '',
+          company_estado: lead.company_estado || '',
+          company_endereco: lead.company_endereco || '',
+          company_telefone: lead.company_telefone || '',
+          company_email: lead.company_email || '',
+          company_site: lead.company_site || ''
         });
 
         // Preencher valores dos campos personalizados
@@ -109,8 +155,22 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           responsible_user_id: '',
           visitor_id: ''
         });
+        setCompanyData({
+          company_name: '',
+          company_cnpj: '',
+          company_razao_social: '',
+          company_nome_fantasia: '',
+          company_cep: '',
+          company_cidade: '',
+          company_estado: '',
+          company_endereco: '',
+          company_telefone: '',
+          company_email: '',
+          company_site: ''
+        });
         setCustomFieldValues({});
       }
+      setValidationErrors({});
     }
   }, [isOpen, lead, company?.id]);
 
@@ -129,10 +189,35 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     e.preventDefault();
     if (!company?.id) return;
 
+    // Validar dados da empresa
+    const errors: Record<string, string> = {};
+    
+    if (companyData.company_cnpj && !validateCNPJ(companyData.company_cnpj)) {
+      errors.company_cnpj = 'CNPJ inválido';
+    }
+    if (companyData.company_email && !validateEmail(companyData.company_email)) {
+      errors.company_email = 'Email inválido';
+    }
+    if (companyData.company_site && !validateURL(companyData.company_site)) {
+      errors.company_site = 'URL inválida';
+    }
+    if (companyData.company_cep && !validateCEP(companyData.company_cep)) {
+      errors.company_cep = 'CEP inválido';
+    }
+    if (companyData.company_telefone && !validatePhone(companyData.company_telefone)) {
+      errors.company_telefone = 'Telefone inválido';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
     setLoading(true);
     try {
       const leadData = {
         ...formData,
+        ...companyData,
         company_id: company.id,
         custom_fields: customFieldValues
       };
@@ -162,6 +247,32 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }));
   };
 
+  const handleCompanyInputChange = (field: string, value: string) => {
+    let processedValue = value;
+    
+    // Aplicar máscaras
+    if (field === 'company_cnpj') {
+      processedValue = maskCNPJ(value);
+    } else if (field === 'company_cep') {
+      processedValue = maskCEP(value);
+    } else if (field === 'company_telefone') {
+      processedValue = maskPhone(value);
+    }
+    
+    setCompanyData(prev => ({
+      ...prev,
+      [field]: processedValue
+    }));
+
+    // Limpar erro de validação quando o usuário digitar
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
   const handleCustomFieldChange = (fieldId: string, value: any) => {
     setCustomFieldValues(prev => ({
       ...prev,
@@ -189,62 +300,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder={`Digite ${field.field_label.toLowerCase()}`}
             />
-          </div>
-        );
-
-      case 'number':
-        return (
-          <div key={field.id} className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              <Hash className="w-4 h-4 inline mr-1" />
-              {field.field_label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
-            </label>
-            <input
-              type="number"
-              value={value}
-              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-              required={field.is_required}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder={`Digite ${field.field_label.toLowerCase()}`}
-            />
-          </div>
-        );
-
-      case 'date':
-        return (
-          <div key={field.id} className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              {field.field_label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
-            </label>
-            <input
-              type="date"
-              value={value}
-              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-              required={field.is_required}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-        );
-
-      case 'boolean':
-        return (
-          <div key={field.id} className="space-y-2">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={value === 'true' || value === true}
-                onChange={(e) => handleCustomFieldChange(field.id, e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                <CheckSquare className="w-4 h-4 inline mr-1" />
-                {field.field_label}
-                {field.is_required && <span className="text-red-500 ml-1">*</span>}
-              </span>
-            </label>
           </div>
         );
 
@@ -295,115 +350,357 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Dados Básicos */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
-              Dados Básicos
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <User className="w-4 h-4 inline mr-1" />
-                  Nome *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Nome completo do lead"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <Mail className="w-4 h-4 inline mr-1" />
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="email@exemplo.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <Phone className="w-4 h-4 inline mr-1" />
-                  Telefone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="(11) 99999-9999"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <Building className="w-4 h-4 inline mr-1" />
-                  Origem
-                </label>
-                <select
-                  value={formData.origin}
-                  onChange={(e) => handleInputChange('origin', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="manual">Manual</option>
-                  <option value="landing_page">Landing Page</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="import">Importação</option>
-                  <option value="api">API Externa</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <Tag className="w-4 h-4 inline mr-1" />
-                  Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="novo">Novo</option>
-                  <option value="em_qualificacao">Em Qualificação</option>
-                  <option value="convertido">Convertido</option>
-                  <option value="perdido">Perdido</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  <FileText className="w-4 h-4 inline mr-1" />
-                  Interesse
-                </label>
-                <input
-                  type="text"
-                  value={formData.interest}
-                  onChange={(e) => handleInputChange('interest', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Produto ou serviço de interesse"
-                />
-              </div>
-            </div>
+          {/* Sistema de Abas */}
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                type="button"
+                onClick={() => setActiveTab('lead')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'lead'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <User className="w-4 h-4 inline mr-2" />
+                Dados do Lead
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('company')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'company'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Building className="w-4 h-4 inline mr-2" />
+                Dados da Empresa
+              </button>
+            </nav>
           </div>
 
-          {/* Campos Personalizados */}
-          {customFields.length > 0 && (
+          {/* Conteúdo da Aba - Dados do Lead */}
+          {activeTab === 'lead' && (
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
-                Campos Personalizados
+                Informações do Lead
               </h3>
+            
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {customFields.map(renderCustomField)}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <User className="w-4 h-4 inline mr-1" />
+                    Nome *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome completo do lead"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Mail className="w-4 h-4 inline mr-1" />
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Phone className="w-4 h-4 inline mr-1" />
+                    Telefone
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Building className="w-4 h-4 inline mr-1" />
+                    Origem
+                  </label>
+                  <select
+                    value={formData.origin}
+                    onChange={(e) => handleInputChange('origin', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="landing_page">Landing Page</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="import">Importação</option>
+                    <option value="api">API Externa</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Tag className="w-4 h-4 inline mr-1" />
+                    Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => handleInputChange('status', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="novo">Novo</option>
+                    <option value="em_qualificacao">Em Qualificação</option>
+                    <option value="convertido">Convertido</option>
+                    <option value="perdido">Perdido</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <FileText className="w-4 h-4 inline mr-1" />
+                    Interesse
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.interest}
+                    onChange={(e) => handleInputChange('interest', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Produto ou serviço de interesse"
+                  />
+                </div>
+              </div>
+
+              {/* Campos Personalizados */}
+              {customFields.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                    Campos Personalizados
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {customFields.map(renderCustomField)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Conteúdo da Aba - Dados da Empresa */}
+          {activeTab === 'company' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                Informações da Empresa
+              </h3>
+
+              {/* Informações Básicas */}
+              <div className="space-y-4">
+                <h4 className="text-md font-medium text-gray-800 flex items-center gap-2">
+                  <Building className="w-4 h-4" />
+                  Informações Básicas
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Nome da Empresa
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_name}
+                      onChange={(e) => handleCompanyInputChange('company_name', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nome da empresa"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      CNPJ
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_cnpj}
+                      onChange={(e) => handleCompanyInputChange('company_cnpj', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        validationErrors.company_cnpj ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="00.000.000/0000-00"
+                    />
+                    {validationErrors.company_cnpj && (
+                      <p className="text-sm text-red-600">{validationErrors.company_cnpj}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Razão Social
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_razao_social}
+                      onChange={(e) => handleCompanyInputChange('company_razao_social', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Razão social da empresa"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Nome Fantasia
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_nome_fantasia}
+                      onChange={(e) => handleCompanyInputChange('company_nome_fantasia', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nome fantasia"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Localização */}
+              <div className="space-y-4">
+                <h4 className="text-md font-medium text-gray-800 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Localização
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      CEP
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_cep}
+                      onChange={(e) => handleCompanyInputChange('company_cep', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        validationErrors.company_cep ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="00000-000"
+                    />
+                    {validationErrors.company_cep && (
+                      <p className="text-sm text-red-600">{validationErrors.company_cep}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Estado
+                    </label>
+                    <select
+                      value={companyData.company_estado}
+                      onChange={(e) => handleCompanyInputChange('company_estado', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Selecione o estado</option>
+                      {BRAZILIAN_STATES.map((state) => (
+                        <option key={state.value} value={state.value}>
+                          {state.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Cidade
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_cidade}
+                      onChange={(e) => handleCompanyInputChange('company_cidade', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nome da cidade"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Endereço
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.company_endereco}
+                      onChange={(e) => handleCompanyInputChange('company_endereco', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Rua, número, bairro"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contato Empresarial */}
+              <div className="space-y-4">
+                <h4 className="text-md font-medium text-gray-800 flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  Contato Empresarial
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Telefone da Empresa
+                    </label>
+                    <input
+                      type="tel"
+                      value={companyData.company_telefone}
+                      onChange={(e) => handleCompanyInputChange('company_telefone', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        validationErrors.company_telefone ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="(00) 00000-0000"
+                    />
+                    {validationErrors.company_telefone && (
+                      <p className="text-sm text-red-600">{validationErrors.company_telefone}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Email Corporativo
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.company_email}
+                      onChange={(e) => handleCompanyInputChange('company_email', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        validationErrors.company_email ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="contato@empresa.com"
+                    />
+                    {validationErrors.company_email && (
+                      <p className="text-sm text-red-600">{validationErrors.company_email}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      <Globe className="w-4 h-4 inline mr-1" />
+                      Site
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.company_site}
+                      onChange={(e) => handleCompanyInputChange('company_site', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        validationErrors.company_site ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="https://www.empresa.com"
+                    />
+                    {validationErrors.company_site && (
+                      <p className="text-sm text-red-600">{validationErrors.company_site}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
