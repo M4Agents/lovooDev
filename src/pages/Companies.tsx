@@ -133,6 +133,7 @@ export const Companies: React.FC = () => {
   const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
+    console.log('🔄 useEffect executado - company:', company?.name, 'is_super_admin:', company?.is_super_admin);
     if (company?.is_super_admin) {
       loadCompanies();
     } else if (company) {
@@ -618,9 +619,17 @@ export const Companies: React.FC = () => {
                     
                     // Verificar estado após um pequeno delay
                     setTimeout(() => {
-                      console.log('🔄 Verificando estado após timeout - showEditModal:', showEditModal);
-                      console.log('🔄 Verificando estado após timeout - editingCompanyData:', editingCompanyData);
-                    }, 100);
+                      console.log('🔄 TIMEOUT - showEditModal:', showEditModal);
+                      console.log('🔄 TIMEOUT - editingCompanyData:', editingCompanyData);
+                      console.log('🔄 TIMEOUT - Modal deveria estar visível?', showEditModal);
+                      
+                      // Verificar se o elemento existe no DOM
+                      const modalElement = document.querySelector('[style*="rgba(255, 0, 0, 0.8)"]') as HTMLElement;
+                      console.log('🔄 TIMEOUT - Modal no DOM:', !!modalElement);
+                      if (modalElement) {
+                        console.log('🔄 TIMEOUT - Modal styles:', modalElement.style.cssText);
+                      }
+                    }, 500);
                   } catch (error) {
                     console.error('Erro ao abrir modal:', error);
                     alert('Erro ao abrir modal de edição');
