@@ -243,7 +243,7 @@ export const Settings: React.FC = () => {
             }`}
           >
             <Building className="w-4 h-4" />
-            Empresas
+            Dados da Empresa
           </button>
         </div>
       </div>
