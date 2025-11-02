@@ -996,99 +996,70 @@ export const Companies: React.FC = () => {
                   setTimeout(() => {
                     console.log('🔧 Aplicando otimizações no modal...');
                     
-                    // Função para aplicar máscara de CNPJ
-                    const maskCNPJ = (value: string) => {
-                      return value
-                        .replace(/\\D/g, '')
-                        .replace(/(\\d{2})(\\d)/, '$1.$2')
-                        .replace(/(\\d{3})(\\d)/, '$1.$2')
-                        .replace(/(\\d{3})(\\d)/, '$1/$2')
-                        .replace(/(\\d{4})(\\d)/, '$1-$2')
-                        .replace(/(-\\d{2})\\d+?$/, '$1');
-                    };
-                    
-                    // Função para aplicar máscara de CEP
-                    const maskCEP = (value: string) => {
-                      return value
-                        .replace(/\\D/g, '')
-                        .replace(/(\\d{5})(\\d)/, '$1-$2')
-                        .replace(/(-\\d{3})\\d+?$/, '$1');
-                    };
-                    
-                    // Função para aplicar máscara de telefone
-                    const maskPhone = (value: string) => {
-                      return value
-                        .replace(/\\D/g, '')
-                        .replace(/(\\d{2})(\\d)/, '($1) $2')
-                        .replace(/(\\d{4})(\\d)/, '$1-$2')
-                        .replace(/(\\d{4})-\\d+?$/, '$1');
-                    };
-                    
-                    // Buscar campos CNPJ e aplicar máscaras
-                    const cnpjInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
-                    cnpjInputs.forEach(input => {
-                      if (input.value === \`${comp.cnpj || ''}\` || input.placeholder?.includes('CNPJ')) {
-                        input.addEventListener('input', (e) => {
-                          const target = e.target as HTMLInputElement;
-                          target.value = maskCNPJ(target.value);
+                    // Buscar e aplicar máscaras nos campos
+                    const allInputs = document.querySelectorAll('#edit-modal-direct input');
+                    allInputs.forEach((input: any) => {
+                      // Máscara CNPJ
+                      if (input.placeholder && input.placeholder.includes('CNPJ')) {
+                        input.addEventListener('input', (e: any) => {
+                          let value = e.target.value.replace(/\\D/g, '');
+                          value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
+                          value = value.replace(/(\\d{3})(\\d)/, '$1.$2');
+                          value = value.replace(/(\\d{3})(\\d)/, '$1/$2');
+                          value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                          e.target.value = value.substring(0, 18);
                         });
                         console.log('✅ Máscara CNPJ aplicada');
                       }
-                    });
-                    
-                    // Buscar campos CEP e aplicar máscaras + API
-                    const cepInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
-                    cepInputs.forEach(input => {
-                      if (input.placeholder?.includes('CEP') || input.value?.includes('-')) {
-                        input.addEventListener('input', (e) => {
-                          const target = e.target as HTMLInputElement;
-                          target.value = maskCEP(target.value);
+                      
+                      // Máscara CEP + API
+                      if (input.placeholder && input.placeholder.includes('CEP')) {
+                        input.addEventListener('input', (e: any) => {
+                          let value = e.target.value.replace(/\\D/g, '');
+                          value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
+                          e.target.value = value.substring(0, 9);
                         });
                         
-                        input.addEventListener('blur', async (e) => {
-                          const target = e.target as HTMLInputElement;
-                          const cep = target.value.replace(/\\D/g, '');
-                          
+                        input.addEventListener('blur', async (e: any) => {
+                          const cep = e.target.value.replace(/\\D/g, '');
                           if (cep.length === 8) {
                             try {
-                              const response = await fetch(\`https://viacep.com.br/ws/\${cep}/json/\`);
+                              const response = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
                               const data = await response.json();
-                              
                               if (!data.erro) {
-                                // Buscar campos de cidade e estado para preencher
-                                const allInputs = document.querySelectorAll('#edit-modal-direct input, #edit-modal-direct select') as NodeListOf<HTMLInputElement | HTMLSelectElement>;
-                                allInputs.forEach(inp => {
-                                  if (inp.placeholder?.toLowerCase().includes('cidade')) {
-                                    (inp as HTMLInputElement).value = data.localidade;
+                                // Preencher cidade e estado
+                                const inputs = document.querySelectorAll('#edit-modal-direct input, #edit-modal-direct select');
+                                inputs.forEach((inp: any) => {
+                                  if (inp.placeholder && inp.placeholder.toLowerCase().includes('cidade')) {
+                                    inp.value = data.localidade;
                                   }
-                                  if (inp.tagName === 'SELECT' && inp.innerHTML.includes('SP')) {
-                                    (inp as HTMLSelectElement).value = data.uf;
+                                  if (inp.tagName === 'SELECT') {
+                                    inp.value = data.uf;
                                   }
                                 });
-                                console.log('✅ CEP preenchido automaticamente:', data);
+                                console.log('✅ CEP preenchido:', data.localidade, data.uf);
                               }
                             } catch (error) {
-                              console.log('❌ Erro ao buscar CEP:', error);
+                              console.log('❌ Erro CEP:', error);
                             }
                           }
                         });
                         console.log('✅ API de CEP aplicada');
                       }
-                    });
-                    
-                    // Buscar campos de telefone e aplicar máscaras
-                    const phoneInputs = document.querySelectorAll('#edit-modal-direct input') as NodeListOf<HTMLInputElement>;
-                    phoneInputs.forEach(input => {
-                      if (input.placeholder?.toLowerCase().includes('telefone')) {
-                        input.addEventListener('input', (e) => {
-                          const target = e.target as HTMLInputElement;
-                          target.value = maskPhone(target.value);
+                      
+                      // Máscara telefone
+                      if (input.placeholder && input.placeholder.toLowerCase().includes('telefone')) {
+                        input.addEventListener('input', (e: any) => {
+                          let value = e.target.value.replace(/\\D/g, '');
+                          value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
+                          value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
+                          e.target.value = value.substring(0, 15);
                         });
                         console.log('✅ Máscara telefone aplicada');
                       }
                     });
                     
-                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM SUCESSO!');
+                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS!');
                   }, 300);
                   
                   // Adicionar funcionalidade das abas após inserir o modal
