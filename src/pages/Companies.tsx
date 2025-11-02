@@ -608,8 +608,10 @@ export const Companies: React.FC = () => {
                     });
                     setEditActiveTab('dados-principais');
                     console.log('🚀 Definindo showEditModal = true');
+                    console.log('🏢 editingCompanyData definido:', !!comp);
                     setShowEditModal(true);
                     console.log('✅ Modal deve abrir agora - showEditModal:', true);
+                    console.log('✅ editingCompanyData:', editingCompanyData);
                     
                     // Forçar re-render após um pequeno delay
                     setTimeout(() => {
@@ -2099,7 +2101,7 @@ export const Companies: React.FC = () => {
       {/* Modal de Edição Funcional */}
       {(() => {
         console.log('🔍 Verificando condição do modal:', { showEditModal, editingCompanyData });
-        return showEditModal;
+        return showEditModal && editingCompanyData;
       })() && (
         <div 
           style={{
