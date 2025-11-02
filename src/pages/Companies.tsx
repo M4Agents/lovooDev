@@ -996,11 +996,23 @@ export const Companies: React.FC = () => {
                   setTimeout(() => {
                     console.log('🔧 Aplicando otimizações no modal...');
                     
-                    // Buscar e aplicar máscaras nos campos
-                    const allInputs = document.querySelectorAll('#edit-modal-direct input');
-                    allInputs.forEach((input: any) => {
-                      // Máscara CNPJ
-                      if (input.placeholder && input.placeholder.includes('CNPJ')) {
+                    const modal = document.getElementById('edit-modal-direct');
+                    if (!modal) {
+                      console.log('❌ Modal não encontrado');
+                      return;
+                    }
+                    
+                    const allInputs = modal.querySelectorAll('input');
+                    console.log(`📊 Encontrados ${allInputs.length} inputs no modal`);
+                    
+                    allInputs.forEach((input: any, index: number) => {
+                      const label = input.previousElementSibling;
+                      const labelText = label?.textContent || '';
+                      
+                      console.log(`Input ${index}: label="${labelText}"`);
+                      
+                      // Detectar CNPJ por label anterior
+                      if (labelText.includes('CNPJ')) {
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{2})(\\d)/, '$1.$2');
@@ -1009,11 +1021,40 @@ export const Companies: React.FC = () => {
                           value = value.replace(/(\\d{4})(\\d)/, '$1-$2');
                           e.target.value = value.substring(0, 18);
                         });
+                        
+                        input.addEventListener('blur', (e: any) => {
+                          const cnpj = e.target.value.replace(/\\D/g, '');
+                          if (cnpj.length === 14) {
+                            // Validação básica de CNPJ
+                            let sum = 0;
+                            let weight = 5;
+                            for (let i = 0; i < 12; i++) {
+                              sum += parseInt(cnpj.charAt(i)) * weight;
+                              weight = weight === 2 ? 9 : weight - 1;
+                            }
+                            let digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+                            
+                            sum = 0;
+                            weight = 6;
+                            for (let i = 0; i < 13; i++) {
+                              sum += parseInt(cnpj.charAt(i)) * weight;
+                              weight = weight === 2 ? 9 : weight - 1;
+                            }
+                            let digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+                            
+                            const isValid = digit1 === parseInt(cnpj.charAt(12)) && digit2 === parseInt(cnpj.charAt(13));
+                            e.target.style.borderColor = isValid ? '#d1d5db' : '#ef4444';
+                            
+                            if (!isValid) {
+                              console.log('❌ CNPJ inválido:', e.target.value);
+                            }
+                          }
+                        });
                         console.log('✅ Máscara CNPJ aplicada');
                       }
                       
-                      // Máscara CEP + API
-                      if (input.placeholder && input.placeholder.includes('CEP')) {
+                      // Detectar CEP por label anterior
+                      if (labelText.includes('CEP')) {
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{5})(\\d)/, '$1-$2');
@@ -1024,31 +1065,43 @@ export const Companies: React.FC = () => {
                           const cep = e.target.value.replace(/\\D/g, '');
                           if (cep.length === 8) {
                             try {
+                              console.log('🔍 Buscando CEP:', cep);
                               const response = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
                               const data = await response.json();
+                              
                               if (!data.erro) {
-                                // Preencher cidade e estado
-                                const inputs = document.querySelectorAll('#edit-modal-direct input, #edit-modal-direct select');
-                                inputs.forEach((inp: any) => {
-                                  if (inp.placeholder && inp.placeholder.toLowerCase().includes('cidade')) {
+                                // Buscar campos de cidade e estado para preencher
+                                const allModalInputs = modal.querySelectorAll('input, select');
+                                allModalInputs.forEach((inp: any) => {
+                                  const inputLabel = inp.previousElementSibling?.textContent || '';
+                                  
+                                  // Preencher cidade
+                                  if (inputLabel.toLowerCase().includes('cidade')) {
                                     inp.value = data.localidade;
+                                    console.log('✅ Cidade preenchida:', data.localidade);
                                   }
-                                  if (inp.tagName === 'SELECT') {
+                                  
+                                  // Preencher estado (select)
+                                  if (inp.tagName === 'SELECT' && inputLabel.toLowerCase().includes('estado')) {
                                     inp.value = data.uf;
+                                    console.log('✅ Estado preenchido:', data.uf);
                                   }
                                 });
-                                console.log('✅ CEP preenchido:', data.localidade, data.uf);
+                                
+                                console.log('✅ CEP preenchido automaticamente:', data.localidade, data.uf);
+                              } else {
+                                console.log('❌ CEP não encontrado');
                               }
                             } catch (error) {
-                              console.log('❌ Erro CEP:', error);
+                              console.log('❌ Erro ao buscar CEP:', error);
                             }
                           }
                         });
                         console.log('✅ API de CEP aplicada');
                       }
                       
-                      // Máscara telefone
-                      if (input.placeholder && input.placeholder.toLowerCase().includes('telefone')) {
+                      // Detectar telefone por label anterior
+                      if (labelText.toLowerCase().includes('telefone')) {
                         input.addEventListener('input', (e: any) => {
                           let value = e.target.value.replace(/\\D/g, '');
                           value = value.replace(/(\\d{2})(\\d)/, '($1) $2');
@@ -1059,7 +1112,7 @@ export const Companies: React.FC = () => {
                       }
                     });
                     
-                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS!');
+                    console.log('✅ TODAS AS OTIMIZAÇÕES APLICADAS COM SUCESSO!');
                   }, 300);
                   
                   // Adicionar funcionalidade das abas após inserir o modal
