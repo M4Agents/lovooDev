@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   Bell,
   Search,
-  User
+  User,
+  Users
 } from 'lucide-react';
 
 type ModernLayoutProps = {
@@ -38,6 +39,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
+    { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];
