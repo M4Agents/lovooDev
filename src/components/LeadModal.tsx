@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
+import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
 import {
   X,
   Save,
@@ -105,6 +106,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && company?.id) {
@@ -278,6 +280,50 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       ...prev,
       [fieldId]: value
     }));
+  };
+
+  const handleCEPBlur = async (cep: string) => {
+    // Só buscar se CEP estiver válido para busca
+    if (!isValidCEPForSearch(cep)) {
+      return;
+    }
+
+    setCepLoading(true);
+    try {
+      const result = await fetchCEPData(cep);
+      
+      if (result.success && result.data) {
+        // Preencher campos automaticamente
+        setCompanyData(prev => ({
+          ...prev,
+          company_cidade: result.data!.localidade,
+          company_estado: result.data!.uf,
+          company_endereco: formatAddress(result.data!)
+        }));
+
+        // Limpar erro de CEP se existir
+        if (validationErrors.company_cep) {
+          setValidationErrors(prev => ({
+            ...prev,
+            company_cep: ''
+          }));
+        }
+      } else {
+        // Mostrar erro se CEP não encontrado
+        setValidationErrors(prev => ({
+          ...prev,
+          company_cep: result.error || 'CEP não encontrado'
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching CEP:', error);
+      setValidationErrors(prev => ({
+        ...prev,
+        company_cep: 'Erro ao buscar CEP'
+      }));
+    } finally {
+      setCepLoading(false);
+    }
   };
 
   const renderCustomField = (field: CustomField) => {
@@ -578,18 +624,28 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
                       CEP
+                      {cepLoading && (
+                        <span className="ml-2 text-xs text-blue-600">Buscando...</span>
+                      )}
                     </label>
                     <input
                       type="text"
                       value={companyData.company_cep}
                       onChange={(e) => handleCompanyInputChange('company_cep', e.target.value)}
+                      onBlur={(e) => handleCEPBlur(e.target.value)}
+                      disabled={cepLoading}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         validationErrors.company_cep ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      } ${cepLoading ? 'bg-gray-50' : ''}`}
                       placeholder="00000-000"
                     />
                     {validationErrors.company_cep && (
                       <p className="text-sm text-red-600">{validationErrors.company_cep}</p>
+                    )}
+                    {!validationErrors.company_cep && companyData.company_cep && isValidCEPForSearch(companyData.company_cep) && (
+                      <p className="text-xs text-gray-500">
+                        Cidade e estado serão preenchidos automaticamente
+                      </p>
                     )}
                   </div>
 
