@@ -2121,8 +2121,8 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
-      {/* TESTE: Modal Simples - FORÇADO */}
-      {(showEditModal || modalForceOpen) && (
+      {/* MODAL DEFINITIVO - SEMPRE FUNCIONA */}
+      {editingCompanyData && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -2146,6 +2146,7 @@ export const Companies: React.FC = () => {
             <p>editingCompanyData: {editingCompanyData ? editingCompanyData.name : 'null'}</p>
             <button 
               onClick={() => {
+                setEditingCompanyData(null);
                 setShowEditModal(false);
                 setModalForceOpen(false);
               }}
