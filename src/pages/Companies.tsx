@@ -617,7 +617,7 @@ export const Companies: React.FC = () => {
                           <div id="content-dados-principais" style="display: block;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Empresa *</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Conta *</label>
                                 <input type="text" value="${comp.name || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
