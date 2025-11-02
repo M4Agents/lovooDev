@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { Company } from '../lib/supabase';
+import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
+import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
+import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
 import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Building, MapPin, Phone, Globe, Save } from 'lucide-react';
 
 export const Companies: React.FC = () => {
@@ -67,6 +70,8 @@ export const Companies: React.FC = () => {
     status: 'active'
   });
   const [savingEditCompany, setSavingEditCompany] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [cepLoading, setCepLoading] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [managingCompany, setManagingCompany] = useState<Company | null>(null);
   const [userFormData, setUserFormData] = useState({
@@ -203,6 +208,104 @@ export const Companies: React.FC = () => {
   useEffect(() => {
     console.log('🔄 MODAL STATES CHANGED - showEditModal:', showEditModal, 'editingCompanyData:', !!editingCompanyData);
   }, [showEditModal, editingCompanyData]);
+
+  // Função para aplicar máscaras e validações
+  const handleCompanyInputChange = (field: string, value: string) => {
+    let processedValue = value;
+    
+    // Aplicar máscaras
+    if (field === 'cnpj') {
+      processedValue = maskCNPJ(value);
+    } else if (field === 'cep') {
+      processedValue = maskCEP(value);
+    } else if (field === 'telefone_principal' || field === 'telefone_secundario' || field === 'whatsapp') {
+      processedValue = maskPhone(value);
+    }
+    
+    setEditCompanyData(prev => ({
+      ...prev,
+      [field]: processedValue
+    }));
+
+    // Limpar erro de validação quando o usuário digitar
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  // Função para busca automática de CEP
+  const handleCEPBlur = async (cep: string) => {
+    if (!isValidCEPForSearch(cep)) {
+      return;
+    }
+
+    setCepLoading(true);
+    try {
+      const result = await fetchCEPData(cep);
+      
+      if (result.success && result.data) {
+        // Preencher campos automaticamente
+        setEditCompanyData(prev => ({
+          ...prev,
+          cidade: result.data!.localidade,
+          estado: result.data!.uf,
+          logradouro: formatAddress(result.data!)
+        }));
+
+        // Limpar erro de CEP se existir
+        if (validationErrors.cep) {
+          setValidationErrors(prev => ({
+            ...prev,
+            cep: ''
+          }));
+        }
+      } else {
+        // Mostrar erro se CEP não encontrado
+        setValidationErrors(prev => ({
+          ...prev,
+          cep: result.error || 'CEP não encontrado'
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching CEP:', error);
+      setValidationErrors(prev => ({
+        ...prev,
+        cep: 'Erro ao buscar CEP'
+      }));
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  // Função para validar dados antes de salvar
+  const validateCompanyData = () => {
+    const errors: Record<string, string> = {};
+    
+    if (editCompanyData.cnpj && !validateCNPJ(editCompanyData.cnpj)) {
+      errors.cnpj = 'CNPJ inválido';
+    }
+    if (editCompanyData.email_principal && !validateEmail(editCompanyData.email_principal)) {
+      errors.email_principal = 'Email inválido';
+    }
+    if (editCompanyData.email_comercial && !validateEmail(editCompanyData.email_comercial)) {
+      errors.email_comercial = 'Email inválido';
+    }
+    if (editCompanyData.cep && !validateCEP(editCompanyData.cep)) {
+      errors.cep = 'CEP inválido';
+    }
+    if (editCompanyData.telefone_principal && !validatePhone(editCompanyData.telefone_principal)) {
+      errors.telefone_principal = 'Telefone inválido';
+    }
+    if (editCompanyData.url_google_business && !validateURL(editCompanyData.url_google_business)) {
+      errors.url_google_business = 'URL inválida';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const loadCompanies = async () => {
     if (!company || !company.is_super_admin) return;
@@ -2576,20 +2679,25 @@ export const Companies: React.FC = () => {
                         }}
                       />
                     </div>
-                    <div>
+                    <div style={{ marginBottom: '16px' }}>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>CNPJ</label>
                       <input 
                         type="text" 
                         value={editCompanyData.cnpj}
-                        onChange={(e) => setEditCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                        onChange={(e) => handleCompanyInputChange('cnpj', e.target.value)}
                         style={{ 
                           width: '100%', 
                           padding: '8px 12px', 
-                          border: '1px solid #d1d5db', 
-                          borderRadius: '6px',
-                          fontSize: '14px'
-                        }}
+                          border: validationErrors.cnpj ? '1px solid #ef4444' : '1px solid #d1d5db', 
+                          borderRadius: '6px' 
+                        }} 
+                        placeholder="00.000.000/0000-00"
                       />
+                      {validationErrors.cnpj && (
+                        <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
+                          {validationErrors.cnpj}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2786,9 +2894,17 @@ export const Companies: React.FC = () => {
                         <input
                           type="text"
                           value={editCompanyData.cnpj}
-                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          onChange={(e) => handleCompanyInputChange('cnpj', e.target.value)}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                            validationErrors.cnpj 
+                              ? 'border-red-300 focus:ring-red-500' 
+                              : 'border-slate-300 focus:ring-orange-500'
+                          }`}
+                          placeholder="00.000.000/0000-00"
                         />
+                        {validationErrors.cnpj && (
+                          <p className="text-sm text-red-600 mt-1">{validationErrors.cnpj}</p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2812,13 +2928,31 @@ export const Companies: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                           CEP
+                          {cepLoading && (
+                            <span className="ml-2 text-xs text-blue-600">Buscando...</span>
+                          )}
                         </label>
                         <input
                           type="text"
                           value={editCompanyData.cep}
-                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, cep: e.target.value }))}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => handleCompanyInputChange('cep', e.target.value)}
+                          onBlur={(e) => handleCEPBlur(e.target.value)}
+                          disabled={cepLoading}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                            validationErrors.cep 
+                              ? 'border-red-300 focus:ring-red-500' 
+                              : 'border-slate-300 focus:ring-blue-500'
+                          } ${cepLoading ? 'bg-gray-50' : ''}`}
+                          placeholder="00000-000"
                         />
+                        {validationErrors.cep && (
+                          <p className="text-sm text-red-600 mt-1">{validationErrors.cep}</p>
+                        )}
+                        {!validationErrors.cep && editCompanyData.cep && isValidCEPForSearch(editCompanyData.cep) && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Cidade e estado serão preenchidos automaticamente
+                          </p>
+                        )}
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2851,34 +2985,12 @@ export const Companies: React.FC = () => {
                           onChange={(e) => setEditCompanyData(prev => ({ ...prev, estado: e.target.value }))}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="">Selecione</option>
-                          <option value="AC">Acre</option>
-                          <option value="AL">Alagoas</option>
-                          <option value="AP">Amapá</option>
-                          <option value="AM">Amazonas</option>
-                          <option value="BA">Bahia</option>
-                          <option value="CE">Ceará</option>
-                          <option value="DF">Distrito Federal</option>
-                          <option value="ES">Espírito Santo</option>
-                          <option value="GO">Goiás</option>
-                          <option value="MA">Maranhão</option>
-                          <option value="MT">Mato Grosso</option>
-                          <option value="MS">Mato Grosso do Sul</option>
-                          <option value="MG">Minas Gerais</option>
-                          <option value="PA">Pará</option>
-                          <option value="PB">Paraíba</option>
-                          <option value="PR">Paraná</option>
-                          <option value="PE">Pernambuco</option>
-                          <option value="PI">Piauí</option>
-                          <option value="RJ">Rio de Janeiro</option>
-                          <option value="RN">Rio Grande do Norte</option>
-                          <option value="RS">Rio Grande do Sul</option>
-                          <option value="RO">Rondônia</option>
-                          <option value="RR">Roraima</option>
-                          <option value="SC">Santa Catarina</option>
-                          <option value="SP">São Paulo</option>
-                          <option value="SE">Sergipe</option>
-                          <option value="TO">Tocantins</option>
+                          <option value="">Selecione o estado</option>
+                          {BRAZILIAN_STATES.map((state) => (
+                            <option key={state.value} value={state.value}>
+                              {state.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -2896,9 +3008,17 @@ export const Companies: React.FC = () => {
                         <input
                           type="text"
                           value={editCompanyData.telefone_principal}
-                          onChange={(e) => setEditCompanyData(prev => ({ ...prev, telefone_principal: e.target.value }))}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                          onChange={(e) => handleCompanyInputChange('telefone_principal', e.target.value)}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                            validationErrors.telefone_principal 
+                              ? 'border-red-300 focus:ring-red-500' 
+                              : 'border-slate-300 focus:ring-green-500'
+                          }`}
+                          placeholder="(00) 00000-0000"
                         />
+                        {validationErrors.telefone_principal && (
+                          <p className="text-sm text-red-600 mt-1">{validationErrors.telefone_principal}</p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2908,8 +3028,23 @@ export const Companies: React.FC = () => {
                           type="email"
                           value={editCompanyData.email_principal}
                           onChange={(e) => setEditCompanyData(prev => ({ ...prev, email_principal: e.target.value }))}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                          onBlur={(e) => {
+                            if (e.target.value && !validateEmail(e.target.value)) {
+                              setValidationErrors(prev => ({ ...prev, email_principal: 'Email inválido' }));
+                            } else {
+                              setValidationErrors(prev => ({ ...prev, email_principal: '' }));
+                            }
+                          }}
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                            validationErrors.email_principal 
+                              ? 'border-red-300 focus:ring-red-500' 
+                              : 'border-slate-300 focus:ring-green-500'
+                          }`}
+                          placeholder="contato@empresa.com"
                         />
+                        {validationErrors.email_principal && (
+                          <p className="text-sm text-red-600 mt-1">{validationErrors.email_principal}</p>
+                        )}
                       </div>
                     </div>
                   </div>
