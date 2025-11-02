@@ -547,8 +547,12 @@ export const Companies: React.FC = () => {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Botão Editar clicado para empresa:', comp.name);
-                  console.log('Dados da empresa:', comp);
+                  console.log('🔵 BOTÃO EDITAR CLICADO!');
+                  console.log('🏢 Empresa:', comp.name);
+                  
+                  // Teste simples - apenas mostrar alert primeiro
+                  alert(`Editando empresa: ${comp.name}`);
+                  
                   try {
                     setEditingCompanyData(comp);
                     setEditCompanyData({
@@ -2089,8 +2093,60 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Edição com Abas Cadastrais usando Portal */}
-      {showEditModal && editingCompanyData && (() => {
+      {/* TESTE: Modal Simples */}
+      {showEditModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 0, 0, 0.8)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={() => {
+            setShowEditModal(false);
+            setEditingCompanyData(null);
+          }}
+        >
+          <div 
+            style={{
+              backgroundColor: 'white',
+              padding: '20px',
+              borderRadius: '10px',
+              maxWidth: '500px',
+              width: '90%'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>🎉 MODAL FUNCIONANDO!</h2>
+            <p>Editando: {editingCompanyData?.name || 'Empresa'}</p>
+            <button 
+              onClick={() => {
+                setShowEditModal(false);
+                setEditingCompanyData(null);
+              }}
+              style={{
+                backgroundColor: '#dc2626',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer'
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Original (comentado temporariamente) */}
+      {false && showEditModal && editingCompanyData && (() => {
         console.log('Renderizando modal via Portal - showEditModal:', showEditModal, 'editingCompanyData:', editingCompanyData);
         return createPortal(
           <div 
