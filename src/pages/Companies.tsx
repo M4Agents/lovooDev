@@ -696,19 +696,19 @@ export const Companies: React.FC = () => {
                           <!-- Abas -->
                           <div style="display: flex; gap: 4px; background-color: #f1f5f9; padding: 4px; border-radius: 8px;">
                             <button id="tab-dados-principais" style="
-                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: normal;
                               background-color: white; color: #1e293b;
                             ">📋 Dados Principais</button>
                             <button id="tab-endereco" style="
-                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: normal;
                               background-color: transparent; color: #64748b;
                             ">📍 Endereço</button>
                             <button id="tab-contatos" style="
-                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: normal;
                               background-color: transparent; color: #64748b;
                             ">📞 Contatos</button>
                             <button id="tab-dominios" style="
-                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;
+                              padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: normal;
                               background-color: transparent; color: #64748b;
                             ">🌐 Domínios & URLs</button>
                           </div>
@@ -720,31 +720,31 @@ export const Companies: React.FC = () => {
                           <div id="content-dados-principais" style="display: block;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome da Conta *</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Nome da Conta *</label>
                                 <input type="text" value="${comp.name || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome Fantasia</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Nome Fantasia</label>
                                 <input type="text" value="${comp.nome_fantasia || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">CNPJ</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">CNPJ</label>
                                 <input type="text" placeholder="00.000.000/0000-00" value="${comp.cnpj || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Razão Social</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Razão Social</label>
                                 <input type="text" value="${comp.razao_social || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Inscrição Estadual</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Inscrição Estadual</label>
                                 <input type="text" value="${comp.inscricao_estadual || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Inscrição Municipal</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Inscrição Municipal</label>
                                 <input type="text" value="${comp.inscricao_municipal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Tipo de Empresa</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Tipo de Empresa</label>
                                 <select value="${comp.tipo_empresa || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
                                   <option value="">Selecionar</option>
                                   <option value="MEI">MEI</option>
@@ -755,7 +755,7 @@ export const Companies: React.FC = () => {
                                 </select>
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Porte da Empresa</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Porte da Empresa</label>
                                 <select value="${comp.porte_empresa || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
                                   <option value="">Selecionar</option>
                                   <option value="Microempresa">Microempresa</option>
@@ -765,20 +765,20 @@ export const Companies: React.FC = () => {
                                 </select>
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Ramo de Atividade</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Ramo de Atividade</label>
                                 <input type="text" value="${comp.ramo_atividade || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Data de Fundação</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Data de Fundação</label>
                                 <input type="date" value="${comp.data_fundacao || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Site Principal</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Site Principal</label>
                                 <input type="url" value="${comp.site_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                             </div>
                             <div style="margin-bottom: 16px;">
-                              <label style="display: block; margin-bottom: 8px; font-weight: 500;">Descrição da Empresa</label>
+                              <label style="display: block; margin-bottom: 8px; font-weight: normal;">Descrição da Empresa</label>
                               <textarea value="${comp.descricao_empresa || ''}" rows="3" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical;">${comp.descricao_empresa || ''}</textarea>
                             </div>
                           </div>
@@ -787,27 +787,27 @@ export const Companies: React.FC = () => {
                           <div id="content-endereco" style="display: none;">
                             <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">CEP</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">CEP</label>
                                 <input type="text" placeholder="00000-000" value="${comp.cep || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Logradouro</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Logradouro</label>
                                 <input type="text" value="${comp.logradouro || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Número</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Número</label>
                                 <input type="text" value="${comp.numero || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Bairro</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Bairro</label>
                                 <input type="text" value="${comp.bairro || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Cidade</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Cidade</label>
                                 <input type="text" value="${comp.cidade || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Estado</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Estado</label>
                                 <select value="${comp.estado || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
                                   <option value="">Selecionar</option>
                                   <option value="AC">Acre</option>
@@ -840,11 +840,11 @@ export const Companies: React.FC = () => {
                                 </select>
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Complemento</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Complemento</label>
                                 <input type="text" value="${comp.complemento || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">País</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">País</label>
                                 <input type="text" value="${comp.pais || 'Brasil'}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                             </div>
@@ -854,31 +854,31 @@ export const Companies: React.FC = () => {
                           <div id="content-contatos" style="display: none;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone Principal</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Telefone Principal</label>
                                 <input type="text" placeholder="(00) 00000-0000" value="${comp.telefone_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone Secundário</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Telefone Secundário</label>
                                 <input type="text" placeholder="(00) 00000-0000" value="${comp.telefone_secundario || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">WhatsApp</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">WhatsApp</label>
                                 <input type="text" placeholder="(00) 00000-0000" value="${comp.whatsapp || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Principal</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Email Principal</label>
                                 <input type="email" value="${comp.email_principal || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Comercial</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Email Comercial</label>
                                 <input type="email" value="${comp.email_comercial || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Financeiro</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Email Financeiro</label>
                                 <input type="email" value="${comp.email_financeiro || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                               <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email Suporte</label>
+                                <label style="display: block; margin-bottom: 8px; font-weight: normal;">Email Suporte</label>
                                 <input type="email" value="${comp.email_suporte || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                               </div>
                             </div>
@@ -888,11 +888,11 @@ export const Companies: React.FC = () => {
                               <h4 style="margin: 0 0 12px 0; font-weight: 600; color: #374151;">Responsável Principal</h4>
                               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Nome</label>
                                   <input type="text" value="${comp.responsavel_principal?.nome || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Cargo</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Cargo</label>
                                   <input type="text" value="${comp.responsavel_principal?.cargo || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                               </div>
@@ -903,15 +903,15 @@ export const Companies: React.FC = () => {
                               <h4 style="margin: 0 0 12px 0; font-weight: 600; color: #374151;">Contato Financeiro</h4>
                               <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nome</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Nome</label>
                                   <input type="text" value="${comp.contato_financeiro?.nome || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Email</label>
                                   <input type="email" value="${comp.contato_financeiro?.email || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Telefone</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Telefone</label>
                                   <input type="text" placeholder="(00) 00000-0000" value="${comp.contato_financeiro?.telefone || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                               </div>
@@ -921,7 +921,7 @@ export const Companies: React.FC = () => {
                           <!-- Aba Domínios & URLs -->
                           <div id="content-dominios" style="display: none;">
                             <div style="margin-bottom: 16px;">
-                              <label style="display: block; margin-bottom: 8px; font-weight: 500;">URL do Google My Business</label>
+                              <label style="display: block; margin-bottom: 8px; font-weight: normal;">URL do Google My Business</label>
                               <input type="url" value="${comp.url_google_business || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                             </div>
                             
@@ -930,23 +930,23 @@ export const Companies: React.FC = () => {
                               <h4 style="margin: 0 0 12px 0; font-weight: 600; color: #374151;">Redes Sociais</h4>
                               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Facebook</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Facebook</label>
                                   <input type="url" value="${comp.redes_sociais?.facebook || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Instagram</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Instagram</label>
                                   <input type="url" value="${comp.redes_sociais?.instagram || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">LinkedIn</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">LinkedIn</label>
                                   <input type="url" value="${comp.redes_sociais?.linkedin || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">Twitter</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">Twitter</label>
                                   <input type="url" value="${comp.redes_sociais?.twitter || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                                 <div>
-                                  <label style="display: block; margin-bottom: 8px; font-weight: 500;">YouTube</label>
+                                  <label style="display: block; margin-bottom: 8px; font-weight: normal;">YouTube</label>
                                   <input type="url" value="${comp.redes_sociais?.youtube || ''}" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;" />
                                 </div>
                               </div>
@@ -970,11 +970,11 @@ export const Companies: React.FC = () => {
                         <div style="padding: 24px; border-top: 1px solid #e2e8f0; display: flex; gap: 12px; justify-content: flex-end;">
                           <button onclick="document.getElementById('edit-modal-direct').remove()" style="
                             padding: 10px 20px; border: 1px solid #d1d5db; background-color: white; color: #374151;
-                            border-radius: 6px; cursor: pointer; font-weight: 500;
+                            border-radius: 6px; cursor: pointer; font-weight: normal;
                           ">Cancelar</button>
                           <button onclick="alert('Dados salvos com sucesso!'); document.getElementById('edit-modal-direct').remove()" style="
                             padding: 10px 20px; border: none; background-color: #3b82f6; color: white;
-                            border-radius: 6px; cursor: pointer; font-weight: 500;
+                            border-radius: 6px; cursor: pointer; font-weight: normal;
                           ">Salvar Alterações</button>
                         </div>
                       </div>
