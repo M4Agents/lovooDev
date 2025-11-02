@@ -166,7 +166,25 @@ export const Settings: React.FC = () => {
     setSavingCompany(true);
     try {
       // Preparar dados para envio (remover campos que não devem ser alterados)
-      const { domain, plan, status, ...updateData } = companyData;
+      const { domain, plan, status, ...rawData } = companyData;
+      
+      // Limpar campos vazios e tratar datas
+      const updateData = Object.entries(rawData).reduce((acc, [key, value]) => {
+        // Tratar campos de data - converter string vazia para null
+        if (key === 'data_fundacao') {
+          acc[key] = (typeof value === 'string' && value.trim() !== '') ? value : null;
+        }
+        // Tratar outros campos específicos - converter string vazia para null
+        else if (typeof value === 'string' && value.trim() === '' && 
+                 ['inscricao_estadual', 'inscricao_municipal', 'tipo_empresa', 'porte_empresa'].includes(key)) {
+          acc[key] = null;
+        }
+        // Manter valor original para outros campos
+        else {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as any);
       
       console.log('🔄 Salvando dados da empresa:', { companyId: company.id, updateData });
       
@@ -182,6 +200,8 @@ export const Settings: React.FC = () => {
       let errorMessage = 'Erro ao salvar dados da empresa';
       if (error instanceof Error) {
         errorMessage += ': ' + error.message;
+      } else if (typeof error === 'object' && error !== null && 'message' in error) {
+        errorMessage += ': ' + (error as any).message;
       }
       
       alert(errorMessage);
