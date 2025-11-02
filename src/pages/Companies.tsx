@@ -544,6 +544,7 @@ export const Companies: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  console.log('Botão Editar clicado para empresa:', comp.name);
                   setEditingCompanyData(comp);
                   setEditCompanyData({
                     // Dados básicos
@@ -601,6 +602,7 @@ export const Companies: React.FC = () => {
                   });
                   setEditActiveTab('dados-principais');
                   setShowEditModal(true);
+                  console.log('Modal deve abrir agora - showEditModal:', true);
                 }}
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
@@ -2080,7 +2082,7 @@ export const Companies: React.FC = () => {
 
       {/* Modal de Edição com Abas Cadastrais */}
       {showEditModal && editingCompanyData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-xl font-semibold text-slate-900">
