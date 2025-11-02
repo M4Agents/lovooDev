@@ -2093,8 +2093,27 @@ export const Companies: React.FC = () => {
         console.log('Renderizando modal - showEditModal:', showEditModal, 'editingCompanyData:', editingCompanyData);
         return true;
       })() && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+          style={{ 
+            zIndex: 99999, 
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)'
+          }}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            style={{ 
+              position: 'relative',
+              zIndex: 100000,
+              maxWidth: '1024px',
+              maxHeight: '90vh'
+            }}
+          >
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-xl font-semibold text-slate-900">
                 Editar Empresa - {editingCompanyData.name}
