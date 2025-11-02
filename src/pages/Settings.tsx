@@ -590,7 +590,357 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Outras abas serão adicionadas aqui */}
+      {/* Aba Empresas com Sub-abas */}
+      {activeTab === 'empresas' && (
+        <div className="space-y-6">
+          {/* Sub-abas da Empresa */}
+          <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
+            <button
+              onClick={() => setEmpresasTab('dados-principais')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                empresasTab === 'dados-principais'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building className="w-4 h-4" />
+              Dados Principais
+            </button>
+            <button
+              onClick={() => setEmpresasTab('endereco')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                empresasTab === 'endereco'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              Endereço
+            </button>
+            <button
+              onClick={() => setEmpresasTab('contatos')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                empresasTab === 'contatos'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Phone className="w-4 h-4" />
+              Contatos
+            </button>
+            <button
+              onClick={() => setEmpresasTab('dominios')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                empresasTab === 'dominios'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              Domínios & URLs
+            </button>
+          </div>
+
+          {/* Conteúdo das Sub-abas */}
+          {empresasTab === 'dados-principais' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Building className="w-5 h-5 text-orange-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Dados Principais</h2>
+              </div>
+
+              <form onSubmit={handleSaveCompany} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Nome da Empresa *
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.name}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Nome da sua empresa"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Nome Fantasia
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.nome_fantasia}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Nome fantasia"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      CNPJ
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.cnpj}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="00.000.000/0000-00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Razão Social
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.razao_social}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, razao_social: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Razão social da empresa"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-900 mb-2">Informações da Conta</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-orange-800">Tipo:</span>
+                      <span className="ml-2 text-orange-700">
+                        {company?.is_super_admin ? 'Super Admin' : 'Empresa Filha'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-orange-800">Plano:</span>
+                      <span className="ml-2 text-orange-700 capitalize">
+                        {company?.plan === 'basic' ? 'Básico' : 
+                         company?.plan === 'pro' ? 'Pro' : 
+                         company?.plan === 'enterprise' ? 'Enterprise' : 
+                         company?.plan || 'Não definido'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingCompany}
+                  className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingCompany ? 'Salvando...' : 'Salvar Dados Principais'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {empresasTab === 'endereco' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <MapPin className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
+              </div>
+
+              <form onSubmit={handleSaveCompany} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      CEP
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.cep}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, cep: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="00000-000"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Logradouro
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.logradouro}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, logradouro: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Rua, Avenida, etc."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Cidade
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.cidade}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, cidade: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Cidade"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Estado/UF
+                    </label>
+                    <select
+                      value={companyData.estado}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, estado: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="SP">São Paulo</option>
+                      <option value="RJ">Rio de Janeiro</option>
+                      <option value="MG">Minas Gerais</option>
+                      <option value="RS">Rio Grande do Sul</option>
+                      <option value="PR">Paraná</option>
+                      <option value="SC">Santa Catarina</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingCompany}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingCompany ? 'Salvando...' : 'Salvar Endereço'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {empresasTab === 'contatos' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Phone className="w-5 h-5 text-green-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Contatos</h2>
+              </div>
+
+              <form onSubmit={handleSaveCompany} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Telefone Principal
+                    </label>
+                    <input
+                      type="text"
+                      value={companyData.telefone_principal}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_principal: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Email Principal
+                    </label>
+                    <input
+                      type="email"
+                      value={companyData.email_principal}
+                      onChange={(e) => setCompanyData(prev => ({ ...prev, email_principal: e.target.value }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="contato@empresa.com"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingCompany}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingCompany ? 'Salvando...' : 'Salvar Contatos'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {empresasTab === 'dominios' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Globe className="w-5 h-5 text-purple-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Domínios & URLs</h2>
+              </div>
+
+              <form onSubmit={handleSaveCompany} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    URL do Google My Business
+                  </label>
+                  <input
+                    type="url"
+                    value={companyData.url_google_business}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, url_google_business: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="https://goo.gl/maps/..."
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Facebook
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.facebook}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
+                      }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://facebook.com/..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Instagram
+                    </label>
+                    <input
+                      type="url"
+                      value={companyData.redes_sociais.instagram}
+                      onChange={(e) => setCompanyData(prev => ({ 
+                        ...prev, 
+                        redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
+                      }))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://instagram.com/..."
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingCompany}
+                  className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingCompany ? 'Salvando...' : 'Salvar Domínios & URLs'}
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
