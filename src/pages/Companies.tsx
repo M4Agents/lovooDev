@@ -13,9 +13,10 @@ export const Companies: React.FC = () => {
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [createdCompany, setCreatedCompany] = useState<any>(null);
   
-  // Estados para modal de edição com abas cadastrais
+  // Estados para modal de edição com abas cadastrais - PROTEGIDOS
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCompanyData, setEditingCompanyData] = useState<any>(null);
+  const [modalForceOpen, setModalForceOpen] = useState(false);
   const [editActiveTab, setEditActiveTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   const [editCompanyData, setEditCompanyData] = useState({
     // Dados Principais
@@ -622,7 +623,9 @@ export const Companies: React.FC = () => {
                     
                     console.log('🚀 Definindo showEditModal = true');
                     setShowEditModal(true);
+                    setModalForceOpen(true);
                     console.log('✅ Estados definidos - Modal deve abrir agora');
+                    console.log('🔒 FORÇA MODAL ABERTO - modalForceOpen = true');
                     
                     // Verificar estado após um pequeno delay
                     setTimeout(() => {
@@ -2118,8 +2121,8 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
-      {/* TESTE: Modal Simples */}
-      {showEditModal && (
+      {/* TESTE: Modal Simples - FORÇADO */}
+      {(showEditModal || modalForceOpen) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -2142,7 +2145,10 @@ export const Companies: React.FC = () => {
             <p>showEditModal: {String(showEditModal)}</p>
             <p>editingCompanyData: {editingCompanyData ? editingCompanyData.name : 'null'}</p>
             <button 
-              onClick={() => setShowEditModal(false)}
+              onClick={() => {
+                setShowEditModal(false);
+                setModalForceOpen(false);
+              }}
               style={{
                 padding: '10px 20px',
                 backgroundColor: '#3b82f6',
