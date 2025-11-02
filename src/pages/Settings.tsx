@@ -250,7 +250,7 @@ export const Settings: React.FC = () => {
       {/* Aba Configurações Técnicas */}
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-100 rounded-lg">
               <Key className="w-5 h-5 text-blue-600" />
@@ -320,10 +320,9 @@ export const Settings: React.FC = () => {
             </button>
           </form>
         </div>
-      </div>
 
-      {/* Webhook de Conversão */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        {/* Webhook de Conversão */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-purple-100 rounded-lg">
             <Webhook className="w-5 h-5 text-purple-600" />
@@ -483,21 +482,15 @@ export const Settings: React.FC = () => {
   }
 }`}
         </pre>
-      </div>
+        </div>
         </div>
       )}
 
-      {/* Aba Dados Principais */}
-      {activeTab === 'dados-principais' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <Building className="w-5 h-5 text-orange-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-900">Dados Principais</h2>
-          </div>
-
-          <form onSubmit={handleSaveCompany} className="space-y-6">
+      {/* Aba Empresas com Sub-abas */}
+      {activeTab === 'empresas' && (
+        <div className="space-y-6">
+          {/* Sub-abas da Empresa */}
+          <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
