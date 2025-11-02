@@ -10,7 +10,7 @@ export const Settings: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
-  // Estados para abas principais
+  // Estados para abas cadastrais (apenas para empresas filhas ou quando super admin acessa configurações)
   const [activeTab, setActiveTab] = useState<'settings' | 'empresas'>('settings');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   const [companyData, setCompanyData] = useState({
@@ -64,6 +64,9 @@ export const Settings: React.FC = () => {
   const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
+    console.log('Settings: useEffect triggered, company:', company);
+    console.log('Settings: company.api_key:', company?.api_key);
+    
     if (company) {
       setWebhookUrl(company.webhook_url || '');
       loadWebhookLogs();
@@ -125,17 +128,46 @@ export const Settings: React.FC = () => {
         url_google_business: company.url_google_business || ''
       }));
     } 
+    // Se não tem company mas está impersonating, carregar logs pelo localStorage
+    else if (localStorage.getItem('lovoo_crm_impersonating') === 'true') {
+      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
+      console.log('Settings: No company but impersonating, using localStorage ID:', impersonatedCompanyId);
+      
+      if (impersonatedCompanyId) {
+        loadWebhookLogsById(impersonatedCompanyId);
+      }
+    }
+    // Se não tem company e não está impersonating, parar loading
+    else {
+      console.log('Settings: No company and not impersonating, stopping loading');
+      setLoadingLogs(false);
+    }
   }, [company]);
 
   const loadWebhookLogs = async () => {
+    if (!company) return;
+
     try {
-      setLoadingLogs(true);
-      const response = await api.getWebhookLogs();
-      setLogs(response || []);
+      const data = await api.getWebhookLogs(company.id);
+      setLogs(data);
     } catch (error) {
       console.error('Error loading webhook logs:', error);
-      setLogs([]);
     } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const loadWebhookLogsById = async (companyId: string) => {
+    console.log('Settings: loadWebhookLogsById called for:', companyId);
+
+    try {
+      const data = await api.getWebhookLogs(companyId);
+      console.log('Settings: Webhook logs loaded:', data);
+      setLogs(data);
+    } catch (error) {
+      console.error('Settings: Error loading webhook logs by ID:', error);
+    } finally {
+      console.log('Settings: Setting loadingLogs to false');
       setLoadingLogs(false);
     }
   };
@@ -146,7 +178,7 @@ export const Settings: React.FC = () => {
 
     setSaving(true);
     try {
-      await api.updateCompany(company.id, { webhook_url: webhookUrl });
+      await api.updateCompanyWebhook(company.id, webhookUrl);
       await refreshCompany();
       alert('Webhook URL atualizada com sucesso!');
     } catch (error) {
@@ -219,74 +251,335 @@ export const Settings: React.FC = () => {
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Key className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Key className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">API Key</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Sua API Key (usada nos scripts de tracking)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={company?.api_key || 'Carregando...'}
+                  readOnly
+                  className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                />
+                <button
+                  onClick={() => copyToClipboard(company?.api_key || '')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Copiar
+                </button>
               </div>
-              <h2 className="text-lg font-semibold text-slate-900">API Key</h2>
+              <p className="text-xs text-slate-500 mt-2">
+                Use esta chave para identificar sua empresa nas requisições de tracking
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Webhook Personalizado */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Webhook className="w-5 h-5 text-green-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900">Webhook Personalizado</h2>
+          </div>
+
+          <form onSubmit={handleSaveWebhook} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                URL do Webhook
+              </label>
+              <input
+                type="url"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://seu-site.com/webhook"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Enviaremos dados de conversão com analytics comportamental para esta URL
+              </p>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Sua API Key (usada nos scripts de tracking)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={company?.api_key || 'Carregando...'}
-                    readOnly
-                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(company?.api_key || '')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                  >
-                    Copiar
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Use esta chave para identificar sua empresa nas requisições de tracking
-                </p>
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? 'Salvando...' : 'Salvar Webhook'}
+            </button>
+          </form>
+        </div>
+
+        {/* Webhook de Conversão */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-purple-100 rounded-lg">
+            <Webhook className="w-5 h-5 text-purple-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900">Webhook de Conversão</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                URL do Webhook para Formulários
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={company?.api_key ? 
+                    `https://app.lovoocrm.com/api/webhook-conversion?api_key=${company.api_key}` : 
+                    'Carregando API key...'
+                  }
+                  readOnly
+                  className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                />
+                <button
+                  onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook-conversion?api_key=${company?.api_key || ''}`)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Use esta URL nos seus formulários para capturar conversões automaticamente
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Como usar no formulário:</h4>
+              <div className="space-y-2 text-sm text-blue-800">
+                <p><strong>Método:</strong> POST</p>
+                <p><strong>Content-Type:</strong> application/json</p>
+                <p><strong>Dados obrigatórios:</strong></p>
+                <ul className="list-disc list-inside ml-4 space-y-1">
+                  <li><code>tracking_code</code>: Código da landing page</li>
+                  <li><code>form_data</code>: Dados do formulário (nome, email, telefone, etc.)</li>
+                </ul>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Webhook className="w-5 h-5 text-green-600" />
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="font-medium text-green-900 mb-2">Script automático para formulários:</h4>
+              <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                <div className="text-slate-600">{`<!-- Adicionar no final da página -->`}</div>
+                <div>{`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>`}</div>
+                <div>{`<script>`}</div>
+                <div className="ml-2">{`ConversionTracker.init('SEU_TRACKING_CODE');`}</div>
+                <div className="ml-2">{`ConversionTracker.autoTrack(); // Captura todos os formulários`}</div>
+                <div>{`</script>`}</div>
               </div>
-              <h2 className="text-lg font-semibold text-slate-900">Webhook Personalizado</h2>
+              <button
+                onClick={() => copyToClipboard(`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>
+<script>
+  ConversionTracker.init('SEU_TRACKING_CODE');
+  ConversionTracker.autoTrack();
+</script>`)}
+                className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-medium transition-colors"
+              >
+                Copiar Script
+              </button>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <form onSubmit={handleSaveWebhook} className="space-y-4">
+      {/* Logs de Webhook */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-purple-100 rounded-lg">
+            <Clock className="w-5 h-5 text-purple-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900">Logs de Webhook</h2>
+        </div>
+
+        {loadingLogs ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="text-slate-600 text-center py-8">Nenhum webhook enviado ainda</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data/Hora</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">URL</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Status</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Resposta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-3 px-4 text-sm text-slate-900">
+                      {new Date(log.sent_at).toLocaleString('pt-BR')}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600 max-w-xs truncate">
+                      {log.webhook_url}
+                    </td>
+                    <td className="py-3 px-4 text-sm">
+                      {log.response_status ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            log.response_status >= 200 && log.response_status < 300
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {log.response_status}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          Erro
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-600 max-w-md truncate">
+                      {log.error_message || log.response_body || 'Sucesso'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm p-6 text-white">
+        <h2 className="text-lg font-semibold mb-4">Exemplo de Payload do Webhook</h2>
+        <pre className="bg-slate-950 rounded-lg p-4 text-sm overflow-x-auto text-slate-100">
+{`{
+  "conversion_data": {
+    "name": "João Silva",
+    "email": "joao@email.com",
+    "phone": "11999999999"
+  },
+  "behavior_analytics": {
+    "session_duration": 245,
+    "scroll_depth": "85%",
+    "sections_viewed": ["hero", "about", "services"],
+    "total_clicks": 7,
+    "cta_clicks": 3,
+    "engagement_score": 8.5,
+    "device_type": "desktop",
+    "time_to_convert": 180
+  }
+}`}
+        </pre>
+        </div>
+        </div>
+      )}
+
+      {/* Aba Empresas com Sub-abas */}
+      {activeTab === 'empresas' && (
+        <div className="space-y-6">
+          {/* Sub-abas da Empresa */}
+          <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  URL do Webhook
+                  Nome da Empresa *
                 </label>
                 <input
-                  type="url"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://seu-site.com/webhook"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  type="text"
+                  value={companyData.name}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome da sua empresa"
+                  required
                 />
-                <p className="text-xs text-slate-500 mt-2">
-                  Enviaremos dados de conversão com analytics comportamental para esta URL
-                </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? 'Salvando...' : 'Salvar Webhook'}
-              </button>
-            </form>
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nome Fantasia
+                </label>
+                <input
+                  type="text"
+                  value={companyData.nome_fantasia}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nome fantasia"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  CNPJ
+                </label>
+                <input
+                  type="text"
+                  value={companyData.cnpj}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="00.000.000/0000-00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tipo de Empresa
+                </label>
+                <select
+                  value={companyData.tipo_empresa}
+                  onChange={(e) => setCompanyData(prev => ({ ...prev, tipo_empresa: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Selecione</option>
+                  <option value="MEI">MEI</option>
+                  <option value="Ltda">Ltda</option>
+                  <option value="SA">SA</option>
+                  <option value="EIRELI">EIRELI</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <h4 className="font-medium text-orange-900 mb-2">Informações da Conta</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-orange-800">Tipo:</span>
+                  <span className="ml-2 text-orange-700">
+                    {company?.is_super_admin ? 'Super Admin' : 'Empresa Filha'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-orange-800">Plano:</span>
+                  <span className="ml-2 text-orange-700 capitalize">
+                    {company?.plan === 'basic' ? 'Básico' : 
+                     company?.plan === 'pro' ? 'Pro' : 
+                     company?.plan === 'enterprise' ? 'Enterprise' : 
+                     company?.plan || 'Não definido'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingCompany}
+              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {savingCompany ? 'Salvando...' : 'Salvar Dados Principais'}
+            </button>
+          </form>
         </div>
       )}
 
