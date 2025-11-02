@@ -543,10 +543,14 @@ export const Companies: React.FC = () => {
                 <UserCog className="w-4 h-4" />
               </button>
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   console.log('Botão Editar clicado para empresa:', comp.name);
-                  setEditingCompanyData(comp);
-                  setEditCompanyData({
+                  console.log('Dados da empresa:', comp);
+                  try {
+                    setEditingCompanyData(comp);
+                    setEditCompanyData({
                     // Dados básicos
                     name: comp.name || '',
                     domain: comp.domain || '',
@@ -599,10 +603,14 @@ export const Companies: React.FC = () => {
                       youtube: comp.redes_sociais?.youtube || ''
                     },
                     url_google_business: comp.url_google_business || ''
-                  });
-                  setEditActiveTab('dados-principais');
-                  setShowEditModal(true);
-                  console.log('Modal deve abrir agora - showEditModal:', true);
+                    });
+                    setEditActiveTab('dados-principais');
+                    setShowEditModal(true);
+                    console.log('Modal deve abrir agora - showEditModal:', true);
+                  } catch (error) {
+                    console.error('Erro ao abrir modal:', error);
+                    alert('Erro ao abrir modal de edição');
+                  }
                 }}
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
@@ -2081,7 +2089,10 @@ export const Companies: React.FC = () => {
       )}
 
       {/* Modal de Edição com Abas Cadastrais */}
-      {showEditModal && editingCompanyData && (
+      {showEditModal && editingCompanyData && (() => {
+        console.log('Renderizando modal - showEditModal:', showEditModal, 'editingCompanyData:', editingCompanyData);
+        return true;
+      })() && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-slate-200">
