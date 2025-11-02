@@ -745,6 +745,18 @@ export const api = {
     responsible_user_id?: string;
     visitor_id?: string;
     custom_fields?: Record<string, any>;
+    // Campos da empresa
+    company_name?: string;
+    company_cnpj?: string;
+    company_razao_social?: string;
+    company_nome_fantasia?: string;
+    company_cep?: string;
+    company_cidade?: string;
+    company_estado?: string;
+    company_endereco?: string;
+    company_telefone?: string;
+    company_email?: string;
+    company_site?: string;
   }) {
     console.log('API: createLead called with:', data);
     
@@ -854,6 +866,18 @@ export const api = {
     responsible_user_id?: string;
     visitor_id?: string;
     custom_fields?: Record<string, any>;
+    // Campos da empresa
+    company_name?: string;
+    company_cnpj?: string;
+    company_razao_social?: string;
+    company_nome_fantasia?: string;
+    company_cep?: string;
+    company_cidade?: string;
+    company_estado?: string;
+    company_endereco?: string;
+    company_telefone?: string;
+    company_email?: string;
+    company_site?: string;
   }) {
     console.log('API: updateLead called with:', { leadId, updates });
     
@@ -1056,6 +1080,18 @@ export const api = {
     origin?: string;
     status?: string;
     interest?: string;
+    // Campos da empresa
+    company_name?: string;
+    company_cnpj?: string;
+    company_razao_social?: string;
+    company_nome_fantasia?: string;
+    company_cep?: string;
+    company_cidade?: string;
+    company_estado?: string;
+    company_endereco?: string;
+    company_telefone?: string;
+    company_email?: string;
+    company_site?: string;
     [key: string]: any;
   }>) {
     console.log('API: importLeads called with:', { companyId, count: leads.length });

@@ -21,7 +21,19 @@ export default async function handler(req, res) {
       status = 'novo',
       interest,
       visitor_id,
-      custom_fields
+      custom_fields,
+      // Campos da empresa
+      company_name,
+      company_cnpj,
+      company_razao_social,
+      company_nome_fantasia,
+      company_cep,
+      company_cidade,
+      company_estado,
+      company_endereco,
+      company_telefone,
+      company_email,
+      company_site
     } = req.body;
 
     // Validar API Key
@@ -60,7 +72,19 @@ export default async function handler(req, res) {
       origin,
       status,
       interest: interest || null,
-      visitor_id: visitor_id || null
+      visitor_id: visitor_id || null,
+      // Campos da empresa
+      company_name: company_name || null,
+      company_cnpj: company_cnpj || null,
+      company_razao_social: company_razao_social || null,
+      company_nome_fantasia: company_nome_fantasia || null,
+      company_cep: company_cep || null,
+      company_cidade: company_cidade || null,
+      company_estado: company_estado || null,
+      company_endereco: company_endereco || null,
+      company_telefone: company_telefone || null,
+      company_email: company_email || null,
+      company_site: company_site || null
     };
 
     const { data: lead, error: leadError } = await supabase
