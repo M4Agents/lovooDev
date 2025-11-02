@@ -134,6 +134,8 @@ export const Companies: React.FC = () => {
 
   useEffect(() => {
     console.log('🔄 useEffect executado - company:', company?.name, 'is_super_admin:', company?.is_super_admin);
+    console.log('🔄 useEffect - showEditModal atual:', showEditModal, 'editingCompanyData:', !!editingCompanyData);
+    
     if (company?.is_super_admin) {
       loadCompanies();
     } else if (company) {
@@ -195,6 +197,11 @@ export const Companies: React.FC = () => {
       }));
     }
   }, [company]);
+
+  // useEffect separado para debug - não interfere com estados do modal
+  useEffect(() => {
+    console.log('🔄 MODAL STATES CHANGED - showEditModal:', showEditModal, 'editingCompanyData:', !!editingCompanyData);
+  }, [showEditModal, editingCompanyData]);
 
   const loadCompanies = async () => {
     if (!company || !company.is_super_admin) return;
