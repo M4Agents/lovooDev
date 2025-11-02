@@ -2102,8 +2102,48 @@ export const Companies: React.FC = () => {
         </div>
       )}
 
+      {/* TESTE: Modal Simples */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255, 0, 0, 0.8)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '40px',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <h2>🎯 MODAL DE TESTE FUNCIONANDO!</h2>
+            <p>showEditModal: {String(showEditModal)}</p>
+            <p>editingCompanyData: {editingCompanyData ? editingCompanyData.name : 'null'}</p>
+            <button 
+              onClick={() => setShowEditModal(false)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Edição Funcional */}
-      {showEditModal && editingCompanyData && (() => {
+      {false && showEditModal && editingCompanyData && (() => {
         console.log('🔍 Renderizando modal - showEditModal:', showEditModal, 'editingCompanyData:', !!editingCompanyData);
         return true;
       })() && (
@@ -2120,6 +2160,13 @@ export const Companies: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '20px'
+          }}
+          onLoad={() => console.log('🎯 MODAL RENDERIZADO COM SUCESSO!')}
+          ref={(el) => {
+            if (el) {
+              console.log('🎯 MODAL DOM ELEMENT CRIADO:', el);
+              console.log('🎯 MODAL VISÍVEL:', el.style.display !== 'none');
+            }
           }}
           onClick={() => {
             setShowEditModal(false);
