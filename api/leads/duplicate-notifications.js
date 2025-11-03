@@ -34,11 +34,53 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Buscar notificações pendentes
-      const { data: notifications, error } = await supabase
+      // Buscar notificações pendentes - Tentativa 1: RPC
+      console.log('Chamando RPC com company_id:', companyId);
+      let { data: notifications, error } = await supabase
         .rpc('get_pending_duplicate_notifications', { 
           p_company_id: companyId 
         });
+      
+      console.log('Resultado da RPC:', { notifications, error });
+      
+      // Tentativa 2: Query direta se RPC falhar
+      if (!notifications || notifications.length === 0) {
+        console.log('RPC retornou vazio, tentando query direta...');
+        
+        const { data: directQuery, error: directError } = await supabase
+          .from('duplicate_notifications')
+          .select(`
+            id,
+            lead_id,
+            duplicate_of_lead_id,
+            reason,
+            created_at,
+            leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
+            leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
+          `)
+          .eq('company_id', companyId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+          
+        console.log('Resultado query direta:', { directQuery, directError });
+        
+        if (!directError && directQuery) {
+          // Transformar dados para formato esperado
+          notifications = directQuery.map(n => ({
+            notification_id: n.id,
+            lead_id: n.lead_id,
+            lead_name: n.leads?.name || 'N/A',
+            lead_email: n.leads?.email || '',
+            lead_phone: n.leads?.phone || '',
+            duplicate_of_lead_id: n.duplicate_of_lead_id,
+            duplicate_name: n.leads?.name || 'N/A',
+            duplicate_email: n.leads?.email || '',
+            duplicate_phone: n.leads?.phone || '',
+            reason: n.reason,
+            created_at: n.created_at
+          }));
+        }
+      }
 
       if (error) {
         console.error('Erro ao buscar notificações:', error);
