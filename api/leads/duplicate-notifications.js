@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       
       const startTime = Date.now();
       
-      // Query direta que replica a lógica da RPC
+      // Query direta simples sem JOIN (vamos buscar leads separadamente)
       const { data: notifications, error } = await supabase
         .from('duplicate_notifications')
         .select(`
@@ -59,9 +59,7 @@ export default async function handler(req, res) {
           lead_id,
           duplicate_of_lead_id,
           reason,
-          created_at,
-          leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
-          leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
+          created_at
         `)
         .eq('company_id', companyId)
         .eq('status', 'pending')
@@ -81,39 +79,51 @@ export default async function handler(req, res) {
       console.log('=== PROCESSAMENTO ===');
       console.log('Iniciando processamento de', notifications?.length || 0, 'notificações');
       
-      // Processar dados da query direta
+      // Buscar dados dos leads separadamente
       let enrichedNotifications = [];
       if (notifications && notifications.length > 0) {
-        console.log(`Processando ${notifications.length} notificações da query direta...`);
+        console.log(`Processando ${notifications.length} notificações...`);
         
-        // Log das primeiras notificações para debug
-        notifications.slice(0, 3).forEach((notif, index) => {
-          const leadNew = Array.isArray(notif.leads) ? notif.leads[0] : notif.leads;
-          console.log(`Notificação ${index}:`, {
-            id: notif.id,
-            lead_id: notif.lead_id,
-            lead_data: leadNew,
-            reason: notif.reason
-          });
+        // Coletar IDs únicos dos leads
+        const leadIds = new Set();
+        notifications.forEach(notif => {
+          leadIds.add(notif.lead_id);
+          leadIds.add(notif.duplicate_of_lead_id);
         });
         
-        enrichedNotifications = notifications.map(notif => {
-          // Extrair dados dos leads (podem vir como array ou objeto)
-          const leadNew = Array.isArray(notif.leads) ? notif.leads[0] : notif.leads;
-          const leadExisting = Array.isArray(notif.leads) ? notif.leads[1] : null;
+        console.log('Buscando dados de', leadIds.size, 'leads únicos');
+        
+        // Buscar todos os leads de uma vez
+        const { data: leads, error: leadsError } = await supabase
+          .from('leads')
+          .select('id, name, email, phone')
+          .in('id', Array.from(leadIds));
           
-          // Se não temos o lead existente separado, vamos buscar pelos IDs
-          // Por enquanto, vamos usar os dados que temos
+        console.log('Leads encontrados:', leads?.length || 0);
+        if (leadsError) {
+          console.error('Erro ao buscar leads:', leadsError);
+        }
+        
+        // Criar mapa de leads por ID
+        const leadsMap = new Map();
+        if (leads) {
+          leads.forEach(lead => leadsMap.set(lead.id, lead));
+        }
+        
+        // Processar notificações com dados dos leads
+        enrichedNotifications = notifications.map(notif => {
+          const leadNew = leadsMap.get(notif.lead_id);
+          const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
           
           // Determinar qual campo está duplicado e seu valor
           let duplicateFieldValue = '';
           let reasonLabel = '';
           
           if (notif.reason === 'phone') {
-            duplicateFieldValue = leadNew?.phone || '';
+            duplicateFieldValue = leadNew?.phone || leadExisting?.phone || '';
             reasonLabel = 'Telefone';
           } else if (notif.reason === 'email') {
-            duplicateFieldValue = leadNew?.email || '';
+            duplicateFieldValue = leadNew?.email || leadExisting?.email || '';
             reasonLabel = 'Email';
           }
           
@@ -124,7 +134,7 @@ export default async function handler(req, res) {
             lead_email: leadNew?.email || '',
             lead_phone: leadNew?.phone || '',
             duplicate_of_lead_id: notif.duplicate_of_lead_id,
-            duplicate_name: leadExisting?.name || 'Carregando...',
+            duplicate_name: leadExisting?.name || 'Lead não encontrado',
             duplicate_email: leadExisting?.email || '',
             duplicate_phone: leadExisting?.phone || '',
             reason: notif.reason,
