@@ -225,7 +225,11 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       'cnpj', 'company_cnpj', 'documento',
       'company_email', 'email_empresa', 'corporate_email',
       'company_phone', 'telefone_empresa', 'corporate_phone',
-      'api_key' // Excluir api_key dos campos personalizados
+      'api_key', // Excluir api_key dos campos personalizados
+      // Campos técnicos do sistema (não devem ser personalizados):
+      'visitor_id', 'session_id',
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+      'referrer', 'user_agent', 'ip_address', 'device_type'
     ]);
     
     console.log('Campos padrão definidos:', Array.from(standardFields));
