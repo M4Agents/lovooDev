@@ -484,29 +484,6 @@ export const Settings: React.FC = () => {
             )}
           </div>
 
-          {/* Exemplo de Payload */}
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-sm p-6 text-white">
-            <h2 className="text-lg font-semibold mb-4">Exemplo de Payload do Webhook</h2>
-            <pre className="bg-slate-950 rounded-lg p-4 text-sm overflow-x-auto text-slate-100">
-{`{
-  "conversion_data": {
-    "name": "João Silva",
-    "email": "joao@email.com",
-    "phone": "11999999999"
-  },
-  "behavior_analytics": {
-    "session_duration": 245,
-    "scroll_depth": "85%",
-    "sections_viewed": ["hero", "about", "services"],
-    "total_clicks": 7,
-    "cta_clicks": 3,
-    "engagement_score": 8.5,
-    "device_type": "desktop",
-    "time_to_convert": 180
-  }
-}`}
-            </pre>
-          </div>
         </div>
       )}
 
