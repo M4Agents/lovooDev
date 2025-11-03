@@ -108,12 +108,13 @@ async function createLeadDirectSQL(params) {
     
     console.log('Lead criado com ID:', lead.lead_id);
     
-    // 3. Processar visitor_id se fornecido (OPCIONAL - não quebra se não tiver)
+    // 3. Processar conexão visitor-lead (Sistema Híbrido)
     if (params.visitor_id) {
       console.log('Visitor ID detectado:', params.visitor_id);
       await processVisitorConnection(supabase, lead.lead_id, lead.company_id, params.visitor_id, detectedFields);
     } else {
-      console.log('Lead criado sem visitor_id (compatibilidade mantida)');
+      console.log('Visitor ID não fornecido - tentando busca retroativa inteligente');
+      await processRetroactiveVisitorSearch(supabase, lead.lead_id, lead.company_id, detectedFields);
     }
     
     // 4. Processar campos personalizados (mapeamento inteligente)
@@ -378,19 +379,31 @@ async function processVisitorConnection(supabase, leadId, companyId, visitorId, 
         converted_at: new Date().toISOString()
       };
       
-      // 4. Inserir conversão (conecta visitor + lead)
-      const { error: conversionError } = await supabase
+      // 4. Verificar se já existe conversão para este visitor (evitar duplicatas)
+      const { data: existingConversion } = await supabase
         .from('conversions')
-        .insert(conversionData);
+        .select('id')
+        .eq('visitor_id', visitorId)
+        .limit(1)
+        .single();
       
-      if (conversionError) {
-        console.error('Erro ao criar conversão:', conversionError);
-        // NÃO falha o lead - apenas log do erro
+      if (existingConversion) {
+        console.log('Conversão já existe para este visitor - pulando criação');
       } else {
-        console.log('Conversão criada com sucesso - Lead conectado ao analytics');
+        // 5. Inserir conversão (conecta visitor + lead)
+        const { error: conversionError } = await supabase
+          .from('conversions')
+          .insert(conversionData);
+        
+        if (conversionError) {
+          console.error('Erro ao criar conversão:', conversionError);
+          // NÃO falha o lead - apenas log do erro
+        } else {
+          console.log('Conversão criada com sucesso - Lead conectado ao analytics');
+        }
       }
       
-      // 5. Atualizar lead com visitor_id (se campo existir)
+      // 6. Atualizar lead com visitor_id (se campo existir)
       const { error: updateError } = await supabase
         .from('leads')
         .update({ visitor_id: visitorId })
@@ -464,6 +477,81 @@ function calculateEngagementScore(visitorData) {
   
   // Máximo 10
   return Math.min(score, 10);
+}
+
+// NOVA FUNÇÃO: Busca retroativa inteligente (quando não tem visitor_id)
+async function processRetroactiveVisitorSearch(supabase, leadId, companyId, detectedFields) {
+  try {
+    console.log('Iniciando busca retroativa para conectar visitor-lead');
+    
+    // 1. Buscar visitantes recentes que podem corresponder ao lead
+    const potentialVisitors = await findPotentialVisitors(supabase, detectedFields);
+    
+    if (potentialVisitors && potentialVisitors.length > 0) {
+      // 2. Usar o visitante mais recente (mais provável)
+      const bestMatch = potentialVisitors[0];
+      console.log('Possível correspondência encontrada:', bestMatch.visitor_id);
+      
+      // 3. Processar como se tivesse visitor_id
+      await processVisitorConnection(supabase, leadId, companyId, bestMatch.visitor_id, detectedFields);
+      
+    } else {
+      console.log('Nenhum visitante correspondente encontrado - lead criado sem score');
+    }
+    
+  } catch (error) {
+    console.error('Erro na busca retroativa:', error);
+    // NÃO falha o lead - sistema robusto
+  }
+}
+
+// Buscar visitantes que podem corresponder ao lead
+async function findPotentialVisitors(supabase, detectedFields) {
+  try {
+    // Buscar visitantes das últimas 2 horas (janela razoável para conversão)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    
+    const { data: visitors, error } = await supabase
+      .from('visitors')
+      .select('*')
+      .gte('created_at', twoHoursAgo)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    if (error || !visitors || visitors.length === 0) {
+      console.log('Nenhum visitante recente encontrado');
+      return null;
+    }
+    
+    // Filtrar visitantes que fazem sentido
+    const filteredVisitors = visitors.filter(visitor => {
+      // Critérios de correspondência:
+      
+      // 1. Deve ter visitor_id (para remarketing)
+      if (!visitor.visitor_id) return false;
+      
+      // 2. Não deve já ter conversão (evitar duplicatas)
+      // (Isso será verificado na função de conversão)
+      
+      // 3. Preferir visitantes mais recentes
+      const visitTime = new Date(visitor.created_at);
+      const now = new Date();
+      const diffMinutes = (now - visitTime) / (1000 * 60);
+      
+      // Visitantes das últimas 30 minutos têm prioridade
+      if (diffMinutes <= 30) return true;
+      
+      // Visitantes até 2 horas são considerados
+      return diffMinutes <= 120;
+    });
+    
+    console.log(`Encontrados ${filteredVisitors.length} visitantes potenciais`);
+    return filteredVisitors;
+    
+  } catch (error) {
+    console.error('Erro ao buscar visitantes potenciais:', error);
+    return null;
+  }
 }
 
 // Gerar UUID simples

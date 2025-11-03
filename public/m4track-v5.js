@@ -30,6 +30,7 @@
       // Start tracking immediately
       this.trackVisitor();
       this.setupEventListeners();
+      this.setupFormInterception();
     },
     
     generateSessionId: function() {
@@ -219,6 +220,117 @@
     
     get sessionId() {
       return this.config.sessionId;
+    },
+    
+    // NOVO: Interceptação automática de formulários (Sistema Híbrido)
+    setupFormInterception: function() {
+      const self = this;
+      
+      // Aguardar DOM estar pronto
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          self.interceptForms();
+        });
+      } else {
+        self.interceptForms();
+      }
+      
+      // Interceptar formulários adicionados dinamicamente
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          mutation.addedNodes.forEach(function(node) {
+            if (node.nodeType === 1) { // Element node
+              if (node.tagName === 'FORM') {
+                self.interceptForm(node);
+              } else if (node.querySelectorAll) {
+                const forms = node.querySelectorAll('form');
+                forms.forEach(function(form) {
+                  self.interceptForm(form);
+                });
+              }
+            }
+          });
+        });
+      });
+      
+      observer.observe(document.body, { childList: true, subtree: true });
+    },
+    
+    interceptForms: function() {
+      const self = this;
+      const forms = document.querySelectorAll('form');
+      
+      forms.forEach(function(form) {
+        self.interceptForm(form);
+      });
+    },
+    
+    interceptForm: function(form) {
+      const self = this;
+      
+      // Verificar se é um formulário que vai para webhook LovoCRM
+      const action = form.action || form.getAttribute('action') || '';
+      const isWebhookForm = action.includes('webhook-lead') || 
+                           action.includes('lovoocrm.com') ||
+                           action.includes('app.lovoocrm.com');
+      
+      if (!isWebhookForm) {
+        // Verificar se tem campo api_key (indicativo de webhook LovoCRM)
+        const apiKeyField = form.querySelector('input[name="api_key"]');
+        if (!apiKeyField) {
+          return; // Não é formulário LovoCRM
+        }
+      }
+      
+      // Verificar se já foi interceptado
+      if (form.dataset.lovoIntercepted) {
+        return;
+      }
+      
+      form.dataset.lovoIntercepted = 'true';
+      console.log('LovoCRM: Interceptando formulário para webhook');
+      
+      // Interceptar submit
+      form.addEventListener('submit', function(e) {
+        self.enhanceFormSubmission(form, e);
+      });
+    },
+    
+    enhanceFormSubmission: function(form, event) {
+      const self = this;
+      
+      try {
+        // Verificar se já tem visitor_id
+        let visitorIdField = form.querySelector('input[name="visitor_id"]');
+        
+        if (!visitorIdField) {
+          // Criar campo hidden automaticamente
+          visitorIdField = document.createElement('input');
+          visitorIdField.type = 'hidden';
+          visitorIdField.name = 'visitor_id';
+          form.appendChild(visitorIdField);
+        }
+        
+        // Definir visitor_id
+        const visitorId = self.getOrCreateVisitorId();
+        visitorIdField.value = visitorId;
+        
+        console.log('LovoCRM: Visitor ID adicionado automaticamente:', visitorId);
+        
+        // Adicionar session_id também (para dados extras)
+        let sessionIdField = form.querySelector('input[name="session_id"]');
+        if (!sessionIdField) {
+          sessionIdField = document.createElement('input');
+          sessionIdField.type = 'hidden';
+          sessionIdField.name = 'session_id';
+          sessionIdField.value = self.config.sessionId;
+          form.appendChild(sessionIdField);
+        }
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro ao interceptar formulário:', error);
+        // NÃO impede o envio - sistema robusto
+      }
     }
   };
   
