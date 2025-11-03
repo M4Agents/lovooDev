@@ -391,7 +391,7 @@ export const Settings: React.FC = () => {
                   <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                     <div className="text-gray-600">{`// Exemplo de JSON que seu formulário deve enviar:`}</div>
                     <div className="text-green-600 mt-2">{`{`}</div>
-                    <div className="ml-2 text-red-600">{`"api_key": "${company?.api_key || 'SUA_API_KEY_AQUI'}",`}</div>
+                    <div className="ml-2 text-red-600">{`"api_key": "(sua apikey aqui...)",`}</div>
                     <div className="ml-2 text-blue-600">{`"nome": "João Silva",`}</div>
                     <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
                     <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
