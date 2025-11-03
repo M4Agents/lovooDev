@@ -10,6 +10,10 @@ export const Settings: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
+  // Estados para teste do webhook de leads
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<{success: boolean, lead_id?: string, error?: string} | null>(null);
+  
   // Estados para abas principais
   const [activeTab, setActiveTab] = useState<'settings' | 'empresas'>('settings');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
@@ -215,6 +219,52 @@ export const Settings: React.FC = () => {
     alert('Copiado para a área de transferência!');
   };
 
+  const testWebhookLead = async () => {
+    if (!company?.api_key) return;
+    
+    setTestingWebhook(true);
+    setWebhookTestResult(null);
+    
+    try {
+      const testData = {
+        nome: 'Lead de Teste',
+        email: 'teste@lovoocrm.com',
+        telefone: '(11) 99999-9999',
+        empresa: 'Empresa de Teste Ltda',
+        interesse: 'Teste do webhook ultra-simples'
+      };
+      
+      const response = await fetch(`https://app.lovoocrm.com/api/webhook/lead/${company.api_key}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(testData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setWebhookTestResult({
+          success: true,
+          lead_id: result.lead_id
+        });
+      } else {
+        setWebhookTestResult({
+          success: false,
+          error: result.error || 'Erro desconhecido'
+        });
+      }
+    } catch (error) {
+      setWebhookTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro de conexão'
+      });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -393,6 +443,132 @@ export const Settings: React.FC = () => {
                   >
                     Copiar Script
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Webhook Ultra-Simples para Leads */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-emerald-100 rounded-lg">
+                <Webhook className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Webhook Ultra-Simples para Leads</h2>
+                <p className="text-sm text-slate-600">Crie leads automaticamente a partir de qualquer formulário</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* URL do Webhook */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    🚀 URL Ultra-Simples para Leads
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={company?.api_key ? 
+                        `https://app.lovoocrm.com/api/webhook/lead/${company.api_key}` : 
+                        'Carregando API key...'
+                      }
+                      readOnly
+                      className="flex-1 px-4 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-slate-900 font-mono text-sm"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook/lead/${company?.api_key || ''}`)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <p className="text-xs text-emerald-600 mt-2 font-medium">
+                    ✨ Envie qualquer JSON e criamos o lead automaticamente!
+                  </p>
+                </div>
+
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                  <h4 className="font-medium text-emerald-900 mb-2">📋 Como usar (3 passos):</h4>
+                  <div className="space-y-2 text-sm text-emerald-800">
+                    <p><strong>1.</strong> Configure seu formulário para enviar POST para a URL acima</p>
+                    <p><strong>2.</strong> Envie os dados como JSON (nome, email, telefone, etc.)</p>
+                    <p><strong>3.</strong> Pronto! O lead aparece automaticamente no sistema</p>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 mb-2">🔧 Configuração Técnica:</h4>
+                  <div className="space-y-1 text-sm text-blue-800">
+                    <p><strong>Método:</strong> POST</p>
+                    <p><strong>Content-Type:</strong> application/json</p>
+                    <p><strong>Campos detectados automaticamente:</strong></p>
+                    <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
+                      <li>Nome: name, nome, full_name, cliente</li>
+                      <li>Email: email, e-mail, mail</li>
+                      <li>Telefone: phone, telefone, celular, whatsapp</li>
+                      <li>Empresa: company, empresa, company_name</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exemplo e Teste */}
+              <div className="space-y-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo de Uso:</h4>
+                  <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                    <div className="text-gray-600">{`// Exemplo de JSON que seu formulário deve enviar:`}</div>
+                    <div className="text-green-600 mt-2">{`{`}</div>
+                    <div className="ml-2 text-blue-600">{`"nome": "João Silva",`}</div>
+                    <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
+                    <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
+                    <div className="ml-2 text-blue-600">{`"empresa": "Minha Empresa Ltda",`}</div>
+                    <div className="ml-2 text-blue-600">{`"interesse": "Quero saber mais"`}</div>
+                    <div className="text-green-600">{`}`}</div>
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h4 className="font-medium text-yellow-900 mb-2">⚡ Teste Rápido:</h4>
+                  <p className="text-sm text-yellow-800 mb-3">
+                    Clique no botão abaixo para testar se o webhook está funcionando:
+                  </p>
+                  <button
+                    onClick={() => testWebhookLead()}
+                    disabled={!company?.api_key || testingWebhook}
+                    className="w-full flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {testingWebhook ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Testando...
+                      </>
+                    ) : (
+                      <>
+                        <Webhook className="w-4 h-4" />
+                        Testar Webhook
+                      </>
+                    )}
+                  </button>
+                  {webhookTestResult && (
+                    <div className={`mt-3 p-3 rounded-lg text-sm ${
+                      webhookTestResult.success 
+                        ? 'bg-green-100 text-green-800 border border-green-200' 
+                        : 'bg-red-100 text-red-800 border border-red-200'
+                    }`}>
+                      {webhookTestResult.success ? (
+                        <>
+                          ✅ <strong>Sucesso!</strong> Lead de teste criado: {webhookTestResult.lead_id}
+                        </>
+                      ) : (
+                        <>
+                          ❌ <strong>Erro:</strong> {webhookTestResult.error}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
