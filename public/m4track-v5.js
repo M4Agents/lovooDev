@@ -226,41 +226,71 @@
     setupFormInterception: function() {
       const self = this;
       
+      console.log('LovoCRM: Iniciando sistema de interceptação de formulários');
+      
+      // Função para interceptar formulários
+      function interceptExistingForms() {
+        console.log('LovoCRM: Procurando formulários existentes...');
+        self.interceptForms();
+        
+        // Tentar novamente após um delay (para formulários React/dinâmicos)
+        setTimeout(function() {
+          console.log('LovoCRM: Segunda tentativa de interceptação...');
+          self.interceptForms();
+        }, 1000);
+        
+        // Terceira tentativa após mais tempo
+        setTimeout(function() {
+          console.log('LovoCRM: Terceira tentativa de interceptação...');
+          self.interceptForms();
+        }, 3000);
+      }
+      
       // Aguardar DOM estar pronto
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          self.interceptForms();
-        });
+        document.addEventListener('DOMContentLoaded', interceptExistingForms);
       } else {
-        self.interceptForms();
+        interceptExistingForms();
       }
       
       // Interceptar formulários adicionados dinamicamente
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          mutation.addedNodes.forEach(function(node) {
-            if (node.nodeType === 1) { // Element node
-              if (node.tagName === 'FORM') {
-                self.interceptForm(node);
-              } else if (node.querySelectorAll) {
-                const forms = node.querySelectorAll('form');
-                forms.forEach(function(form) {
-                  self.interceptForm(form);
-                });
+      try {
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node && node.nodeType === 1) { // Element node
+                if (node.tagName === 'FORM') {
+                  console.log('LovoCRM: Novo formulário detectado via MutationObserver');
+                  self.interceptForm(node);
+                } else if (node.querySelectorAll) {
+                  const forms = node.querySelectorAll('form');
+                  if (forms.length > 0) {
+                    console.log('LovoCRM: ' + forms.length + ' formulários encontrados em novo elemento');
+                    forms.forEach(function(form) {
+                      self.interceptForm(form);
+                    });
+                  }
+                }
               }
-            }
+            });
           });
         });
-      });
-      
-      observer.observe(document.body, { childList: true, subtree: true });
+        
+        observer.observe(document.body, { childList: true, subtree: true });
+        console.log('LovoCRM: MutationObserver ativo para formulários dinâmicos');
+      } catch (error) {
+        console.error('LovoCRM: Erro ao configurar MutationObserver:', error);
+      }
     },
     
     interceptForms: function() {
       const self = this;
       const forms = document.querySelectorAll('form');
       
-      forms.forEach(function(form) {
+      console.log('LovoCRM: Encontrados ' + forms.length + ' formulários na página');
+      
+      forms.forEach(function(form, index) {
+        console.log('LovoCRM: Analisando formulário ' + (index + 1) + '/' + forms.length);
         self.interceptForm(form);
       });
     },
@@ -268,67 +298,114 @@
     interceptForm: function(form) {
       const self = this;
       
-      // Verificar se é um formulário que vai para webhook LovoCRM
-      const action = form.action || form.getAttribute('action') || '';
-      const isWebhookForm = action.includes('webhook-lead') || 
-                           action.includes('lovoocrm.com') ||
-                           action.includes('app.lovoocrm.com');
-      
-      if (!isWebhookForm) {
-        // Verificar se tem campo api_key (indicativo de webhook LovoCRM)
-        const apiKeyField = form.querySelector('input[name="api_key"]');
-        if (!apiKeyField) {
-          return; // Não é formulário LovoCRM
+      try {
+        // Verificar se já foi interceptado
+        if (form.dataset.lovoIntercepted) {
+          console.log('LovoCRM: Formulário já interceptado, pulando...');
+          return;
         }
+        
+        // Verificar se é um formulário que vai para webhook LovoCRM
+        const action = form.action || form.getAttribute('action') || '';
+        const method = form.method || form.getAttribute('method') || '';
+        
+        console.log('LovoCRM: Analisando formulário - Action:', action, 'Method:', method);
+        
+        // Critérios mais amplos de detecção
+        const isWebhookForm = action.includes('webhook-lead') || 
+                             action.includes('lovoocrm.com') ||
+                             action.includes('app.lovoocrm.com') ||
+                             action.includes('/api/webhook');
+        
+        let isLovoCRMForm = isWebhookForm;
+        
+        if (!isWebhookForm) {
+          // Verificar se tem campo api_key (indicativo de webhook LovoCRM)
+          const apiKeyField = form.querySelector('input[name="api_key"]');
+          const apiKeyValue = apiKeyField ? apiKeyField.value : '';
+          
+          console.log('LovoCRM: Campo api_key encontrado:', !!apiKeyField, 'Valor:', apiKeyValue ? 'presente' : 'vazio');
+          
+          if (apiKeyField && apiKeyValue) {
+            isLovoCRMForm = true;
+            console.log('LovoCRM: Formulário identificado por api_key');
+          }
+        }
+        
+        // Verificar também por outros indicadores
+        if (!isLovoCRMForm) {
+          // Verificar se tem campos típicos de lead
+          const hasLeadFields = form.querySelector('input[name="nome"], input[name="name"], input[name="email"]');
+          const hasHiddenApiKey = form.querySelector('input[type="hidden"][name="api_key"]');
+          
+          if (hasLeadFields && hasHiddenApiKey) {
+            isLovoCRMForm = true;
+            console.log('LovoCRM: Formulário identificado por campos de lead + api_key hidden');
+          }
+        }
+        
+        if (!isLovoCRMForm) {
+          console.log('LovoCRM: Formulário não é LovoCRM, ignorando');
+          return;
+        }
+        
+        form.dataset.lovoIntercepted = 'true';
+        console.log('LovoCRM: ✅ Interceptando formulário LovoCRM!');
+        
+        // Interceptar submit
+        form.addEventListener('submit', function(e) {
+          console.log('LovoCRM: Submit interceptado!');
+          self.enhanceFormSubmission(form, e);
+        });
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro ao interceptar formulário:', error);
       }
-      
-      // Verificar se já foi interceptado
-      if (form.dataset.lovoIntercepted) {
-        return;
-      }
-      
-      form.dataset.lovoIntercepted = 'true';
-      console.log('LovoCRM: Interceptando formulário para webhook');
-      
-      // Interceptar submit
-      form.addEventListener('submit', function(e) {
-        self.enhanceFormSubmission(form, e);
-      });
     },
     
     enhanceFormSubmission: function(form, event) {
       const self = this;
       
       try {
+        console.log('LovoCRM: Enriquecendo envio do formulário...');
+        
         // Verificar se já tem visitor_id
         let visitorIdField = form.querySelector('input[name="visitor_id"]');
         
         if (!visitorIdField) {
+          console.log('LovoCRM: Criando campo visitor_id...');
           // Criar campo hidden automaticamente
           visitorIdField = document.createElement('input');
           visitorIdField.type = 'hidden';
           visitorIdField.name = 'visitor_id';
           form.appendChild(visitorIdField);
+        } else {
+          console.log('LovoCRM: Campo visitor_id já existe');
         }
         
         // Definir visitor_id
         const visitorId = self.getOrCreateVisitorId();
         visitorIdField.value = visitorId;
         
-        console.log('LovoCRM: Visitor ID adicionado automaticamente:', visitorId);
+        console.log('LovoCRM: ✅ Visitor ID adicionado:', visitorId);
         
         // Adicionar session_id também (para dados extras)
         let sessionIdField = form.querySelector('input[name="session_id"]');
         if (!sessionIdField) {
+          console.log('LovoCRM: Criando campo session_id...');
           sessionIdField = document.createElement('input');
           sessionIdField.type = 'hidden';
           sessionIdField.name = 'session_id';
           sessionIdField.value = self.config.sessionId;
           form.appendChild(sessionIdField);
+          console.log('LovoCRM: ✅ Session ID adicionado:', self.config.sessionId);
         }
         
+        // Log final
+        console.log('LovoCRM: ✅ Formulário enriquecido com sucesso! Enviando...');
+        
       } catch (error) {
-        console.error('LovoCRM: Erro ao interceptar formulário:', error);
+        console.error('LovoCRM: ❌ Erro ao enriquecer formulário:', error);
         // NÃO impede o envio - sistema robusto
       }
     }
