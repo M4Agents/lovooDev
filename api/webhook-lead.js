@@ -4,8 +4,9 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 export default async function handler(req, res) {
-  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS');
+  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS - V2');
   console.log('Timestamp:', new Date().toISOString());
+  console.log('Deploy Version: 2025-11-03-20:55 - Campos Técnicos Corrigidos');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
