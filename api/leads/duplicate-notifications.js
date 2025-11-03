@@ -59,18 +59,21 @@ export default async function handler(req, res) {
         
         for (const notif of notifications) {
           // Buscar lead novo
-          const { data: newLead } = await supabase
+          const { data: newLead, error: newLeadError } = await supabase
             .from('leads')
             .select('id, name, email, phone')
             .eq('id', notif.lead_id)
-            .single();
+            .maybeSingle();
             
           // Buscar lead existente
-          const { data: existingLead } = await supabase
+          const { data: existingLead, error: existingLeadError } = await supabase
             .from('leads')
             .select('id, name, email, phone')
             .eq('id', notif.duplicate_of_lead_id)
-            .single();
+            .maybeSingle();
+            
+          if (newLeadError) console.log('Erro ao buscar lead novo:', newLeadError);
+          if (existingLeadError) console.log('Erro ao buscar lead existente:', existingLeadError);
             
           enrichedNotifications.push({
             notification_id: notif.id,
