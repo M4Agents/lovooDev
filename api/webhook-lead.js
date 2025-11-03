@@ -67,21 +67,9 @@ async function createLeadDirectSQL(params) {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // 1. Validar API key e obter empresa
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('id, name')
-      .eq('api_key', params.api_key)
-      .single();
+    console.log('Processando webhook para API key:', params.api_key);
     
-    if (companyError || !company) {
-      console.error('Invalid API key:', params.api_key);
-      return { success: false, error: 'API key inválida' };
-    }
-    
-    console.log('API key validada para empresa:', company.name);
-    
-    // 2. Detectar campos automaticamente
+    // 1. Detectar campos automaticamente
     const detectedFields = detectFormFields(params.form_data);
     
     if (!detectedFields.name && !detectedFields.email) {
@@ -93,40 +81,40 @@ async function createLeadDirectSQL(params) {
     
     console.log('Campos detectados:', detectedFields);
     
-    // 3. Processar campos personalizados (mapeamento inteligente)
-    const customFieldsData = await processCustomFields(supabase, company.id, params.form_data, detectedFields);
-    
-    // 4. Criar lead com campos padrão (apenas campos que existem na tabela)
-    const leadData = {
-      company_id: company.id,
-      name: detectedFields.name || 'Lead sem nome',
-      email: detectedFields.email || null,
-      phone: detectedFields.phone || null,
-      interest: detectedFields.interest || null,
-      // Dados da empresa (campos que existem na tabela leads)
-      company_name: detectedFields.company_name || null,
-      company_cnpj: detectedFields.company_cnpj || null,
-      company_email: detectedFields.company_email || null
-    };
-    
-    // Usar insert direto como sistema atual de leads
+    // 2. Criar lead via RPC (padrão Analytics V5 - contorna RLS)
     const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .insert(leadData)
-      .select('id')
-      .single();
+      .rpc('public_create_lead_webhook', {
+        lead_data: {
+          api_key: params.api_key,
+          name: detectedFields.name || 'Lead sem nome',
+          email: detectedFields.email || null,
+          phone: detectedFields.phone || null,
+          interest: detectedFields.interest || null,
+          company_name: detectedFields.company_name || null,
+          company_cnpj: detectedFields.company_cnpj || null,
+          company_email: detectedFields.company_email || null
+        }
+      });
     
     if (leadError) {
       console.error('Erro ao criar lead:', leadError);
       return { success: false, error: leadError.message };
     }
     
-    console.log('Lead criado com ID:', lead.id);
+    if (!lead || !lead.success) {
+      console.error('RPC falhou:', lead);
+      return { success: false, error: lead?.error || 'Falha ao criar lead' };
+    }
     
-    // 5. Inserir valores dos campos personalizados
+    console.log('Lead criado com ID:', lead.lead_id);
+    
+    // 3. Processar campos personalizados (mapeamento inteligente)
+    const customFieldsData = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
+    
+    // 4. Inserir valores dos campos personalizados
     if (customFieldsData.length > 0) {
       const customValues = customFieldsData.map(field => ({
-        lead_id: lead.id,
+        lead_id: lead.lead_id,
         field_id: field.field_id,
         value: String(field.value)
       }));
@@ -143,7 +131,7 @@ async function createLeadDirectSQL(params) {
       }
     }
     
-    return { success: true, lead_id: lead.id };
+    return { success: true, lead_id: lead.lead_id };
     
   } catch (error) {
     console.error('Exception in createLeadDirectSQL:', error);
