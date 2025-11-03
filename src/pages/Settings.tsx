@@ -208,6 +208,7 @@ export const Settings: React.FC = () => {
     
     try {
       const testData = {
+        api_key: company.api_key,
         nome: 'Lead de Teste',
         email: 'teste@lovoocrm.com',
         telefone: '(11) 99999-9999',
@@ -219,7 +220,7 @@ export const Settings: React.FC = () => {
         fonte_indicacao: 'Teste Automático'
       };
       
-      const response = await fetch(`https://app.lovoocrm.com/api/webhook/lead/${company.api_key}`, {
+      const response = await fetch('https://app.lovoocrm.com/api/webhook-lead', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -308,15 +309,12 @@ export const Settings: React.FC = () => {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={company?.api_key ? 
-                        `https://app.lovoocrm.com/api/webhook/lead/${company.api_key}` : 
-                        'Carregando API key...'
-                      }
+                      value="https://app.lovoocrm.com/api/webhook-lead"
                       readOnly
                       className="flex-1 px-4 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-slate-900 font-mono text-sm"
                     />
                     <button
-                      onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook/lead/${company?.api_key || ''}`)}
+                      onClick={() => copyToClipboard('https://app.lovoocrm.com/api/webhook-lead')}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
                     >
                       Copiar
@@ -331,8 +329,8 @@ export const Settings: React.FC = () => {
                   <h4 className="font-medium text-emerald-900 mb-2">📋 Como usar (3 passos):</h4>
                   <div className="space-y-2 text-sm text-emerald-800">
                     <p><strong>1.</strong> Configure seu formulário para enviar POST para a URL acima</p>
-                    <p><strong>2.</strong> Envie os dados como JSON (nome, email, telefone, etc.)</p>
-                    <p><strong>3.</strong> Pronto! O lead aparece automaticamente no sistema</p>
+                    <p><strong>2.</strong> Inclua sua API Key + dados do formulário em formato JSON</p>
+                    <p><strong>3.</strong> Pronto! O lead será criado automaticamente</p>
                   </div>
                 </div>
 
@@ -360,6 +358,7 @@ export const Settings: React.FC = () => {
                   <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                     <div className="text-gray-600">{`// Exemplo de JSON que seu formulário deve enviar:`}</div>
                     <div className="text-green-600 mt-2">{`{`}</div>
+                    <div className="ml-2 text-red-600">{`"api_key": "${company?.api_key || 'SUA_API_KEY_AQUI'}",`}</div>
                     <div className="ml-2 text-blue-600">{`"nome": "João Silva",`}</div>
                     <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
                     <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
