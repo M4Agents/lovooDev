@@ -190,10 +190,14 @@ function detectFormFields(formData) {
 
 async function processCustomFields(supabase, companyId, formData, detectedFields) {
   try {
-    console.log('Processando campos personalizados...');
+    console.log('=== INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS ===');
+    console.log('Company ID:', companyId);
+    console.log('Form Data recebido:', formData);
+    console.log('Detected Fields:', detectedFields);
     
     // Converter para objeto se necessário
     const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
+    console.log('Dados convertidos:', data);
     
     // Obter campos padrão que já foram detectados
     const standardFields = new Set([
@@ -208,25 +212,44 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       'api_key' // Excluir api_key dos campos personalizados
     ]);
     
+    console.log('Campos padrão definidos:', Array.from(standardFields));
+    
     // Identificar campos personalizados (que não são padrão)
     const customFields = [];
     
+    console.log('=== ANALISANDO CADA CAMPO DO FORMULÁRIO ===');
     for (const [fieldName, fieldValue] of Object.entries(data)) {
+      console.log(`Analisando campo: "${fieldName}" = "${fieldValue}"`);
+      
+      // Verificar se é campo padrão
+      const isStandardField = standardFields.has(fieldName.toLowerCase());
+      console.log(`  - É campo padrão? ${isStandardField}`);
+      console.log(`  - Tem valor? ${!!fieldValue}`);
+      
       // Pular campos padrão e campos vazios
-      if (standardFields.has(fieldName.toLowerCase()) || !fieldValue) {
+      if (isStandardField || !fieldValue) {
+        console.log(`  - PULANDO campo: ${isStandardField ? 'é padrão' : 'está vazio'}`);
         continue;
       }
       
-      console.log(`Campo personalizado detectado: ${fieldName} = ${fieldValue}`);
+      console.log(`  - ✅ CAMPO PERSONALIZADO DETECTADO: ${fieldName} = ${fieldValue}`);
       
       // Processar campo personalizado
-      const fieldData = await processCustomField(supabase, companyId, fieldName, fieldValue);
-      if (fieldData) {
-        customFields.push(fieldData);
+      try {
+        const fieldData = await processCustomField(supabase, companyId, fieldName, fieldValue);
+        if (fieldData) {
+          customFields.push(fieldData);
+          console.log(`  - ✅ Campo processado com sucesso:`, fieldData);
+        } else {
+          console.log(`  - ❌ Falha ao processar campo: ${fieldName}`);
+        }
+      } catch (fieldError) {
+        console.error(`  - ❌ ERRO ao processar campo ${fieldName}:`, fieldError);
       }
     }
     
-    console.log(`${customFields.length} campos personalizados processados`);
+    console.log(`=== RESULTADO FINAL: ${customFields.length} campos personalizados processados ===`);
+    console.log('Campos processados:', customFields);
     return customFields;
     
   } catch (error) {
@@ -237,13 +260,19 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
 
 async function processCustomField(supabase, companyId, fieldName, fieldValue) {
   try {
+    console.log(`    === PROCESSANDO CAMPO INDIVIDUAL: ${fieldName} ===`);
+    
     // 1. Normalizar nome do campo
     const normalizedFieldName = normalizeFieldName(fieldName);
     const fieldLabel = generateFieldLabel(fieldName);
     
-    console.log(`Processando campo: ${fieldName} → ${normalizedFieldName} (${fieldLabel})`);
+    console.log(`    - Campo original: "${fieldName}"`);
+    console.log(`    - Campo normalizado: "${normalizedFieldName}"`);
+    console.log(`    - Label gerado: "${fieldLabel}"`);
+    console.log(`    - Valor: "${fieldValue}"`);
     
     // 2. Verificar se campo já existe
+    console.log(`    - Verificando se campo já existe na empresa ${companyId}...`);
     const { data: existingField, error: searchError } = await supabase
       .from('lead_custom_fields')
       .select('id, field_name, field_type')
@@ -251,8 +280,10 @@ async function processCustomField(supabase, companyId, fieldName, fieldValue) {
       .eq('field_name', normalizedFieldName)
       .single();
     
+    console.log(`    - Resultado da busca:`, { existingField, searchError });
+    
     if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
-      console.error('Erro ao buscar campo existente:', searchError);
+      console.error('    - ❌ ERRO ao buscar campo existente:', searchError);
       return null;
     }
     
@@ -260,33 +291,39 @@ async function processCustomField(supabase, companyId, fieldName, fieldValue) {
     
     if (existingField) {
       // 3a. Campo existe - usar existente
-      console.log(`Campo existente encontrado: ${existingField.id}`);
+      console.log(`    - ✅ Campo existente encontrado: ${existingField.id}`);
       fieldId = existingField.id;
     } else {
       // 3b. Campo não existe - criar automaticamente
-      console.log(`Criando novo campo personalizado: ${normalizedFieldName}`);
+      console.log(`    - 🆕 Criando novo campo personalizado: ${normalizedFieldName}`);
       
       const fieldType = detectFieldType(fieldValue);
+      console.log(`    - Tipo detectado: ${fieldType}`);
+      
+      const insertData = {
+        company_id: companyId,
+        field_name: normalizedFieldName,
+        field_label: fieldLabel,
+        field_type: fieldType,
+        is_required: false
+      };
+      console.log(`    - Dados para inserção:`, insertData);
       
       const { data: newField, error: createError } = await supabase
         .from('lead_custom_fields')
-        .insert({
-          company_id: companyId,
-          field_name: normalizedFieldName,
-          field_label: fieldLabel,
-          field_type: fieldType,
-          is_required: false
-        })
+        .insert(insertData)
         .select('id')
         .single();
       
+      console.log(`    - Resultado da criação:`, { newField, createError });
+      
       if (createError) {
-        console.error('Erro ao criar campo personalizado:', createError);
+        console.error('    - ❌ ERRO ao criar campo personalizado:', createError);
         return null;
       }
       
       fieldId = newField.id;
-      console.log(`Novo campo criado com ID: ${fieldId}`);
+      console.log(`    - ✅ Novo campo criado com ID: ${fieldId}`);
     }
     
     return {
