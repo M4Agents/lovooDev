@@ -45,29 +45,34 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      console.log('=== PREPARANDO CHAMADA RPC ===');
-      console.log('Nome da função RPC:', 'get_pending_duplicate_notifications');
-      console.log('Parâmetros da RPC:', { p_company_id: companyId });
-      console.log('Tipo do parâmetro company_id:', typeof companyId);
-      console.log('Iniciando chamada RPC...');
+      console.log('=== IMPLEMENTANDO FALLBACK COM QUERY DIRETA ===');
+      console.log('Substituindo RPC por query SQL direta que sabemos funcionar');
+      console.log('Company ID para busca:', companyId);
       
-      console.log('=== EXECUTANDO RPC ===');
       const startTime = Date.now();
       
+      // Query direta que replica a lógica da RPC
       const { data: notifications, error } = await supabase
-        .rpc('get_pending_duplicate_notifications', { 
-          p_company_id: companyId 
-        });
+        .from('duplicate_notifications')
+        .select(`
+          id,
+          lead_id,
+          duplicate_of_lead_id,
+          reason,
+          created_at,
+          leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
+          leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
+        `)
+        .eq('company_id', companyId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
         
       const endTime = Date.now();
-      console.log('Tempo de execução RPC:', endTime - startTime, 'ms');
+      console.log('Tempo de execução Query Direta:', endTime - startTime, 'ms');
       
-      console.log('=== RESULTADO RPC ===');
+      console.log('=== RESULTADO QUERY DIRETA ===');
       console.log('Error object:', error);
       console.log('Error message:', error?.message);
-      console.log('Error details:', error?.details);
-      console.log('Error hint:', error?.hint);
-      console.log('Error code:', error?.code);
       console.log('Data type:', typeof notifications);
       console.log('Data is array:', Array.isArray(notifications));
       console.log('Data length:', notifications?.length);
@@ -76,44 +81,52 @@ export default async function handler(req, res) {
       console.log('=== PROCESSAMENTO ===');
       console.log('Iniciando processamento de', notifications?.length || 0, 'notificações');
       
-      // Processar dados da RPC para adicionar informações extras
+      // Processar dados da query direta
       let enrichedNotifications = [];
       if (notifications && notifications.length > 0) {
-        console.log(`Processando ${notifications.length} notificações da RPC...`);
+        console.log(`Processando ${notifications.length} notificações da query direta...`);
         
         // Log das primeiras notificações para debug
         notifications.slice(0, 3).forEach((notif, index) => {
+          const leadNew = Array.isArray(notif.leads) ? notif.leads[0] : notif.leads;
           console.log(`Notificação ${index}:`, {
-            id: notif.notification_id,
-            lead_name: notif.lead_name,
-            duplicate_name: notif.duplicate_name,
+            id: notif.id,
+            lead_id: notif.lead_id,
+            lead_data: leadNew,
             reason: notif.reason
           });
         });
         
         enrichedNotifications = notifications.map(notif => {
+          // Extrair dados dos leads (podem vir como array ou objeto)
+          const leadNew = Array.isArray(notif.leads) ? notif.leads[0] : notif.leads;
+          const leadExisting = Array.isArray(notif.leads) ? notif.leads[1] : null;
+          
+          // Se não temos o lead existente separado, vamos buscar pelos IDs
+          // Por enquanto, vamos usar os dados que temos
+          
           // Determinar qual campo está duplicado e seu valor
           let duplicateFieldValue = '';
           let reasonLabel = '';
           
           if (notif.reason === 'phone') {
-            duplicateFieldValue = notif.lead_phone || notif.duplicate_phone || '';
+            duplicateFieldValue = leadNew?.phone || '';
             reasonLabel = 'Telefone';
           } else if (notif.reason === 'email') {
-            duplicateFieldValue = notif.lead_email || notif.duplicate_email || '';
+            duplicateFieldValue = leadNew?.email || '';
             reasonLabel = 'Email';
           }
           
           return {
-            notification_id: notif.notification_id,
+            notification_id: notif.id,
             lead_id: notif.lead_id,
-            lead_name: notif.lead_name || 'Lead não encontrado',
-            lead_email: notif.lead_email || '',
-            lead_phone: notif.lead_phone || '',
+            lead_name: leadNew?.name || 'Lead não encontrado',
+            lead_email: leadNew?.email || '',
+            lead_phone: leadNew?.phone || '',
             duplicate_of_lead_id: notif.duplicate_of_lead_id,
-            duplicate_name: notif.duplicate_name || 'Lead não encontrado',
-            duplicate_email: notif.duplicate_email || '',
-            duplicate_phone: notif.duplicate_phone || '',
+            duplicate_name: leadExisting?.name || 'Carregando...',
+            duplicate_email: leadExisting?.email || '',
+            duplicate_phone: leadExisting?.phone || '',
             reason: notif.reason,
             reason_label: reasonLabel,
             duplicate_field_value: duplicateFieldValue,
