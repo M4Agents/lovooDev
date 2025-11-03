@@ -93,7 +93,8 @@ export default async function handler(req, res) {
         
         console.log('Buscando dados de', leadIds.size, 'leads únicos');
         
-        // Buscar todos os leads usando função RPC que contorna RLS
+        // Buscar todos os leads usando função RPC específica para contornar RLS
+        // Filtrar apenas leads ativos (não mesclados/deletados)
         console.log('Buscando leads com função RPC específica...');
         const { data: leads, error: leadsError } = await supabase
           .rpc('get_leads_for_notifications', {
@@ -113,38 +114,46 @@ export default async function handler(req, res) {
         }
         
         // Processar notificações com dados dos leads
-        enrichedNotifications = notifications.map(notif => {
-          const leadNew = leadsMap.get(notif.lead_id);
-          const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
-          
-          // Determinar qual campo está duplicado e seu valor
-          let duplicateFieldValue = '';
-          let reasonLabel = '';
-          
-          if (notif.reason === 'phone') {
-            duplicateFieldValue = leadNew?.phone || leadExisting?.phone || '';
-            reasonLabel = 'Telefone';
-          } else if (notif.reason === 'email') {
-            duplicateFieldValue = leadNew?.email || leadExisting?.email || '';
-            reasonLabel = 'Email';
-          }
-          
-          return {
-            notification_id: notif.id,
-            lead_id: notif.lead_id,
-            lead_name: leadNew?.name || 'Lead não encontrado',
-            lead_email: leadNew?.email || '',
-            lead_phone: leadNew?.phone || '',
-            duplicate_of_lead_id: notif.duplicate_of_lead_id,
-            duplicate_name: leadExisting?.name || 'Lead não encontrado',
-            duplicate_email: leadExisting?.email || '',
-            duplicate_phone: leadExisting?.phone || '',
-            reason: notif.reason,
-            reason_label: reasonLabel,
-            duplicate_field_value: duplicateFieldValue,
-            created_at: notif.created_at
-          };
-        });
+        // Filtrar apenas notificações onde ambos os leads existem (não foram mesclados)
+        enrichedNotifications = notifications
+          .filter(notif => {
+            const leadNew = leadsMap.get(notif.lead_id);
+            const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
+            // Só incluir se ambos os leads existem e não foram mesclados
+            return leadNew && leadExisting;
+          })
+          .map(notif => {
+            const leadNew = leadsMap.get(notif.lead_id);
+            const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
+            
+            // Determinar qual campo está duplicado e seu valor
+            let duplicateFieldValue = '';
+            let reasonLabel = '';
+            
+            if (notif.reason === 'phone') {
+              duplicateFieldValue = leadNew?.phone || leadExisting?.phone || '';
+              reasonLabel = 'Telefone';
+            } else if (notif.reason === 'email') {
+              duplicateFieldValue = leadNew?.email || leadExisting?.email || '';
+              reasonLabel = 'Email';
+            }
+            
+            return {
+              notification_id: notif.id,
+              lead_id: notif.lead_id,
+              lead_name: leadNew?.name || 'Lead não encontrado',
+              lead_email: leadNew?.email || '',
+              lead_phone: leadNew?.phone || '',
+              duplicate_of_lead_id: notif.duplicate_of_lead_id,
+              duplicate_name: leadExisting?.name || 'Lead não encontrado',
+              duplicate_email: leadExisting?.email || '',
+              duplicate_phone: leadExisting?.phone || '',
+              reason: notif.reason,
+              reason_label: reasonLabel,
+              duplicate_field_value: duplicateFieldValue,
+              created_at: notif.created_at
+            };
+          });
         
         console.log(`Notificações enriquecidas: ${enrichedNotifications.length}`);
         console.log('Primeira notificação enriquecida:', enrichedNotifications[0]);
