@@ -342,3 +342,4 @@ function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
+// Force deploy Mon Nov  3 11:41:54 -03 2025
