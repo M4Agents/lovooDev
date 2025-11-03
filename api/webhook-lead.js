@@ -106,10 +106,7 @@ async function createLeadDirectSQL(params) {
       // Dados da empresa (campos que existem na tabela leads)
       company_name: detectedFields.company_name || null,
       company_cnpj: detectedFields.company_cnpj || null,
-      company_email: detectedFields.company_email || null,
-      // Metadados
-      source: 'webhook_ultra_simples',
-      created_at: new Date().toISOString()
+      company_email: detectedFields.company_email || null
     };
     
     const { data: lead, error: leadError } = await supabase
