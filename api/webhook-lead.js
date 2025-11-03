@@ -68,6 +68,7 @@ async function createLeadDirectSQL(params) {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     console.log('Processando webhook para API key:', params.api_key);
+    console.log('Visitor ID recebido:', params.visitor_id || 'não fornecido');
     
     // 1. Detectar campos automaticamente
     const detectedFields = detectFormFields(params.form_data);
@@ -92,7 +93,8 @@ async function createLeadDirectSQL(params) {
           interest: detectedFields.interest || null,
           company_name: detectedFields.company_name || null,
           company_cnpj: detectedFields.company_cnpj || null,
-          company_email: detectedFields.company_email || null
+          company_email: detectedFields.company_email || null,
+          visitor_id: params.visitor_id || null  // CRÍTICO: Passar visitor_id para RPC
         }
       });
     
