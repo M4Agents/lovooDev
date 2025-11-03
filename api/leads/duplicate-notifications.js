@@ -34,52 +34,60 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Buscar notificações pendentes - Tentativa 1: RPC
-      console.log('Chamando RPC com company_id:', companyId);
-      let { data: notifications, error } = await supabase
-        .rpc('get_pending_duplicate_notifications', { 
-          p_company_id: companyId 
-        });
+      // Usar query direta simples (mais confiável que RPC)
+      console.log('Buscando notificações com query direta para company_id:', companyId);
       
-      console.log('Resultado da RPC:', { notifications, error });
+      const { data: notifications, error } = await supabase
+        .from('duplicate_notifications')
+        .select(`
+          id,
+          lead_id,
+          duplicate_of_lead_id,
+          reason,
+          created_at
+        `)
+        .eq('company_id', companyId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+        
+      console.log('Resultado query direta:', { notifications, error });
       
-      // Tentativa 2: Query direta se RPC falhar
-      if (!notifications || notifications.length === 0) {
-        console.log('RPC retornou vazio, tentando query direta...');
+      // Se temos notificações, buscar dados dos leads
+      let enrichedNotifications = [];
+      if (notifications && notifications.length > 0) {
+        console.log(`Enriquecendo ${notifications.length} notificações com dados dos leads...`);
         
-        const { data: directQuery, error: directError } = await supabase
-          .from('duplicate_notifications')
-          .select(`
-            id,
-            lead_id,
-            duplicate_of_lead_id,
-            reason,
-            created_at,
-            leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
-            leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
-          `)
-          .eq('company_id', companyId)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
-          
-        console.log('Resultado query direta:', { directQuery, directError });
-        
-        if (!directError && directQuery) {
-          // Transformar dados para formato esperado
-          notifications = directQuery.map(n => ({
-            notification_id: n.id,
-            lead_id: n.lead_id,
-            lead_name: n.leads?.name || 'N/A',
-            lead_email: n.leads?.email || '',
-            lead_phone: n.leads?.phone || '',
-            duplicate_of_lead_id: n.duplicate_of_lead_id,
-            duplicate_name: n.leads?.name || 'N/A',
-            duplicate_email: n.leads?.email || '',
-            duplicate_phone: n.leads?.phone || '',
-            reason: n.reason,
-            created_at: n.created_at
-          }));
+        for (const notif of notifications) {
+          // Buscar lead novo
+          const { data: newLead } = await supabase
+            .from('leads')
+            .select('id, name, email, phone')
+            .eq('id', notif.lead_id)
+            .single();
+            
+          // Buscar lead existente
+          const { data: existingLead } = await supabase
+            .from('leads')
+            .select('id, name, email, phone')
+            .eq('id', notif.duplicate_of_lead_id)
+            .single();
+            
+          enrichedNotifications.push({
+            notification_id: notif.id,
+            lead_id: notif.lead_id,
+            lead_name: newLead?.name || 'N/A',
+            lead_email: newLead?.email || '',
+            lead_phone: newLead?.phone || '',
+            duplicate_of_lead_id: notif.duplicate_of_lead_id,
+            duplicate_name: existingLead?.name || 'N/A',
+            duplicate_email: existingLead?.email || '',
+            duplicate_phone: existingLead?.phone || '',
+            reason: notif.reason,
+            created_at: notif.created_at
+          });
         }
+        
+        console.log(`Notificações enriquecidas: ${enrichedNotifications.length}`);
       }
 
       if (error) {
@@ -90,12 +98,12 @@ export default async function handler(req, res) {
         });
       }
 
-      console.log(`Encontradas ${notifications?.length || 0} notificações pendentes`);
+      console.log(`Encontradas ${enrichedNotifications?.length || 0} notificações pendentes`);
       
       return res.status(200).json({
         success: true,
-        notifications: notifications || [],
-        count: notifications?.length || 0
+        notifications: enrichedNotifications || [],
+        count: enrichedNotifications?.length || 0
       });
     }
 
