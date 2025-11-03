@@ -1,8 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-// Usar service key para contornar RLS ao buscar leads
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE5MjMwMywiZXhwIjoyMDYzNzY4MzAzfQ.nTh_suYXOLlBkVmJqOFvQWJlEfJxrJqGjNOKhBGvdBs';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -16,8 +15,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Usar service key para contornar RLS ao buscar dados dos leads
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Extrair company_id do header ou query
     const companyId = req.headers['x-company-id'] || req.query.company_id;
@@ -36,73 +34,44 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Usar query simples e buscar leads separadamente (mais confiável)
-      console.log('Buscando notificações para company_id:', companyId);
+      // Usar RPC que já funciona (contorna RLS automaticamente)
+      console.log('Chamando RPC get_pending_duplicate_notifications para company_id:', companyId);
       
       const { data: notifications, error } = await supabase
-        .from('duplicate_notifications')
-        .select('id, lead_id, duplicate_of_lead_id, reason, created_at')
-        .eq('company_id', companyId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-        
-      console.log('Resultado query notificações:', { notifications, error, count: notifications?.length });
-      
-      // Buscar dados dos leads em uma query separada
-      let enrichedNotifications = [];
-      if (notifications && notifications.length > 0) {
-        console.log(`Processando ${notifications.length} notificações...`);
-        
-        // Coletar todos os IDs únicos dos leads
-        const leadIds = new Set();
-        notifications.forEach(notif => {
-          leadIds.add(notif.lead_id);
-          leadIds.add(notif.duplicate_of_lead_id);
+        .rpc('get_pending_duplicate_notifications', { 
+          p_company_id: companyId 
         });
         
-        console.log('IDs dos leads para buscar:', Array.from(leadIds));
+      console.log('Resultado RPC:', { notifications, error, count: notifications?.length });
+      
+      // Processar dados da RPC para adicionar informações extras
+      let enrichedNotifications = [];
+      if (notifications && notifications.length > 0) {
+        console.log(`Processando ${notifications.length} notificações da RPC...`);
         
-        // Buscar todos os leads de uma vez
-        const { data: leads, error: leadsError } = await supabase
-          .from('leads')
-          .select('id, name, email, phone')
-          .in('id', Array.from(leadIds));
-          
-        console.log('Leads encontrados:', { leads, leadsError, count: leads?.length });
-        
-        // Criar mapa de leads por ID para acesso rápido
-        const leadsMap = new Map();
-        if (leads) {
-          leads.forEach(lead => leadsMap.set(lead.id, lead));
-        }
-        
-        // Processar notificações com dados dos leads
         enrichedNotifications = notifications.map(notif => {
-          const leadNew = leadsMap.get(notif.lead_id);
-          const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
-          
           // Determinar qual campo está duplicado e seu valor
           let duplicateFieldValue = '';
           let reasonLabel = '';
           
           if (notif.reason === 'phone') {
-            duplicateFieldValue = leadNew?.phone || leadExisting?.phone || '';
+            duplicateFieldValue = notif.lead_phone || notif.duplicate_phone || '';
             reasonLabel = 'Telefone';
           } else if (notif.reason === 'email') {
-            duplicateFieldValue = leadNew?.email || leadExisting?.email || '';
+            duplicateFieldValue = notif.lead_email || notif.duplicate_email || '';
             reasonLabel = 'Email';
           }
           
           return {
-            notification_id: notif.id,
+            notification_id: notif.notification_id,
             lead_id: notif.lead_id,
-            lead_name: leadNew?.name || 'Lead não encontrado',
-            lead_email: leadNew?.email || '',
-            lead_phone: leadNew?.phone || '',
+            lead_name: notif.lead_name || 'Lead não encontrado',
+            lead_email: notif.lead_email || '',
+            lead_phone: notif.lead_phone || '',
             duplicate_of_lead_id: notif.duplicate_of_lead_id,
-            duplicate_name: leadExisting?.name || 'Lead não encontrado',
-            duplicate_email: leadExisting?.email || '',
-            duplicate_phone: leadExisting?.phone || '',
+            duplicate_name: notif.duplicate_name || 'Lead não encontrado',
+            duplicate_email: notif.duplicate_email || '',
+            duplicate_phone: notif.duplicate_phone || '',
             reason: notif.reason,
             reason_label: reasonLabel,
             duplicate_field_value: duplicateFieldValue,
@@ -110,8 +79,8 @@ export default async function handler(req, res) {
           };
         });
         
-        console.log(`Notificações processadas: ${enrichedNotifications.length}`);
-        console.log('Primeira notificação:', enrichedNotifications[0]);
+        console.log(`Notificações enriquecidas: ${enrichedNotifications.length}`);
+        console.log('Primeira notificação enriquecida:', enrichedNotifications[0]);
       }
 
       if (error) {
