@@ -326,21 +326,34 @@
           
           console.log('LovoCRM: Campo api_key encontrado:', !!apiKeyField, 'Valor:', apiKeyValue ? 'presente' : 'vazio');
           
-          if (apiKeyField && apiKeyValue) {
+          // RELAXADO: Aceitar campo api_key mesmo sem valor (pode ser preenchido via JS)
+          if (apiKeyField) {
             isLovoCRMForm = true;
-            console.log('LovoCRM: Formulário identificado por api_key');
+            console.log('LovoCRM: Formulário identificado por campo api_key (valor pode ser definido dinamicamente)');
           }
         }
         
-        // Verificar também por outros indicadores
+        // Verificar também por outros indicadores (critérios mais flexíveis)
         if (!isLovoCRMForm) {
           // Verificar se tem campos típicos de lead
           const hasLeadFields = form.querySelector('input[name="nome"], input[name="name"], input[name="email"]');
-          const hasHiddenApiKey = form.querySelector('input[type="hidden"][name="api_key"]');
+          const hasApiKeyField = form.querySelector('input[name="api_key"]'); // Qualquer tipo
           
-          if (hasLeadFields && hasHiddenApiKey) {
+          console.log('LovoCRM: Campos de lead encontrados:', !!hasLeadFields, 'Campo api_key encontrado:', !!hasApiKeyField);
+          
+          // FLEXÍVEL: Se tem campos de lead E campo api_key (qualquer tipo)
+          if (hasLeadFields && hasApiKeyField) {
             isLovoCRMForm = true;
-            console.log('LovoCRM: Formulário identificado por campos de lead + api_key hidden');
+            console.log('LovoCRM: Formulário identificado por campos de lead + api_key');
+          }
+          
+          // AINDA MAIS FLEXÍVEL: Se tem campos de lead e parece ser formulário de contato
+          if (!isLovoCRMForm && hasLeadFields) {
+            const hasContactFields = form.querySelector('input[name="telefone"], input[name="phone"], textarea[name="mensagem"], textarea[name="message"]');
+            if (hasContactFields) {
+              console.log('LovoCRM: Formulário com campos de lead e contato - assumindo LovoCRM');
+              isLovoCRMForm = true;
+            }
           }
         }
         
