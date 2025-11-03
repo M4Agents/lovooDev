@@ -5,6 +5,8 @@ import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
 import { ImportLeadsModal } from '../components/ImportLeadsModal';
+import { DuplicateNotifications } from '../components/DuplicateNotifications';
+import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import {
   Users,
   Plus,
@@ -69,6 +71,8 @@ export const Leads: React.FC = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedDuplicateNotification, setSelectedDuplicateNotification] = useState<any>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
 
   useEffect(() => {
     if (company?.id) {
@@ -161,6 +165,24 @@ export const Leads: React.FC = () => {
     });
   };
 
+  // Funções para controle de duplicatas
+  const handleMergeRequest = (notification: any) => {
+    setSelectedDuplicateNotification(notification);
+    setShowMergeModal(true);
+  };
+
+  const handleMergeComplete = () => {
+    setShowMergeModal(false);
+    setSelectedDuplicateNotification(null);
+    // Recarregar dados para refletir mudanças
+    loadData();
+  };
+
+  const handleCloseMergeModal = () => {
+    setShowMergeModal(false);
+    setSelectedDuplicateNotification(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -251,6 +273,9 @@ export const Leads: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Notificações de Duplicatas */}
+      <DuplicateNotifications onMergeRequest={handleMergeRequest} />
 
       {/* Filters */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -466,6 +491,15 @@ export const Leads: React.FC = () => {
         onClose={() => setShowImportModal(false)}
         onImportComplete={loadData}
       />
+
+      {/* Modal de Mesclagem de Duplicatas */}
+      {showMergeModal && selectedDuplicateNotification && (
+        <DuplicateMergeModal
+          notification={selectedDuplicateNotification}
+          onClose={handleCloseMergeModal}
+          onMergeComplete={handleMergeComplete}
+        />
+      )}
     </div>
   );
 };
