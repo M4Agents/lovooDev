@@ -15,14 +15,25 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('=== INÍCIO DEBUG DETALHADO ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Method:', req.method);
+    console.log('URL completa:', req.url);
+    console.log('Headers completos:', JSON.stringify(req.headers, null, 2));
+    console.log('Query params completos:', JSON.stringify(req.query, null, 2));
+
+    console.log('=== CONEXÃO SUPABASE ===');
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Supabase Key (primeiros 20 chars):', supabaseKey.substring(0, 20) + '...');
+    
     const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('Client Supabase criado com sucesso');
     
     // Extrair company_id do header ou query
     const companyId = req.headers['x-company-id'] || req.query.company_id;
     
-    console.log('Headers recebidos:', req.headers);
-    console.log('Query params:', req.query);
     console.log('Company ID extraído:', companyId);
+    console.log('Tipo do Company ID:', typeof companyId);
     
     if (!companyId) {
       console.error('Company ID não fornecido');
@@ -34,20 +45,51 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Usar RPC que já funciona (contorna RLS automaticamente)
-      console.log('Chamando RPC get_pending_duplicate_notifications para company_id:', companyId);
+      console.log('=== PREPARANDO CHAMADA RPC ===');
+      console.log('Nome da função RPC:', 'get_pending_duplicate_notifications');
+      console.log('Parâmetros da RPC:', { p_company_id: companyId });
+      console.log('Tipo do parâmetro company_id:', typeof companyId);
+      console.log('Iniciando chamada RPC...');
+      
+      console.log('=== EXECUTANDO RPC ===');
+      const startTime = Date.now();
       
       const { data: notifications, error } = await supabase
         .rpc('get_pending_duplicate_notifications', { 
           p_company_id: companyId 
         });
         
-      console.log('Resultado RPC:', { notifications, error, count: notifications?.length });
+      const endTime = Date.now();
+      console.log('Tempo de execução RPC:', endTime - startTime, 'ms');
+      
+      console.log('=== RESULTADO RPC ===');
+      console.log('Error object:', error);
+      console.log('Error message:', error?.message);
+      console.log('Error details:', error?.details);
+      console.log('Error hint:', error?.hint);
+      console.log('Error code:', error?.code);
+      console.log('Data type:', typeof notifications);
+      console.log('Data is array:', Array.isArray(notifications));
+      console.log('Data length:', notifications?.length);
+      console.log('Data (primeiros 200 chars):', JSON.stringify(notifications)?.substring(0, 200));
+      
+      console.log('=== PROCESSAMENTO ===');
+      console.log('Iniciando processamento de', notifications?.length || 0, 'notificações');
       
       // Processar dados da RPC para adicionar informações extras
       let enrichedNotifications = [];
       if (notifications && notifications.length > 0) {
         console.log(`Processando ${notifications.length} notificações da RPC...`);
+        
+        // Log das primeiras notificações para debug
+        notifications.slice(0, 3).forEach((notif, index) => {
+          console.log(`Notificação ${index}:`, {
+            id: notif.notification_id,
+            lead_name: notif.lead_name,
+            duplicate_name: notif.duplicate_name,
+            reason: notif.reason
+          });
+        });
         
         enrichedNotifications = notifications.map(notif => {
           // Determinar qual campo está duplicado e seu valor
@@ -83,21 +125,35 @@ export default async function handler(req, res) {
         console.log('Primeira notificação enriquecida:', enrichedNotifications[0]);
       }
 
+      console.log('=== VERIFICAÇÃO DE ERROS ===');
       if (error) {
-        console.error('Erro ao buscar notificações:', error);
+        console.error('ERRO DETECTADO na RPC:', error);
+        console.error('Tipo do erro:', typeof error);
+        console.error('Erro completo:', JSON.stringify(error, null, 2));
         return res.status(500).json({ 
           error: 'Erro ao buscar notificações',
           details: error.message 
         });
       }
 
-      console.log(`Encontradas ${enrichedNotifications?.length || 0} notificações pendentes`);
+      console.log('=== RESPOSTA FINAL ===');
+      console.log('Notificações enriquecidas:', enrichedNotifications?.length || 0);
+      console.log('Primeira notificação final:', enrichedNotifications?.[0]);
       
-      return res.status(200).json({
+      const finalResponse = {
         success: true,
         notifications: enrichedNotifications || [],
         count: enrichedNotifications?.length || 0
+      };
+      
+      console.log('Resposta que será enviada:', {
+        success: finalResponse.success,
+        count: finalResponse.count,
+        has_data: finalResponse.notifications.length > 0
       });
+      console.log('=== FIM DEBUG DETALHADO ===');
+      
+      return res.status(200).json(finalResponse);
     }
 
     if (req.method === 'PUT') {
