@@ -4,6 +4,11 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 export default async function handler(req, res) {
+  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+
   // Set CORS headers (mesmo padrão do webhook-visitor)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -11,16 +16,19 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   
   if (req.method === 'OPTIONS') {
+    console.log('OPTIONS request - retornando 200');
     res.status(200).end();
     return;
   }
   
   if (req.method !== 'POST') {
+    console.log('Method not allowed:', req.method);
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
   
   try {
+    console.log('PAYLOAD RECEBIDO:', req.body);
     console.log('Lead webhook received raw body:', req.body);
     console.log('Lead webhook received headers:', req.headers);
     
@@ -120,9 +128,14 @@ async function createLeadDirectSQL(params) {
     }
     
     // 4. Processar campos personalizados (mapeamento inteligente)
+    console.log('🔧 INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS');
+    console.log('Lead Company ID:', lead.company_id);
+    console.log('Form Data para campos personalizados:', params.form_data);
     const customFieldsData = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
+    console.log('🔧 CAMPOS PERSONALIZADOS PROCESSADOS:', customFieldsData);
     
     // 5. Inserir valores dos campos personalizados
+    console.log('💾 INSERINDO VALORES DOS CAMPOS PERSONALIZADOS');
     if (customFieldsData.length > 0) {
       const customValues = customFieldsData.map(field => ({
         lead_id: lead.lead_id,
@@ -130,16 +143,19 @@ async function createLeadDirectSQL(params) {
         value: String(field.value)
       }));
       
+      console.log('💾 Valores a serem inseridos:', customValues);
+      
       const { error: customError } = await supabase
         .from('lead_custom_values')
         .insert(customValues);
       
       if (customError) {
-        console.error('Erro ao inserir campos personalizados:', customError);
-        // Não falha o lead por causa dos campos personalizados
+        console.error('❌ ERRO ao inserir valores dos campos personalizados:', customError);
       } else {
-        console.log(`${customValues.length} campos personalizados inseridos`);
+        console.log(`✅ ${customValues.length} valores de campos personalizados inseridos com sucesso`);
       }
+    } else {
+      console.log('⚠️ Nenhum campo personalizado para inserir');
     }
     
     return { success: true, lead_id: lead.lead_id };
@@ -294,36 +310,42 @@ async function processCustomField(supabase, companyId, fieldName, fieldValue) {
       console.log(`    - ✅ Campo existente encontrado: ${existingField.id}`);
       fieldId = existingField.id;
     } else {
-      // 3b. Campo não existe - criar automaticamente
-      console.log(`    - 🆕 Criando novo campo personalizado: ${normalizedFieldName}`);
+      // 3b. Campo não existe - criar automaticamente via RPC (contorna RLS)
+      console.log(`    - 🆕 Criando novo campo personalizado via RPC: ${normalizedFieldName}`);
       
       const fieldType = detectFieldType(fieldValue);
       console.log(`    - Tipo detectado: ${fieldType}`);
       
-      const insertData = {
-        company_id: companyId,
-        field_name: normalizedFieldName,
-        field_label: fieldLabel,
-        field_type: fieldType,
-        is_required: false
-      };
-      console.log(`    - Dados para inserção:`, insertData);
+      console.log(`    - Chamando RPC create_custom_field_webhook...`);
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('create_custom_field_webhook', {
+          p_company_id: companyId,
+          p_field_name: normalizedFieldName,
+          p_field_label: fieldLabel,
+          p_field_type: fieldType,
+          p_is_required: false
+        });
       
-      const { data: newField, error: createError } = await supabase
-        .from('lead_custom_fields')
-        .insert(insertData)
-        .select('id')
-        .single();
+      console.log(`    - Resultado da RPC:`, { rpcResult, rpcError });
       
-      console.log(`    - Resultado da criação:`, { newField, createError });
-      
-      if (createError) {
-        console.error('    - ❌ ERRO ao criar campo personalizado:', createError);
+      if (rpcError) {
+        console.error('    - ❌ ERRO na RPC create_custom_field_webhook:', rpcError);
         return null;
       }
       
-      fieldId = newField.id;
-      console.log(`    - ✅ Novo campo criado com ID: ${fieldId}`);
+      if (!rpcResult || rpcResult.length === 0) {
+        console.error('    - ❌ RPC retornou resultado vazio');
+        return null;
+      }
+      
+      const result = rpcResult[0];
+      if (!result.success) {
+        console.error('    - ❌ RPC falhou:', result.error_message);
+        return null;
+      }
+      
+      fieldId = result.field_id;
+      console.log(`    - ✅ Campo criado via RPC com ID: ${fieldId}`);
     }
     
     return {
