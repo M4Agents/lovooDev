@@ -1,9 +1,9 @@
 # DOCUMENTAÇÃO TÉCNICA - LOVOCRM
 ## Sistema SaaS para Análise Comportamental e CRM
 
-**Versão:** 1.1.0 - Sistema Híbrido Webhook + Visitor ID  
+**Versão:** 1.2.0 - Sistema de Duplicatas Completo  
 **Data:** Novembro 2025  
-**Última Atualização:** 03/11/2025 - 16:16  
+**Última Atualização:** 03/11/2025 - 22:43  
 
 ---
 
@@ -31,6 +31,7 @@ Sistema SaaS completo para análise comportamental de visitantes em landing page
 ### Funcionalidades Principais
 - **Analytics Comportamental**: Tracking de visitantes em tempo real
 - **CRM Completo**: Gestão de leads, empresas, usuários
+- **Sistema de Duplicatas**: Detecção automática e mesclagem inteligente
 - **Webhook Ultra-Simples**: Captura automática de leads
 - **Sistema Híbrido**: Captura automática de visitor_id e scoring comportamental
 - **Landing Pages**: Sistema de criação e gerenciamento
@@ -715,10 +716,168 @@ LovoCRM: 🚀 Requisição enriquecida com visitor_id
 
 ---
 
+## 🔄 SISTEMA DE DUPLICATAS COMPLETO {#duplicatas}
+
+### Visão Geral
+Sistema automático de detecção, notificação e mesclagem de leads duplicados baseado em telefone e email.
+
+### Funcionalidades Implementadas
+
+#### 🔍 Detecção Automática
+- **Triggers SQL**: Detectam duplicatas em tempo real na inserção/atualização
+- **Processamento Retroativo**: Analisa leads históricos automaticamente
+- **Critérios**: Telefone e email dentro da mesma empresa
+- **Performance**: Indexação otimizada para consultas rápidas
+
+#### 📊 Interface de Notificações
+- **Listagem Visual**: Exibe todas as duplicatas pendentes
+- **Informações Completas**: Nomes reais, emails, telefones, campos duplicados
+- **Filtros Automáticos**: Remove leads já mesclados da interface
+- **Contagem Dinâmica**: Atualiza automaticamente após mesclagens
+
+#### 🔧 Sistema de Mesclagem
+- **3 Estratégias Disponíveis**:
+  - Manter Lead Existente
+  - Manter Lead Novo
+  - Combinar Informações (Recomendado)
+- **Processamento Seguro**: Via RPC para contornar RLS
+- **Histórico Completo**: Registro de todas as mesclagens
+- **Validações**: Verificações de integridade antes da mesclagem
+
+### Arquitetura Técnica
+
+#### 📋 Tabelas do Banco
+```sql
+-- Notificações de duplicatas
+duplicate_notifications (
+  id, company_id, lead_id, duplicate_of_lead_id, 
+  reason, status, created_at, reviewed_at, reviewed_by_user_id
+)
+
+-- Histórico de mesclagens
+lead_merge_history (
+  source_lead_id, target_lead_id, merged_by_user_id, 
+  merge_strategy, created_at
+)
+```
+
+#### 🔧 Funções RPC Críticas
+```sql
+-- Detecção de duplicatas
+detect_lead_duplicates(p_company_id UUID)
+
+-- Busca de leads para notificações (contorna RLS)
+get_leads_for_notifications(p_lead_ids INTEGER[], p_company_id UUID)
+
+-- Mesclagem de leads (contorna RLS)
+merge_leads_webhook(p_source_id, p_target_id, p_strategy, p_notification_id, p_user_id)
+
+-- Notificações enriquecidas (contorna RLS)
+get_pending_duplicate_notifications(p_company_id UUID)
+```
+
+#### 🌐 APIs Implementadas
+```javascript
+// Buscar notificações de duplicatas
+GET /api/leads/duplicate-notifications?company_id=UUID
+// Retorna: { success: true, notifications: [...], count: N }
+
+// Mesclar leads duplicados
+POST /api/leads/merge
+// Body: { sourceId, targetId, strategy, notificationId?, userId? }
+// Retorna: { success: true, resultLeadId, strategy, mergedData }
+```
+
+#### 📱 Componente Frontend
+```typescript
+// Componente principal
+src/components/DuplicateNotifications.tsx
+// Interface: Lista + Modal de mesclagem + Estratégias
+// Estado: Loading, dados, erros, processamento
+```
+
+### Fluxo de Funcionamento
+
+#### 1. Detecção Automática
+```
+Lead Inserido/Atualizado → Trigger SQL → Busca Duplicatas → 
+Cria Notificação → Interface Atualizada
+```
+
+#### 2. Processamento pelo Usuário
+```
+Interface Lista Duplicatas → Usuário Clica Mesclar → 
+Modal com Estratégias → Confirmação → API Mesclagem → 
+RPC Processa → Leads Mesclados → Interface Atualizada
+```
+
+#### 3. Filtros Automáticos
+```
+API Notificações → Busca Leads Ativos → Filtra Mesclados → 
+Retorna Apenas Válidos → Interface Limpa
+```
+
+### Correções Críticas Implementadas
+
+#### ❌ Problemas Resolvidos
+1. **RLS Blocking**: APIs usavam chave anônima bloqueada por RLS
+2. **Campo Inexistente**: RPC tentava atualizar `updated_at` inexistente
+3. **Leads Mesclados**: Interface mostrava "Lead não encontrado"
+4. **Contagem Incorreta**: Incluía leads já processados
+
+#### ✅ Soluções Aplicadas
+1. **RPC com SECURITY DEFINER**: Contorna RLS automaticamente
+2. **Campos Validados**: Apenas campos existentes nas tabelas
+3. **Filtros Automáticos**: Remove leads mesclados da interface
+4. **Contagem Dinâmica**: Atualiza automaticamente após ações
+
+### Configurações Críticas
+
+#### 🔑 Supabase
+- **Project ID**: etzdsywunlpbgxkphuil
+- **Tabelas**: duplicate_notifications, lead_merge_history
+- **RLS**: Políticas configuradas para isolamento por empresa
+- **Triggers**: Automáticos para detecção em tempo real
+
+#### 📊 Performance
+- **Índices**: Otimizados para consultas de duplicatas
+- **Queries**: Eficientes com filtros por empresa
+- **Cache**: Automático via Vercel Edge Functions
+- **Logs**: Detalhados para debug e monitoramento
+
+### Monitoramento e Logs
+
+#### 📈 Métricas Importantes
+- **Duplicatas Detectadas**: Contagem por empresa/período
+- **Taxa de Mesclagem**: Percentual de duplicatas processadas
+- **Tempo de Resposta**: APIs de notificação e mesclagem
+- **Erros**: Falhas na detecção ou processamento
+
+#### 🔍 Logs de Debug
+```javascript
+// API de notificações
+console.log('Notificações encontradas:', count);
+console.log('Leads filtrados:', leadsMap.size);
+
+// API de mesclagem
+console.log('Mesclagem via RPC:', sourceId, '→', targetId);
+console.log('Resultado:', result.success, result.result_lead_id);
+```
+
+### Status Final
+- **✅ Detecção**: 100% automática e em tempo real
+- **✅ Interface**: Completa com informações detalhadas
+- **✅ Mesclagem**: 3 estratégias funcionais
+- **✅ Filtros**: Automáticos para leads processados
+- **✅ Performance**: Otimizada e escalável
+- **✅ Segurança**: RLS respeitado com contornos seguros
+
+---
+
 **📄 ARQUIVO**: `DOCUMENTACAO_TECNICA_LOVOCRM.md`  
 **🔄 SEMPRE MANTER ATUALIZADO**: A cada nova implementação ou correção  
 **📍 LOCALIZAÇÃO**: Raiz do projeto M4Track
 
 ---
 
-*Documentação gerada automaticamente - Última atualização: 03/11/2025 - 16:16*
+*Documentação gerada automaticamente - Última atualização: 03/11/2025 - 22:43*

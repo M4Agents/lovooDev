@@ -1,9 +1,9 @@
 # BASE DE CONHECIMENTO - SUPORTE LOVOCRM
 ## Guia Completo para Suporte ao Usuário
 
-**Versão:** 1.1.0 - Sistema Híbrido com Visitor ID  
+**Versão:** 1.2.0 - Sistema de Duplicatas Completo  
 **Data:** Novembro 2025  
-**Última Atualização:** 03/11/2025 - 16:16  
+**Última Atualização:** 03/11/2025 - 22:43  
 
 ---
 
@@ -14,11 +14,12 @@
 3. [Dashboard Principal](#dashboard)
 4. [Sistema de Analytics](#analytics)
 5. [Gestão de Leads](#leads)
-6. [Landing Pages](#landing-pages)
-7. [Webhook Ultra-Simples](#webhook)
-8. [Configurações](#configuracoes)
-9. [Problemas Comuns](#problemas-comuns)
-10. [Perguntas Frequentes](#faq)
+6. [Sistema de Duplicatas](#duplicatas)
+7. [Landing Pages](#landing-pages)
+8. [Webhook Ultra-Simples](#webhook)
+9. [Configurações](#configuracoes)
+10. [Problemas Comuns](#problemas-comuns)
+11. [Perguntas Frequentes](#faq)
 
 ---
 
@@ -28,6 +29,7 @@
 O LovoCRM é uma plataforma SaaS completa que combina:
 - **Analytics Comportamental**: Acompanhe visitantes em suas landing pages
 - **CRM Inteligente**: Gerencie leads de forma automatizada
+- **Sistema de Duplicatas**: Detecta e mescla leads duplicados automaticamente
 - **Webhook Ultra-Simples**: Capture leads de qualquer formulário
 - **Sistema Híbrido**: Conecta automaticamente dados comportamentais aos leads
 - **Campos Personalizados**: Sistema inteligente que se adapta aos seus dados
@@ -593,10 +595,107 @@ O score aparece quando há dados comportamentais disponíveis. Se o visitante fo
 
 ---
 
+## 🔄 SISTEMA DE DUPLICATAS {#duplicatas}
+
+### O que é o Sistema de Duplicatas?
+O Sistema de Duplicatas é uma funcionalidade automática que identifica leads duplicados em sua base e permite mesclá-los de forma inteligente, mantendo sua base de dados limpa e organizada.
+
+### Como Funciona?
+
+#### 🔍 Detecção Automática
+- **Critérios**: O sistema detecta duplicatas baseado em **telefone** e **email** idênticos
+- **Tempo Real**: A detecção acontece automaticamente quando novos leads são adicionados
+- **Histórico**: Também analisa leads já existentes na sua base
+- **Por Empresa**: Cada empresa vê apenas suas próprias duplicatas
+
+#### 📊 Visualização das Duplicatas
+1. **Acesse** a página de Leads no menu lateral
+2. **Observe** o alerta laranja no topo: "⚠️ Duplicatas Detectadas (X)"
+3. **Clique** no alerta para ver a lista completa
+4. **Visualize** as informações de cada duplicata:
+   - Nome completo dos leads
+   - Email e telefone
+   - Campo que está duplicado (Telefone ou Email)
+   - Data de criação
+
+#### 🔧 Como Mesclar Duplicatas
+1. **Clique** no botão "Mesclar" na duplicata desejada
+2. **Escolha** uma das 3 estratégias:
+   - **Manter Lead Existente**: Mantém o lead mais antigo e remove o novo
+   - **Manter Lead Novo**: Mantém o lead mais recente e remove o antigo
+   - **Combinar Informações** (Recomendado): Mescla os dados dos dois leads
+3. **Confirme** a ação
+4. **Pronto!** Os leads foram mesclados automaticamente
+
+### Estratégias de Mesclagem
+
+#### 🎯 Combinar Informações (Recomendado)
+- **Nomes**: Usa o nome mais completo
+- **Contatos**: Mantém email e telefone disponíveis
+- **Dados da Empresa**: Combina informações mais completas
+- **Campos Personalizados**: Preserva todos os valores preenchidos
+- **Histórico**: Mantém registro da mesclagem
+
+#### 📋 Manter Lead Existente
+- **Uso**: Quando o lead antigo tem informações mais confiáveis
+- **Resultado**: Lead novo é removido, antigo permanece inalterado
+- **Histórico**: Registra que houve uma mesclagem
+
+#### 🆕 Manter Lead Novo
+- **Uso**: Quando o lead novo tem informações mais atualizadas
+- **Resultado**: Lead antigo é removido, novo permanece
+- **Dados**: Informações mais recentes são preservadas
+
+### Benefícios do Sistema
+
+#### ✅ Para Sua Gestão
+- **Base Limpa**: Elimina leads duplicados automaticamente
+- **Dados Completos**: Combina informações de múltiplas fontes
+- **Decisão Informada**: Vê todos os dados antes de mesclar
+- **Histórico Preservado**: Mantém registro de todas as mesclagens
+
+#### ✅ Para Sua Equipe
+- **Eficiência**: Não perde tempo com leads duplicados
+- **Qualidade**: Trabalha sempre com dados mais completos
+- **Confiança**: Sistema automático e confiável
+- **Simplicidade**: Interface intuitiva e fácil de usar
+
+### Perguntas Frequentes
+
+#### "O sistema detecta duplicatas automaticamente?"
+**Sim!** A detecção é 100% automática. Sempre que um novo lead é adicionado (via formulário, importação ou API), o sistema verifica se já existe um lead com o mesmo telefone ou email.
+
+#### "Posso desfazer uma mesclagem?"
+**Não é possível desfazer**, por isso recomendamos sempre revisar as informações antes de confirmar a mesclagem. O sistema mostra todos os dados para você tomar uma decisão informada.
+
+#### "O que acontece com campos personalizados?"
+**São preservados!** Na estratégia "Combinar Informações", todos os campos personalizados de ambos os leads são mantidos, priorizando valores preenchidos sobre campos vazios.
+
+#### "Como sei se tenho duplicatas?"
+**Alerta automático!** Quando há duplicatas pendentes, aparece um alerta laranja no topo da página de Leads com o número de duplicatas encontradas.
+
+#### "Posso ignorar uma duplicata?"
+**Sim!** Se você determinar que não são realmente duplicatas, pode clicar em "Ignorar" e elas não aparecerão mais na lista.
+
+### Dicas de Uso
+
+#### 🎯 Melhores Práticas
+- **Revise sempre** os dados antes de mesclar
+- **Use "Combinar Informações"** na maioria dos casos
+- **Verifique campos personalizados** importantes
+- **Processe duplicatas regularmente** para manter a base limpa
+
+#### ⚠️ Cuidados Importantes
+- **Decisão irreversível**: Mesclagens não podem ser desfeitas
+- **Dados sensíveis**: Revise informações importantes antes de mesclar
+- **Campos únicos**: Verifique se não há conflitos em dados específicos
+
+---
+
 **📄 ARQUIVO**: `BASE_CONHECIMENTO_SUPORTE_LOVOCRM.md`  
 **🎯 OBJETIVO**: Suporte completo ao usuário da plataforma LovoCRM  
 **🔄 ATUALIZAÇÃO**: Sempre que houver novas funcionalidades ou mudanças na interface  
 
 ---
 
-*Base de conhecimento gerada para suporte ao usuário - Última atualização: 03/11/2025 - 16:16*
+*Base de conhecimento gerada para suporte ao usuário - Última atualização: 03/11/2025 - 22:43*
