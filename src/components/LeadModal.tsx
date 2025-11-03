@@ -13,10 +13,7 @@ import {
   Building,
   Tag,
   FileText,
-  Calendar,
-  CheckSquare,
   Type,
-  Hash,
   List,
   MapPin,
   Globe
@@ -215,12 +212,21 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       return;
     }
 
+    // Verificar se company está disponível
+    if (!company?.id) {
+      alert('Erro: Empresa não identificada. Recarregue a página e tente novamente.');
+      return;
+    }
+
     setLoading(true);
     try {
       const leadData = {
         ...formData,
         ...companyData,
-        company_id: company.id,
+        company_id: company?.id,
+        // Limpar campos UUID vazios para evitar erro de sintaxe
+        responsible_user_id: formData.responsible_user_id || null,
+        visitor_id: formData.visitor_id || null,
         custom_fields: customFieldValues
       };
 

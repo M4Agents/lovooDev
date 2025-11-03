@@ -742,8 +742,8 @@ export const api = {
     origin?: string;
     status?: string;
     interest?: string;
-    responsible_user_id?: string;
-    visitor_id?: string;
+    responsible_user_id?: string | null;
+    visitor_id?: string | null;
     custom_fields?: Record<string, any>;
     // Campos da empresa
     company_name?: string;
@@ -863,8 +863,8 @@ export const api = {
     origin?: string;
     status?: string;
     interest?: string;
-    responsible_user_id?: string;
-    visitor_id?: string;
+    responsible_user_id?: string | null;
+    visitor_id?: string | null;
     custom_fields?: Record<string, any>;
     // Campos da empresa
     company_name?: string;
