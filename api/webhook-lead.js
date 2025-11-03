@@ -96,23 +96,19 @@ async function createLeadDirectSQL(params) {
     // 3. Processar campos personalizados (mapeamento inteligente)
     const customFieldsData = await processCustomFields(supabase, company.id, params.form_data, detectedFields);
     
-    // 4. Criar lead com campos padrão
+    // 4. Criar lead com campos padrão (apenas campos que existem na tabela)
     const leadData = {
       company_id: company.id,
       name: detectedFields.name || 'Lead sem nome',
       email: detectedFields.email || null,
       phone: detectedFields.phone || null,
       interest: detectedFields.interest || null,
-      // Dados da empresa (se fornecidos)
+      // Dados da empresa (campos que existem na tabela leads)
       company_name: detectedFields.company_name || null,
       company_cnpj: detectedFields.company_cnpj || null,
       company_email: detectedFields.company_email || null,
-      company_phone: detectedFields.company_phone || null,
       // Metadados
       source: 'webhook_ultra_simples',
-      user_agent: params.user_agent,
-      ip_address: params.ip_address,
-      referrer: params.referrer,
       created_at: new Date().toISOString()
     };
     
