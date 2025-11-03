@@ -103,7 +103,10 @@ async function createLeadFromWebhook(params) {
       };
     }
     
-    // 3. Preparar dados do lead
+    // 3. Processar campos personalizados (Mapeamento Inteligente)
+    const customFieldsData = await processCustomFields(supabase, company.id, params.form_data, detectedFields);
+    
+    // 4. Preparar dados do lead
     const leadData = {
       company_id: company.id,
       name: detectedFields.name || 'Lead sem nome',
@@ -119,7 +122,7 @@ async function createLeadFromWebhook(params) {
       company_telefone: detectedFields.company_phone || null
     };
     
-    // 4. Criar lead
+    // 5. Criar lead
     const { data: lead, error: leadError } = await supabase
       .from('leads')
       .insert(leadData)
@@ -129,6 +132,26 @@ async function createLeadFromWebhook(params) {
     if (leadError) {
       console.error('Erro ao criar lead:', leadError);
       return { success: false, error: leadError.message };
+    }
+    
+    // 6. Inserir valores dos campos personalizados
+    if (customFieldsData.length > 0) {
+      const customValues = customFieldsData.map(field => ({
+        lead_id: lead.id,
+        field_id: field.field_id,
+        value: String(field.value)
+      }));
+
+      const { error: customError } = await supabase
+        .from('lead_custom_values')
+        .insert(customValues);
+
+      if (customError) {
+        console.error('Erro ao inserir campos personalizados:', customError);
+        // Não falha o processo, apenas loga o erro
+      } else {
+        console.log(`${customFieldsData.length} campos personalizados inseridos para lead ${lead.id}`);
+      }
     }
     
     console.log('Lead criado com sucesso:', lead.id);
@@ -222,4 +245,152 @@ function detectFormFields(formData) {
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
+}
+
+async function processCustomFields(supabase, companyId, formData, detectedFields) {
+  try {
+    console.log('Processando campos personalizados...');
+    
+    // Converter para objeto se necessário
+    const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
+    
+    // Obter campos padrão que já foram detectados
+    const standardFields = new Set([
+      'name', 'nome', 'full_name', 'fullname', 'first_name', 'firstname', 'cliente', 'usuario',
+      'email', 'e-mail', 'mail', 'email_address', 'user_email',
+      'phone', 'telefone', 'tel', 'celular', 'whatsapp', 'mobile', 'contact',
+      'interest', 'interesse', 'subject', 'assunto', 'message', 'mensagem', 'produto', 'servico',
+      'company', 'empresa', 'company_name', 'nome_empresa',
+      'cnpj', 'company_cnpj', 'documento',
+      'company_email', 'email_empresa', 'corporate_email',
+      'company_phone', 'telefone_empresa', 'corporate_phone'
+    ]);
+    
+    // Identificar campos personalizados (que não são padrão)
+    const customFields = [];
+    
+    for (const [fieldName, fieldValue] of Object.entries(data)) {
+      // Pular campos padrão e campos vazios
+      if (standardFields.has(fieldName.toLowerCase()) || !fieldValue) {
+        continue;
+      }
+      
+      console.log(`Campo personalizado detectado: ${fieldName} = ${fieldValue}`);
+      
+      // Processar campo personalizado
+      const fieldData = await processCustomField(supabase, companyId, fieldName, fieldValue);
+      if (fieldData) {
+        customFields.push(fieldData);
+      }
+    }
+    
+    console.log(`${customFields.length} campos personalizados processados`);
+    return customFields;
+    
+  } catch (error) {
+    console.error('Erro ao processar campos personalizados:', error);
+    return [];
+  }
+}
+
+async function processCustomField(supabase, companyId, fieldName, fieldValue) {
+  try {
+    // 1. Normalizar nome do campo
+    const normalizedFieldName = normalizeFieldName(fieldName);
+    const fieldLabel = generateFieldLabel(fieldName);
+    
+    console.log(`Processando campo: ${fieldName} → ${normalizedFieldName} (${fieldLabel})`);
+    
+    // 2. Verificar se campo já existe
+    const { data: existingField, error: searchError } = await supabase
+      .from('lead_custom_fields')
+      .select('id, field_name, field_type')
+      .eq('company_id', companyId)
+      .eq('field_name', normalizedFieldName)
+      .single();
+    
+    if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
+      console.error('Erro ao buscar campo existente:', searchError);
+      return null;
+    }
+    
+    let fieldId;
+    
+    if (existingField) {
+      // 3a. Campo existe - usar existente
+      console.log(`Campo existente encontrado: ${existingField.id}`);
+      fieldId = existingField.id;
+    } else {
+      // 3b. Campo não existe - criar automaticamente
+      console.log(`Criando novo campo personalizado: ${normalizedFieldName}`);
+      
+      const fieldType = detectFieldType(fieldValue);
+      
+      const { data: newField, error: createError } = await supabase
+        .from('lead_custom_fields')
+        .insert({
+          company_id: companyId,
+          field_name: normalizedFieldName,
+          field_label: fieldLabel,
+          field_type: fieldType,
+          is_required: false
+        })
+        .select('id')
+        .single();
+      
+      if (createError) {
+        console.error('Erro ao criar campo personalizado:', createError);
+        return null;
+      }
+      
+      fieldId = newField.id;
+      console.log(`Novo campo criado com ID: ${fieldId}`);
+    }
+    
+    return {
+      field_id: fieldId,
+      value: fieldValue
+    };
+    
+  } catch (error) {
+    console.error(`Erro ao processar campo ${fieldName}:`, error);
+    return null;
+  }
+}
+
+function normalizeFieldName(fieldName) {
+  // Converter para snake_case e remover caracteres especiais
+  return fieldName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+function generateFieldLabel(fieldName) {
+  // Gerar label legível a partir do nome do campo
+  return fieldName
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .trim();
+}
+
+function detectFieldType(value) {
+  // Detectar tipo do campo baseado no valor
+  if (typeof value === 'boolean' || value === 'true' || value === 'false') {
+    return 'boolean';
+  }
+  
+  if (typeof value === 'number' || (!isNaN(value) && !isNaN(parseFloat(value)))) {
+    return 'number';
+  }
+  
+  // Detectar data (formatos comuns)
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$|^\d{2}\/\d{2}\/\d{4}$|^\d{2}-\d{2}-\d{4}$/;
+  if (dateRegex.test(String(value))) {
+    return 'date';
+  }
+  
+  // Por padrão, usar texto
+  return 'text';
 }

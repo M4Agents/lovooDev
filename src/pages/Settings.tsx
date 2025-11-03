@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Key, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [saving, setSaving] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
@@ -69,7 +67,6 @@ export const Settings: React.FC = () => {
 
   useEffect(() => {
     if (company) {
-      setWebhookUrl(company.webhook_url || '');
       loadWebhookLogs();
       
       // Carregar dados da empresa para as abas cadastrais
@@ -146,22 +143,6 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleSaveWebhook = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!company) return;
-
-    setSaving(true);
-    try {
-      await api.updateCompany(company.id, { webhook_url: webhookUrl });
-      await refreshCompany();
-      alert('Webhook URL atualizada com sucesso!');
-    } catch (error) {
-      console.error('Error saving webhook:', error);
-      alert('Erro ao salvar webhook URL');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,7 +212,11 @@ export const Settings: React.FC = () => {
         email: 'teste@lovoocrm.com',
         telefone: '(11) 99999-9999',
         empresa: 'Empresa de Teste Ltda',
-        interesse: 'Teste do webhook ultra-simples'
+        interesse: 'Teste do webhook ultra-simples',
+        // Campos personalizados de teste
+        orcamento: 'R$ 10.000',
+        prazo_projeto: '2 meses',
+        fonte_indicacao: 'Teste Automático'
       };
       
       const response = await fetch(`https://app.lovoocrm.com/api/webhook/lead/${company.api_key}`, {
@@ -298,156 +283,9 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* Aba Configurações Técnicas */}
+      {/* Aba Integrações */}
       {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Key className="w-5 h-5 text-blue-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-slate-900">API Key</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Sua API Key (usada nos scripts de tracking)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={company?.api_key || 'Carregando...'}
-                    readOnly
-                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(company?.api_key || '')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                  >
-                    Copiar
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Use esta chave para identificar sua empresa nas requisições de tracking
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Webhook className="w-5 h-5 text-green-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-slate-900">Webhook Personalizado</h2>
-            </div>
-
-            <form onSubmit={handleSaveWebhook} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  URL do Webhook
-                </label>
-                <input
-                  type="url"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://seu-site.com/webhook"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  Enviaremos dados de conversão com analytics comportamental para esta URL
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? 'Salvando...' : 'Salvar Webhook'}
-              </button>
-            </form>
-          </div>
-
-          {/* Webhook de Conversão */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Webhook className="w-5 h-5 text-purple-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-slate-900">Webhook de Conversão</h2>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    URL do Webhook para Formulários
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={company?.api_key ? 
-                        `https://app.lovoocrm.com/api/webhook-conversion?api_key=${company.api_key}` : 
-                        'Carregando API key...'
-                      }
-                      readOnly
-                      className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
-                    />
-                    <button
-                      onClick={() => copyToClipboard(`https://app.lovoocrm.com/api/webhook-conversion?api_key=${company?.api_key || ''}`)}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                      Copiar
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Use esta URL nos seus formulários para capturar conversões automaticamente
-                  </p>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">Como usar no formulário:</h4>
-                  <div className="space-y-2 text-sm text-blue-800">
-                    <p><strong>Método:</strong> POST</p>
-                    <p><strong>Content-Type:</strong> application/json</p>
-                    <p><strong>Dados obrigatórios:</strong></p>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li><code>tracking_code</code>: Código da landing page</li>
-                      <li><code>form_data</code>: Dados do formulário (nome, email, telefone, etc.)</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-900 mb-2">Script automático para formulários:</h4>
-                  <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
-                    <div className="text-slate-600">{`<!-- Adicionar no final da página -->`}</div>
-                    <div>{`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>`}</div>
-                    <div>{`<script>`}</div>
-                    <div className="ml-2">{`ConversionTracker.init('SEU_TRACKING_CODE');`}</div>
-                    <div className="ml-2">{`ConversionTracker.autoTrack(); // Captura todos os formulários`}</div>
-                    <div>{`</script>`}</div>
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(`<script src="https://app.lovoocrm.com/conversion-tracker.js"></script>
-<script>
-  ConversionTracker.init('SEU_TRACKING_CODE');
-  ConversionTracker.autoTrack();
-</script>`)}
-                    className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded font-medium transition-colors"
-                  >
-                    Copiar Script
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="space-y-6">
           {/* Webhook Ultra-Simples para Leads */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
@@ -509,6 +347,7 @@ export const Settings: React.FC = () => {
                       <li>Email: email, e-mail, mail</li>
                       <li>Telefone: phone, telefone, celular, whatsapp</li>
                       <li>Empresa: company, empresa, company_name</li>
+                      <li><strong>Campos personalizados:</strong> Qualquer outro campo é criado automaticamente!</li>
                     </ul>
                   </div>
                 </div>
@@ -525,8 +364,16 @@ export const Settings: React.FC = () => {
                     <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
                     <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
                     <div className="ml-2 text-blue-600">{`"empresa": "Minha Empresa Ltda",`}</div>
-                    <div className="ml-2 text-blue-600">{`"interesse": "Quero saber mais"`}</div>
+                    <div className="ml-2 text-blue-600">{`"interesse": "Quero saber mais",`}</div>
+                    <div className="ml-2 text-purple-600">{`"orcamento": "R$ 50.000",`}</div>
+                    <div className="ml-2 text-purple-600">{`"prazo_projeto": "3 meses",`}</div>
+                    <div className="ml-2 text-purple-600">{`"fonte_indicacao": "Google Ads"`}</div>
                     <div className="text-green-600">{`}`}</div>
+                  </div>
+                  <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
+                    <p className="text-xs text-purple-800">
+                      <strong>🎯 Campos Personalizados:</strong> Os campos em <span className="text-purple-600 font-mono">roxo</span> são criados automaticamente como campos personalizados no sistema de leads!
+                    </p>
                   </div>
                 </div>
 
