@@ -31,6 +31,7 @@
       this.trackVisitor();
       this.setupEventListeners();
       this.setupFormInterception();
+      this.setupHttpInterception();
     },
     
     generateSessionId: function() {
@@ -460,6 +461,146 @@
         
       } catch (error) {
         console.error('LovoCRM: Erro ao garantir visitor_id:', error);
+      }
+    },
+    
+    // NOVA FUNÇÃO: Interceptar requisições HTTP (fetch/axios) para React/SPA
+    setupHttpInterception: function() {
+      const self = this;
+      
+      try {
+        console.log('LovoCRM: Configurando interceptação HTTP...');
+        
+        // Interceptar fetch (método mais comum em React)
+        if (window.fetch) {
+          const originalFetch = window.fetch;
+          
+          window.fetch = function(url, options) {
+            // Verificar se é uma requisição para webhook LovoCRM
+            const isWebhookRequest = url && (
+              url.includes('webhook-lead') ||
+              url.includes('lovoocrm.com') ||
+              url.includes('app.lovoocrm.com') ||
+              url.includes('/api/webhook')
+            );
+            
+            if (isWebhookRequest && options && options.body) {
+              console.log('LovoCRM: Interceptando requisição fetch para webhook');
+              
+              try {
+                // Tentar parsear o body como JSON
+                let bodyData;
+                if (typeof options.body === 'string') {
+                  bodyData = JSON.parse(options.body);
+                } else if (options.body instanceof FormData) {
+                  // Converter FormData para objeto
+                  bodyData = {};
+                  for (let [key, value] of options.body.entries()) {
+                    bodyData[key] = value;
+                  }
+                } else {
+                  bodyData = options.body;
+                }
+                
+                // Adicionar visitor_id se não existir
+                if (!bodyData.visitor_id) {
+                  bodyData.visitor_id = self.getOrCreateVisitorId();
+                  console.log('LovoCRM: ✅ Visitor ID adicionado ao fetch:', bodyData.visitor_id);
+                }
+                
+                // Adicionar session_id se não existir
+                if (!bodyData.session_id) {
+                  bodyData.session_id = self.config.sessionId;
+                  console.log('LovoCRM: ✅ Session ID adicionado ao fetch:', bodyData.session_id);
+                }
+                
+                // Atualizar o body da requisição
+                if (options.body instanceof FormData) {
+                  // Recriar FormData com novos campos
+                  const newFormData = new FormData();
+                  for (let [key, value] of Object.entries(bodyData)) {
+                    newFormData.append(key, value);
+                  }
+                  options.body = newFormData;
+                } else {
+                  // Atualizar JSON
+                  options.body = JSON.stringify(bodyData);
+                }
+                
+                console.log('LovoCRM: 🚀 Requisição enriquecida com visitor_id');
+                
+              } catch (error) {
+                console.error('LovoCRM: Erro ao processar body da requisição:', error);
+                // Continuar com requisição original se houver erro
+              }
+            }
+            
+            // Chamar fetch original com dados (possivelmente) modificados
+            return originalFetch.apply(this, arguments);
+          };
+          
+          console.log('LovoCRM: ✅ Interceptação fetch configurada');
+        }
+        
+        // Interceptar XMLHttpRequest (para axios e outras bibliotecas)
+        if (window.XMLHttpRequest) {
+          const originalXHRSend = XMLHttpRequest.prototype.send;
+          
+          XMLHttpRequest.prototype.send = function(data) {
+            // Verificar se é uma requisição para webhook LovoCRM
+            const isWebhookRequest = this._url && (
+              this._url.includes('webhook-lead') ||
+              this._url.includes('lovoocrm.com') ||
+              this._url.includes('app.lovoocrm.com') ||
+              this._url.includes('/api/webhook')
+            );
+            
+            if (isWebhookRequest && data) {
+              console.log('LovoCRM: Interceptando requisição XMLHttpRequest para webhook');
+              
+              try {
+                let bodyData;
+                if (typeof data === 'string') {
+                  bodyData = JSON.parse(data);
+                  
+                  // Adicionar visitor_id se não existir
+                  if (!bodyData.visitor_id) {
+                    bodyData.visitor_id = self.getOrCreateVisitorId();
+                    console.log('LovoCRM: ✅ Visitor ID adicionado ao XHR:', bodyData.visitor_id);
+                  }
+                  
+                  // Adicionar session_id se não existir
+                  if (!bodyData.session_id) {
+                    bodyData.session_id = self.config.sessionId;
+                    console.log('LovoCRM: ✅ Session ID adicionado ao XHR:', bodyData.session_id);
+                  }
+                  
+                  // Atualizar dados
+                  data = JSON.stringify(bodyData);
+                  console.log('LovoCRM: 🚀 XHR enriquecido com visitor_id');
+                }
+              } catch (error) {
+                console.error('LovoCRM: Erro ao processar XHR data:', error);
+                // Continuar com dados originais se houver erro
+              }
+            }
+            
+            // Chamar método original
+            return originalXHRSend.call(this, data);
+          };
+          
+          // Interceptar open para capturar URL
+          const originalXHROpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url) {
+            this._url = url;
+            return originalXHROpen.apply(this, arguments);
+          };
+          
+          console.log('LovoCRM: ✅ Interceptação XMLHttpRequest configurada');
+        }
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro ao configurar interceptação HTTP:', error);
       }
     }
   };
