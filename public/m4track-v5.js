@@ -468,13 +468,27 @@
     // NOVA FUNÇÃO: Enviar formulário via fetch garantindo visitor_id
     submitFormViaFetch: function(form) {
       try {
-        // Coletar todos os dados do formulário incluindo campos dinâmicos
+        console.log('LovoCRM: Coletando dados do formulário...');
+        
+        // Coletar TODOS os campos do formulário (incluindo hidden)
         const formData = new FormData(form);
         const jsonData = {};
         
         // Converter FormData para objeto
         for (let [key, value] of formData.entries()) {
           jsonData[key] = value;
+          console.log('LovoCRM: Campo coletado:', key, '=', value);
+        }
+        
+        // CRÍTICO: Garantir que api_key está incluída
+        if (!jsonData.api_key) {
+          const apiKeyField = form.querySelector('input[name="api_key"]');
+          if (apiKeyField && apiKeyField.value) {
+            jsonData.api_key = apiKeyField.value;
+            console.log('LovoCRM: ✅ API Key recuperada manualmente:', apiKeyField.value);
+          } else {
+            console.error('LovoCRM: ❌ API Key não encontrada!');
+          }
         }
         
         // Garantir que visitor_id está incluído
