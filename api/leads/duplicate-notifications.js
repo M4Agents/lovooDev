@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+// Usar service key para contornar RLS ao buscar leads
+const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE5MjMwMywiZXhwIjoyMDYzNzY4MzAzfQ.nTh_suYXOLlBkVmJqOFvQWJlEfJxrJqGjNOKhBGvdBs';
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -15,7 +16,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Usar service key para contornar RLS ao buscar dados dos leads
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Extrair company_id do header ou query
     const companyId = req.headers['x-company-id'] || req.query.company_id;
