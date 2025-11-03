@@ -13,6 +13,8 @@ interface DuplicateNotification {
   duplicate_email: string;
   duplicate_phone: string;
   reason: 'phone' | 'email';
+  reason_label?: string;
+  duplicate_field_value?: string;
   created_at: string;
 }
 
@@ -164,25 +166,36 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
           <div key={notification.notification_id} className="p-6 hover:bg-gray-50 transition-colors">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <div className="flex items-center mb-3">
-                  <Users className="w-5 h-5 text-gray-400 mr-2" />
-                  <span className="text-sm font-medium text-gray-900">
-                    Lead Duplicado Detectado
-                  </span>
-                  <div className="flex items-center ml-3 px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center">
+                    <Users className="w-5 h-5 text-gray-400 mr-2" />
+                    <span className="text-sm font-medium text-gray-900">
+                      Lead Duplicado Detectado
+                    </span>
+                  </div>
+                  <div className="flex items-center px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium">
                     {getReasonIcon(notification.reason)}
-                    <span className="ml-1">{getReasonText(notification.reason)}</span>
+                    <span className="ml-1">{notification.reason_label || getReasonText(notification.reason)}</span>
+                    {notification.duplicate_field_value && (
+                      <span className="ml-2 font-mono text-xs bg-orange-200 px-2 py-0.5 rounded">
+                        {notification.duplicate_field_value}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Lead Novo */}
                   <div className="bg-blue-50 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2">Lead Novo (ID: {notification.lead_id})</h4>
-                    <div className="space-y-1 text-sm">
+                    <h4 className="font-medium text-blue-900 mb-2">
+                      Lead Novo (ID: {notification.lead_id})
+                    </h4>
+                    <div className="space-y-2 text-sm">
                       <div className="flex items-center text-blue-800">
-                        <Users className="w-4 h-4 mr-2" />
-                        {notification.lead_name}
+                        <Users className="w-4 h-4 mr-2 flex-shrink-0" />
+                        <span className={`font-medium ${notification.lead_name === 'Lead não encontrado' ? 'text-red-600' : 'text-blue-900'}`}>
+                          {notification.lead_name}
+                        </span>
                       </div>
                       {notification.lead_email && (
                         <div className="flex items-center text-blue-700">
@@ -201,11 +214,15 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
 
                   {/* Lead Existente */}
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Lead Existente (ID: {notification.duplicate_of_lead_id})</h4>
-                    <div className="space-y-1 text-sm">
+                    <h4 className="font-medium text-gray-900 mb-2">
+                      Lead Existente (ID: {notification.duplicate_of_lead_id})
+                    </h4>
+                    <div className="space-y-2 text-sm">
                       <div className="flex items-center text-gray-800">
-                        <Users className="w-4 h-4 mr-2" />
-                        {notification.duplicate_name}
+                        <Users className="w-4 h-4 mr-2 flex-shrink-0" />
+                        <span className={`font-medium ${notification.duplicate_name === 'Lead não encontrado' ? 'text-red-600' : 'text-gray-900'}`}>
+                          {notification.duplicate_name}
+                        </span>
                       </div>
                       {notification.duplicate_email && (
                         <div className="flex items-center text-gray-700">

@@ -34,8 +34,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Usar query direta simples (mais confiável que RPC)
-      console.log('Buscando notificações com query direta para company_id:', companyId);
+      // Usar query com JOIN para buscar tudo de uma vez (mais eficiente e confiável)
+      console.log('Buscando notificações com JOIN para company_id:', companyId);
       
       const { data: notifications, error } = await supabase
         .from('duplicate_notifications')
@@ -44,53 +44,56 @@ export default async function handler(req, res) {
           lead_id,
           duplicate_of_lead_id,
           reason,
-          created_at
+          created_at,
+          lead_new:leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
+          lead_existing:leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
         `)
         .eq('company_id', companyId)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
         
-      console.log('Resultado query direta:', { notifications, error });
+      console.log('Resultado query com JOIN:', { notifications, error, count: notifications?.length });
       
-      // Se temos notificações, buscar dados dos leads
+      // Transformar dados para formato esperado
       let enrichedNotifications = [];
       if (notifications && notifications.length > 0) {
-        console.log(`Enriquecendo ${notifications.length} notificações com dados dos leads...`);
+        console.log(`Processando ${notifications.length} notificações...`);
         
-        for (const notif of notifications) {
-          // Buscar lead novo
-          const { data: newLead, error: newLeadError } = await supabase
-            .from('leads')
-            .select('id, name, email, phone')
-            .eq('id', notif.lead_id)
-            .maybeSingle();
-            
-          // Buscar lead existente
-          const { data: existingLead, error: existingLeadError } = await supabase
-            .from('leads')
-            .select('id, name, email, phone')
-            .eq('id', notif.duplicate_of_lead_id)
-            .maybeSingle();
-            
-          if (newLeadError) console.log('Erro ao buscar lead novo:', newLeadError);
-          if (existingLeadError) console.log('Erro ao buscar lead existente:', existingLeadError);
-            
-          enrichedNotifications.push({
+        enrichedNotifications = notifications.map(notif => {
+          const leadNew = Array.isArray(notif.lead_new) ? notif.lead_new[0] : notif.lead_new;
+          const leadExisting = Array.isArray(notif.lead_existing) ? notif.lead_existing[0] : notif.lead_existing;
+          
+          // Determinar qual campo está duplicado e seu valor
+          let duplicateFieldValue = '';
+          let reasonLabel = '';
+          
+          if (notif.reason === 'phone') {
+            duplicateFieldValue = leadNew?.phone || leadExisting?.phone || '';
+            reasonLabel = 'Telefone';
+          } else if (notif.reason === 'email') {
+            duplicateFieldValue = leadNew?.email || leadExisting?.email || '';
+            reasonLabel = 'Email';
+          }
+          
+          return {
             notification_id: notif.id,
             lead_id: notif.lead_id,
-            lead_name: newLead?.name || 'N/A',
-            lead_email: newLead?.email || '',
-            lead_phone: newLead?.phone || '',
+            lead_name: leadNew?.name || 'Lead não encontrado',
+            lead_email: leadNew?.email || '',
+            lead_phone: leadNew?.phone || '',
             duplicate_of_lead_id: notif.duplicate_of_lead_id,
-            duplicate_name: existingLead?.name || 'N/A',
-            duplicate_email: existingLead?.email || '',
-            duplicate_phone: existingLead?.phone || '',
+            duplicate_name: leadExisting?.name || 'Lead não encontrado',
+            duplicate_email: leadExisting?.email || '',
+            duplicate_phone: leadExisting?.phone || '',
             reason: notif.reason,
+            reason_label: reasonLabel,
+            duplicate_field_value: duplicateFieldValue,
             created_at: notif.created_at
-          });
-        }
+          };
+        });
         
-        console.log(`Notificações enriquecidas: ${enrichedNotifications.length}`);
+        console.log(`Notificações processadas: ${enrichedNotifications.length}`);
+        console.log('Primeira notificação:', enrichedNotifications[0]);
       }
 
       if (error) {
