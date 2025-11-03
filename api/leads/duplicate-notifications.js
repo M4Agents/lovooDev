@@ -34,34 +34,50 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('Buscando notificações de duplicatas para empresa:', companyId);
       
-      // Usar query com JOIN para buscar tudo de uma vez (mais eficiente e confiável)
-      console.log('Buscando notificações com JOIN para company_id:', companyId);
+      // Usar query simples e buscar leads separadamente (mais confiável)
+      console.log('Buscando notificações para company_id:', companyId);
       
       const { data: notifications, error } = await supabase
         .from('duplicate_notifications')
-        .select(`
-          id,
-          lead_id,
-          duplicate_of_lead_id,
-          reason,
-          created_at,
-          lead_new:leads!duplicate_notifications_lead_id_fkey(id, name, email, phone),
-          lead_existing:leads!duplicate_notifications_duplicate_of_lead_id_fkey(id, name, email, phone)
-        `)
+        .select('id, lead_id, duplicate_of_lead_id, reason, created_at')
         .eq('company_id', companyId)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
         
-      console.log('Resultado query com JOIN:', { notifications, error, count: notifications?.length });
+      console.log('Resultado query notificações:', { notifications, error, count: notifications?.length });
       
-      // Transformar dados para formato esperado
+      // Buscar dados dos leads em uma query separada
       let enrichedNotifications = [];
       if (notifications && notifications.length > 0) {
         console.log(`Processando ${notifications.length} notificações...`);
         
+        // Coletar todos os IDs únicos dos leads
+        const leadIds = new Set();
+        notifications.forEach(notif => {
+          leadIds.add(notif.lead_id);
+          leadIds.add(notif.duplicate_of_lead_id);
+        });
+        
+        console.log('IDs dos leads para buscar:', Array.from(leadIds));
+        
+        // Buscar todos os leads de uma vez
+        const { data: leads, error: leadsError } = await supabase
+          .from('leads')
+          .select('id, name, email, phone')
+          .in('id', Array.from(leadIds));
+          
+        console.log('Leads encontrados:', { leads, leadsError, count: leads?.length });
+        
+        // Criar mapa de leads por ID para acesso rápido
+        const leadsMap = new Map();
+        if (leads) {
+          leads.forEach(lead => leadsMap.set(lead.id, lead));
+        }
+        
+        // Processar notificações com dados dos leads
         enrichedNotifications = notifications.map(notif => {
-          const leadNew = Array.isArray(notif.lead_new) ? notif.lead_new[0] : notif.lead_new;
-          const leadExisting = Array.isArray(notif.lead_existing) ? notif.lead_existing[0] : notif.lead_existing;
+          const leadNew = leadsMap.get(notif.lead_id);
+          const leadExisting = leadsMap.get(notif.duplicate_of_lead_id);
           
           // Determinar qual campo está duplicado e seu valor
           let duplicateFieldValue = '';
