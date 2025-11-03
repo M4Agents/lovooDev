@@ -20,7 +20,12 @@ export default async function handler(req, res) {
     // Extrair company_id do header ou query
     const companyId = req.headers['x-company-id'] || req.query.company_id;
     
+    console.log('Headers recebidos:', req.headers);
+    console.log('Query params:', req.query);
+    console.log('Company ID extraído:', companyId);
+    
     if (!companyId) {
+      console.error('Company ID não fornecido');
       return res.status(400).json({ 
         error: 'company_id é obrigatório' 
       });
