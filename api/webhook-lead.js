@@ -68,7 +68,7 @@ async function createLeadDirectSQL(params) {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     console.log('Processando webhook para API key:', params.api_key);
-    console.log('Visitor ID recebido:', params.visitor_id || 'não fornecido');
+    console.log('Visitor ID recebido:', params.form_data.visitor_id || 'não fornecido');
     
     // 1. Detectar campos automaticamente
     const detectedFields = detectFormFields(params.form_data);
@@ -94,7 +94,7 @@ async function createLeadDirectSQL(params) {
           company_name: detectedFields.company_name || null,
           company_cnpj: detectedFields.company_cnpj || null,
           company_email: detectedFields.company_email || null,
-          visitor_id: params.visitor_id || null  // CRÍTICO: Passar visitor_id para RPC
+          visitor_id: params.form_data.visitor_id || null  // CRÍTICO: Passar visitor_id para RPC
         }
       });
     
@@ -111,9 +111,9 @@ async function createLeadDirectSQL(params) {
     console.log('Lead criado com ID:', lead.lead_id);
     
     // 3. Processar conexão visitor-lead (Sistema Híbrido)
-    if (params.visitor_id) {
-      console.log('Visitor ID detectado:', params.visitor_id);
-      await processVisitorConnection(supabase, lead.lead_id, lead.company_id, params.visitor_id, detectedFields);
+    if (params.form_data.visitor_id) {
+      console.log('Visitor ID detectado:', params.form_data.visitor_id);
+      await processVisitorConnection(supabase, lead.lead_id, lead.company_id, params.form_data.visitor_id, detectedFields);
     } else {
       console.log('Visitor ID não fornecido - tentando busca retroativa inteligente');
       await processRetroactiveVisitorSearch(supabase, lead.lead_id, lead.company_id, detectedFields);
