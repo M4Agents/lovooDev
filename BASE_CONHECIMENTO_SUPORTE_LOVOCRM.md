@@ -1,0 +1,602 @@
+# BASE DE CONHECIMENTO - SUPORTE LOVOCRM
+## Guia Completo para Suporte ao Usuário
+
+**Versão:** 1.1.0 - Sistema Híbrido com Visitor ID  
+**Data:** Novembro 2025  
+**Última Atualização:** 03/11/2025 - 16:16  
+
+---
+
+## 📋 ÍNDICE
+
+1. [Visão Geral da Plataforma](#visao-geral)
+2. [Primeiros Passos](#primeiros-passos)
+3. [Dashboard Principal](#dashboard)
+4. [Sistema de Analytics](#analytics)
+5. [Gestão de Leads](#leads)
+6. [Landing Pages](#landing-pages)
+7. [Webhook Ultra-Simples](#webhook)
+8. [Configurações](#configuracoes)
+9. [Problemas Comuns](#problemas-comuns)
+10. [Perguntas Frequentes](#faq)
+
+---
+
+## 🎯 VISÃO GERAL DA PLATAFORMA {#visao-geral}
+
+### O que é o LovoCRM?
+O LovoCRM é uma plataforma SaaS completa que combina:
+- **Analytics Comportamental**: Acompanhe visitantes em suas landing pages
+- **CRM Inteligente**: Gerencie leads de forma automatizada
+- **Webhook Ultra-Simples**: Capture leads de qualquer formulário
+- **Sistema Híbrido**: Conecta automaticamente dados comportamentais aos leads
+- **Campos Personalizados**: Sistema inteligente que se adapta aos seus dados
+- **Score Comportamental**: Leads recebem pontuação automática baseada no comportamento
+
+### Principais Benefícios
+- ✅ **Captura Automática**: Leads chegam automaticamente no sistema
+- ✅ **Analytics em Tempo Real**: Veja quem visita suas páginas
+- ✅ **Flexibilidade Total**: Funciona com qualquer formulário (HTML, React, Vue, Angular)
+- ✅ **Sem Configuração Complexa**: Sistema ultra-simples de usar
+- ✅ **Score Automático**: Leads recebem pontuação comportamental automaticamente
+- ✅ **Dados Enriquecidos**: Informações de navegação conectadas aos leads
+
+### Acesso à Plataforma
+- **URL**: https://app.lovoocrm.com
+- **Login**: Email e senha cadastrados
+- **Suporte**: Via chat ou email
+
+---
+
+## 🚀 PRIMEIROS PASSOS {#primeiros-passos}
+
+### 1. Primeiro Acesso
+1. **Acesse**: https://app.lovoocrm.com
+2. **Faça login** com suas credenciais
+3. **Explore o dashboard** principal
+4. **Configure sua primeira landing page**
+
+### 2. Configuração Inicial
+#### Dados da Empresa
+1. Vá em **Configurações** → **Dados da Empresa**
+2. Preencha as informações básicas
+3. **Salve** as alterações
+
+#### Primeira Landing Page
+1. Acesse **Landing Pages**
+2. Clique em **Nova Landing Page**
+3. Preencha nome e URL
+4. **Copie o código de tracking**
+5. **Instale na sua página**
+
+### 3. Primeiro Lead
+#### Via Webhook Ultra-Simples
+1. Vá em **Configurações** → **Integrações**
+2. **Copie sua API Key** (clique no olho para revelar)
+3. **Configure seu formulário** para enviar para a URL mostrada
+4. **Teste** usando o botão de teste
+
+---
+
+## 📊 DASHBOARD PRINCIPAL {#dashboard}
+
+### Visão Geral
+O dashboard mostra um resumo completo da sua operação:
+
+#### Métricas Principais
+- **Total de Leads**: Leads capturados no período
+- **Visitantes**: Pessoas que visitaram suas páginas
+- **Taxa de Conversão**: Percentual de visitantes que viraram leads
+- **Leads Hoje**: Novos leads do dia atual
+
+#### Gráficos Disponíveis
+- **Visitantes por Dia**: Evolução temporal
+- **Leads por Origem**: De onde vêm seus leads
+- **Dispositivos**: Mobile, tablet, desktop
+
+### Como Interpretar os Dados
+- **Picos de visitantes**: Indicam campanhas ou conteúdo viral
+- **Taxa de conversão baixa**: Pode indicar problema no formulário
+- **Muitos visitantes mobile**: Otimize para dispositivos móveis
+
+---
+
+## 📈 SISTEMA DE ANALYTICS {#analytics}
+
+### Analytics Básico
+**Localização**: Menu → Analytics → Selecionar Landing Page
+
+#### Funcionalidades
+- **Total de Visitantes**: Contador geral
+- **Gráfico Temporal**: Visitantes por período
+- **Breakdown por Dispositivo**: Mobile, tablet, desktop
+- **Tabela de Visitantes**: Lista dos visitantes recentes
+
+#### Como Usar
+1. **Selecione a landing page** que deseja analisar
+2. **Escolha o período** (hoje, ontem, 7 dias, etc.)
+3. **Analise os gráficos** para identificar padrões
+4. **Verifique a tabela** para detalhes dos visitantes
+
+### Analytics Pro
+**Localização**: Menu → Analytics Pro → Selecionar Landing Page
+
+#### Funcionalidades Avançadas
+- **Métricas Profissionais**: Visitantes únicos, recorrentes
+- **Filtros de Data**: Períodos personalizados
+- **Segmentação Avançada**: Por origem do tráfego
+- **Tabela de Remarketing**: Visitantes identificados
+- **Exportação CSV**: Para análises externas
+
+#### Métricas Explicadas
+- **Visitantes Únicos**: Pessoas diferentes (não sessões)
+- **Taxa de Retorno**: Quantos visitaram mais de uma vez
+- **Duração Média**: Tempo médio na página
+- **Taxa de Rejeição**: Visitantes que saíram rapidamente
+
+### Instalação do Código de Tracking
+#### Código Padrão
+```html
+<script src="https://app.lovoocrm.com/m4track-v5.js?v=TIMESTAMP"></script>
+<script>
+  LovoCRM.init('SEU_TRACKING_CODE', 'https://app.lovoocrm.com');
+</script>
+```
+
+#### Onde Instalar
+- **Antes do `</body>`**: Para melhor performance
+- **Em todas as páginas**: Que você quer trackear
+- **Uma vez por página**: Não duplicar o código
+
+#### Verificação da Instalação
+1. Acesse a landing page no sistema
+2. Clique em **"Verificar Tag"**
+3. O sistema mostrará se está instalado corretamente
+
+---
+
+## 👥 GESTÃO DE LEADS {#leads}
+
+### Lista de Leads
+**Localização**: Menu → Leads
+
+#### Informações Exibidas
+- **Nome e Email**: Dados principais do lead
+- **Telefone**: Se fornecido
+- **Empresa**: Nome da empresa do lead
+- **Origem**: Como o lead chegou (webhook, formulário, etc.)
+- **Status**: Novo, em andamento, convertido, etc.
+- **Data**: Quando foi capturado
+
+#### Filtros Disponíveis
+- **Por Status**: Novo, em andamento, convertido
+- **Por Origem**: Webhook, formulário manual
+- **Por Período**: Últimos dias, semanas, meses
+- **Busca**: Por nome, email ou empresa
+
+### Detalhes do Lead
+Clique em qualquer lead para ver:
+
+#### Dados Básicos
+- **Informações pessoais**: Nome, email, telefone
+- **Dados da empresa**: Nome, CNPJ, endereço
+- **Origem**: Como chegou ao sistema
+
+#### Campos Personalizados
+- **Campos específicos**: Criados automaticamente
+- **Valores únicos**: Informações específicas do seu negócio
+- **Histórico**: Quando foram preenchidos
+
+#### Ações Disponíveis
+- **Editar dados**: Alterar informações
+- **Alterar status**: Marcar progresso
+- **Adicionar observações**: Notas internas
+- **Exportar dados**: Para outros sistemas
+
+### Status dos Leads
+- **Novo**: Recém capturado, precisa ser qualificado
+- **Em Andamento**: Sendo trabalhado pela equipe
+- **Convertido**: Virou cliente
+- **Perdido**: Não teve interesse
+- **Pausado**: Temporariamente parado
+
+---
+
+## 🎯 LANDING PAGES {#landing-pages}
+
+### Gerenciamento
+**Localização**: Menu → Landing Pages
+
+#### Lista de Landing Pages
+- **Nome**: Identificação interna
+- **URL**: Endereço da página
+- **Status**: Ativa ou inativa
+- **Visitantes**: Total de visitantes
+- **Código**: Tracking code único
+
+#### Criando Nova Landing Page
+1. Clique em **"Nova Landing Page"**
+2. **Preencha o nome**: Para identificação interna
+3. **Adicione a URL**: Endereço completo da página
+4. **Salve**: Sistema gera código automaticamente
+5. **Copie o código**: Para instalar na página
+
+### Instalação do Tracking
+#### Código Gerado
+Cada landing page recebe um código único:
+```html
+<script src="https://app.lovoocrm.com/m4track-v5.js?v=1730642100"></script>
+<script>
+  LovoCRM.init('c5c81b46-03bb-40da-882a-350c8d9c1877', 'https://app.lovoocrm.com');
+</script>
+```
+
+#### Onde Instalar
+- **WordPress**: No tema, antes do `</body>`
+- **HTML Puro**: Antes do fechamento do body
+- **Outras Plataformas**: Na seção de scripts customizados
+
+#### Verificação
+- Use o botão **"Verificar Tag"** para confirmar instalação
+- Acesse a página e veja se aparece nos analytics
+- Teste em dispositivos diferentes
+
+---
+
+## 🔗 WEBHOOK ULTRA-SIMPLES {#webhook}
+
+### Conceito
+Sistema que permite capturar leads de **qualquer formulário** automaticamente, sem programação complexa.
+
+### Como Funciona
+1. **Você configura** seu formulário para enviar dados
+2. **Sistema recebe** automaticamente
+3. **Lead é criado** no CRM
+4. **Campos personalizados** são criados automaticamente
+
+### Configuração
+**Localização**: Configurações → Integrações
+
+#### Informações Necessárias
+- **URL do Webhook**: `https://app.lovoocrm.com/api/webhook-lead`
+- **Sua API Key**: Chave única da sua empresa
+- **Método**: POST
+- **Formato**: JSON
+
+#### Exemplo de Configuração
+```json
+{
+  "api_key": "sua-api-key-aqui",
+  "nome": "João Silva",
+  "email": "joao@email.com",
+  "telefone": "(11) 99999-9999",
+  "empresa": "Empresa do João",
+  "interesse": "Quero saber mais sobre o produto"
+}
+```
+
+### Campos Reconhecidos Automaticamente
+#### Campos Padrão
+- **Nome**: name, nome, full_name, cliente
+- **Email**: email, e-mail, mail
+- **Telefone**: phone, telefone, celular, whatsapp
+- **Empresa**: company, empresa, company_name
+- **Interesse**: interest, interesse, mensagem, message
+
+#### Campos Personalizados
+**Qualquer outro campo** enviado será:
+- **Detectado automaticamente**
+- **Criado como campo personalizado**
+- **Associado ao lead**
+- **Disponível para busca e filtros**
+
+### Exemplos de Uso
+#### Formulário de Orçamento
+```json
+{
+  "api_key": "sua-api-key",
+  "nome": "Maria Santos",
+  "email": "maria@empresa.com",
+  "orcamento_disponivel": "R$ 50.000",
+  "prazo_desejado": "3 meses",
+  "tipo_servico": "Desenvolvimento Web"
+}
+```
+
+#### Formulário de Contato
+```json
+{
+  "api_key": "sua-api-key",
+  "nome": "Carlos Silva",
+  "email": "carlos@gmail.com",
+  "telefone": "(11) 98765-4321",
+  "assunto": "Dúvida sobre produto",
+  "mensagem": "Gostaria de mais informações"
+}
+```
+
+### Teste do Webhook
+1. **Acesse**: Configurações → Integrações
+2. **Clique em**: "Testar Webhook"
+3. **Sistema envia**: Dados de teste
+4. **Verifica**: Se lead foi criado
+5. **Mostra resultado**: Sucesso ou erro
+
+---
+
+## ⚙️ CONFIGURAÇÕES {#configuracoes}
+
+### Dados da Empresa
+**Localização**: Configurações → Dados da Empresa
+
+#### Informações Básicas
+- **Nome da Empresa**: Razão social
+- **Nome Fantasia**: Nome comercial
+- **CNPJ**: Documento da empresa
+- **Inscrições**: Estadual e municipal
+
+#### Endereço
+- **CEP**: Código postal
+- **Cidade e Estado**: Localização
+- **Endereço Completo**: Rua, número, complemento
+
+#### Contatos
+- **Telefone Principal**: Contato da empresa
+- **Email Corporativo**: Email oficial
+- **Website**: Site da empresa
+
+### Integrações
+**Localização**: Configurações → Integrações
+
+#### Webhook Ultra-Simples
+- **URL**: Endpoint para receber leads
+- **API Key**: Chave de identificação (clique no olho para ver)
+- **Instruções**: Como configurar formulários
+- **Teste**: Botão para testar funcionamento
+
+#### Como Usar a API Key
+1. **Clique no ícone do olho** para revelar a chave
+2. **Copie a chave completa**
+3. **Use no campo "api_key"** dos seus formulários
+4. **Mantenha segura**: Não compartilhe publicamente
+
+### Usuários e Permissões
+#### Tipos de Usuário
+- **Administrador**: Acesso total ao sistema
+- **Usuário**: Acesso limitado a leads e analytics
+- **Visualizador**: Apenas consulta dados
+
+#### Gerenciamento
+- **Adicionar usuários**: Convites por email
+- **Alterar permissões**: Conforme necessário
+- **Remover acesso**: Quando necessário
+
+---
+
+## 🔧 PROBLEMAS COMUNS {#problemas-comuns}
+
+### Analytics Não Mostra Dados
+#### Possíveis Causas
+- **Código não instalado**: Verificar se está na página
+- **Código incorreto**: Conferir tracking code
+- **Cache do navegador**: Limpar cache
+- **Bloqueador de anúncios**: Pode estar bloqueando
+
+#### Soluções
+1. **Use "Verificar Tag"** na landing page
+2. **Acesse a página** e aguarde alguns minutos
+3. **Teste em navegador anônimo**
+4. **Desative bloqueadores** temporariamente
+
+### Webhook Não Recebe Leads
+#### Possíveis Causas
+- **API Key incorreta**: Verificar se está correta
+- **URL errada**: Deve ser exatamente a fornecida
+- **Formato JSON incorreto**: Verificar sintaxe
+- **Método HTTP errado**: Deve ser POST
+
+#### Soluções
+1. **Teste o webhook** usando o botão de teste
+2. **Verifique a API Key** (clique no olho)
+3. **Confira o formato JSON** do exemplo
+4. **Teste com dados simples** primeiro
+
+### Leads Duplicados
+#### Possíveis Causas
+- **Múltiplos envios**: Usuário clicou várias vezes
+- **Formulário mal configurado**: Enviando múltiplas vezes
+- **Cache de formulário**: Dados antigos sendo reenviados
+
+#### Soluções
+1. **Configure debounce** no formulário (aguardar entre envios)
+2. **Desabilite botão** após primeiro clique
+3. **Implemente validação** no lado cliente
+
+### Campos Personalizados Não Aparecem
+#### Possíveis Causas
+- **Nome do campo muito similar**: Sistema pode estar agrupando
+- **Dados não enviados**: Campo vazio no formulário
+- **Formato incorreto**: Caracteres especiais
+
+#### Soluções
+1. **Verifique os dados enviados** no teste
+2. **Use nomes descritivos** para campos
+3. **Evite caracteres especiais** nos nomes
+
+---
+
+## ❓ PERGUNTAS FREQUENTES {#faq}
+
+### Sobre a Plataforma
+
+**P: O LovoCRM funciona com qualquer tipo de formulário?**
+R: Sim! O webhook ultra-simples funciona com qualquer formulário que possa enviar dados via POST em formato JSON.
+
+**P: Preciso saber programação para usar?**
+R: Não para usar a plataforma. Para configurar o webhook, pode precisar de ajuda técnica básica ou usar integrações prontas.
+
+**P: Quantos leads posso capturar?**
+R: Não há limite técnico. O limite depende do seu plano contratado.
+
+**P: Os dados ficam seguros?**
+R: Sim, usamos criptografia e seguimos boas práticas de segurança. Seus dados ficam isolados por empresa.
+
+### Sobre Analytics
+
+**P: Por que os números podem diferir de outras ferramentas?**
+R: Cada ferramenta tem critérios diferentes. Nosso foco é em visitantes reais, filtrando bots e tráfego inválido.
+
+**P: Posso ver dados históricos?**
+R: Sim, todos os dados ficam armazenados. Você pode consultar qualquer período desde a instalação.
+
+**P: O tracking funciona em sites HTTPS?**
+R: Sim, nosso sistema é totalmente compatível com HTTPS e é a configuração recomendada.
+
+### Sobre Webhook
+
+**P: Posso usar o webhook em múltiplos formulários?**
+R: Sim! Use a mesma API Key em quantos formulários quiser. Todos os leads chegam no mesmo lugar.
+
+**P: E se meu formulário tiver campos diferentes?**
+R: Perfeito! O sistema cria automaticamente campos personalizados para qualquer dado novo que receber.
+
+**P: Posso testar antes de colocar em produção?**
+R: Sim, use o botão "Testar Webhook" nas configurações para verificar se tudo está funcionando.
+
+### Sobre Integração
+
+**P: Funciona com WordPress?**
+R: Sim! Tanto o tracking quanto o webhook funcionam perfeitamente com WordPress.
+
+**P: E com outras plataformas (Wix, Squarespace, etc.)?**
+R: Sim, funciona com qualquer plataforma que permita adicionar código JavaScript e configurar formulários.
+
+**P: Posso integrar com meu CRM atual?**
+R: O LovoCRM pode ser usado junto com outros sistemas. Você pode exportar dados ou usar nossa API para integrações.
+
+### Sobre Suporte
+
+**P: Como obter ajuda?**
+R: Use o chat da plataforma, envie email para suporte ou consulte esta base de conhecimento.
+
+**P: Vocês ajudam na configuração?**
+R: Sim! Nossa equipe pode ajudar na configuração inicial e resolver dúvidas técnicas.
+
+**P: Há treinamento disponível?**
+R: Sim, oferecemos treinamento para equipes e materiais de apoio para uso da plataforma.
+
+---
+
+## 📞 CANAIS DE SUPORTE
+
+### Suporte Técnico
+- **Chat Online**: Disponível na plataforma
+- **Email**: suporte@lovoocrm.com
+- **Horário**: Segunda a sexta, 9h às 18h
+
+### Recursos de Ajuda
+- **Base de Conhecimento**: Este documento
+- **Tutoriais em Vídeo**: Em desenvolvimento
+- **Documentação API**: Para desenvolvedores
+
+### Suporte Comercial
+- **Vendas**: vendas@lovoocrm.com
+- **Parcerias**: parcerias@lovoocrm.com
+- **Feedback**: feedback@lovoocrm.com
+
+---
+
+## 📝 GLOSSÁRIO
+
+**Analytics**: Sistema de análise de visitantes e comportamento em landing pages.
+
+**API Key**: Chave única que identifica sua empresa no sistema de webhook.
+
+**Campo Personalizado**: Campo criado automaticamente pelo sistema quando recebe dados não padrão.
+
+**CRM**: Customer Relationship Management - sistema de gestão de relacionamento com clientes.
+
+**Landing Page**: Página específica criada para conversão de visitantes em leads.
+
+**Lead**: Pessoa que demonstrou interesse no seu produto/serviço fornecendo seus dados.
+
+**Mapeamento Inteligente**: Sistema que identifica automaticamente o tipo de dados recebidos.
+
+**Remarketing**: Estratégia de marketing para visitantes que já conhecem sua marca.
+
+**Tracking Code**: Código único usado para identificar e rastrear uma landing page específica.
+
+**Webhook**: Sistema que permite receber dados automaticamente de formulários externos.
+
+**Visitor ID**: Identificador único que conecta o comportamento do visitante ao lead gerado.
+
+---
+
+## 🚀 SISTEMA HÍBRIDO - NOVIDADE V1.1.0 {#sistema-hibrido}
+
+### O que é o Sistema Híbrido?
+É uma funcionalidade revolucionária que conecta automaticamente os dados de comportamento dos visitantes aos leads capturados, mantendo a simplicidade total do webhook.
+
+### Como Funciona?
+1. **Visitante navega** na landing page (dados comportamentais são coletados)
+2. **Visitante preenche** formulário (qualquer tipo: HTML, React, etc.)
+3. **Sistema conecta** automaticamente os dados comportamentais ao lead
+4. **Lead recebe** pontuação baseada no comportamento
+5. **Tudo automático** - zero configuração adicional!
+
+### Benefícios para o Usuário
+- ✅ **Zero Configuração**: Funciona automaticamente
+- ✅ **Leads Mais Ricos**: Dados comportamentais incluídos
+- ✅ **Score Automático**: Pontuação de 0 a 10 baseada no engajamento
+- ✅ **Compatibilidade Total**: Funciona com qualquer tipo de formulário
+- ✅ **Simplicidade Mantida**: Mesmo processo de sempre (copiar/colar webhook)
+
+### O que o Cliente Vê?
+#### Antes (V1.0):
+- Nome, email, telefone, interesse
+- Data de criação, origem
+
+#### Agora (V1.1):
+- **Todos os dados anteriores** +
+- **Visitor ID**: Identificador único do visitante
+- **Score Comportamental**: Pontuação de engajamento (quando disponível)
+- **Dados de Navegação**: Tempo na página, dispositivo, origem (nos bastidores)
+
+### Perguntas Frequentes - Sistema Híbrido
+
+#### "Preciso alterar meu formulário?"
+**Não!** O sistema funciona automaticamente com qualquer formulário existente.
+
+#### "Funciona com React/Vue/Angular?"
+**Sim!** O sistema é compatível com qualquer tecnologia de frontend.
+
+#### "E se meu formulário não capturar o Visitor ID?"
+O sistema tem múltiplos fallbacks e busca retroativa. Sempre funciona!
+
+#### "O score sempre aparece?"
+O score aparece quando há dados comportamentais disponíveis. Se o visitante for direto ao formulário, o lead é criado normalmente sem score.
+
+#### "Isso afeta a velocidade do meu site?"
+**Não!** O sistema é otimizado e não impacta a performance.
+
+### Suporte Técnico
+
+#### Se o Visitor ID não aparecer:
+1. **Verifique** se o script de tracking está instalado na landing page
+2. **Confirme** que o formulário está enviando para o webhook LovoCRM
+3. **Teste** com um novo lead para validar
+
+#### Se houver problemas:
+- **Logs disponíveis**: Console do navegador mostra detalhes técnicos
+- **Sistema robusto**: Nunca quebra o funcionamento normal
+- **Suporte**: Entre em contato para análise detalhada
+
+---
+
+**📄 ARQUIVO**: `BASE_CONHECIMENTO_SUPORTE_LOVOCRM.md`  
+**🎯 OBJETIVO**: Suporte completo ao usuário da plataforma LovoCRM  
+**🔄 ATUALIZAÇÃO**: Sempre que houver novas funcionalidades ou mudanças na interface  
+
+---
+
+*Base de conhecimento gerada para suporte ao usuário - Última atualização: 03/11/2025 - 16:16*
