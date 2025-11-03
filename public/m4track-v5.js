@@ -201,6 +201,24 @@
           this.trackEvent('scroll', { percent: scrollPercent });
         }, 1000);
       });
+    },
+    
+    // NOVO: Métodos para expor visitor_id (compatibilidade total mantida)
+    getVisitorId: function() {
+      return this.getOrCreateVisitorId();
+    },
+    
+    getSessionId: function() {
+      return this.config.sessionId;
+    },
+    
+    // Propriedades para acesso direto
+    get visitorId() {
+      return this.getOrCreateVisitorId();
+    },
+    
+    get sessionId() {
+      return this.config.sessionId;
     }
   };
   

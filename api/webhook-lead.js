@@ -108,10 +108,18 @@ async function createLeadDirectSQL(params) {
     
     console.log('Lead criado com ID:', lead.lead_id);
     
-    // 3. Processar campos personalizados (mapeamento inteligente)
+    // 3. Processar visitor_id se fornecido (OPCIONAL - não quebra se não tiver)
+    if (params.visitor_id) {
+      console.log('Visitor ID detectado:', params.visitor_id);
+      await processVisitorConnection(supabase, lead.lead_id, lead.company_id, params.visitor_id, detectedFields);
+    } else {
+      console.log('Lead criado sem visitor_id (compatibilidade mantida)');
+    }
+    
+    // 4. Processar campos personalizados (mapeamento inteligente)
     const customFieldsData = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
     
-    // 4. Inserir valores dos campos personalizados
+    // 5. Inserir valores dos campos personalizados
     if (customFieldsData.length > 0) {
       const customValues = customFieldsData.map(field => ({
         lead_id: lead.lead_id,
@@ -330,4 +338,141 @@ function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
+
+// NOVA FUNÇÃO: Processar conexão com visitor (OPCIONAL - não quebra compatibilidade)
+async function processVisitorConnection(supabase, leadId, companyId, visitorId, detectedFields) {
+  try {
+    console.log('Processando conexão visitor-lead:', { leadId, visitorId });
+    
+    // 1. Buscar dados comportamentais do visitante
+    const visitorData = await getVisitorBehaviorData(supabase, visitorId);
+    
+    if (visitorData) {
+      // 2. Calcular engagement score baseado nos dados
+      const engagementScore = calculateEngagementScore(visitorData);
+      
+      // 3. Criar registro na tabela conversions (conecta analytics + CRM)
+      const conversionData = {
+        id: generateUUID(),
+        visitor_id: visitorId,
+        landing_page_id: visitorData.landing_page_id,
+        form_data: {
+          name: detectedFields.name,
+          email: detectedFields.email,
+          phone: detectedFields.phone,
+          company: detectedFields.company_name,
+          interest: detectedFields.interest
+        },
+        behavior_summary: {
+          session_duration: visitorData.session_duration || 0,
+          device_type: visitorData.device_type || 'unknown',
+          referrer: visitorData.referrer || 'direct',
+          user_agent: visitorData.user_agent || 'unknown',
+          engagement_score: engagementScore,
+          lead_id: leadId // NOVA: Conexão com lead criado
+        },
+        engagement_score: engagementScore,
+        time_to_convert: visitorData.session_duration || 0,
+        webhook_sent: true,
+        webhook_response: { success: true, lead_id: leadId },
+        converted_at: new Date().toISOString()
+      };
+      
+      // 4. Inserir conversão (conecta visitor + lead)
+      const { error: conversionError } = await supabase
+        .from('conversions')
+        .insert(conversionData);
+      
+      if (conversionError) {
+        console.error('Erro ao criar conversão:', conversionError);
+        // NÃO falha o lead - apenas log do erro
+      } else {
+        console.log('Conversão criada com sucesso - Lead conectado ao analytics');
+      }
+      
+      // 5. Atualizar lead com visitor_id (se campo existir)
+      const { error: updateError } = await supabase
+        .from('leads')
+        .update({ visitor_id: visitorId })
+        .eq('id', leadId);
+      
+      if (updateError) {
+        console.error('Erro ao atualizar visitor_id no lead:', updateError);
+        // NÃO falha - apenas log
+      } else {
+        console.log('Lead atualizado com visitor_id');
+      }
+    } else {
+      console.log('Dados comportamentais não encontrados para visitor:', visitorId);
+    }
+    
+  } catch (error) {
+    console.error('Erro no processamento visitor-lead:', error);
+    // NÃO falha o lead - sistema robusto
+  }
+}
+
+// Buscar dados comportamentais do visitante
+async function getVisitorBehaviorData(supabase, visitorId) {
+  try {
+    const { data: visitor, error } = await supabase
+      .from('visitors')
+      .select('*')
+      .eq('visitor_id', visitorId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (error || !visitor) {
+      console.log('Visitante não encontrado:', visitorId);
+      return null;
+    }
+    
+    // Calcular duração da sessão (aproximada)
+    const sessionDuration = visitor.created_at 
+      ? Math.floor((new Date() - new Date(visitor.created_at)) / 1000)
+      : 0;
+    
+    return {
+      ...visitor,
+      session_duration: sessionDuration
+    };
+    
+  } catch (error) {
+    console.error('Erro ao buscar dados do visitante:', error);
+    return null;
+  }
+}
+
+// Calcular score de engagement baseado nos dados
+function calculateEngagementScore(visitorData) {
+  let score = 0;
+  
+  // Base score por ter visitado
+  score += 2;
+  
+  // Score por duração da sessão
+  if (visitorData.session_duration > 30) score += 2;
+  if (visitorData.session_duration > 60) score += 2;
+  if (visitorData.session_duration > 120) score += 2;
+  
+  // Score por dispositivo (desktop = mais engajado)
+  if (visitorData.device_type === 'desktop') score += 1;
+  
+  // Score por origem (direct = mais qualificado)
+  if (!visitorData.referrer || visitorData.referrer === 'direct') score += 1;
+  
+  // Máximo 10
+  return Math.min(score, 10);
+}
+
+// Gerar UUID simples
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 // DEPLOY FORÇADO - Webhook Lead V2 - 1730642100
