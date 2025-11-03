@@ -365,16 +365,18 @@
         form.dataset.lovoIntercepted = 'true';
         console.log('LovoCRM: ✅ Interceptando formulário LovoCRM!');
         
-        // Interceptar submit SEM preventDefault (manter funcionamento original)
+        // CRÍTICO: Adicionar visitor_id IMEDIATAMENTE (não esperar submit)
+        self.enhanceFormSubmission(form, null);
+        
+        // TAMBÉM interceptar submit com capture phase (executa ANTES da serialização)
         form.addEventListener('submit', function(e) {
-          console.log('LovoCRM: Submit interceptado - adicionando visitor_id...');
+          console.log('LovoCRM: Submit interceptado - garantindo visitor_id...');
           
-          // NÃO usar preventDefault - deixar formulário funcionar normalmente
-          // Apenas adicionar visitor_id antes do envio
-          self.enhanceFormSubmission(form, e);
+          // Garantir que visitor_id ainda está presente
+          self.ensureVisitorIdPresent(form);
           
-          console.log('LovoCRM: ✅ Visitor_id adicionado - formulário continua envio normal');
-        });
+          console.log('LovoCRM: ✅ Visitor_id garantido - formulário continua envio normal');
+        }, true); // true = capture phase (executa ANTES)
         
       } catch (error) {
         console.error('LovoCRM: Erro ao interceptar formulário:', error);
@@ -414,6 +416,50 @@
       } catch (error) {
         console.error('LovoCRM: Erro ao adicionar visitor_id:', error);
         // NÃO impede o envio - sistema robusto
+      }
+    },
+    
+    // NOVA FUNÇÃO: Garantir que visitor_id está presente (chamada no capture phase)
+    ensureVisitorIdPresent: function(form) {
+      const self = this;
+      
+      try {
+        // Verificar se visitor_id ainda está presente
+        let visitorIdField = form.querySelector('input[name="visitor_id"]');
+        
+        if (!visitorIdField || !visitorIdField.value) {
+          console.log('LovoCRM: Visitor ID não encontrado - adicionando novamente...');
+          
+          if (!visitorIdField) {
+            // Criar campo se não existir
+            visitorIdField = document.createElement('input');
+            visitorIdField.type = 'hidden';
+            visitorIdField.name = 'visitor_id';
+            form.appendChild(visitorIdField);
+          }
+          
+          // Definir valor
+          visitorIdField.value = self.getOrCreateVisitorId();
+          console.log('LovoCRM: ✅ Visitor ID garantido:', visitorIdField.value);
+        } else {
+          console.log('LovoCRM: ✅ Visitor ID já presente:', visitorIdField.value);
+        }
+        
+        // Também garantir session_id
+        let sessionIdField = form.querySelector('input[name="session_id"]');
+        if (!sessionIdField || !sessionIdField.value) {
+          if (!sessionIdField) {
+            sessionIdField = document.createElement('input');
+            sessionIdField.type = 'hidden';
+            sessionIdField.name = 'session_id';
+            form.appendChild(sessionIdField);
+          }
+          sessionIdField.value = self.config.sessionId;
+          console.log('LovoCRM: ✅ Session ID garantido:', sessionIdField.value);
+        }
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro ao garantir visitor_id:', error);
       }
     }
   };
