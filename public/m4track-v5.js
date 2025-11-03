@@ -365,10 +365,21 @@
         form.dataset.lovoIntercepted = 'true';
         console.log('LovoCRM: ✅ Interceptando formulário LovoCRM!');
         
-        // Interceptar submit
+        // Interceptar submit ANTES do processamento
         form.addEventListener('submit', function(e) {
           console.log('LovoCRM: Submit interceptado!');
+          
+          // CRÍTICO: Pausar envio para garantir visitor_id
+          e.preventDefault();
+          
+          // Enriquecer formulário
           self.enhanceFormSubmission(form, e);
+          
+          // Aguardar um momento para garantir que campos foram adicionados
+          setTimeout(function() {
+            console.log('LovoCRM: Reenviando formulário com visitor_id...');
+            self.resubmitForm(form);
+          }, 100);
         });
         
       } catch (error) {
@@ -415,11 +426,108 @@
         }
         
         // Log final
-        console.log('LovoCRM: ✅ Formulário enriquecido com sucesso! Enviando...');
+        console.log('LovoCRM: ✅ Formulário enriquecido com sucesso! Pronto para envio...');
         
       } catch (error) {
         console.error('LovoCRM: ❌ Erro ao enriquecer formulário:', error);
         // NÃO impede o envio - sistema robusto
+      }
+    },
+    
+    // NOVA FUNÇÃO: Reenviar formulário com todos os campos incluídos
+    resubmitForm: function(form) {
+      const self = this;
+      
+      try {
+        console.log('LovoCRM: Preparando reenvio do formulário...');
+        
+        // Verificar se formulário tem action (formulário tradicional)
+        const action = form.action || form.getAttribute('action');
+        
+        if (action && action.includes('webhook')) {
+          console.log('LovoCRM: Formulário tradicional - enviando via submit nativo');
+          // Remover listener para evitar loop
+          form.removeEventListener('submit', arguments.callee);
+          form.submit();
+        } else {
+          console.log('LovoCRM: Formulário SPA - enviando via fetch');
+          self.submitFormViaFetch(form);
+        }
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro no reenvio:', error);
+        // Fallback: tentar submit nativo
+        try {
+          form.submit();
+        } catch (fallbackError) {
+          console.error('LovoCRM: Erro no fallback:', fallbackError);
+        }
+      }
+    },
+    
+    // NOVA FUNÇÃO: Enviar formulário via fetch garantindo visitor_id
+    submitFormViaFetch: function(form) {
+      try {
+        // Coletar todos os dados do formulário incluindo campos dinâmicos
+        const formData = new FormData(form);
+        const jsonData = {};
+        
+        // Converter FormData para objeto
+        for (let [key, value] of formData.entries()) {
+          jsonData[key] = value;
+        }
+        
+        // Garantir que visitor_id está incluído
+        const visitorIdField = form.querySelector('input[name="visitor_id"]');
+        if (visitorIdField && visitorIdField.value) {
+          jsonData.visitor_id = visitorIdField.value;
+          console.log('LovoCRM: ✅ Visitor ID incluído no fetch:', visitorIdField.value);
+        }
+        
+        // Garantir que session_id está incluído
+        const sessionIdField = form.querySelector('input[name="session_id"]');
+        if (sessionIdField && sessionIdField.value) {
+          jsonData.session_id = sessionIdField.value;
+          console.log('LovoCRM: ✅ Session ID incluído no fetch:', sessionIdField.value);
+        }
+        
+        console.log('LovoCRM: Dados finais para envio:', jsonData);
+        
+        // Enviar via fetch
+        fetch('https://app.lovoocrm.com/api/webhook-lead', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(jsonData)
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('LovoCRM: ✅ Resposta do webhook:', data);
+          
+          // Se sucesso, redirecionar ou mostrar mensagem
+          if (data.success) {
+            console.log('LovoCRM: 🎉 Lead criado com sucesso! ID:', data.lead_id);
+            
+            // Tentar encontrar página de sucesso ou mostrar alerta
+            const successUrl = form.dataset.successUrl || form.getAttribute('data-success-url');
+            if (successUrl) {
+              window.location.href = successUrl;
+            } else {
+              alert('Obrigado! Seu contato foi enviado com sucesso.');
+            }
+          } else {
+            console.error('LovoCRM: Erro do webhook:', data.error);
+            alert('Erro ao enviar formulário. Tente novamente.');
+          }
+        })
+        .catch(error => {
+          console.error('LovoCRM: Erro no fetch:', error);
+          alert('Erro ao enviar formulário. Tente novamente.');
+        });
+        
+      } catch (error) {
+        console.error('LovoCRM: Erro no submitFormViaFetch:', error);
       }
     }
   };
