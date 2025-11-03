@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
@@ -11,6 +11,9 @@ export const Settings: React.FC = () => {
   // Estados para teste do webhook de leads
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<{success: boolean, lead_id?: string, error?: string} | null>(null);
+  
+  // Estado para mostrar/ocultar API Key
+  const [showApiKey, setShowApiKey] = useState(false);
   
   // Estados para abas principais
   const [activeTab, setActiveTab] = useState<'settings' | 'empresas'>('settings');
@@ -322,6 +325,36 @@ export const Settings: React.FC = () => {
                   </div>
                   <p className="text-xs text-emerald-600 mt-2 font-medium">
                     ✨ Envie qualquer JSON e criamos o lead automaticamente!
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    🔑 Sua API Key (incluir no JSON)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={company?.api_key || 'Carregando...'}
+                      readOnly
+                      className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
+                      title={showApiKey ? "Ocultar API Key" : "Mostrar API Key"}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(company?.api_key || '')}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Use esta chave no campo "api_key" do seu JSON para identificar sua empresa
                   </p>
                 </div>
 
