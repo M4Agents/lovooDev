@@ -109,29 +109,24 @@ async function createLeadDirectSQL(params) {
       company_email: detectedFields.company_email || null
     };
     
-    // Usar RPC para contornar RLS (similar ao webhook-visitor)
+    // Usar insert direto como sistema atual de leads
     const { data: lead, error: leadError } = await supabase
-      .rpc('create_lead_webhook', {
-        lead_data: leadData
-      });
+      .from('leads')
+      .insert(leadData)
+      .select('id')
+      .single();
     
     if (leadError) {
       console.error('Erro ao criar lead:', leadError);
       return { success: false, error: leadError.message };
     }
     
-    if (!lead || !lead.lead_id) {
-      console.error('RPC não retornou ID do lead');
-      return { success: false, error: 'Falha ao criar lead' };
-    }
-    
-    const leadId = lead.lead_id;
-    console.log('Lead criado com ID:', leadId);
+    console.log('Lead criado com ID:', lead.id);
     
     // 5. Inserir valores dos campos personalizados
     if (customFieldsData.length > 0) {
       const customValues = customFieldsData.map(field => ({
-        lead_id: leadId,
+        lead_id: lead.id,
         field_id: field.field_id,
         value: String(field.value)
       }));
@@ -148,7 +143,7 @@ async function createLeadDirectSQL(params) {
       }
     }
     
-    return { success: true, lead_id: leadId };
+    return { success: true, lead_id: lead.id };
     
   } catch (error) {
     console.error('Exception in createLeadDirectSQL:', error);
