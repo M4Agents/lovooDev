@@ -365,21 +365,15 @@
         form.dataset.lovoIntercepted = 'true';
         console.log('LovoCRM: ✅ Interceptando formulário LovoCRM!');
         
-        // Interceptar submit ANTES do processamento
+        // Interceptar submit SEM preventDefault (manter funcionamento original)
         form.addEventListener('submit', function(e) {
-          console.log('LovoCRM: Submit interceptado!');
+          console.log('LovoCRM: Submit interceptado - adicionando visitor_id...');
           
-          // CRÍTICO: Pausar envio para garantir visitor_id
-          e.preventDefault();
-          
-          // Enriquecer formulário
+          // NÃO usar preventDefault - deixar formulário funcionar normalmente
+          // Apenas adicionar visitor_id antes do envio
           self.enhanceFormSubmission(form, e);
           
-          // Aguardar um momento para garantir que campos foram adicionados
-          setTimeout(function() {
-            console.log('LovoCRM: Reenviando formulário com visitor_id...');
-            self.resubmitForm(form);
-          }, 100);
+          console.log('LovoCRM: ✅ Visitor_id adicionado - formulário continua envio normal');
         });
         
       } catch (error) {
@@ -391,167 +385,35 @@
       const self = this;
       
       try {
-        console.log('LovoCRM: Enriquecendo envio do formulário...');
-        
-        // Verificar se já tem visitor_id
+        // SIMPLES: Apenas adicionar visitor_id se não existir
         let visitorIdField = form.querySelector('input[name="visitor_id"]');
         
         if (!visitorIdField) {
-          console.log('LovoCRM: Criando campo visitor_id...');
-          // Criar campo hidden automaticamente
+          // Criar campo hidden
           visitorIdField = document.createElement('input');
           visitorIdField.type = 'hidden';
           visitorIdField.name = 'visitor_id';
+          visitorIdField.value = self.getOrCreateVisitorId();
           form.appendChild(visitorIdField);
-        } else {
-          console.log('LovoCRM: Campo visitor_id já existe');
+          
+          console.log('LovoCRM: ✅ Visitor ID adicionado:', visitorIdField.value);
         }
         
-        // Definir visitor_id
-        const visitorId = self.getOrCreateVisitorId();
-        visitorIdField.value = visitorId;
-        
-        console.log('LovoCRM: ✅ Visitor ID adicionado:', visitorId);
-        
-        // Adicionar session_id também (para dados extras)
+        // Adicionar session_id se não existir
         let sessionIdField = form.querySelector('input[name="session_id"]');
         if (!sessionIdField) {
-          console.log('LovoCRM: Criando campo session_id...');
           sessionIdField = document.createElement('input');
           sessionIdField.type = 'hidden';
           sessionIdField.name = 'session_id';
           sessionIdField.value = self.config.sessionId;
           form.appendChild(sessionIdField);
-          console.log('LovoCRM: ✅ Session ID adicionado:', self.config.sessionId);
-        }
-        
-        // Log final
-        console.log('LovoCRM: ✅ Formulário enriquecido com sucesso! Pronto para envio...');
-        
-      } catch (error) {
-        console.error('LovoCRM: ❌ Erro ao enriquecer formulário:', error);
-        // NÃO impede o envio - sistema robusto
-      }
-    },
-    
-    // NOVA FUNÇÃO: Reenviar formulário com todos os campos incluídos
-    resubmitForm: function(form) {
-      const self = this;
-      
-      try {
-        console.log('LovoCRM: Preparando reenvio do formulário...');
-        
-        // Verificar se formulário tem action (formulário tradicional)
-        const action = form.action || form.getAttribute('action');
-        
-        if (action && action.includes('webhook')) {
-          console.log('LovoCRM: Formulário tradicional - enviando via submit nativo');
-          // Remover listener para evitar loop
-          form.removeEventListener('submit', arguments.callee);
-          form.submit();
-        } else {
-          console.log('LovoCRM: Formulário SPA - enviando via fetch');
-          self.submitFormViaFetch(form);
-        }
-        
-      } catch (error) {
-        console.error('LovoCRM: Erro no reenvio:', error);
-        // Fallback: tentar submit nativo
-        try {
-          form.submit();
-        } catch (fallbackError) {
-          console.error('LovoCRM: Erro no fallback:', fallbackError);
-        }
-      }
-    },
-    
-    // NOVA FUNÇÃO: Enviar formulário via fetch garantindo visitor_id
-    submitFormViaFetch: function(form) {
-      try {
-        console.log('LovoCRM: Coletando dados do formulário...');
-        
-        // ABORDAGEM ROBUSTA: Coletar campos manualmente
-        const jsonData = {};
-        
-        // Buscar TODOS os inputs, selects e textareas
-        const allFields = form.querySelectorAll('input, select, textarea');
-        
-        allFields.forEach(function(field) {
-          if (field.name && field.value) {
-            jsonData[field.name] = field.value;
-            console.log('LovoCRM: Campo coletado:', field.name, '=', field.value);
-          }
-        });
-        
-        // FALLBACK: Se ainda não tem api_key, procurar especificamente
-        if (!jsonData.api_key) {
-          // Procurar por qualquer campo que possa conter API key
-          const possibleApiFields = form.querySelectorAll('input[name*="api"], input[id*="api"], input[class*="api"]');
-          possibleApiFields.forEach(function(field) {
-            if (field.value) {
-              jsonData.api_key = field.value;
-              console.log('LovoCRM: ✅ API Key encontrada em campo alternativo:', field.name || field.id, '=', field.value);
-            }
-          });
-        }
-        
-        // Se AINDA não tem api_key, usar valor padrão conhecido
-        if (!jsonData.api_key) {
-          jsonData.api_key = '582121bf-6661-4c70-81e0-f180f481a92b';
-          console.log('LovoCRM: ⚠️ Usando API Key padrão (fallback)');
-        }
-        
-        // Garantir que visitor_id está incluído
-        const visitorIdField = form.querySelector('input[name="visitor_id"]');
-        if (visitorIdField && visitorIdField.value) {
-          jsonData.visitor_id = visitorIdField.value;
-          console.log('LovoCRM: ✅ Visitor ID incluído no fetch:', visitorIdField.value);
-        }
-        
-        // Garantir que session_id está incluído
-        const sessionIdField = form.querySelector('input[name="session_id"]');
-        if (sessionIdField && sessionIdField.value) {
-          jsonData.session_id = sessionIdField.value;
-          console.log('LovoCRM: ✅ Session ID incluído no fetch:', sessionIdField.value);
-        }
-        
-        console.log('LovoCRM: Dados finais para envio:', jsonData);
-        
-        // Enviar via fetch
-        fetch('https://app.lovoocrm.com/api/webhook-lead', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(jsonData)
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log('LovoCRM: ✅ Resposta do webhook:', data);
           
-          // Se sucesso, redirecionar ou mostrar mensagem
-          if (data.success) {
-            console.log('LovoCRM: 🎉 Lead criado com sucesso! ID:', data.lead_id);
-            
-            // Tentar encontrar página de sucesso ou mostrar alerta
-            const successUrl = form.dataset.successUrl || form.getAttribute('data-success-url');
-            if (successUrl) {
-              window.location.href = successUrl;
-            } else {
-              alert('Obrigado! Seu contato foi enviado com sucesso.');
-            }
-          } else {
-            console.error('LovoCRM: Erro do webhook:', data.error);
-            alert('Erro ao enviar formulário. Tente novamente.');
-          }
-        })
-        .catch(error => {
-          console.error('LovoCRM: Erro no fetch:', error);
-          alert('Erro ao enviar formulário. Tente novamente.');
-        });
+          console.log('LovoCRM: ✅ Session ID adicionado:', sessionIdField.value);
+        }
         
       } catch (error) {
-        console.error('LovoCRM: Erro no submitFormViaFetch:', error);
+        console.error('LovoCRM: Erro ao adicionar visitor_id:', error);
+        // NÃO impede o envio - sistema robusto
       }
     }
   };
