@@ -93,11 +93,13 @@ export default async function handler(req, res) {
         
         console.log('Buscando dados de', leadIds.size, 'leads únicos');
         
-        // Buscar todos os leads de uma vez
+        // Buscar todos os leads usando função RPC que contorna RLS
+        console.log('Buscando leads com função RPC específica...');
         const { data: leads, error: leadsError } = await supabase
-          .from('leads')
-          .select('id, name, email, phone')
-          .in('id', Array.from(leadIds));
+          .rpc('get_leads_for_notifications', {
+            p_lead_ids: Array.from(leadIds),
+            p_company_id: companyId
+          });
           
         console.log('Leads encontrados:', leads?.length || 0);
         if (leadsError) {
