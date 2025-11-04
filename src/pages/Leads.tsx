@@ -100,12 +100,17 @@ export const Leads: React.FC = () => {
   // Fechar dropdown ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showExportDropdown) {
+      const target = event.target as HTMLElement;
+      // Só fecha se clicar fora do container do dropdown
+      if (showExportDropdown && !target.closest('.relative')) {
         setShowExportDropdown(false);
       }
     };
 
-    document.addEventListener('click', handleClickOutside);
+    if (showExportDropdown) {
+      document.addEventListener('click', handleClickOutside);
+    }
+    
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showExportDropdown]);
 
@@ -293,7 +298,8 @@ export const Leads: React.FC = () => {
           {/* Dropdown de Exportação */}
           <div className="relative">
             <button
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation(); // Impede que o event listener feche o dropdown
                 console.log('🔍 DEBUG: Botão Exportar clicado!');
                 console.log('🔍 DEBUG: showExportDropdown atual:', showExportDropdown);
                 console.log('🔍 DEBUG: exportLoading atual:', exportLoading);
