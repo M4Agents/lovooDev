@@ -13,11 +13,13 @@ import {
   Calendar,
   CheckSquare,
   List,
-  AlertCircle
+  AlertCircle,
+  Copy  // ← ADICIONADO: Ícone para copiar ID
 } from 'lucide-react';
 
 interface CustomField {
   id: string;
+  numeric_id?: number;  // ← ADICIONADO: ID numérico para sistema híbrido
   field_name: string;
   field_label: string;
   field_type: 'text' | 'number' | 'date' | 'boolean' | 'select';
@@ -81,6 +83,23 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
     setOptionInput('');
     setEditingField(null);
     setShowCreateForm(false);
+  };
+
+  // Função para copiar ID do campo para área de transferência
+  const handleCopyId = async (numericId: number) => {
+    try {
+      await navigator.clipboard.writeText(numericId.toString());
+      // Você pode adicionar uma notificação de sucesso aqui se desejar
+    } catch (error) {
+      console.error('Erro ao copiar ID:', error);
+      // Fallback para navegadores mais antigos
+      const textArea = document.createElement('textarea');
+      textArea.value = numericId.toString();
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
   };
 
   const handleCreateField = () => {
@@ -213,6 +232,21 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
         </div>
 
         <div className="p-6">
+          {/* Documentação do Sistema Híbrido */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h4 className="text-sm font-medium text-blue-900 mb-2">
+              💡 Sistema Híbrido de Campos
+            </h4>
+            <div className="text-sm text-blue-800 space-y-1">
+              <p><strong>Campos padrão:</strong> Use nomes como "nome", "email", "telefone"</p>
+              <p><strong>Campos personalizados:</strong> Use o ID numérico no payload (ex: "1": "valor")</p>
+              <p><strong>Exemplo de payload:</strong></p>
+              <code className="block bg-white p-2 rounded text-xs mt-1">
+                {`{ "nome": "João Silva", "email": "joao@email.com", "1": "valor_personalizado" }`}
+              </code>
+            </div>
+          </div>
+
           {/* Header com botão de criar */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -394,6 +428,11 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
                         <div className="flex items-center gap-2 mb-2">
                           {getFieldTypeIcon(field.field_type)}
                           <h5 className="font-medium text-gray-900">
+                            {field.numeric_id && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 mr-2">
+                                ID: {field.numeric_id}
+                              </span>
+                            )}
                             {field.field_label}
                           </h5>
                           {field.is_required && (
@@ -403,9 +442,19 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
                         <p className="text-sm text-gray-500 mb-2">
                           Tipo: {getFieldTypeLabel(field.field_type)}
                         </p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-400 mb-2">
                           Nome interno: {field.field_name}
                         </p>
+                        
+                        {/* Exemplo de uso no payload */}
+                        {field.numeric_id && (
+                          <div className="bg-gray-50 rounded-md p-2 mb-2">
+                            <p className="text-xs text-gray-600 mb-1">Uso no payload:</p>
+                            <code className="text-xs text-blue-600 bg-white px-2 py-1 rounded border">
+                              "{field.numeric_id}": "seu_valor_aqui"
+                            </code>
+                          </div>
+                        )}
                         
                         {field.field_type === 'select' && field.options && field.options.length > 0 && (
                           <div className="mt-2">
@@ -430,6 +479,16 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
                       </div>
                       
                       <div className="flex items-center gap-1 ml-4">
+                        {/* Botão para copiar ID numérico */}
+                        {field.numeric_id && (
+                          <button
+                            onClick={() => handleCopyId(field.numeric_id!)}
+                            className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                            title={`Copiar ID: ${field.numeric_id}`}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEditField(field)}
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
