@@ -83,6 +83,15 @@ export const Leads: React.FC = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
+  // NOVOS ESTADOS PARA FILTROS AVANÇADOS
+  const [nameFilter, setNameFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
+  const [emailFilter, setEmailFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
   // DEBUG: Log dos estados de exportação
   console.log('🔍 DEBUG: Estados de exportação renderizados:', {
     showExportDropdown,
@@ -139,6 +148,91 @@ export const Leads: React.FC = () => {
   };
 
   const handleSearch = () => {
+    loadData();
+  };
+
+  // NOVAS FUNÇÕES PARA FILTROS AVANÇADOS
+  const getDateRange = (filter: string, start: string, end: string) => {
+    const now = new Date();
+    
+    switch (filter) {
+      case 'hoje':
+        const today = new Date();
+        return {
+          start: new Date(today.setHours(0, 0, 0, 0)).toISOString(),
+          end: new Date(today.setHours(23, 59, 59, 999)).toISOString()
+        };
+      case 'ontem':
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return {
+          start: new Date(yesterday.setHours(0, 0, 0, 0)).toISOString(),
+          end: new Date(yesterday.setHours(23, 59, 59, 999)).toISOString()
+        };
+      case '7dias':
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return {
+          start: sevenDaysAgo.toISOString(),
+          end: new Date().toISOString()
+        };
+      case '30dias':
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return {
+          start: thirtyDaysAgo.toISOString(),
+          end: new Date().toISOString()
+        };
+      case 'personalizado':
+        return start && end ? {
+          start: new Date(start + 'T00:00:00').toISOString(),
+          end: new Date(end + 'T23:59:59').toISOString()
+        } : null;
+      default:
+        return null;
+    }
+  };
+
+  const applyAdvancedFilters = async () => {
+    if (!company?.id) return;
+    
+    try {
+      setLoading(true);
+      const dateRange = getDateRange(dateFilter, startDate, endDate);
+      
+      const [leadsData, statsData] = await Promise.all([
+        api.getLeads(company.id, {
+          search: searchTerm,
+          name: nameFilter,
+          phone: phoneFilter,
+          email: emailFilter,
+          status: statusFilter || undefined,
+          origin: originFilter || undefined,
+          dateRange: dateRange || undefined,
+          limit: 100
+        }),
+        api.getLeadStats(company.id)
+      ]);
+      
+      setLeads(leadsData);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error applying advanced filters:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setNameFilter('');
+    setPhoneFilter('');
+    setEmailFilter('');
+    setStatusFilter('');
+    setOriginFilter('');
+    setDateFilter('');
+    setStartDate('');
+    setEndDate('');
     loadData();
   };
 
@@ -405,7 +499,27 @@ export const Leads: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4">
+        {/* Header dos Filtros */}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Filtros de Pesquisa</h3>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            >
+              {showAdvancedFilters ? 'Filtros Simples' : 'Filtros Avançados'}
+            </button>
+            <button
+              onClick={clearAllFilters}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              Limpar Filtros
+            </button>
+          </div>
+        </div>
+
+        {/* Filtros Básicos (sempre visíveis) */}
+        <div className="flex flex-col md:flex-row gap-4 mb-4">
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -454,6 +568,114 @@ export const Leads: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Filtros Avançados (condicionalmente visíveis) */}
+        {showAdvancedFilters && (
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Filtros Específicos</h4>
+            
+            {/* Linha 1: Filtros específicos por campo */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  placeholder="Buscar por nome específico..."
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Telefone
+                </label>
+                <input
+                  type="text"
+                  placeholder="Buscar por telefone..."
+                  value={phoneFilter}
+                  onChange={(e) => setPhoneFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="text"
+                  placeholder="Buscar por email..."
+                  value={emailFilter}
+                  onChange={(e) => setEmailFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Linha 2: Filtros de período */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Período
+                </label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Qualquer período</option>
+                  <option value="hoje">Hoje</option>
+                  <option value="ontem">Ontem</option>
+                  <option value="7dias">Últimos 7 dias</option>
+                  <option value="30dias">Últimos 30 dias</option>
+                  <option value="personalizado">Período personalizado</option>
+                </select>
+              </div>
+              
+              {dateFilter === 'personalizado' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data Inicial
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Data Final
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </>
+              )}
+              
+              <div className="flex items-end">
+                <button
+                  onClick={applyAdvancedFilters}
+                  className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Search className="w-4 h-4 inline mr-2" />
+                  Aplicar Filtros
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Leads Table */}

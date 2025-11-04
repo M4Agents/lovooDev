@@ -800,6 +800,10 @@ export const api = {
     status?: string;
     origin?: string;
     search?: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    dateRange?: { start: string; end: string };
     limit?: number;
     offset?: number;
   }) {
@@ -834,6 +838,26 @@ export const api = {
 
       if (filters?.search) {
         query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+      }
+
+      // NOVOS FILTROS ESPECÍFICOS
+      if (filters?.name) {
+        query = query.ilike('name', `%${filters.name}%`);
+      }
+
+      if (filters?.phone) {
+        query = query.ilike('phone', `%${filters.phone}%`);
+      }
+
+      if (filters?.email) {
+        query = query.ilike('email', `%${filters.email}%`);
+      }
+
+      // FILTRO POR PERÍODO
+      if (filters?.dateRange) {
+        query = query
+          .gte('created_at', filters.dateRange.start)
+          .lte('created_at', filters.dateRange.end);
       }
 
       if (filters?.limit) {
