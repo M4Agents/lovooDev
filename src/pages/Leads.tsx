@@ -83,6 +83,14 @@ export const Leads: React.FC = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
+  // DEBUG: Log dos estados de exportação
+  console.log('🔍 DEBUG: Estados de exportação renderizados:', {
+    showExportDropdown,
+    exportLoading,
+    setShowExportDropdown: typeof setShowExportDropdown,
+    setExportLoading: typeof setExportLoading
+  });
+
   useEffect(() => {
     if (company?.id) {
       loadData();
@@ -285,7 +293,14 @@ export const Leads: React.FC = () => {
           {/* Dropdown de Exportação */}
           <div className="relative">
             <button
-              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              onClick={() => {
+                console.log('🔍 DEBUG: Botão Exportar clicado!');
+                console.log('🔍 DEBUG: showExportDropdown atual:', showExportDropdown);
+                console.log('🔍 DEBUG: exportLoading atual:', exportLoading);
+                console.log('🔍 DEBUG: setShowExportDropdown função:', typeof setShowExportDropdown);
+                setShowExportDropdown(!showExportDropdown);
+                console.log('🔍 DEBUG: Novo valor deveria ser:', !showExportDropdown);
+              }}
               disabled={exportLoading}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
             >
@@ -294,8 +309,15 @@ export const Leads: React.FC = () => {
               <ChevronDown className="w-4 h-4" />
             </button>
             
-            {showExportDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+            {(() => {
+              if (showExportDropdown) {
+                console.log('🔍 DEBUG: Dropdown sendo renderizado!');
+              }
+              return showExportDropdown && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                  <div className="bg-yellow-100 p-2 text-xs text-yellow-800">
+                    DEBUG: Dropdown visível
+                  </div>
                 <button
                   onClick={() => handleExport('csv')}
                   disabled={exportLoading}
@@ -312,8 +334,9 @@ export const Leads: React.FC = () => {
                   <FileSpreadsheet className="w-4 h-4" />
                   Exportar Excel
                 </button>
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
           
           <button
