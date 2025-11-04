@@ -1164,6 +1164,16 @@ export const api = {
                   console.log(`Custom field mapped: ID ${key} -> ${customField.field_name} = ${value}`);
                 }
               }
+              // Verificar se é um campo mapeado (custom_fieldId)
+              else if (key.startsWith('custom_')) {
+                const fieldId = key.replace('custom_', '');
+                customValues.push({
+                  lead_id: lead.id,
+                  field_id: fieldId,
+                  value: String(value)
+                });
+                console.log(`Custom field mapped: ${key} -> ${fieldId} = ${value}`);
+              }
             }
           }
 

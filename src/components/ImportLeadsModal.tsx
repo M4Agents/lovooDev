@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
   X,
@@ -40,7 +41,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
 }) => {
   const { company } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'complete'>('upload');
+  const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'importing' | 'complete'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedLead[]>([]);
   const [importResults, setImportResults] = useState<{
@@ -50,6 +51,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState('');
+  
+  // NOVOS ESTADOS PARA MAPEAMENTO
+  const [unmappedColumns, setUnmappedColumns] = useState<string[]>([]);
+  const [customFields, setCustomFields] = useState<any[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [rawHeaders, setRawHeaders] = useState<string[]>([]);
 
   // Detectar tipo de arquivo/URL
   const detectImportType = (input: File | string) => {
@@ -195,7 +202,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   };
 
   // NOVA FUNÇÃO - Processar texto CSV (extraída da lógica existente)
-  const parseCsvText = (csvText: string) => {
+  const parseCsvText = async (csvText: string) => {
     const lines = csvText.split('\n').filter(line => line.trim());
     
     if (lines.length < 2) {
@@ -205,6 +212,46 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
 
     // Parse CSV (mesma lógica da função parseFile)
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    setRawHeaders(headers);
+    
+    // Detectar colunas não mapeadas
+    const unmapped: string[] = [];
+    const isStandardField = (header: string) => {
+      const lowerHeader = header.toLowerCase();
+      return lowerHeader.includes('nome') || lowerHeader.includes('name') ||
+             lowerHeader.includes('email') || lowerHeader.includes('e-mail') ||
+             lowerHeader.includes('telefone') || lowerHeader.includes('phone') || lowerHeader.includes('celular') ||
+             lowerHeader.includes('origem') || lowerHeader.includes('origin') ||
+             lowerHeader.includes('status') ||
+             lowerHeader.includes('interesse') || lowerHeader.includes('interest');
+    };
+    
+    const isNumericId = (header: string) => /^\d+$/.test(header);
+    
+    headers.forEach(header => {
+      if (!isStandardField(header) && !isNumericId(header)) {
+        unmapped.push(header);
+      }
+    });
+    
+    setUnmappedColumns(unmapped);
+    
+    // Se há colunas não mapeadas, carregar campos personalizados
+    if (unmapped.length > 0 && company?.id) {
+      try {
+        const { data: fields, error } = await supabase
+          .rpc('get_all_custom_fields_for_import', {
+            p_company_id: company.id
+          });
+        
+        if (!error && fields) {
+          setCustomFields(fields);
+        }
+      } catch (error) {
+        console.error('Error loading custom fields:', error);
+      }
+    }
+
     const data: ParsedLead[] = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -240,7 +287,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     }
 
     setParsedData(data);
-    setStep('preview');
+    
+    // Decidir próximo step baseado em colunas não mapeadas
+    if (unmapped.length > 0) {
+      setStep('mapping');
+    } else {
+      setStep('preview');
+    }
   };
 
   const handleImport = async () => {
@@ -251,14 +304,33 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
 
     try {
       // Preparar dados para importação
-      const leadsToImport = parsedData.map(lead => ({
-        name: lead.name,
-        email: lead.email || undefined,
-        phone: lead.phone || undefined,
-        origin: lead.origin || 'import',
-        status: lead.status || 'novo',
-        interest: lead.interest || undefined
-      }));
+      const leadsToImport = parsedData.map(lead => {
+        const leadData: any = {
+          name: lead.name,
+          email: lead.email || undefined,
+          phone: lead.phone || undefined,
+          origin: lead.origin || 'import',
+          status: lead.status || 'novo',
+          interest: lead.interest || undefined
+        };
+
+        // Adicionar campos personalizados mapeados
+        Object.entries(columnMapping).forEach(([columnName, fieldId]) => {
+          if (fieldId && lead[columnName]) {
+            // Usar fieldId como chave para que a API reconheça como campo personalizado
+            leadData[`custom_${fieldId}`] = lead[columnName];
+          }
+        });
+
+        // Manter campos com IDs numéricos (sistema existente)
+        Object.keys(lead).forEach(key => {
+          if (/^\d+$/.test(key) && lead[key]) {
+            leadData[key] = lead[key];
+          }
+        });
+
+        return leadData;
+      });
 
       // Importar em lotes de 100
       let successCount = 0;
@@ -315,6 +387,11 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     setParsedData([]);
     setImportResults(null);
     setLoading(false);
+    setGoogleSheetsUrl('');
+    setUnmappedColumns([]);
+    setCustomFields([]);
+    setColumnMapping({});
+    setRawHeaders([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -458,6 +535,92 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                   <li>• Máximo de 1.000 leads por importação</li>
                   <li>• Codificação UTF-8 recomendada</li>
                 </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Step Mapping */}
+          {step === 'mapping' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Mapear Campos Personalizados
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  Encontramos {unmappedColumns.length} colunas que não são campos padrão. 
+                  Selecione o campo personalizado correspondente para cada uma.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {unmappedColumns.map(column => {
+                  // Pegar exemplo de valor da primeira linha de dados
+                  const exampleValue = parsedData.length > 0 ? parsedData[0][column] : '';
+                  
+                  return (
+                    <div key={column} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 mb-1">
+                            Coluna: "{column}"
+                          </h4>
+                          {exampleValue && (
+                            <p className="text-sm text-gray-500">
+                              Exemplo: {exampleValue}
+                            </p>
+                          )}
+                        </div>
+                        <div className="ml-4">
+                          <select 
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            value={columnMapping[column] || ''}
+                            onChange={(e) => setColumnMapping(prev => ({
+                              ...prev,
+                              [column]: e.target.value
+                            }))}
+                          >
+                            <option value="">Ignorar este campo</option>
+                            {customFields.map(field => (
+                              <option key={field.id} value={field.id}>
+                                {field.field_label} (ID: {field.numeric_id})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-blue-900 mb-1">
+                      Dica
+                    </h4>
+                    <p className="text-sm text-blue-700">
+                      Você pode ignorar campos que não deseja importar selecionando "Ignorar este campo". 
+                      Apenas os campos mapeados serão importados como campos personalizados.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between">
+                <button
+                  onClick={() => setStep('upload')}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={() => setStep('preview')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Continuar para Preview
+                </button>
               </div>
             </div>
           )}
