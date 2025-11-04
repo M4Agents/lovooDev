@@ -4,9 +4,9 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 export default async function handler(req, res) {
-  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS - V2');
+  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS - V3');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-03-20:55 - Campos Técnicos Corrigidos');
+  console.log('Deploy Version: 2025-11-04-08:00 - Todos Campos Padrão Corrigidos');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -187,19 +187,26 @@ function detectFormFields(formData) {
   
   // Mapear campos comuns para nomes padronizados
   const fieldMappings = {
-    // Nome
+    // Campos básicos do lead:
     name: ['name', 'nome', 'full_name', 'fullname', 'first_name', 'firstname', 'cliente', 'usuario'],
-    // Email
     email: ['email', 'e-mail', 'mail', 'email_address', 'user_email'],
-    // Telefone
     phone: ['phone', 'telefone', 'tel', 'celular', 'whatsapp', 'mobile', 'contact'],
-    // Interesse/Assunto
     interest: ['interest', 'interesse', 'subject', 'assunto', 'message', 'mensagem', 'produto', 'servico'],
-    // Empresa
+    origin: ['origin', 'origem', 'source', 'fonte'], // ← ADICIONADO
+    status: ['status', 'situacao', 'estado'], // ← ADICIONADO
+    
+    // Campos da empresa:
     company_name: ['company', 'empresa', 'company_name', 'nome_empresa'],
     company_cnpj: ['cnpj', 'company_cnpj', 'documento'],
     company_email: ['company_email', 'email_empresa', 'corporate_email'],
-    company_phone: ['company_phone', 'telefone_empresa', 'corporate_phone']
+    company_phone: ['company_phone', 'telefone_empresa', 'corporate_phone'],
+    company_razao_social: ['company_razao_social', 'razao_social', 'razao'], // ← ADICIONADO
+    company_nome_fantasia: ['company_nome_fantasia', 'nome_fantasia', 'fantasia'], // ← ADICIONADO
+    company_cep: ['company_cep', 'cep', 'codigo_postal'], // ← ADICIONADO
+    company_cidade: ['company_cidade', 'cidade', 'city'], // ← ADICIONADO
+    company_estado: ['company_estado', 'estado', 'uf', 'state'], // ← ADICIONADO
+    company_endereco: ['company_endereco', 'endereco', 'address'], // ← ADICIONADO
+    company_site: ['company_site', 'site', 'website', 'url'] // ← ADICIONADO
   };
   
   // Detectar campos automaticamente
@@ -230,16 +237,30 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
     
     // Obter campos padrão que já foram detectados
     const standardFields = new Set([
+      // Campos básicos do lead:
       'name', 'nome', 'full_name', 'fullname', 'first_name', 'firstname', 'cliente', 'usuario',
       'email', 'e-mail', 'mail', 'email_address', 'user_email',
       'phone', 'telefone', 'tel', 'celular', 'whatsapp', 'mobile', 'contact',
       'interest', 'interesse', 'subject', 'assunto', 'message', 'mensagem', 'produto', 'servico',
+      'origin', 'origem', 'source', 'fonte', // ← ADICIONADO
+      'status', 'situacao', 'estado', // ← ADICIONADO
+      
+      // Campos da empresa:
       'company', 'empresa', 'company_name', 'nome_empresa',
       'cnpj', 'company_cnpj', 'documento',
       'company_email', 'email_empresa', 'corporate_email',
       'company_phone', 'telefone_empresa', 'corporate_phone',
+      'company_razao_social', 'razao_social', 'razao', // ← ADICIONADO
+      'company_nome_fantasia', 'nome_fantasia', 'fantasia', // ← ADICIONADO
+      'company_cep', 'cep', 'codigo_postal', // ← ADICIONADO
+      'company_cidade', 'cidade', 'city', // ← ADICIONADO
+      'company_estado', 'estado', 'uf', 'state', // ← ADICIONADO
+      'company_endereco', 'endereco', 'address', // ← ADICIONADO
+      'company_site', 'site', 'website', 'url', // ← ADICIONADO
+      
+      // Campos técnicos:
+      'responsible_user_id', 'responsavel', 'usuario_responsavel', // ← ADICIONADO
       'api_key', // Excluir api_key dos campos personalizados
-      // Campos técnicos do sistema (não devem ser personalizados):
       'visitor_id', 'session_id',
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
       'referrer', 'user_agent', 'ip_address', 'device_type'
