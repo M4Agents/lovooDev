@@ -76,12 +76,12 @@ async function createLeadDirectSQL(params) {
     const { createClient } = await import('@supabase/supabase-js');
     
     const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    // Usando service_role key para contornar RLS e acessar campos personalizados
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE5MjMwMywiZXhwIjoyMDYzNzY4MzAzfQ.nTzCLqDPJZfGjKJMOWPfIvYzEQKPOJZJYEOoLqvyKhE';
+    // Usando chave anon que funcionava + RPC com SECURITY DEFINER para contornar RLS
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    console.log('🔑 USANDO SERVICE_ROLE KEY PARA CONTORNAR RLS');
+    console.log('🔑 USANDO CHAVE ANON + RPC SECURITY DEFINER PARA CONTORNAR RLS');
     console.log('Processando webhook para API key:', params.api_key);
     console.log('Visitor ID recebido:', params.form_data.visitor_id || 'não fornecido');
     
@@ -680,12 +680,12 @@ async function processCustomFieldById(supabase, companyId, numericId, value) {
     console.log(`- Numeric ID: ${numericId}`);
     console.log(`- Valor: ${value}`);
     
-    // Buscar campo personalizado pelo ID numérico
+    // Buscar campo personalizado pelo ID numérico usando RPC (contorna RLS)
     const { data: fieldData, error: fieldError } = await supabase
-      .from('lead_custom_fields')
-      .select('id, field_name, field_label, field_type, numeric_id')
-      .eq('company_id', companyId)
-      .eq('numeric_id', numericId)
+      .rpc('get_custom_field_by_id', {
+        p_company_id: companyId,
+        p_numeric_id: numericId
+      })
       .single();
     
     if (fieldError) {
@@ -695,9 +695,9 @@ async function processCustomFieldById(supabase, companyId, numericId, value) {
     }
     
     console.log(`- ✅ Campo encontrado:`, fieldData);
-    console.log(`- Nome: ${fieldData.field_name}`);
-    console.log(`- Label: ${fieldData.field_label}`);
+    console.log(`- Nome: ${fieldData.name}`);
     console.log(`- Tipo: ${fieldData.field_type}`);
+    console.log(`- ID: ${fieldData.id}`);
     
     // Retornar dados para inserção
     return {
