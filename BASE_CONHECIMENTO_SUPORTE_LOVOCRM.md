@@ -1,9 +1,9 @@
 # BASE DE CONHECIMENTO - SUPORTE LOVOCRM
 ## Guia Completo para Suporte ao Usuário
 
-**Versão:** 1.4.0 - Sistema Híbrido 100% Funcional - VERSÃO FINAL  
+**Versão:** 2.0.0 - Sistema de Leads Completo com Importação, Exportação e Filtros Avançados  
 **Data:** Novembro 2025  
-**Última Atualização:** 04/11/2025 - 09:54 - SISTEMA APROVADO PARA PRODUÇÃO  
+**Última Atualização:** 04/11/2025 - 14:39 - SISTEMA DE LEADS V2.0 FINALIZADO  
 
 ---
 
@@ -170,11 +170,29 @@ O dashboard mostra um resumo completo da sua operação:
 - **Status**: Novo, em andamento, convertido, etc.
 - **Data**: Quando foi capturado
 
-#### Filtros Disponíveis
-- **Por Status**: Novo, em andamento, convertido
-- **Por Origem**: Webhook, formulário manual
-- **Por Período**: Últimos dias, semanas, meses
-- **Busca**: Por nome, email ou empresa
+#### Filtros Disponíveis V2.0 ✨ NOVO!
+
+##### Filtros Básicos (sempre visíveis)
+- **Busca Geral**: Por nome, email ou telefone
+- **Por Status**: Novo, em qualificação, convertido, perdido
+- **Por Origem**: Landing page, WhatsApp, manual, importação, API
+
+##### Filtros Avançados 🔍 (clique em "Filtros Avançados")
+- **Nome Específico**: Busca exata por nome do lead
+- **Telefone Específico**: Busca por número de telefone
+- **Email Específico**: Busca por endereço de email
+- **Por Período**: 
+  - Hoje
+  - Ontem
+  - Últimos 7 dias
+  - Últimos 30 dias
+  - Período personalizado (escolha as datas)
+
+##### Como Usar os Filtros
+1. **Filtros Simples**: Use a busca geral e dropdowns de status/origem
+2. **Filtros Avançados**: Clique no botão azul "🔍 Filtros Avançados"
+3. **Combine Filtros**: Use vários filtros juntos para busca precisa
+4. **Limpar Filtros**: Clique em "Limpar Filtros" para resetar tudo
 
 ### Detalhes do Lead
 Clique em qualquer lead para ver:
@@ -195,12 +213,61 @@ Clique em qualquer lead para ver:
 - **Adicionar observações**: Notas internas
 - **Exportar dados**: Para outros sistemas
 
+### 📥 IMPORTAÇÃO DE LEADS V2.0 ✨ NOVO!
+
+#### Formatos Suportados
+- **CSV**: Arquivos de texto (.csv)
+- **Excel**: Planilhas (.xlsx e .xls)
+- **Google Sheets**: Via link compartilhado público
+
+#### Como Importar
+1. **Clique** em "Importar" na página de Leads
+2. **Selecione** seu arquivo ou cole o link do Google Sheets
+3. **Aguarde** o processamento automático
+4. **Mapeie** campos personalizados (se houver campos não reconhecidos)
+5. **Confira** a prévia com todos os dados
+6. **Confirme** a importação
+7. **Pronto!** Veja a mensagem de sucesso com quantidade importada
+
+#### Mapeamento Inteligente
+- **Campos padrão**: Nome, email, telefone são reconhecidos automaticamente
+- **Campos da empresa**: CNPJ, razão social, endereço também
+- **Campos personalizados**: Sistema pergunta como mapear campos novos
+- **Flexibilidade total**: Qualquer planilha funciona!
+
+#### Dicas para Importação
+- **Primeira linha**: Use como cabeçalho com nomes dos campos
+- **Dados limpos**: Remova linhas vazias
+- **Formatos**: Telefones podem ter qualquer formato
+- **Emails**: Devem estar no formato correto (nome@dominio.com)
+
+### 📤 EXPORTAÇÃO DE LEADS V2.0 ✨ NOVO!
+
+#### Como Exportar
+1. **Clique** no botão verde "Exportar" na página de Leads
+2. **Escolha** o formato:
+   - **CSV**: Para usar em outros sistemas
+   - **Excel**: Para análise em planilhas
+3. **Aguarde** o processamento
+4. **Download** automático do arquivo
+5. **Pronto!** Arquivo salvo com data/hora no nome
+
+#### O que é Exportado
+- **Todos os campos padrão**: Nome, email, telefone, status, origem, data
+- **Todos os campos da empresa**: CNPJ, razão social, endereço completo
+- **Todos os campos personalizados**: Criados especificamente para sua empresa
+- **Dados completos**: Nada fica de fora!
+
+#### Nome do Arquivo
+- **Formato**: leads_04-11-2025_14h30.xlsx
+- **Automático**: Data e hora brasileira
+- **Organizado**: Fácil de encontrar depois
+
 ### Status dos Leads
 - **Novo**: Recém capturado, precisa ser qualificado
-- **Em Andamento**: Sendo trabalhado pela equipe
+- **Em Qualificação**: Sendo trabalhado pela equipe
 - **Convertido**: Virou cliente
 - **Perdido**: Não teve interesse
-- **Pausado**: Temporariamente parado
 
 ---
 
@@ -689,6 +756,44 @@ O Sistema de Duplicatas é uma funcionalidade automática que identifica leads d
 
 #### "Posso ignorar uma duplicata?"
 **Sim!** Se você determinar que não são realmente duplicatas, pode clicar em "Ignorar" e elas não aparecerão mais na lista.
+
+### 🆕 PERGUNTAS FREQUENTES - SISTEMA V2.0
+
+#### Sobre Importação de Leads
+
+**P: Que formatos posso importar?**
+R: CSV, Excel (.xlsx e .xls) e Google Sheets via link compartilhado público.
+
+**P: E se minha planilha tiver campos diferentes?**
+R: Perfeito! O sistema detecta campos novos e permite mapear para campos personalizados.
+
+**P: Quantos leads posso importar de uma vez?**
+R: Até 1.000 leads por importação para garantir boa performance.
+
+**P: O que acontece se houver dados duplicados na importação?**
+R: O sistema detecta e oferece opções de mesclagem automática.
+
+#### Sobre Exportação de Leads
+
+**P: Posso exportar apenas alguns leads?**
+R: Sim! Use os filtros avançados para selecionar exatamente os leads que quer exportar.
+
+**P: A exportação inclui campos personalizados?**
+R: Sim! Todos os campos (padrão + empresa + personalizados) são incluídos.
+
+**P: Qual formato é melhor, CSV ou Excel?**
+R: Excel para análise em planilhas, CSV para integrar com outros sistemas.
+
+#### Sobre Filtros Avançados
+
+**P: Como uso os filtros por período?**
+R: Clique em "Filtros Avançados", escolha o período no dropdown e clique "Aplicar Filtros".
+
+**P: Posso combinar vários filtros?**
+R: Sim! Use nome + período + status, por exemplo. Todos funcionam juntos.
+
+**P: Como limpo todos os filtros de uma vez?**
+R: Clique no botão "Limpar Filtros" no cabeçalho da seção de filtros.
 
 ### Dicas de Uso
 

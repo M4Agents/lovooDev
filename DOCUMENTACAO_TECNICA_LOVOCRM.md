@@ -1,9 +1,9 @@
 # DOCUMENTAÇÃO TÉCNICA - LOVOCRM
 ## Sistema SaaS para Análise Comportamental e CRM
 
-**Versão:** 1.4.0 - Sistema Híbrido 100% Funcional - RLS Resolvido  
+**Versão:** 2.0.0 - Sistema de Leads Completo com Importação, Exportação e Filtros Avançados  
 **Data:** Novembro 2025  
-**Última Atualização:** 04/11/2025 - 09:54 - VERSÃO FINAL APROVADA  
+**Última Atualização:** 04/11/2025 - 14:39 - SISTEMA DE LEADS V2.0 FINALIZADO  
 
 ---
 
@@ -890,10 +890,265 @@ console.log('Resultado:', result.success, result.result_lead_id);
 
 ---
 
+## 🔄 SISTEMA DE LEADS V2.0 - IMPORTAÇÃO, EXPORTAÇÃO E FILTROS AVANÇADOS
+
+### Visão Geral V2.0
+Sistema completo de gestão de leads com funcionalidades avançadas de importação, exportação e filtros, mantendo 100% de compatibilidade com o sistema anterior.
+
+### 📊 Importação de Leads
+
+#### Formatos Suportados
+- **CSV**: Arquivos de texto separados por vírgula
+- **Excel**: Formatos .xlsx e .xls
+- **Google Sheets**: Via link compartilhado público
+
+#### Fluxo de Importação
+```
+Upload → Parsing → Mapping → Preview → Import → Complete
+```
+
+#### Mapeamento Inteligente
+```javascript
+// Detecção automática de campos personalizados
+const unmappedColumns = rawHeaders.filter(header => 
+  !isStandardField(header) && !isNumericCustomField(header)
+);
+
+// Busca campos personalizados da empresa
+const customFields = await supabase.rpc('get_all_custom_fields_for_import');
+
+// Interface de mapeamento
+{unmappedColumns.map(column => (
+  <select value={columnMapping[column]}>
+    {customFields.map(field => (
+      <option value={field.id}>{field.field_label}</option>
+    ))}
+  </select>
+))}
+```
+
+#### Validação e Preview
+- **Validação**: Dados obrigatórios e formatos
+- **Preview**: Tabela com todos os campos (padrão + empresa + personalizados)
+- **Feedback**: Contagem de leads válidos/inválidos
+
+### 📈 Exportação de Leads
+
+#### API de Exportação
+```javascript
+// Busca completa com campos personalizados
+async exportLeads(companyId: string) {
+  const { data: leads } = await supabase
+    .from('leads')
+    .select(`
+      *,
+      lead_custom_values (
+        value,
+        lead_custom_fields (field_name, field_label, numeric_id)
+      )
+    `)
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+}
+```
+
+#### Processamento de Dados
+```javascript
+// Preparação para exportação
+export const prepareLeadsForExport = (leads) => {
+  return leads.map(lead => {
+    const processedLead = {
+      // Campos padrão
+      'Nome': lead.name || '',
+      'Email': lead.email || '',
+      'Telefone': lead.phone || '',
+      'Data Criação': new Date(lead.created_at).toLocaleDateString('pt-BR'),
+      
+      // Campos da empresa (11 campos)
+      'Empresa': lead.company_name || '',
+      'CNPJ': lead.company_cnpj || '',
+      // ... outros campos
+    };
+    
+    // Campos personalizados dinâmicos
+    lead.lead_custom_values?.forEach(customValue => {
+      const fieldLabel = customValue.lead_custom_fields.field_label;
+      processedLead[fieldLabel] = customValue.value || '';
+    });
+    
+    return processedLead;
+  });
+};
+```
+
+#### Formatos de Exportação
+```javascript
+// CSV
+export const exportToCSV = (data, filename) => {
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => headers.map(header => 
+      `"${(row[header] || '').toString().replace(/"/g, '""')}"`
+    ).join(','))
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  downloadFile(blob, `${filename}.csv`);
+};
+
+// Excel
+export const exportToExcel = async (data, filename) => {
+  const XLSX = await import('xlsx');
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+  XLSX.writeFile(workbook, `${filename}.xlsx`);
+};
+```
+
+### 🔍 Filtros Avançados
+
+#### API Expandida
+```javascript
+async getLeads(companyId: string, filters?: {
+  // Filtros existentes (mantidos)
+  status?: string;
+  origin?: string;
+  search?: string;
+  
+  // NOVOS FILTROS V2.0
+  name?: string;        // Filtro específico por nome
+  phone?: string;       // Filtro específico por telefone
+  email?: string;       // Filtro específico por email
+  dateRange?: { start: string; end: string }; // Filtro por período
+})
+```
+
+#### Implementação de Filtros
+```javascript
+// Filtros específicos por campo
+if (filters?.name) {
+  query = query.ilike('name', `%${filters.name}%`);
+}
+if (filters?.phone) {
+  query = query.ilike('phone', `%${filters.phone}%`);
+}
+if (filters?.email) {
+  query = query.ilike('email', `%${filters.email}%`);
+}
+
+// Filtro por período
+if (filters?.dateRange) {
+  query = query
+    .gte('created_at', filters.dateRange.start)
+    .lte('created_at', filters.dateRange.end);
+}
+```
+
+#### Cálculo de Períodos
+```javascript
+const getDateRange = (filter, start, end) => {
+  switch (filter) {
+    case 'hoje':
+      return {
+        start: new Date().setHours(0, 0, 0, 0),
+        end: new Date().setHours(23, 59, 59, 999)
+      };
+    case '7dias':
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      return {
+        start: sevenDaysAgo.toISOString(),
+        end: new Date().toISOString()
+      };
+    // ... outros períodos
+  }
+};
+```
+
+### 🎨 Interface V2.0
+
+#### Componentes Principais
+- **ImportLeadsModal**: Modal completo de importação
+- **ExportDropdown**: Dropdown verde com opções CSV/Excel
+- **AdvancedFilters**: Seção expansível de filtros
+
+#### Estados e Funções
+```javascript
+// Estados para filtros avançados
+const [nameFilter, setNameFilter] = useState('');
+const [phoneFilter, setPhoneFilter] = useState('');
+const [emailFilter, setEmailFilter] = useState('');
+const [dateFilter, setDateFilter] = useState('');
+const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+// Função de aplicação de filtros
+const applyAdvancedFilters = async () => {
+  const dateRange = getDateRange(dateFilter, startDate, endDate);
+  const leadsData = await api.getLeads(company.id, {
+    search: searchTerm,
+    name: nameFilter,
+    phone: phoneFilter,
+    email: emailFilter,
+    status: statusFilter,
+    origin: originFilter,
+    dateRange: dateRange
+  });
+};
+```
+
+### 📊 Arquivos Modificados V2.0
+
+#### Frontend
+- **src/pages/Leads.tsx**: Interface principal expandida
+- **src/components/ImportLeadsModal.tsx**: Sistema completo de importação
+- **src/utils/export.ts**: Utilitários de exportação
+
+#### Backend
+- **src/services/api.ts**: API expandida com novos filtros
+- **Função exportLeads()**: Busca completa com JOIN
+- **Função getLeads()**: Parâmetros expandidos
+
+### 🎯 Benefícios V2.0
+
+#### Para Usuários
+- **Importação flexível**: Qualquer formato de planilha
+- **Exportação completa**: Todos os dados em formatos universais
+- **Filtros precisos**: Busca específica por campo
+- **Períodos flexíveis**: Desde hoje até datas personalizadas
+
+#### Para Desenvolvedores
+- **API backward compatible**: Parâmetros antigos funcionam
+- **Código organizado**: Utilitários separados
+- **Performance otimizada**: Queries eficientes
+- **Manutenibilidade**: Código limpo e documentado
+
+### 🔧 Configurações V2.0
+
+#### Dependências
+- **xlsx**: Biblioteca para Excel (importação dinâmica)
+- **Supabase**: Queries expandidas com novos filtros
+- **React**: Estados e componentes adicionais
+
+#### Performance
+- **Importação**: Até 1.000 leads por vez
+- **Exportação**: Sem limite (paginação automática)
+- **Filtros**: Índices otimizados no banco
+
+### ✅ Status Final V2.0
+- **✅ Importação**: CSV, Excel, Google Sheets funcionando
+- **✅ Exportação**: CSV e Excel com dados completos
+- **✅ Filtros**: Específicos e por período funcionando
+- **✅ Interface**: Profissional e responsiva
+- **✅ Compatibilidade**: 100% mantida com sistema anterior
+- **✅ Performance**: Otimizada e escalável
+
+---
+
 **📄 ARQUIVO**: `DOCUMENTACAO_TECNICA_LOVOCRM.md`  
 **🔄 SEMPRE MANTER ATUALIZADO**: A cada nova implementação ou correção  
 **📍 LOCALIZAÇÃO**: Raiz do projeto M4Track
 
 ---
 
-*Documentação gerada automaticamente - Última atualização: 03/11/2025 - 22:43*
+*Documentação atualizada automaticamente - Sistema de Leads V2.0 - Última atualização: 04/11/2025 - 14:39*
