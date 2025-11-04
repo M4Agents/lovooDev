@@ -4,9 +4,9 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 export default async function handler(req, res) {
-  console.log('WEBHOOK LEAD INICIADO - VERSÃO COM LOGS DETALHADOS - V3');
+  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO MAPEAMENTO MANUAL - V4');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-04-08:00 - Todos Campos Padrão Corrigidos');
+  console.log('Deploy Version: 2025-11-04-08:10 - Migração para Mapeamento Manual de Campos Personalizados');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -227,6 +227,8 @@ function detectFormFields(formData) {
 async function processCustomFields(supabase, companyId, formData, detectedFields) {
   try {
     console.log('=== INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS ===');
+    console.log('🚨 MODO MAPEAMENTO MANUAL ATIVO - Campos personalizados não serão criados automaticamente');
+    console.log('📋 Use a interface de Campos Personalizados para criar campos manualmente');
     console.log('Company ID:', companyId);
     console.log('Form Data recebido:', formData);
     console.log('Detected Fields:', detectedFields);
@@ -286,9 +288,16 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
         continue;
       }
       
-      console.log(`  - ✅ CAMPO PERSONALIZADO DETECTADO: ${fieldName} = ${fieldValue}`);
+      console.log(`  - 📋 CAMPO PERSONALIZADO DETECTADO (MODO MANUAL): ${fieldName} = ${fieldValue}`);
       
-      // Processar campo personalizado
+      // NOVO: Modo mapeamento manual - apenas log, não cria campos automaticamente
+      console.log(`  - 🚨 CRIAÇÃO AUTOMÁTICA DESABILITADA - Campo não será criado`);
+      console.log(`  - 📋 Para usar este campo, crie-o manualmente na interface de Campos Personalizados`);
+      console.log(`  - 📋 Nome sugerido: "${fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_')}"`);
+      console.log(`  - 📋 Valor recebido: "${fieldValue}"`);
+      
+      // COMENTADO: Criação automática desabilitada para migração para modo manual
+      /*
       try {
         const fieldData = await processCustomField(supabase, companyId, fieldName, fieldValue);
         if (fieldData) {
@@ -300,6 +309,7 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       } catch (fieldError) {
         console.error(`  - ❌ ERRO ao processar campo ${fieldName}:`, fieldError);
       }
+      */
     }
     
     console.log(`=== RESULTADO FINAL: ${customFields.length} campos personalizados processados ===`);
