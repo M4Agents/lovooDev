@@ -500,18 +500,19 @@ export const Leads: React.FC = () => {
       {/* Filters */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         {/* Header dos Filtros */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
           <h3 className="text-lg font-medium text-gray-900">Filtros de Pesquisa</h3>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-medium transition-colors"
             >
+              <Filter className="w-4 h-4" />
               {showAdvancedFilters ? 'Filtros Simples' : 'Filtros Avançados'}
             </button>
             <button
               onClick={clearAllFilters}
-              className="text-gray-500 hover:text-gray-700 text-sm"
+              className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm transition-colors"
             >
               Limpar Filtros
             </button>
