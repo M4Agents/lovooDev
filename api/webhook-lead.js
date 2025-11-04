@@ -150,14 +150,22 @@ async function createLeadDirectSQL(params) {
       
       console.log('💾 Valores a serem inseridos:', customValues);
       
-      const { error: customError } = await supabase
-        .from('lead_custom_values')
-        .insert(customValues);
+      // Usar RPC para inserir valores contornando RLS (mesmo padrão dos campos)
+      console.log('💾 Chamando RPC insert_custom_field_values_webhook...');
+      const { data: insertResult, error: customError } = await supabase
+        .rpc('insert_custom_field_values_webhook', {
+          lead_id_param: lead.lead_id,
+          field_values: customValues
+        });
+      
+      console.log('💾 Resultado da RPC inserção:', { insertResult, customError });
       
       if (customError) {
-        console.error('❌ ERRO ao inserir valores dos campos personalizados:', customError);
+        console.error('❌ ERRO ao inserir valores dos campos personalizados via RPC:', customError);
+      } else if (insertResult && insertResult.success) {
+        console.log(`✅ ${insertResult.inserted_count} valores de campos personalizados inseridos com sucesso via RPC`);
       } else {
-        console.log(`✅ ${customValues.length} valores de campos personalizados inseridos com sucesso`);
+        console.error('❌ RPC retornou erro:', insertResult);
       }
     } else {
       console.log('⚠️ Nenhum campo personalizado para inserir');
