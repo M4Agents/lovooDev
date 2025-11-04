@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import * as XLSX from 'xlsx';
 import {
   X,
   Upload,
@@ -12,7 +13,8 @@ import {
   Phone,
   Building,
   Tag,
-  FileUp
+  FileUp,
+  Link
 } from 'lucide-react';
 
 interface ImportLeadsModalProps {
@@ -47,12 +49,38 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     total: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleSheetsUrl, setGoogleSheetsUrl] = useState('');
+
+  // Detectar tipo de arquivo/URL
+  const detectImportType = (input: File | string) => {
+    if (typeof input === 'string' && input.includes('docs.google.com/spreadsheets')) {
+      return 'google-sheets';
+    } else if (input instanceof File) {
+      const fileName = input.name.toLowerCase();
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        return 'excel';
+      } else if (fileName.endsWith('.csv')) {
+        return 'csv';
+      }
+    }
+    return 'unknown';
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      parseFile(selectedFile);
+      
+      const type = detectImportType(selectedFile);
+      switch (type) {
+        case 'excel':
+          parseExcel(selectedFile);
+          break;
+        case 'csv':
+        default:
+          parseFile(selectedFile); // FUNÇÃO ORIGINAL MANTIDA
+          break;
+      }
     }
   };
 
@@ -111,6 +139,108 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // NOVA FUNÇÃO - Parse Excel (não altera parseFile)
+  const parseExcel = async (file: File) => {
+    setLoading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const csvText = XLSX.utils.sheet_to_csv(worksheet);
+      
+      // Reutilizar lógica do CSV existente
+      parseCsvText(csvText);
+    } catch (error) {
+      console.error('Error parsing Excel file:', error);
+      alert('Erro ao processar o arquivo Excel. Verifique se é um arquivo válido.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // NOVA FUNÇÃO - Parse Google Sheets via link compartilhado
+  const parseGoogleSheets = async (shareUrl: string) => {
+    setLoading(true);
+    try {
+      // Extrair ID da planilha do link
+      const spreadsheetId = shareUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1];
+      
+      if (!spreadsheetId) {
+        alert('Link inválido. Use um link de planilha do Google Sheets.');
+        return;
+      }
+
+      // Converter para URL de export CSV
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0`;
+      
+      // Buscar dados como CSV
+      const response = await fetch(csvUrl);
+      
+      if (!response.ok) {
+        throw new Error('Não foi possível acessar a planilha. Verifique se ela está compartilhada publicamente.');
+      }
+      
+      const csvText = await response.text();
+      
+      // Reutilizar lógica do CSV existente
+      parseCsvText(csvText);
+    } catch (error) {
+      console.error('Error parsing Google Sheets:', error);
+      alert('Erro ao importar do Google Sheets. Verifique se a planilha está compartilhada como "Qualquer pessoa com o link pode visualizar".');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // NOVA FUNÇÃO - Processar texto CSV (extraída da lógica existente)
+  const parseCsvText = (csvText: string) => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      alert('O arquivo deve conter pelo menos um cabeçalho e uma linha de dados.');
+      return;
+    }
+
+    // Parse CSV (mesma lógica da função parseFile)
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const data: ParsedLead[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const lead: ParsedLead = { name: '' };
+
+      headers.forEach((header, index) => {
+        const value = values[index] || '';
+        
+        // Mapear colunas comuns (mesma lógica existente)
+        const lowerHeader = header.toLowerCase();
+        if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
+          lead.name = value;
+        } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
+          lead.email = value;
+        } else if (lowerHeader.includes('telefone') || lowerHeader.includes('phone') || lowerHeader.includes('celular')) {
+          lead.phone = value;
+        } else if (lowerHeader.includes('origem') || lowerHeader.includes('origin')) {
+          lead.origin = value;
+        } else if (lowerHeader.includes('status')) {
+          lead.status = value;
+        } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
+          lead.interest = value;
+        } else {
+          lead[header] = value;
+        }
+      });
+
+      // Validar se tem pelo menos o nome
+      if (lead.name) {
+        data.push(lead);
+      }
+    }
+
+    setParsedData(data);
+    setStep('preview');
   };
 
   const handleImport = async () => {
@@ -255,16 +385,16 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.txt"
+                  accept=".csv,.txt,.xlsx,.xls"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
                 <FileUp className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                 <h4 className="text-lg font-medium text-gray-900 mb-2">
-                  Selecione seu arquivo CSV
+                  Selecione seu arquivo CSV ou Excel
                 </h4>
                 <p className="text-gray-500 mb-4">
-                  Arraste e solte ou clique para selecionar
+                  Arraste e solte ou clique para selecionar (.csv, .xlsx, .xls)
                 </p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -276,13 +406,52 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                 </button>
               </div>
 
+              {/* Google Sheets Import */}
+              <div className="border-t pt-6 mt-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Link className="w-6 h-6 text-green-600" />
+                  <h4 className="text-lg font-medium text-gray-900">
+                    Ou importe do Google Sheets
+                  </h4>
+                </div>
+                
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-green-700 mb-3">
+                    Cole o link de uma planilha compartilhada do Google Sheets para importar diretamente.
+                  </p>
+                  <div className="space-y-3">
+                    <input
+                      type="url"
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      value={googleSheetsUrl}
+                      onChange={(e) => setGoogleSheetsUrl(e.target.value)}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                    <button
+                      onClick={() => googleSheetsUrl && parseGoogleSheets(googleSheetsUrl)}
+                      disabled={loading || !googleSheetsUrl}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      <Link className="w-4 h-4" />
+                      {loading ? 'Importando...' : 'Importar do Google Sheets'}
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-700">
+                    <strong>Importante:</strong> A planilha deve estar compartilhada como "Qualquer pessoa com o link pode visualizar"
+                  </p>
+                </div>
+              </div>
+
               {/* Instruções */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-2">
                   Formato do arquivo:
                 </h4>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Arquivo CSV com cabeçalhos na primeira linha</li>
+                  <li>• Arquivo CSV/Excel com cabeçalhos na primeira linha</li>
                   <li>• Coluna "Nome" é obrigatória</li>
                   <li>• Colunas opcionais: Email, Telefone, Origem, Status, Interesse</li>
                   <li>• <strong>Campos personalizados:</strong> Use IDs numéricos (1, 2, 3, etc.)</li>
