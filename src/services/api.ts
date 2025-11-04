@@ -1097,21 +1097,98 @@ export const api = {
     console.log('API: importLeads called with:', { companyId, count: leads.length });
     
     try {
-      const leadsToInsert = leads.map(lead => ({
-        ...lead,
-        company_id: companyId,
-        origin: lead.origin || 'import'
-      }));
+      // Buscar campos personalizados da empresa via RPC (contorna RLS)
+      const { data: customFields, error: fieldsError } = await supabase
+        .rpc('get_all_custom_fields_for_import', {
+          p_company_id: companyId
+        });
 
-      const { data, error } = await supabase
-        .from('leads')
-        .insert(leadsToInsert)
-        .select();
+      if (fieldsError) {
+        console.error('Error fetching custom fields:', fieldsError);
+      }
 
-      if (error) throw error;
+      const customFieldsMap = new Map();
+      if (customFields) {
+        customFields.forEach((field: any) => {
+          customFieldsMap.set(field.numeric_id?.toString(), field);
+        });
+      }
 
-      console.log('API: Leads imported successfully:', data?.length || 0);
-      return data || [];
+      console.log('Custom fields loaded for import:', customFieldsMap.size);
+
+      const results = [];
+      
+      // Processar leads um por vez para garantir campos personalizados
+      for (const leadData of leads) {
+        try {
+          // Separar campos padrão dos personalizados
+          const { 
+            name, email, phone, origin, status, interest,
+            company_name, company_cnpj, company_razao_social, company_nome_fantasia,
+            company_cep, company_cidade, company_estado, company_endereco,
+            company_telefone, company_email, company_site,
+            ...otherFields 
+          } = leadData;
+
+          // Campos padrão do lead
+          const standardFields = {
+            name, email, phone, origin: origin || 'import', status, interest,
+            company_name, company_cnpj, company_razao_social, company_nome_fantasia,
+            company_cep, company_cidade, company_estado, company_endereco,
+            company_telefone, company_email, company_site,
+            company_id: companyId
+          };
+
+          // Criar lead com campos padrão
+          const { data: lead, error: leadError } = await supabase
+            .from('leads')
+            .insert(standardFields)
+            .select()
+            .single();
+
+          if (leadError) throw leadError;
+
+          // Processar campos personalizados (sistema híbrido)
+          const customValues = [];
+          for (const [key, value] of Object.entries(otherFields)) {
+            if (value && value !== '') {
+              // Verificar se é um ID numérico (campo personalizado)
+              if (/^\d+$/.test(key)) {
+                const customField = customFieldsMap.get(key);
+                if (customField) {
+                  customValues.push({
+                    lead_id: lead.id,
+                    field_id: customField.id,
+                    value: String(value)
+                  });
+                  console.log(`Custom field mapped: ID ${key} -> ${customField.field_name} = ${value}`);
+                }
+              }
+            }
+          }
+
+          // Inserir valores dos campos personalizados
+          if (customValues.length > 0) {
+            const { error: customError } = await supabase
+              .from('lead_custom_values')
+              .insert(customValues);
+
+            if (customError) {
+              console.error('Error inserting custom field values:', customError);
+            } else {
+              console.log(`Inserted ${customValues.length} custom field values for lead ${lead.id}`);
+            }
+          }
+
+          results.push(lead);
+        } catch (leadError) {
+          console.error('Error importing individual lead:', leadError);
+          // Continuar com próximo lead em caso de erro
+        }
+      }
+
+      console.log('API: Leads imported successfully:', results.length);
+      return results;
     } catch (error) {
       console.error('Error in importLeads:', error);
       throw error;

@@ -164,9 +164,9 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   };
 
   const downloadTemplate = () => {
-    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse\n' +
-                      'João Silva,joao@email.com,(11) 99999-9999,landing_page,novo,Desenvolvimento de site\n' +
-                      'Maria Santos,maria@email.com,(11) 88888-8888,whatsapp,em_qualificacao,Marketing digital';
+    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,1,2,3\n' +
+                      'João Silva,joao@email.com,(11) 99999-9999,landing_page,novo,Desenvolvimento de site,Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
+                      'Maria Santos,maria@email.com,(11) 88888-8888,whatsapp,em_qualificacao,Marketing digital,Outro Valor 1,Outro Valor 2,Outro Valor 3';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -285,6 +285,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                   <li>• Arquivo CSV com cabeçalhos na primeira linha</li>
                   <li>• Coluna "Nome" é obrigatória</li>
                   <li>• Colunas opcionais: Email, Telefone, Origem, Status, Interesse</li>
+                  <li>• <strong>Campos personalizados:</strong> Use IDs numéricos (1, 2, 3, etc.)</li>
                   <li>• Máximo de 1.000 leads por importação</li>
                   <li>• Codificação UTF-8 recomendada</li>
                 </ul>
