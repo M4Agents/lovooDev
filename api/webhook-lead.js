@@ -29,7 +29,11 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('PAYLOAD RECEBIDO:', req.body);
+    console.log('📥 PAYLOAD RECEBIDO:', req.body);
+    console.log('📊 PAYLOAD DETALHADO:');
+    console.log('- Tipo do payload:', typeof req.body);
+    console.log('- Keys do payload:', Object.keys(req.body || {}));
+    console.log('- Valores do payload:', JSON.stringify(req.body, null, 2));
     console.log('Lead webhook received raw body:', req.body);
     console.log('Lead webhook received headers:', req.headers);
     
