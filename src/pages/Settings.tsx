@@ -368,17 +368,22 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">🔧 Configuração Técnica:</h4>
-                  <div className="space-y-1 text-sm text-blue-800">
+                  <h4 className="font-medium text-blue-900 mb-2">🔧 Sistema Híbrido V5:</h4>
+                  <div className="space-y-2 text-sm text-blue-800">
                     <p><strong>Método:</strong> POST</p>
                     <p><strong>Content-Type:</strong> application/json</p>
-                    <p><strong>Campos detectados automaticamente:</strong></p>
+                    <p><strong>Campos padrão (por nome):</strong></p>
                     <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
                       <li>Nome: name, nome, full_name, cliente</li>
                       <li>Email: email, e-mail, mail</li>
                       <li>Telefone: phone, telefone, celular, whatsapp</li>
-                      <li>Empresa: company, empresa, company_name</li>
-                      <li><strong>Campos personalizados:</strong> Qualquer outro campo é criado automaticamente!</li>
+                      <li>Origem: origin, origem, source, fonte</li>
+                    </ul>
+                    <p><strong>Campos personalizados (por ID):</strong></p>
+                    <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
+                      <li>Use o ID numérico: "1": "valor", "2": "valor"</li>
+                      <li>Crie campos em: Configurações → Campos Personalizados</li>
+                      <li>Copie o ID mostrado na interface</li>
                     </ul>
                   </div>
                 </div>
@@ -389,22 +394,21 @@ export const Settings: React.FC = () => {
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo de Uso:</h4>
                   <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
-                    <div className="text-gray-600">{`// Exemplo de JSON que seu formulário deve enviar:`}</div>
+                    <div className="text-gray-600">{`// Sistema Híbrido V5 - Exemplo de JSON:`}</div>
                     <div className="text-green-600 mt-2">{`{`}</div>
                     <div className="ml-2 text-red-600">{`"api_key": "(sua apikey aqui...)",`}</div>
                     <div className="ml-2 text-blue-600">{`"nome": "João Silva",`}</div>
                     <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
                     <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
-                    <div className="ml-2 text-blue-600">{`"empresa": "Minha Empresa Ltda",`}</div>
-                    <div className="ml-2 text-blue-600">{`"interesse": "Quero saber mais",`}</div>
-                    <div className="ml-2 text-purple-600">{`"orcamento": "R$ 50.000",`}</div>
-                    <div className="ml-2 text-purple-600">{`"prazo_projeto": "3 meses",`}</div>
-                    <div className="ml-2 text-purple-600">{`"fonte_indicacao": "Google Ads"`}</div>
+                    <div className="ml-2 text-blue-600">{`"origem": "landing_page",`}</div>
+                    <div className="ml-2 text-purple-600">{`"1": "R$ 50.000",        // Campo ID: 1`}</div>
+                    <div className="ml-2 text-purple-600">{`"2": "3 meses",          // Campo ID: 2`}</div>
+                    <div className="ml-2 text-purple-600">{`"3": "Google Ads"        // Campo ID: 3`}</div>
                     <div className="text-green-600">{`}`}</div>
                   </div>
                   <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
                     <p className="text-xs text-purple-800">
-                      <strong>🎯 Campos Personalizados:</strong> Os campos em <span className="text-purple-600 font-mono">roxo</span> são criados automaticamente como campos personalizados no sistema de leads!
+                      <strong>🎯 Sistema Híbrido:</strong> Campos <span className="text-blue-600 font-mono">azuis</span> são padrão (por nome), campos <span className="text-purple-600 font-mono">roxos</span> são personalizados (por ID numérico)!
                     </p>
                   </div>
                 </div>
@@ -448,6 +452,106 @@ export const Settings: React.FC = () => {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Documentação Completa da API */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <SettingsIcon className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Documentação Completa da API</h2>
+                <p className="text-sm text-slate-600">Guia completo para desenvolvedores</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Campos Personalizados */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-purple-900 mb-3">🎯 Campos Personalizados</h4>
+                  <div className="space-y-3 text-sm text-purple-800">
+                    <div>
+                      <p className="font-medium">1. Criar Campo:</p>
+                      <p className="text-xs ml-4">• Acesse: Configurações → Campos Personalizados</p>
+                      <p className="text-xs ml-4">• Clique em "Novo Campo"</p>
+                      <p className="text-xs ml-4">• Campo receberá ID automático (1, 2, 3...)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">2. Usar no Payload:</p>
+                      <div className="bg-white rounded p-2 mt-1 font-mono text-xs">
+                        <span className="text-gray-600">{"{"}</span><br/>
+                        <span className="ml-2 text-purple-600">"1": "valor_campo_1",</span><br/>
+                        <span className="ml-2 text-purple-600">"2": "valor_campo_2"</span><br/>
+                        <span className="text-gray-600">{"}"}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-medium">3. Copiar ID:</p>
+                      <p className="text-xs ml-4">• Botão verde "Copiar" na interface</p>
+                      <p className="text-xs ml-4">• ID é único e nunca muda</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 mb-3">📋 Campos Padrão</h4>
+                  <div className="space-y-2 text-sm text-blue-800">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><strong>Nome:</strong> nome, name</div>
+                      <div><strong>Email:</strong> email, e-mail</div>
+                      <div><strong>Telefone:</strong> telefone, phone</div>
+                      <div><strong>Origem:</strong> origem, origin</div>
+                    </div>
+                    <p className="text-xs mt-2">
+                      <strong>Uso:</strong> Sempre por nome, sem ID necessário
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exemplos Práticos */}
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-900 mb-3">✅ Exemplo Completo</h4>
+                  <div className="bg-white rounded p-3 font-mono text-xs overflow-x-auto">
+                    <div className="text-gray-600">// Payload Sistema Híbrido V5</div>
+                    <div className="text-green-600 mt-1">{"{"}</div>
+                    <div className="ml-2 text-red-600">"api_key": "sua-api-key",</div>
+                    <div className="ml-2 text-blue-600">"nome": "Maria Silva",</div>
+                    <div className="ml-2 text-blue-600">"email": "maria@empresa.com",</div>
+                    <div className="ml-2 text-blue-600">"telefone": "11999999999",</div>
+                    <div className="ml-2 text-blue-600">"origem": "landing_page",</div>
+                    <div className="ml-2 text-purple-600">"1": "R$ 100.000",</div>
+                    <div className="ml-2 text-purple-600">"2": "6 meses",</div>
+                    <div className="ml-2 text-purple-600">"3": "E-commerce"</div>
+                    <div className="text-green-600">{"}"}</div>
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-orange-900 mb-3">⚠️ Importante</h4>
+                  <div className="space-y-2 text-sm text-orange-800">
+                    <p><strong>• Precisão:</strong> IDs garantem mapeamento exato</p>
+                    <p><strong>• Escalabilidade:</strong> Suporta milhares de campos</p>
+                    <p><strong>• Compatibilidade:</strong> Funciona com qualquer tecnologia</p>
+                    <p><strong>• Performance:</strong> Processamento otimizado</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 mb-3">🔧 Configuração Técnica</h4>
+                  <div className="space-y-1 text-sm text-gray-800">
+                    <p><strong>Endpoint:</strong> POST /api/webhook-lead</p>
+                    <p><strong>Content-Type:</strong> application/json</p>
+                    <p><strong>Timeout:</strong> 30 segundos</p>
+                    <p><strong>Rate Limit:</strong> 1000 req/min</p>
+                    <p><strong>Logs:</strong> Disponíveis abaixo</p>
+                  </div>
                 </div>
               </div>
             </div>

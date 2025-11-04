@@ -1,9 +1,9 @@
 # DOCUMENTAÇÃO TÉCNICA - LOVOCRM
 ## Sistema SaaS para Análise Comportamental e CRM
 
-**Versão:** 1.2.0 - Sistema de Duplicatas Completo  
+**Versão:** 1.3.0 - Sistema Híbrido de Campos Personalizados  
 **Data:** Novembro 2025  
-**Última Atualização:** 03/11/2025 - 22:43  
+**Última Atualização:** 04/11/2025 - 08:50  
 
 ---
 
@@ -353,40 +353,49 @@ POST https://app.lovoocrm.com/api/webhook-lead
 Content-Type: application/json
 ```
 
-### Payload Mínimo
+### Sistema Híbrido - Payload V5
 ```json
 {
   "api_key": "582121bf-6661-4c70-81e0-f180f481a92b",
   "nome": "João Silva",
-  "email": "joao@email.com"
+  "email": "joao@email.com",
+  "telefone": "11999999999",
+  "1": "R$ 50.000",        // Campo personalizado ID: 1
+  "2": "30 dias",          // Campo personalizado ID: 2
+  "3": "Desenvolvimento"   // Campo personalizado ID: 3
 }
 ```
 
-### Mapeamento Inteligente
+### Mapeamento Híbrido V5
 
-#### Campos Padrão Detectados
+#### Campos Padrão (Por Nome)
 - **Nome**: name, nome, full_name, cliente
 - **Email**: email, e-mail, mail
 - **Telefone**: phone, telefone, celular, whatsapp
 - **Empresa**: company, empresa, company_name
 - **Interesse**: interest, interesse, mensagem, message
+- **Origem**: origin, origem, source, fonte
 
-#### Campos Personalizados
-- **Detecção automática**: Qualquer campo não padrão
-- **Criação automática**: Se não existir na empresa
-- **Normalização**: snake_case (ex: "Orçamento Disponível" → "orcamento_disponivel")
-- **Tipos detectados**: text, number, date, boolean
+#### Campos Personalizados (Por ID Numérico)
+- **Sistema híbrido**: Campos padrão por nome + personalizados por ID
+- **IDs incrementais**: 1, 2, 3, 4, 5... (auto-increment)
+- **Criação manual**: Via interface de Campos Personalizados
+- **Precisão absoluta**: Sem ambiguidade ou conflitos
+- **Escalabilidade**: Suporta milhares de campos
 
-### Fluxo de Processamento
+### Fluxo de Processamento V5 (Sistema Híbrido)
 1. **Recebe POST** com JSON
 2. **Valida API Key** via RPC
-3. **Detecta campos** padrão vs personalizados
+3. **Detecta campos híbridos**:
+   - Campos padrão: Processados por nome
+   - IDs numéricos: Processados como campos personalizados
+   - Nomes não-padrão: Logados (modo manual)
 4. **Cria lead** via RPC (contorna RLS)
-5. **Processa campos personalizados**:
-   - Verifica se existem na empresa
-   - Cria automaticamente se necessário
-   - Insere valores na tabela de valores
-6. **Retorna sucesso** com lead_id
+5. **Processa campos personalizados por ID**:
+   - Busca campo pelo `numeric_id`
+   - Valida existência na empresa
+   - Insere valores via RPC (contorna RLS)
+6. **Retorna sucesso** com lead_id e logs detalhados
 
 ### Interface de Configuração
 **Localização**: Settings → Integrações

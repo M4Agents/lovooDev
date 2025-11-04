@@ -1,9 +1,9 @@
 # BASE DE CONHECIMENTO - SUPORTE LOVOCRM
 ## Guia Completo para Suporte ao Usuário
 
-**Versão:** 1.2.0 - Sistema de Duplicatas Completo  
+**Versão:** 1.3.0 - Sistema Híbrido de Campos Personalizados  
 **Data:** Novembro 2025  
-**Última Atualização:** 03/11/2025 - 22:43  
+**Última Atualização:** 04/11/2025 - 08:50  
 
 ---
 
@@ -285,23 +285,30 @@ Sistema que permite capturar leads de **qualquer formulário** automaticamente, 
 - **Empresa**: company, empresa, company_name
 - **Interesse**: interest, interesse, mensagem, message
 
-#### Campos Personalizados
-**Qualquer outro campo** enviado será:
-- **Detectado automaticamente**
-- **Criado como campo personalizado**
-- **Associado ao lead**
+#### Campos Personalizados - Sistema Híbrido
+**NOVO: Sistema Híbrido de Campos**
+- **Campos por ID**: Use o ID numérico do campo (ex: "1": "valor")
+- **Precisão total**: Sem ambiguidade ou conflitos
+- **Criação manual**: Crie campos na interface primeiro
 - **Disponível para busca e filtros**
 
+**Como usar:**
+1. **Acesse** Configurações → Campos Personalizados
+2. **Crie** o campo desejado (receberá um ID automático)
+3. **Copie** o ID mostrado na interface
+4. **Use** no payload: `"ID": "valor"`
+
 ### Exemplos de Uso
-#### Formulário de Orçamento
+#### Sistema Híbrido - Formulário de Orçamento
 ```json
 {
   "api_key": "sua-api-key",
   "nome": "Maria Santos",
   "email": "maria@empresa.com",
-  "orcamento_disponivel": "R$ 50.000",
-  "prazo_desejado": "3 meses",
-  "tipo_servico": "Desenvolvimento Web"
+  "telefone": "11999999999",
+  "1": "R$ 50.000",        // Campo: Orçamento (ID: 1)
+  "2": "3 meses",          // Campo: Prazo (ID: 2)
+  "3": "Desenvolvimento Web" // Campo: Tipo Serviço (ID: 3)
 }
 ```
 
