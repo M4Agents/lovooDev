@@ -22,8 +22,13 @@ import {
   Calendar,
   User,
   Building,
-  ExternalLink
+  ExternalLink,
+  Download,
+  ChevronDown,
+  FileText,
+  FileSpreadsheet
 } from 'lucide-react';
+import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 
 interface Lead {
   id: number;
@@ -73,12 +78,28 @@ export const Leads: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDuplicateNotification, setSelectedDuplicateNotification] = useState<any>(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  
+  // NOVOS ESTADOS PARA EXPORTAÇÃO
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     if (company?.id) {
       loadData();
     }
   }, [company?.id]);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showExportDropdown) {
+        setShowExportDropdown(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showExportDropdown]);
 
   const loadData = async () => {
     if (!company?.id) return;
@@ -132,6 +153,47 @@ export const Leads: React.FC = () => {
     } catch (error) {
       console.error('Error deleting lead:', error);
       alert('Erro ao excluir lead');
+    }
+  };
+
+  // NOVAS FUNÇÕES DE EXPORTAÇÃO
+  const handleExport = async (format: 'csv' | 'excel') => {
+    if (!company?.id) return;
+    
+    setExportLoading(true);
+    setShowExportDropdown(false);
+    
+    try {
+      // Buscar leads com campos personalizados
+      const leadsData = await api.exportLeads(company.id);
+      
+      if (!leadsData || leadsData.length === 0) {
+        alert('Nenhum lead encontrado para exportar');
+        return;
+      }
+      
+      // Processar dados para exportação
+      const processedData = prepareLeadsForExport(leadsData);
+      
+      // Gerar nome do arquivo
+      const filename = generateExportFilename('leads');
+      
+      // Exportar no formato escolhido
+      if (format === 'csv') {
+        exportToCSV(processedData, filename);
+      } else {
+        await exportToExcel(processedData, filename);
+      }
+      
+      // Feedback de sucesso
+      const count = processedData.length;
+      alert(`${count} lead${count !== 1 ? 's' : ''} exportado${count !== 1 ? 's' : ''} com sucesso!`);
+      
+    } catch (error) {
+      console.error('Error exporting leads:', error);
+      alert('Erro ao exportar leads. Tente novamente.');
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -219,6 +281,41 @@ export const Leads: React.FC = () => {
             <Upload className="w-4 h-4" />
             Importar
           </button>
+          
+          {/* Dropdown de Exportação */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              disabled={exportLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              {exportLoading ? 'Exportando...' : 'Exportar'}
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            
+            {showExportDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                <button
+                  onClick={() => handleExport('csv')}
+                  disabled={exportLoading}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <FileText className="w-4 h-4" />
+                  Exportar CSV
+                </button>
+                <button
+                  onClick={() => handleExport('excel')}
+                  disabled={exportLoading}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Exportar Excel
+                </button>
+              </div>
+            )}
+          </div>
+          
           <button
             onClick={handleCreateLead}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

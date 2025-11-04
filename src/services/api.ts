@@ -1246,5 +1246,40 @@ export const api = {
       console.error('Error in getLeadStats:', error);
       throw error;
     }
+  },
+
+  async exportLeads(companyId: string) {
+    console.log('API: exportLeads called for company:', companyId);
+    
+    try {
+      // Buscar leads com campos personalizados
+      const { data: leads, error } = await supabase
+        .from('leads')
+        .select(`
+          *,
+          lead_custom_values (
+            value,
+            lead_custom_fields (
+              field_name,
+              field_label,
+              numeric_id
+            )
+          )
+        `)
+        .eq('company_id', companyId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching leads for export:', error);
+        throw error;
+      }
+
+      console.log('API: Leads fetched for export:', leads?.length || 0);
+      return leads || [];
+    } catch (error) {
+      console.error('Error in exportLeads:', error);
+      throw error;
+    }
   }
 };
