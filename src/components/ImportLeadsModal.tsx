@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
@@ -15,7 +15,8 @@ import {
   Building,
   Tag,
   FileUp,
-  Link
+  Link,
+  Settings
 } from 'lucide-react';
 
 interface ImportLeadsModalProps {
@@ -57,6 +58,21 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const [customFields, setCustomFields] = useState<any[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+
+  // Calcular campos personalizados mapeados para o preview
+  const mappedCustomFields = useMemo(() => {
+    return Object.entries(columnMapping)
+      .filter(([, fieldId]) => fieldId)
+      .map(([columnName, fieldId]) => {
+        const field = customFields.find(f => f.id === fieldId);
+        return {
+          id: fieldId,
+          column: columnName,
+          label: field?.field_label || columnName,
+          numericId: field?.numeric_id
+        };
+      });
+  }, [columnMapping, customFields]);
 
   // Detectar tipo de arquivo/URL
   const detectImportType = (input: File | string) => {
@@ -648,7 +664,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
               {/* Preview Table */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-96">
-                  <table className="w-full">
+                  <table className="w-full min-w-max">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -671,6 +687,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                           <Tag className="w-4 h-4 inline mr-1" />
                           Status
                         </th>
+                        {/* Campos personalizados mapeados */}
+                        {mappedCustomFields.map(field => (
+                          <th key={field.id} className="px-4 py-3 text-left text-xs font-medium text-purple-600 uppercase min-w-[150px]">
+                            <Settings className="w-4 h-4 inline mr-1" />
+                            {field.label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -691,6 +714,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                           <td className="px-4 py-3 text-sm text-gray-500">
                             {lead.status || 'novo'}
                           </td>
+                          {/* Valores dos campos personalizados mapeados */}
+                          {mappedCustomFields.map(field => (
+                            <td key={field.id} className="px-4 py-3 text-sm font-medium text-purple-700">
+                              {lead[field.column] || '-'}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -703,6 +732,24 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Dica para scroll horizontal se há muitos campos */}
+              {mappedCustomFields.length > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <div className="flex items-start gap-3">
+                    <Settings className="w-5 h-5 text-purple-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-purple-900 mb-1">
+                        Campos Personalizados Mapeados
+                      </h4>
+                      <p className="text-sm text-purple-700">
+                        {mappedCustomFields.length} campo(s) personalizado(s) detectado(s) e mapeado(s). 
+                        {mappedCustomFields.length > 2 && ' Use scroll horizontal para ver todos os campos.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Import Button */}
               <div className="flex items-center justify-end space-x-3">
