@@ -1305,5 +1305,199 @@ export const api = {
       console.error('Error in exportLeads:', error);
       throw error;
     }
+  },
+
+  // ===== WEBHOOK AVANÇADO APIS - MÓDULO ISOLADO =====
+  
+  async getWebhookTriggerConfigs(companyId: string) {
+    console.log('API: getWebhookTriggerConfigs called for company:', companyId);
+    
+    try {
+      const { data, error } = await supabase.rpc('get_webhook_trigger_configs', {
+        p_company_id: companyId
+      });
+
+      if (error) {
+        console.error('Error fetching webhook trigger configs:', error);
+        throw error;
+      }
+
+      console.log('API: Webhook trigger configs fetched:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getWebhookTriggerConfigs:', error);
+      throw error;
+    }
+  },
+
+  async createWebhookTriggerConfig(companyId: string, config: {
+    name: string;
+    webhook_url: string;
+    is_active?: boolean;
+    trigger_events?: string[];
+    conditions?: Record<string, any>;
+    payload_fields?: Record<string, any>;
+    timeout_seconds?: number;
+    retry_attempts?: number;
+    headers?: Record<string, string>;
+  }) {
+    console.log('API: createWebhookTriggerConfig called:', { companyId, config });
+    
+    try {
+      const { data, error } = await supabase.rpc('create_webhook_trigger_config', {
+        p_company_id: companyId,
+        p_name: config.name,
+        p_webhook_url: config.webhook_url,
+        p_is_active: config.is_active ?? true,
+        p_trigger_events: JSON.stringify(config.trigger_events || ['lead_converted']),
+        p_conditions: JSON.stringify(config.conditions || {}),
+        p_payload_fields: JSON.stringify(config.payload_fields || {
+          lead: ['name', 'email', 'phone', 'status', 'origin'],
+          empresa: ['company_name', 'company_cnpj'],
+          tracking: ['visitor_id'],
+          custom: []
+        }),
+        p_timeout_seconds: config.timeout_seconds || 10,
+        p_retry_attempts: config.retry_attempts || 3,
+        p_headers: JSON.stringify(config.headers || {})
+      });
+
+      if (error) {
+        console.error('Error creating webhook trigger config:', error);
+        throw error;
+      }
+
+      console.log('API: Webhook trigger config created with ID:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in createWebhookTriggerConfig:', error);
+      throw error;
+    }
+  },
+
+  async updateWebhookTriggerConfig(configId: string, companyId: string, updates: {
+    name?: string;
+    webhook_url?: string;
+    is_active?: boolean;
+    trigger_events?: string[];
+    conditions?: Record<string, any>;
+    payload_fields?: Record<string, any>;
+    timeout_seconds?: number;
+    retry_attempts?: number;
+    headers?: Record<string, string>;
+  }) {
+    console.log('API: updateWebhookTriggerConfig called:', { configId, companyId, updates });
+    
+    try {
+      const { data, error } = await supabase.rpc('update_webhook_trigger_config', {
+        p_id: configId,
+        p_company_id: companyId,
+        p_name: updates.name || null,
+        p_webhook_url: updates.webhook_url || null,
+        p_is_active: updates.is_active ?? null,
+        p_trigger_events: updates.trigger_events ? JSON.stringify(updates.trigger_events) : null,
+        p_conditions: updates.conditions ? JSON.stringify(updates.conditions) : null,
+        p_payload_fields: updates.payload_fields ? JSON.stringify(updates.payload_fields) : null,
+        p_timeout_seconds: updates.timeout_seconds ?? null,
+        p_retry_attempts: updates.retry_attempts ?? null,
+        p_headers: updates.headers ? JSON.stringify(updates.headers) : null
+      });
+
+      if (error) {
+        console.error('Error updating webhook trigger config:', error);
+        throw error;
+      }
+
+      console.log('API: Webhook trigger config updated:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in updateWebhookTriggerConfig:', error);
+      throw error;
+    }
+  },
+
+  async deleteWebhookTriggerConfig(configId: string, companyId: string) {
+    console.log('API: deleteWebhookTriggerConfig called:', { configId, companyId });
+    
+    try {
+      const { data, error } = await supabase.rpc('delete_webhook_trigger_config', {
+        p_id: configId,
+        p_company_id: companyId
+      });
+
+      if (error) {
+        console.error('Error deleting webhook trigger config:', error);
+        throw error;
+      }
+
+      console.log('API: Webhook trigger config deleted:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in deleteWebhookTriggerConfig:', error);
+      throw error;
+    }
+  },
+
+  async getWebhookTriggerLogs(companyId: string, configId?: string, limit?: number) {
+    console.log('API: getWebhookTriggerLogs called:', { companyId, configId, limit });
+    
+    try {
+      const { data, error } = await supabase.rpc('get_webhook_trigger_logs', {
+        p_company_id: companyId,
+        p_config_id: configId || null,
+        p_limit: limit || 50
+      });
+
+      if (error) {
+        console.error('Error fetching webhook trigger logs:', error);
+        throw error;
+      }
+
+      console.log('API: Webhook trigger logs fetched:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getWebhookTriggerLogs:', error);
+      throw error;
+    }
+  },
+
+  async testWebhookTrigger(url: string, payload: any, headers?: Record<string, string>) {
+    console.log('API: testWebhookTrigger called:', { url, payload, headers });
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const responseText = await response.text();
+      let responseBody;
+      
+      try {
+        responseBody = JSON.parse(responseText);
+      } catch {
+        responseBody = responseText;
+      }
+
+      const result = {
+        success: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        response: responseBody
+      };
+
+      console.log('API: Webhook test result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error in testWebhookTrigger:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 };

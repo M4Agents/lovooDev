@@ -1,22 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
-  // Estados para teste do webhook de leads
-  const [testingWebhook, setTestingWebhook] = useState(false);
+  // Estados para teste do webhook de leads (EXISTENTE)
+  const [testingWebhookLead, setTestingWebhookLead] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<{success: boolean, lead_id?: string, error?: string} | null>(null);
   
   // Estado para mostrar/ocultar API Key
   const [showApiKey, setShowApiKey] = useState(false);
   
+  // Estados para Webhook Avançado - MÓDULO ISOLADO
+  const [webhookConfig, setWebhookConfig] = useState({
+    name: '',
+    webhook_url: '',
+    trigger_event: 'lead_converted',
+    timeout_seconds: 10,
+    retry_attempts: 3,
+    headers: '',
+    payload_fields: {
+      lead: ['name', 'email', 'phone', 'status', 'origin'],
+      empresa: [],
+      analytics: []
+    }
+  });
+  const [savingWebhook, setSavingWebhook] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookConfigs, setWebhookConfigs] = useState<any[]>([]);
+  const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
+  
   // Estados para abas principais
-  const [activeTab, setActiveTab] = useState<'settings' | 'empresas'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'webhook-avancado' | 'empresas'>('settings');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   const [companyData, setCompanyData] = useState({
     // Dados Principais
@@ -206,7 +225,7 @@ export const Settings: React.FC = () => {
   const testWebhookLead = async () => {
     if (!company?.api_key) return;
     
-    setTestingWebhook(true);
+    setTestingWebhookLead(true);
     setWebhookTestResult(null);
     
     try {
@@ -250,7 +269,178 @@ export const Settings: React.FC = () => {
         error: error instanceof Error ? error.message : 'Erro de conexão'
       });
     } finally {
+      setTestingWebhookLead(false);
+    }
+  };
+
+  // ===== FUNÇÕES WEBHOOK AVANÇADO - MÓDULO ISOLADO =====
+  
+  const handleWebhookConfigChange = (field: string, value: any) => {
+    setWebhookConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleFieldToggle = (category: 'lead' | 'empresa' | 'analytics', field: string) => {
+    setWebhookConfig(prev => ({
+      ...prev,
+      payload_fields: {
+        ...prev.payload_fields,
+        [category]: prev.payload_fields[category].includes(field)
+          ? prev.payload_fields[category].filter(f => f !== field)
+          : [...prev.payload_fields[category], field]
+      }
+    }));
+  };
+
+  const handleCreateWebhook = async (e: React.FormEvent) => {
+    e.preventDefault(); // Previne submit padrão
+    
+    if (!company?.id) {
+      alert('Erro: Empresa não encontrada');
+      return;
+    }
+
+    if (!webhookConfig.name || !webhookConfig.webhook_url) {
+      alert('Por favor, preencha Nome e URL do webhook');
+      return;
+    }
+
+    setSavingWebhook(true);
+    
+    try {
+      let headers = {};
+      if (webhookConfig.headers.trim()) {
+        try {
+          headers = JSON.parse(webhookConfig.headers);
+        } catch (error) {
+          alert('Headers inválidos. Use formato JSON válido.');
+          setSavingWebhook(false);
+          return;
+        }
+      }
+
+      const configData = {
+        name: webhookConfig.name,
+        webhook_url: webhookConfig.webhook_url,
+        is_active: true,
+        trigger_events: [webhookConfig.trigger_event],
+        conditions: {},
+        payload_fields: webhookConfig.payload_fields,
+        timeout_seconds: webhookConfig.timeout_seconds,
+        retry_attempts: webhookConfig.retry_attempts,
+        headers
+      };
+
+      const result = await api.createWebhookTriggerConfig(company.id, configData);
+      
+      alert('Configuração criada com sucesso!');
+      
+      // Reset form
+      setWebhookConfig({
+        name: '',
+        webhook_url: '',
+        trigger_event: 'lead_converted',
+        timeout_seconds: 10,
+        retry_attempts: 3,
+        headers: '',
+        payload_fields: {
+          lead: ['name', 'email', 'phone', 'status', 'origin'],
+          empresa: [],
+          analytics: []
+        }
+      });
+      
+      // Reload configs
+      loadWebhookConfigs();
+      
+    } catch (error) {
+      console.error('Error creating webhook config:', error);
+      alert('Erro ao criar configuração: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+    } finally {
+      setSavingWebhook(false);
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    if (!webhookConfig.webhook_url) {
+      alert('Por favor, informe a URL do webhook');
+      return;
+    }
+
+    setTestingWebhook(true);
+    
+    try {
+      let headers = {};
+      if (webhookConfig.headers.trim()) {
+        try {
+          headers = JSON.parse(webhookConfig.headers);
+        } catch (error) {
+          alert('Headers inválidos. Use formato JSON válido.');
+          setTestingWebhook(false);
+          return;
+        }
+      }
+
+      const testPayload = {
+        event: webhookConfig.trigger_event,
+        timestamp: new Date().toISOString(),
+        data: {
+          lead: {
+            name: 'Lead de Teste',
+            email: 'teste@exemplo.com',
+            phone: '(11) 99999-9999',
+            status: 'convertido',
+            origin: 'teste'
+          },
+          empresa: {
+            name: company?.name || 'Empresa Teste',
+            domain: company?.domain || 'teste.com'
+          },
+          analytics: {
+            visitor_id: 'test_visitor_123',
+            session_duration: 180,
+            page_views: 5
+          }
+        }
+      };
+
+      const result = await api.testWebhookTrigger(webhookConfig.webhook_url, testPayload, headers);
+      
+      if (result.success) {
+        alert(`✅ Teste realizado com sucesso!\nStatus: ${result.status}\nResposta: ${JSON.stringify(result.response, null, 2)}`);
+      } else {
+        alert(`❌ Erro no teste:\nStatus: ${result.status || 'N/A'}\nErro: ${result.error || result.statusText || 'Erro desconhecido'}`);
+      }
+      
+    } catch (error) {
+      console.error('Error testing webhook:', error);
+      alert('Erro ao testar webhook: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+    } finally {
       setTestingWebhook(false);
+    }
+  };
+
+  const loadWebhookConfigs = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const configs = await api.getWebhookTriggerConfigs(company.id);
+      setWebhookConfigs(configs);
+    } catch (error) {
+      console.error('Error loading webhook configs:', error);
+    }
+  };
+
+  const loadWebhookTriggerLogs = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const logs = await api.getWebhookTriggerLogs(company.id);
+      setWebhookLogs(logs);
+    } catch (error) {
+      console.error('Error loading webhook logs:', error);
     }
   };
 
@@ -272,6 +462,17 @@ export const Settings: React.FC = () => {
           >
             <SettingsIcon className="w-4 h-4" />
             Integrações
+          </button>
+          <button
+            onClick={() => setActiveTab('webhook-avancado')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'webhook-avancado'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            Webhook Avançado
           </button>
           <button
             onClick={() => setActiveTab('empresas')}
@@ -1396,6 +1597,265 @@ export const Settings: React.FC = () => {
               </form>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Nova Aba Webhook Avançado - ISOLADA */}
+      {activeTab === 'webhook-avancado' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Zap className="w-5 h-5 text-orange-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Webhook Avançado - Disparos Automáticos</h2>
+              <p className="text-sm text-slate-600">Configure webhooks que são disparados automaticamente quando eventos específicos acontecem</p>
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h3 className="font-medium text-blue-900 mb-2">🚀 Nova Funcionalidade</h3>
+            <p className="text-blue-800 text-sm">
+              Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex: lead convertido).
+              Diferente do webhook simples, aqui o <strong>sistema envia dados para você</strong> automaticamente.
+            </p>
+          </div>
+          
+          {/* Interface Completa de Configuração */}
+          <div className="space-y-6">
+            
+            {/* Formulário de Nova Configuração */}
+            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-orange-900 mb-4">➕ Nova Configuração de Webhook</h3>
+              
+              <form onSubmit={handleCreateWebhook} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Nome da Configuração *
+                    </label>
+                    <input
+                      type="text"
+                      value={webhookConfig.name}
+                      onChange={(e) => handleWebhookConfigChange('name', e.target.value)}
+                      placeholder="Ex: Webhook Lead Convertido"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      URL do Webhook *
+                    </label>
+                    <input
+                      type="url"
+                      value={webhookConfig.webhook_url}
+                      onChange={(e) => handleWebhookConfigChange('webhook_url', e.target.value)}
+                      placeholder="https://seu-sistema.com/webhook"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Evento de Disparo *
+                    </label>
+                    <select 
+                      value={webhookConfig.trigger_event}
+                      onChange={(e) => handleWebhookConfigChange('trigger_event', e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="lead_converted">Lead Convertido</option>
+                      <option value="lead_created">Lead Criado</option>
+                      <option value="lead_qualified">Lead Qualificado</option>
+                      <option value="lead_updated">Lead Atualizado</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Timeout (segundos)
+                    </label>
+                    <input
+                      type="number"
+                      value={webhookConfig.timeout_seconds}
+                      onChange={(e) => handleWebhookConfigChange('timeout_seconds', parseInt(e.target.value))}
+                      min="5"
+                      max="60"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Tentativas de Retry
+                    </label>
+                    <input
+                      type="number"
+                      value={webhookConfig.retry_attempts}
+                      onChange={(e) => handleWebhookConfigChange('retry_attempts', parseInt(e.target.value))}
+                      min="0"
+                      max="10"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Seleção de Campos */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Campos a Enviar
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <h4 className="font-medium text-slate-900 mb-2">📋 Dados do Lead</h4>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={webhookConfig.payload_fields.lead.includes('name')}
+                            onChange={() => handleFieldToggle('lead', 'name')}
+                            className="mr-2" 
+                          />
+                          <span className="text-sm">Nome</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={webhookConfig.payload_fields.lead.includes('email')}
+                            onChange={() => handleFieldToggle('lead', 'email')}
+                            className="mr-2" 
+                          />
+                          <span className="text-sm">Email</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={webhookConfig.payload_fields.lead.includes('phone')}
+                            onChange={() => handleFieldToggle('lead', 'phone')}
+                            className="mr-2" 
+                          />
+                          <span className="text-sm">Telefone</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={webhookConfig.payload_fields.lead.includes('status')}
+                            onChange={() => handleFieldToggle('lead', 'status')}
+                            className="mr-2" 
+                          />
+                          <span className="text-sm">Status</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            checked={webhookConfig.payload_fields.lead.includes('origin')}
+                            onChange={() => handleFieldToggle('lead', 'origin')}
+                            className="mr-2" 
+                          />
+                          <span className="text-sm">Origem</span>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <h4 className="font-medium text-slate-900 mb-2">🏢 Dados da Empresa</h4>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">Nome da Empresa</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">CNPJ</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">Domínio</span>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <h4 className="font-medium text-slate-900 mb-2">📊 Analytics</h4>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">Visitor ID</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">Tempo na Página</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input type="checkbox" className="mr-2" />
+                          <span className="text-sm">Origem do Tráfego</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Headers Personalizados */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Headers Personalizados (Opcional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={webhookConfig.headers}
+                    onChange={(e) => handleWebhookConfigChange('headers', e.target.value)}
+                    placeholder='{"Authorization": "Bearer seu-token", "X-Custom-Header": "valor"}'
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Formato JSON. Exemplo: {"{"}"Authorization": "Bearer token"{"}"}</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={savingWebhook}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingWebhook ? 'Salvando...' : 'Criar Configuração'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestWebhook}
+                    disabled={testingWebhook}
+                    className="px-6 py-3 border border-orange-300 text-orange-700 rounded-lg font-medium hover:bg-orange-50 transition-colors disabled:opacity-50"
+                  >
+                    {testingWebhook ? 'Testando...' : 'Testar Webhook'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Lista de Configurações Existentes */}
+            <div className="bg-white border border-slate-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">⚙️ Configurações Existentes</h3>
+              
+              <div className="text-center py-8 text-slate-500">
+                <Zap className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                <p>Nenhuma configuração criada ainda</p>
+                <p className="text-sm">Crie sua primeira configuração usando o formulário acima</p>
+              </div>
+            </div>
+
+            {/* Logs de Disparos */}
+            <div className="bg-white border border-slate-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">📊 Logs de Disparos</h3>
+              
+              <div className="text-center py-8 text-slate-500">
+                <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                <p>Nenhum disparo registrado ainda</p>
+                <p className="text-sm">Os logs aparecerão aqui quando os webhooks forem disparados</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
