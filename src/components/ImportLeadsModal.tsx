@@ -371,7 +371,6 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
       });
 
       setStep('complete');
-      onImportComplete();
     } catch (error) {
       console.error('Error importing leads:', error);
       alert('Erro durante a importação. Tente novamente.');
@@ -791,8 +790,22 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Importação Concluída!
+                {importResults.success > 0 ? 'Importação Concluída com Sucesso!' : 'Importação Concluída'}
               </h3>
+              <p className="text-gray-600 mb-6">
+                {importResults.success === 1 
+                  ? `${importResults.success} lead importado com sucesso`
+                  : `${importResults.success} leads importados com sucesso`
+                }
+                {importResults.errors > 0 && (
+                  <span className="text-red-600">
+                    {importResults.errors === 1 
+                      ? `, ${importResults.errors} lead com erro`
+                      : `, ${importResults.errors} leads com erro`
+                    }
+                  </span>
+                )}
+              </p>
               
               <div className="bg-gray-50 rounded-lg p-6 mb-6 max-w-md mx-auto">
                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -831,12 +844,26 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                 </div>
               )}
 
-              <button
-                onClick={handleClose}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Fechar
-              </button>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => {
+                    setStep('upload');
+                    setImportResults(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Importar Mais
+                </button>
+                <button
+                  onClick={() => {
+                    onImportComplete();
+                    handleClose();
+                  }}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Finalizar
+                </button>
+              </div>
             </div>
           )}
         </div>
