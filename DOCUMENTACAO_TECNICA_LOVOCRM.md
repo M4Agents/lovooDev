@@ -1,9 +1,9 @@
 # DOCUMENTAÇÃO TÉCNICA - LOVOCRM
 ## Sistema SaaS para Análise Comportamental e CRM
 
-**Versão:** 1.3.0 - Sistema Híbrido de Campos Personalizados  
+**Versão:** 1.4.0 - Sistema Híbrido 100% Funcional - RLS Resolvido  
 **Data:** Novembro 2025  
-**Última Atualização:** 04/11/2025 - 08:50  
+**Última Atualização:** 04/11/2025 - 09:54 - VERSÃO FINAL APROVADA  
 
 ---
 
@@ -383,19 +383,26 @@ Content-Type: application/json
 - **Precisão absoluta**: Sem ambiguidade ou conflitos
 - **Escalabilidade**: Suporta milhares de campos
 
-### Fluxo de Processamento V5 (Sistema Híbrido)
+### Fluxo de Processamento V5 (Sistema Híbrido) - ✅ 100% FUNCIONAL
 1. **Recebe POST** com JSON
-2. **Valida API Key** via RPC
+2. **Valida API Key** via chave anon (funcionando 100%)
 3. **Detecta campos híbridos**:
    - Campos padrão: Processados por nome
    - IDs numéricos: Processados como campos personalizados
    - Nomes não-padrão: Logados (modo manual)
-4. **Cria lead** via RPC (contorna RLS)
+4. **Cria lead** com campos padrão
 5. **Processa campos personalizados por ID**:
-   - Busca campo pelo `numeric_id`
+   - Busca campo via RPC `get_custom_field_by_id()` (SECURITY DEFINER)
+   - Contorna RLS automaticamente
    - Valida existência na empresa
-   - Insere valores via RPC (contorna RLS)
-6. **Retorna sucesso** com lead_id e logs detalhados
+   - Insere valores em `lead_custom_values`
+6. **Retorna sucesso** com lead_id e campos processados
+
+### ✅ CORREÇÕES IMPLEMENTADAS (V1.4.0)
+- **RLS Resolvido**: Via RPC com SECURITY DEFINER
+- **Chave anon mantida**: Sistema estável preservado
+- **Correção crítica**: `lcf.name` → `lcf.field_name AS name`
+- **Status**: 100% funcional em produção
 
 ### Interface de Configuração
 **Localização**: Settings → Integrações
