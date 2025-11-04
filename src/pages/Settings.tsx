@@ -90,6 +90,7 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     if (company) {
       loadWebhookLogs();
+      loadWebhookConfigs(); // Carregar configurações de webhook avançado
       
       // Carregar dados da empresa para as abas cadastrais
       setCompanyData(prev => ({
@@ -464,7 +465,10 @@ export const Settings: React.FC = () => {
             Integrações
           </button>
           <button
-            onClick={() => setActiveTab('webhook-avancado')}
+            onClick={() => {
+              setActiveTab('webhook-avancado');
+              if (company?.id) loadWebhookConfigs(); // Carregar configurações ao trocar de aba
+            }}
             className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
               activeTab === 'webhook-avancado'
                 ? 'bg-white text-slate-900 shadow-sm'
@@ -1838,11 +1842,40 @@ export const Settings: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-lg p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">⚙️ Configurações Existentes</h3>
               
-              <div className="text-center py-8 text-slate-500">
-                <Zap className="w-12 h-12 mx-auto mb-2 text-slate-400" />
-                <p>Nenhuma configuração criada ainda</p>
-                <p className="text-sm">Crie sua primeira configuração usando o formulário acima</p>
-              </div>
+              {webhookConfigs.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Zap className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                  <p>Nenhuma configuração criada ainda</p>
+                  <p className="text-sm">Crie sua primeira configuração usando o formulário acima</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {webhookConfigs.map((config: any) => (
+                    <div key={config.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-slate-900">{config.name}</h4>
+                          <p className="text-sm text-slate-600 mt-1">{config.webhook_url}</p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                            <span>Evento: {config.trigger_events?.[0] || 'N/A'}</span>
+                            <span>Status: {config.is_active ? '✅ Ativo' : '❌ Inativo'}</span>
+                            <span>Timeout: {config.timeout_seconds}s</span>
+                            <span>Retry: {config.retry_attempts}x</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
+                            Editar
+                          </button>
+                          <button className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Logs de Disparos */}
