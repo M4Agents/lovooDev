@@ -4,9 +4,9 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO MAPEAMENTO MANUAL - V4');
+  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V5');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-04-08:10 - Migração para Mapeamento Manual de Campos Personalizados');
+  console.log('Deploy Version: 2025-11-04-08:30 - Sistema Híbrido: Campos Padrão por Nome + Personalizados por ID');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -227,8 +227,10 @@ function detectFormFields(formData) {
 async function processCustomFields(supabase, companyId, formData, detectedFields) {
   try {
     console.log('=== INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS ===');
-    console.log('🚨 MODO MAPEAMENTO MANUAL ATIVO - Campos personalizados não serão criados automaticamente');
-    console.log('📋 Use a interface de Campos Personalizados para criar campos manualmente');
+    console.log('🔧 SISTEMA HÍBRIDO ATIVO:');
+    console.log('  - Campos padrão: Processados por nome (nome, email, telefone, etc.)');
+    console.log('  - Campos personalizados por ID: Processados automaticamente (1, 2, 3, etc.)');
+    console.log('  - Campos personalizados por nome: Modo manual (criar na interface)');
     console.log('Company ID:', companyId);
     console.log('Form Data recebido:', formData);
     console.log('Detected Fields:', detectedFields);
@@ -279,7 +281,11 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       
       // Verificar se é campo padrão
       const isStandardField = standardFields.has(fieldName.toLowerCase());
+      // Verificar se é ID numérico (campo personalizado por ID)
+      const isNumericId = /^\d+$/.test(fieldName);
+      
       console.log(`  - É campo padrão? ${isStandardField}`);
+      console.log(`  - É ID numérico? ${isNumericId}`);
       console.log(`  - Tem valor? ${!!fieldValue}`);
       
       // Pular campos padrão e campos vazios
@@ -288,28 +294,20 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
         continue;
       }
       
-      console.log(`  - 📋 CAMPO PERSONALIZADO DETECTADO (MODO MANUAL): ${fieldName} = ${fieldValue}`);
-      
-      // NOVO: Modo mapeamento manual - apenas log, não cria campos automaticamente
-      console.log(`  - 🚨 CRIAÇÃO AUTOMÁTICA DESABILITADA - Campo não será criado`);
-      console.log(`  - 📋 Para usar este campo, crie-o manualmente na interface de Campos Personalizados`);
-      console.log(`  - 📋 Nome sugerido: "${fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_')}"`);
-      console.log(`  - 📋 Valor recebido: "${fieldValue}"`);
-      
-      // COMENTADO: Criação automática desabilitada para migração para modo manual
-      /*
-      try {
-        const fieldData = await processCustomField(supabase, companyId, fieldName, fieldValue);
-        if (fieldData) {
-          customFields.push(fieldData);
-          console.log(`  - ✅ Campo processado com sucesso:`, fieldData);
-        } else {
-          console.log(`  - ❌ Falha ao processar campo: ${fieldName}`);
+      // Processar campo personalizado (por nome ou ID)
+      if (isNumericId) {
+        console.log(`  - 📋 CAMPO PERSONALIZADO POR ID DETECTADO: ${fieldName} = ${fieldValue}`);
+        // Processar campo por ID numérico
+        const customField = await processCustomFieldById(supabase, companyId, parseInt(fieldName), fieldValue);
+        if (customField) {
+          customFields.push(customField);
         }
-      } catch (fieldError) {
-        console.error(`  - ❌ ERRO ao processar campo ${fieldName}:`, fieldError);
+      } else {
+        console.log(`  - 📋 CAMPO PERSONALIZADO POR NOME DETECTADO (MODO MANUAL): ${fieldName} = ${fieldValue}`);
+        console.log(`  - 🚨 CRIAÇÃO AUTOMÁTICA DESABILITADA - Campo não será criado`);
+        console.log(`  - 📋 Para usar este campo, crie-o manualmente na interface de Campos Personalizados`);
+        console.log(`  - 📋 Nome sugerido: "${fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_')}"`);
       }
-      */
     }
     
     console.log(`=== RESULTADO FINAL: ${customFields.length} campos personalizados processados ===`);
@@ -670,6 +668,45 @@ function generateUUID() {
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
+}
+
+// Nova função para processar campos personalizados por ID numérico
+async function processCustomFieldById(supabase, companyId, numericId, value) {
+  try {
+    console.log(`=== PROCESSANDO CAMPO POR ID: ${numericId} ===`);
+    console.log(`- Company ID: ${companyId}`);
+    console.log(`- Numeric ID: ${numericId}`);
+    console.log(`- Valor: ${value}`);
+    
+    // Buscar campo personalizado pelo ID numérico
+    const { data: fieldData, error: fieldError } = await supabase
+      .from('lead_custom_fields')
+      .select('id, field_name, field_label, field_type, numeric_id')
+      .eq('company_id', companyId)
+      .eq('numeric_id', numericId)
+      .single();
+    
+    if (fieldError) {
+      console.log(`- ❌ Campo com ID ${numericId} não encontrado:`, fieldError);
+      console.log(`- 📋 Para usar este ID, crie o campo na interface de Campos Personalizados`);
+      return null;
+    }
+    
+    console.log(`- ✅ Campo encontrado:`, fieldData);
+    console.log(`- Nome: ${fieldData.field_name}`);
+    console.log(`- Label: ${fieldData.field_label}`);
+    console.log(`- Tipo: ${fieldData.field_type}`);
+    
+    // Retornar dados para inserção
+    return {
+      field_id: fieldData.id,
+      value: String(value)
+    };
+    
+  } catch (error) {
+    console.error(`❌ ERRO ao processar campo por ID ${numericId}:`, error);
+    return null;
+  }
 }
 
 // DEPLOY FORÇADO - Webhook Lead V2 - 1730642100
