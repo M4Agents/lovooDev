@@ -34,6 +34,10 @@ export const Settings: React.FC = () => {
   const [webhookConfigs, setWebhookConfigs] = useState<any[]>([]);
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
   
+  // Estados para edição e exclusão - FUNCIONALIDADE BOTÕES
+  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
+  const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null);
+  
   // Estados para abas principais
   const [activeTab, setActiveTab] = useState<'settings' | 'webhook-avancado' | 'empresas'>('settings');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
@@ -334,9 +338,18 @@ export const Settings: React.FC = () => {
         headers
       };
 
-      const result = await api.createWebhookTriggerConfig(company.id, configData);
+      let result;
       
-      alert('Configuração criada com sucesso!');
+      if (editingConfigId) {
+        // Modo edição - atualizar configuração existente
+        result = await api.updateWebhookTriggerConfig(editingConfigId, company.id, configData);
+        alert('Configuração atualizada com sucesso!');
+        setEditingConfigId(null); // Sair do modo edição
+      } else {
+        // Modo criação - criar nova configuração
+        result = await api.createWebhookTriggerConfig(company.id, configData);
+        alert('Configuração criada com sucesso!');
+      }
       
       // Reset form
       setWebhookConfig({
@@ -361,6 +374,100 @@ export const Settings: React.FC = () => {
       alert('Erro ao criar configuração: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     } finally {
       setSavingWebhook(false);
+    }
+  };
+
+  // FUNÇÃO EDITAR CONFIGURAÇÃO - NOVA FUNCIONALIDADE
+  const handleEditWebhookConfig = (config: any) => {
+    console.log('Editando configuração:', config);
+    
+    // Preencher formulário com dados da configuração selecionada
+    setWebhookConfig({
+      name: config.name || '',
+      webhook_url: config.webhook_url || '',
+      trigger_event: config.trigger_events?.[0] || 'lead_converted',
+      timeout_seconds: config.timeout_seconds || 30,
+      retry_attempts: config.retry_attempts || 3,
+      headers: config.headers ? JSON.stringify(config.headers, null, 2) : '',
+      payload_fields: config.payload_fields || {
+        lead: ['name', 'email', 'phone', 'status', 'origin'],
+        empresa: [],
+        analytics: []
+      }
+    });
+    
+    // Definir modo edição
+    setEditingConfigId(config.id);
+    
+    // Scroll para o formulário
+    const formElement = document.querySelector('form');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // FUNÇÃO CANCELAR EDIÇÃO - NOVA FUNCIONALIDADE
+  const handleCancelEdit = () => {
+    console.log('Cancelando edição');
+    
+    // Reset form para estado inicial
+    setWebhookConfig({
+      name: '',
+      webhook_url: '',
+      trigger_event: 'lead_converted',
+      timeout_seconds: 30,
+      retry_attempts: 3,
+      headers: '',
+      payload_fields: {
+        lead: ['name', 'email', 'phone', 'status', 'origin'],
+        empresa: [],
+        analytics: []
+      }
+    });
+    
+    // Sair do modo edição
+    setEditingConfigId(null);
+  };
+
+  // FUNÇÃO EXCLUIR CONFIGURAÇÃO - NOVA FUNCIONALIDADE
+  const handleDeleteWebhookConfig = async (configId: string, configName: string) => {
+    console.log('Excluindo configuração:', { configId, configName });
+    
+    // Confirmação do usuário
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir a configuração "${configName}"?\n\nEsta ação não pode ser desfeita.`
+    );
+    
+    if (!confirmed) {
+      console.log('Exclusão cancelada pelo usuário');
+      return;
+    }
+    
+    if (!company?.id) {
+      alert('Erro: Empresa não encontrada');
+      return;
+    }
+    
+    setDeletingConfigId(configId);
+    
+    try {
+      await api.deleteWebhookTriggerConfig(configId, company.id);
+      
+      alert('Configuração excluída com sucesso!');
+      
+      // Se estava editando esta configuração, cancelar edição
+      if (editingConfigId === configId) {
+        handleCancelEdit();
+      }
+      
+      // Recarregar lista de configurações
+      loadWebhookConfigs();
+      
+    } catch (error) {
+      console.error('Error deleting webhook config:', error);
+      alert('Erro ao excluir configuração: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+    } finally {
+      setDeletingConfigId(null);
     }
   };
 
@@ -1630,7 +1737,20 @@ export const Settings: React.FC = () => {
             
             {/* Formulário de Nova Configuração */}
             <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-orange-900 mb-4">➕ Nova Configuração de Webhook</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-orange-900">
+                  {editingConfigId ? '✏️ Editar Configuração de Webhook' : '➕ Nova Configuração de Webhook'}
+                </h3>
+                {editingConfigId && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+                  >
+                    Cancelar Edição
+                  </button>
+                )}
+              </div>
               
               <form onSubmit={handleCreateWebhook} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1824,7 +1944,7 @@ export const Settings: React.FC = () => {
                     className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
-                    {savingWebhook ? 'Salvando...' : 'Criar Configuração'}
+                    {savingWebhook ? 'Salvando...' : (editingConfigId ? 'Atualizar Configuração' : 'Criar Configuração')}
                   </button>
                   <button
                     type="button"
@@ -1864,11 +1984,20 @@ export const Settings: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
+                          <button 
+                            onClick={() => handleEditWebhookConfig(config)}
+                            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                            title="Editar configuração"
+                          >
                             Editar
                           </button>
-                          <button className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
-                            Excluir
+                          <button 
+                            onClick={() => handleDeleteWebhookConfig(config.id, config.name)}
+                            disabled={deletingConfigId === config.id}
+                            className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50"
+                            title="Excluir configuração"
+                          >
+                            {deletingConfigId === config.id ? 'Excluindo...' : 'Excluir'}
                           </button>
                         </div>
                       </div>
