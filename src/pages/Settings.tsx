@@ -39,8 +39,8 @@ export const Settings: React.FC = () => {
   const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null);
   
   // Estados para abas principais - NOVA ESTRUTURA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'whatsapp' | 'empresas'>('integracoes');
-  const [integracoesTab, setIntegracoesTab] = useState<'webhook-simples' | 'webhook-avancado'>('webhook-simples');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'empresas'>('integracoes');
+  const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   
@@ -577,17 +577,6 @@ export const Settings: React.FC = () => {
             Integrações
           </button>
           <button
-            onClick={() => setActiveTab('whatsapp')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'whatsapp'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <MessageCircle className="w-4 h-4" />
-            WhatsApp
-          </button>
-          <button
             onClick={() => setActiveTab('empresas')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
               activeTab === 'empresas'
@@ -609,6 +598,17 @@ export const Settings: React.FC = () => {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             {/* Sub-abas das Integrações */}
             <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
+              <button
+                onClick={() => setIntegracoesTab('whatsapp')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  integracoesTab === 'whatsapp'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp
+              </button>
               <button
                 onClick={() => setIntegracoesTab('webhook-simples')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
@@ -638,6 +638,79 @@ export const Settings: React.FC = () => {
           </div>
           
           {/* Conteúdo das Sub-abas */}
+          
+          {/* Sub-aba: WhatsApp */}
+          {integracoesTab === 'whatsapp' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              {/* Sub-navegação do WhatsApp */}
+              <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg mb-6">
+                <button
+                  onClick={() => setWhatsappTab('whatsapp-life')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                    whatsappTab === 'whatsapp-life'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4" />
+                  WhatsApp Life
+                </button>
+                <button
+                  onClick={() => setWhatsappTab('cloud-api')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                    whatsappTab === 'cloud-api'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Cloud className="w-4 h-4" />
+                  Cloud API WhatsApp
+                </button>
+              </div>
+              
+              {/* Conteúdo das Sub-abas do WhatsApp */}
+              
+              {/* WhatsApp Life */}
+              {whatsappTab === 'whatsapp-life' && (
+                <div className="text-center py-12">
+                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-green-600 mx-auto mt-2" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    🚧 WhatsApp Life - Em Desenvolvimento
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    Integração com WhatsApp pessoal/business local
+                  </p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
+                    <p className="text-sm text-green-800">
+                      Funcionalidade em desenvolvimento. Em breve você poderá conectar seu WhatsApp local para automações avançadas.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Cloud API WhatsApp */}
+              {whatsappTab === 'cloud-api' && (
+                <div className="text-center py-12">
+                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
+                    <Cloud className="w-8 h-8 text-green-600 mx-auto mt-2" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    🚧 Cloud API WhatsApp - Em Desenvolvimento
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    API oficial do WhatsApp Business Cloud
+                  </p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
+                    <p className="text-sm text-green-800">
+                      Funcionalidade em desenvolvimento. Em breve você poderá usar a API oficial do WhatsApp Business para envios em massa e automações.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Sub-aba: API */}
           {integracoesTab === 'webhook-simples' && (
@@ -1055,88 +1128,6 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
 
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* Aba WhatsApp - NOVA FUNCIONALIDADE */}
-      {activeTab === 'whatsapp' && (
-        <div className="space-y-6">
-          
-          {/* Sub-navegação do WhatsApp */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            {/* Sub-abas do WhatsApp */}
-            <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
-              <button
-                onClick={() => setWhatsappTab('whatsapp-life')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                  whatsappTab === 'whatsapp-life'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Smartphone className="w-4 h-4" />
-                WhatsApp Life
-              </button>
-              <button
-                onClick={() => setWhatsappTab('cloud-api')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                  whatsappTab === 'cloud-api'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Cloud className="w-4 h-4" />
-                Cloud API WhatsApp
-              </button>
-            </div>
-          </div>
-          
-          {/* Conteúdo das Sub-abas do WhatsApp */}
-          
-          {/* Sub-aba: WhatsApp Life */}
-          {whatsappTab === 'whatsapp-life' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="text-center py-12">
-                <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
-                  <Smartphone className="w-8 h-8 text-green-600 mx-auto mt-2" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  🚧 WhatsApp Life - Em Desenvolvimento
-                </h3>
-                <p className="text-slate-600 mb-4">
-                  Integração com WhatsApp pessoal/business local
-                </p>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
-                  <p className="text-sm text-green-800">
-                    Funcionalidade em desenvolvimento. Em breve você poderá conectar seu WhatsApp local para automações avançadas.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Sub-aba: Cloud API WhatsApp */}
-          {whatsappTab === 'cloud-api' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="text-center py-12">
-                <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
-                  <Cloud className="w-8 h-8 text-green-600 mx-auto mt-2" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  🚧 Cloud API WhatsApp - Em Desenvolvimento
-                </h3>
-                <p className="text-slate-600 mb-4">
-                  API oficial do WhatsApp Business Cloud
-                </p>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
-                  <p className="text-sm text-green-800">
-                    Funcionalidade em desenvolvimento. Em breve você poderá usar a API oficial do WhatsApp Business para envios em massa e automações.
-                  </p>
-                </div>
               </div>
             </div>
           )}
