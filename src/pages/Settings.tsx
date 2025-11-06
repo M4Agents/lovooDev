@@ -606,7 +606,7 @@ export const Settings: React.FC = () => {
                 }`}
               >
                 <Webhook className="w-4 h-4" />
-                Webhook Ultra-Simples
+                API
               </button>
               <button
                 onClick={() => {
@@ -627,7 +627,7 @@ export const Settings: React.FC = () => {
           
           {/* Conteúdo das Sub-abas */}
           
-          {/* Sub-aba: Webhook Ultra-Simples */}
+          {/* Sub-aba: API */}
           {integracoesTab === 'webhook-simples' && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
@@ -635,7 +635,7 @@ export const Settings: React.FC = () => {
                 <Webhook className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Webhook Ultra-Simples para Leads</h2>
+                <h2 className="text-lg font-semibold text-slate-900">API para Leads</h2>
                 <p className="text-sm text-slate-600">Crie leads automaticamente a partir de qualquer formulário</p>
               </div>
             </div>
