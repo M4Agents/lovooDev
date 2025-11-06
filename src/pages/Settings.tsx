@@ -595,16 +595,6 @@ export const Settings: React.FC = () => {
           
           {/* Sub-navegação das Integrações */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <SettingsIcon className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Integrações</h2>
-                <p className="text-sm text-slate-600">Configure suas integrações e webhooks</p>
-              </div>
-            </div>
-            
             {/* Sub-abas das Integrações */}
             <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
               <button
