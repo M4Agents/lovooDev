@@ -1862,14 +1862,215 @@ export const Settings: React.FC = () => {
             </div>
             
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              <div className="text-center py-8 text-slate-500">
-                <p className="text-lg mb-2">📖 Documentação em Desenvolvimento</p>
-                <p className="text-sm">
-                  A documentação completa da API será implementada na próxima versão.
-                </p>
-                <p className="text-sm mt-2">
-                  Por enquanto, utilize as configurações disponíveis no formulário acima.
-                </p>
+              <div className="space-y-8">
+                
+                {/* Campos Personalizados */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center gap-2">
+                    🎯 Campos Personalizados
+                  </h3>
+                  <div className="space-y-4 text-sm text-purple-800">
+                    <div>
+                      <p className="font-medium mb-2">1. Criar Campo:</p>
+                      <p className="ml-4 mb-1">• Acesse: Configurações → Campos Personalizados</p>
+                      <p className="ml-4 mb-1">• Clique em "Novo Campo"</p>
+                      <p className="ml-4">• Campo receberá ID automático (1, 2, 3...)</p>
+                    </div>
+                    <div>
+                      <p className="font-medium mb-2">2. Usar no Payload:</p>
+                      <div className="bg-purple-100 p-3 rounded border ml-4">
+                        <code className="text-xs">
+                          "custom_fields": {"{"}
+                          <br />
+                          &nbsp;&nbsp;"custom_field_1": "Valor do campo 1",
+                          <br />
+                          &nbsp;&nbsp;"custom_field_2": "Valor do campo 2"
+                          <br />
+                          {"}"}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campos Padrão */}
+                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                    📋 Campos Padrão Disponíveis
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <h4 className="font-medium text-blue-800 mb-2">Lead:</h4>
+                      <ul className="space-y-1 text-blue-700">
+                        <li>• name (string)</li>
+                        <li>• email (string)</li>
+                        <li>• phone (string)</li>
+                        <li>• status (string)</li>
+                        <li>• origin (string)</li>
+                        <li>• created_at (datetime)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-blue-800 mb-2">Empresa:</h4>
+                      <ul className="space-y-1 text-blue-700">
+                        <li>• name (string)</li>
+                        <li>• cnpj (string)</li>
+                        <li>• domain (string)</li>
+                        <li>• created_at (datetime)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-blue-800 mb-2">Analytics:</h4>
+                      <ul className="space-y-1 text-blue-700">
+                        <li>• source (string)</li>
+                        <li>• medium (string)</li>
+                        <li>• campaign (string)</li>
+                        <li>• utm_content (string)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Exemplos de Código */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center gap-2">
+                    💻 Exemplo Completo de Payload
+                  </h3>
+                  <div className="bg-green-100 p-4 rounded border overflow-x-auto">
+                    <pre className="text-xs text-green-800">
+{`{
+  "event": "lead_converted",
+  "timestamp": "2024-11-06T12:30:00Z",
+  "lead": {
+    "id": "lead_123456",
+    "name": "João Silva",
+    "email": "joao@empresa.com",
+    "phone": "+5511999999999",
+    "status": "converted",
+    "origin": "website",
+    "created_at": "2024-11-06T12:00:00Z"
+  },
+  "company": {
+    "id": "company_789",
+    "name": "Empresa LTDA",
+    "cnpj": "12.345.678/0001-90",
+    "domain": "empresa.com"
+  },
+  "custom_fields": {
+    "custom_field_1": "Interesse em produto A",
+    "custom_field_2": "Orçamento: R$ 10.000"
+  },
+  "analytics": {
+    "source": "google",
+    "medium": "cpc",
+    "campaign": "campanha_novembro",
+    "utm_content": "anuncio_produto_a"
+  }
+}`}
+                    </pre>
+                  </div>
+                </div>
+
+                {/* Configuração Técnica */}
+                <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-4 flex items-center gap-2">
+                    ⚙️ Configuração Técnica
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div>
+                      <h4 className="font-medium text-orange-800 mb-2">Rate Limits:</h4>
+                      <ul className="space-y-1 text-orange-700">
+                        <li>• 1000 requests/hour</li>
+                        <li>• 50 requests/minute</li>
+                        <li>• Burst: até 10 simultâneos</li>
+                      </ul>
+                      
+                      <h4 className="font-medium text-orange-800 mb-2 mt-4">Timeout:</h4>
+                      <ul className="space-y-1 text-orange-700">
+                        <li>• Mínimo: 1 segundo</li>
+                        <li>• Máximo: 60 segundos</li>
+                        <li>• Recomendado: 10-30s</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-orange-800 mb-2">Headers Obrigatórios:</h4>
+                      <div className="bg-orange-100 p-3 rounded border">
+                        <code className="text-xs">
+                          Content-Type: application/json
+                          <br />
+                          User-Agent: LovoCRM-Webhook/1.0
+                        </code>
+                      </div>
+                      
+                      <h4 className="font-medium text-orange-800 mb-2 mt-4">Retry Logic:</h4>
+                      <ul className="space-y-1 text-orange-700">
+                        <li>• Exponential backoff</li>
+                        <li>• 1ª tentativa: imediata</li>
+                        <li>• 2ª tentativa: +2s</li>
+                        <li>• 3ª tentativa: +4s</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Troubleshooting */}
+                <div className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-red-900 mb-4 flex items-center gap-2">
+                    🔧 Troubleshooting
+                  </h3>
+                  <div className="space-y-4 text-sm">
+                    <div>
+                      <h4 className="font-medium text-red-800 mb-2">Erros Comuns:</h4>
+                      <div className="space-y-3">
+                        <div className="bg-red-100 p-3 rounded border">
+                          <p className="font-medium text-red-800">Timeout (408):</p>
+                          <p className="text-red-700">• Aumente o timeout na configuração</p>
+                          <p className="text-red-700">• Verifique se sua URL responde rapidamente</p>
+                        </div>
+                        <div className="bg-red-100 p-3 rounded border">
+                          <p className="font-medium text-red-800">Unauthorized (401):</p>
+                          <p className="text-red-700">• Verifique headers de autenticação</p>
+                          <p className="text-red-700">• Confirme se o token está válido</p>
+                        </div>
+                        <div className="bg-red-100 p-3 rounded border">
+                          <p className="font-medium text-red-800">Bad Request (400):</p>
+                          <p className="text-red-700">• Verifique formato do payload</p>
+                          <p className="text-red-700">• Confirme se campos obrigatórios estão presentes</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center gap-2">
+                    📊 Performance & Monitoramento
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div>
+                      <h4 className="font-medium text-indigo-800 mb-2">Boas Práticas:</h4>
+                      <ul className="space-y-1 text-indigo-700">
+                        <li>• Responda com status 200 para sucesso</li>
+                        <li>• Implemente idempotência</li>
+                        <li>• Use HTTPS sempre</li>
+                        <li>• Valide assinatura do webhook</li>
+                        <li>• Processe de forma assíncrona</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-indigo-800 mb-2">Logs Disponíveis:</h4>
+                      <ul className="space-y-1 text-indigo-700">
+                        <li>• Timestamp do disparo</li>
+                        <li>• Status da resposta</li>
+                        <li>• Tempo de resposta</li>
+                        <li>• Payload enviado</li>
+                        <li>• Mensagem de erro (se houver)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
