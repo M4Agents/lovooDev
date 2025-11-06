@@ -563,30 +563,55 @@ export const Settings: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
         
-        {/* Abas principais - NOVA ESTRUTURA */}
-        <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
-          <button
+        {/* Navegação Principal Moderna */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+          {/* Card Integrações */}
+          <div 
             onClick={() => setActiveTab('integracoes')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'integracoes'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className="group cursor-pointer"
           >
-            <SettingsIcon className="w-4 h-4" />
-            Integrações
-          </button>
-          <button
+            <div className={`bg-gradient-to-br from-blue-50 to-indigo-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+              activeTab === 'integracoes' 
+                ? 'border-blue-400 shadow-lg -translate-y-1' 
+                : 'border-transparent hover:border-blue-300'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg shadow-md group-hover:shadow-lg transition-shadow ${
+                  activeTab === 'integracoes' ? 'bg-blue-600' : 'bg-blue-500'
+                }`}>
+                  <SettingsIcon className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Integrações</h3>
+                  <p className="text-sm text-slate-600">Configure suas integrações e automações</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Card Dados da Empresa */}
+          <div 
             onClick={() => setActiveTab('empresas')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'empresas'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className="group cursor-pointer"
           >
-            <Building className="w-4 h-4" />
-            Dados da Empresa
-          </button>
+            <div className={`bg-gradient-to-br from-emerald-50 to-green-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+              activeTab === 'empresas' 
+                ? 'border-emerald-400 shadow-lg -translate-y-1' 
+                : 'border-transparent hover:border-emerald-300'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg shadow-md group-hover:shadow-lg transition-shadow ${
+                  activeTab === 'empresas' ? 'bg-emerald-600' : 'bg-emerald-500'
+                }`}>
+                  <Building className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Dados da Empresa</h3>
+                  <p className="text-sm text-slate-600">Gerencie informações da sua empresa</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -594,46 +619,87 @@ export const Settings: React.FC = () => {
       {activeTab === 'integracoes' && (
         <div className="space-y-6">
           
-          {/* Sub-navegação das Integrações */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            {/* Sub-abas das Integrações */}
-            <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
-              <button
-                onClick={() => setIntegracoesTab('whatsapp')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                  integracoesTab === 'whatsapp'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <MessageCircle className="w-4 h-4" />
-                WhatsApp
-              </button>
-              <button
-                onClick={() => setIntegracoesTab('webhook-simples')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                  integracoesTab === 'webhook-simples'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Webhook className="w-4 h-4" />
-                API
-              </button>
-              <button
-                onClick={() => {
-                  setIntegracoesTab('webhook-avancado');
-                  if (company?.id) loadWebhookConfigs(); // Carregar configurações ao trocar de aba
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                  integracoesTab === 'webhook-avancado'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-                Webhook Avançado
-              </button>
+          {/* Sub-navegação das Integrações Moderna */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* WhatsApp Card */}
+            <div 
+              onClick={() => setIntegracoesTab('whatsapp')}
+              className="group cursor-pointer"
+            >
+              <div className={`bg-gradient-to-br from-green-50 to-emerald-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
+                integracoesTab === 'whatsapp'
+                  ? 'border-green-400 shadow-xl -translate-y-2'
+                  : 'border-transparent hover:border-green-400'
+              }`}>
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
+                    integracoesTab === 'whatsapp' ? 'bg-green-600' : 'bg-green-500'
+                  }`}>
+                    <MessageCircle className="w-8 h-8 text-white mx-auto mt-1" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">WhatsApp</h3>
+                  <p className="text-sm text-slate-600 mb-4">Automações e integrações WhatsApp</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                      3 funcionalidades
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* API Card */}
+            <div 
+              onClick={() => setIntegracoesTab('webhook-simples')}
+              className="group cursor-pointer"
+            >
+              <div className={`bg-gradient-to-br from-blue-50 to-cyan-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
+                integracoesTab === 'webhook-simples'
+                  ? 'border-blue-400 shadow-xl -translate-y-2'
+                  : 'border-transparent hover:border-blue-400'
+              }`}>
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
+                    integracoesTab === 'webhook-simples' ? 'bg-blue-600' : 'bg-blue-500'
+                  }`}>
+                    <Webhook className="w-8 h-8 text-white mx-auto mt-1" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">API</h3>
+                  <p className="text-sm text-slate-600 mb-4">Receba dados de formulários</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      Ativo
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Webhook Avançado Card */}
+            <div 
+              onClick={() => setIntegracoesTab('webhook-avancado')}
+              className="group cursor-pointer"
+            >
+              <div className={`bg-gradient-to-br from-purple-50 to-indigo-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
+                integracoesTab === 'webhook-avancado'
+                  ? 'border-purple-400 shadow-xl -translate-y-2'
+                  : 'border-transparent hover:border-purple-400'
+              }`}>
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
+                    integracoesTab === 'webhook-avancado' ? 'bg-purple-600' : 'bg-purple-500'
+                  }`}>
+                    <Zap className="w-8 h-8 text-white mx-auto mt-1" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Webhook Avançado</h3>
+                  <p className="text-sm text-slate-600 mb-4">Envie dados automaticamente</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                      Configurável
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -642,41 +708,76 @@ export const Settings: React.FC = () => {
           {/* Sub-aba: WhatsApp */}
           {integracoesTab === 'whatsapp' && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              {/* Sub-navegação do WhatsApp */}
-              <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg mb-6">
-                <button
+              {/* Sub-navegação do WhatsApp Moderna */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* WhatsApp Life */}
+                <div 
                   onClick={() => setWhatsappTab('whatsapp-life')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  className="group cursor-pointer"
+                >
+                  <div className={`bg-white border-2 rounded-lg p-4 transition-all duration-300 hover:shadow-md ${
                     whatsappTab === 'whatsapp-life'
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                  WhatsApp Life
-                </button>
-                <button
+                      ? 'border-green-300 shadow-md'
+                      : 'border-slate-200 hover:border-green-300'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Smartphone className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-slate-900">WhatsApp Life</h4>
+                        <p className="text-xs text-slate-500">Conexão local</p>
+                      </div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Cloud API */}
+                <div 
                   onClick={() => setWhatsappTab('cloud-api')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  className="group cursor-pointer"
+                >
+                  <div className={`bg-white border-2 rounded-lg p-4 transition-all duration-300 hover:shadow-md ${
                     whatsappTab === 'cloud-api'
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Cloud className="w-4 h-4" />
-                  Cloud API WhatsApp
-                </button>
-                <button
+                      ? 'border-green-300 shadow-md'
+                      : 'border-slate-200 hover:border-green-300'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Cloud className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-slate-900">Cloud API</h4>
+                        <p className="text-xs text-slate-500">API oficial</p>
+                      </div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Modelos */}
+                <div 
                   onClick={() => setWhatsappTab('modelos')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                    whatsappTab === 'modelos'
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className="group cursor-pointer"
                 >
-                  <FileText className="w-4 h-4" />
-                  Modelos
-                </button>
+                  <div className={`bg-white border-2 rounded-lg p-4 transition-all duration-300 hover:shadow-md ${
+                    whatsappTab === 'modelos'
+                      ? 'border-green-300 shadow-md'
+                      : 'border-slate-200 hover:border-green-300'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <FileText className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-slate-900">Modelos</h4>
+                        <p className="text-xs text-slate-500">Templates</p>
+                      </div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               
               {/* Conteúdo das Sub-abas do WhatsApp */}
