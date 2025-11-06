@@ -42,6 +42,9 @@ export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'integracoes' | 'empresas'>('integracoes');
   const [integracoesTab, setIntegracoesTab] = useState<'webhook-simples' | 'webhook-avancado'>('webhook-simples');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
+  
+  // Estado para modal de documentação
+  const [showDocumentationModal, setShowDocumentationModal] = useState(false);
   const [companyData, setCompanyData] = useState({
     // Dados Principais
     name: '',
@@ -801,7 +804,6 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           </div>
-          )}
 
           {/* Documentação Completa da API */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -1193,6 +1195,23 @@ export const Settings: React.FC = () => {
                     <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
                     <p>Logs de disparos serão implementados na próxima etapa</p>
                     <p className="text-sm">Backend funcionando - interface em desenvolvimento</p>
+                  </div>
+                </div>
+
+                {/* Botão para Documentação da API */}
+                <div className="bg-white border border-slate-200 rounded-lg p-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">📖 Documentação da API</h3>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Acesse o guia completo para desenvolvedores com exemplos de código e configurações técnicas
+                    </p>
+                    <button
+                      onClick={() => setShowDocumentationModal(true)}
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mx-auto"
+                    >
+                      <SettingsIcon className="w-4 h-4" />
+                      Ver Documentação Completa
+                    </button>
                   </div>
                 </div>
 
@@ -1976,6 +1995,46 @@ export const Settings: React.FC = () => {
               </form>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de Documentação da API */}
+      {showDocumentationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <SettingsIcon className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Documentação Completa da API</h2>
+                  <p className="text-sm text-slate-600">Guia completo para desenvolvedores</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDocumentationModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <span className="sr-only">Fechar</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="text-center py-8 text-slate-500">
+                <p className="text-lg mb-2">📖 Documentação em Desenvolvimento</p>
+                <p className="text-sm">
+                  A documentação completa da API será implementada na próxima versão.
+                </p>
+                <p className="text-sm mt-2">
+                  Por enquanto, utilize as configurações disponíveis no formulário acima.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
