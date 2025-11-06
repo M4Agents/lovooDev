@@ -805,6 +805,257 @@ export const Settings: React.FC = () => {
             </div>
           </div>
           )}
+          
+          {/* Sub-aba: Webhook Avançado */}
+          {integracoesTab === 'webhook-avancado' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Zap className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Webhook Avançado - Disparos Automáticos</h2>
+                  <p className="text-sm text-slate-600">Configure webhooks que são disparados automaticamente quando eventos específicos acontecem</p>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-blue-900 mb-2">🚀 Sistema Completo</h3>
+                <p className="text-blue-800 text-sm">
+                  Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex: lead convertido).
+                  Diferente do webhook simples, aqui o <strong>sistema envia dados para você</strong> automaticamente.
+                </p>
+              </div>
+              
+              {/* CONTEÚDO COMPLETO DO WEBHOOK AVANÇADO - FORMULÁRIOS E CONFIGURAÇÕES */}
+              <div className="space-y-6">
+                
+                {/* Formulário de Configuração */}
+                <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-orange-900">
+                      {editingConfigId ? '✏️ Editar Configuração de Webhook' : '➕ Nova Configuração de Webhook'}
+                    </h3>
+                    {editingConfigId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+                      >
+                        Cancelar Edição
+                      </button>
+                    )}
+                  </div>
+                  
+                  <form onSubmit={handleCreateWebhook} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Nome da Configuração *
+                        </label>
+                        <input
+                          type="text"
+                          value={webhookConfig.name}
+                          onChange={(e) => handleWebhookConfigChange('name', e.target.value)}
+                          placeholder="Ex: Webhook Lead Convertido"
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          URL do Webhook *
+                        </label>
+                        <input
+                          type="url"
+                          value={webhookConfig.webhook_url}
+                          onChange={(e) => handleWebhookConfigChange('webhook_url', e.target.value)}
+                          placeholder="https://seu-sistema.com/webhook"
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Evento de Disparo
+                        </label>
+                        <select
+                          value={webhookConfig.trigger_event}
+                          onChange={(e) => handleWebhookConfigChange('trigger_event', e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="lead_created">Lead Criado</option>
+                          <option value="lead_converted">Lead Convertido</option>
+                          <option value="lead_updated">Lead Atualizado</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Timeout (segundos)
+                        </label>
+                        <input
+                          type="number"
+                          value={webhookConfig.timeout_seconds}
+                          onChange={(e) => handleWebhookConfigChange('timeout_seconds', parseInt(e.target.value))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          min="1"
+                          max="60"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Tentativas
+                        </label>
+                        <input
+                          type="number"
+                          value={webhookConfig.retry_attempts}
+                          onChange={(e) => handleWebhookConfigChange('retry_attempts', parseInt(e.target.value))}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          min="1"
+                          max="10"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Campos do Payload
+                      </label>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        {['name', 'email', 'phone', 'status', 'origin'].map((field) => (
+                          <label key={field} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={webhookConfig.payload_fields.lead.includes(field)}
+                              onChange={() => handleFieldToggle('lead', field)}
+                              className="mr-2"
+                            />
+                            {field}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Headers Personalizados (JSON)
+                      </label>
+                      <textarea
+                        value={webhookConfig.headers}
+                        onChange={(e) => handleWebhookConfigChange('headers', e.target.value)}
+                        placeholder='{"Authorization": "Bearer token", "Content-Type": "application/json"}'
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        rows={3}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Formato JSON. Exemplo: {"{"}"Authorization": "Bearer token"{"}"}</p>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        type="submit"
+                        disabled={savingWebhook}
+                        className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" />
+                        {savingWebhook ? 'Salvando...' : (editingConfigId ? 'Atualizar Configuração' : 'Criar Configuração')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTestWebhook}
+                        disabled={testingWebhook}
+                        className="px-6 py-3 border border-orange-300 text-orange-700 rounded-lg font-medium hover:bg-orange-50 transition-colors disabled:opacity-50"
+                      >
+                        {testingWebhook ? 'Testando...' : 'Testar Webhook'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Lista de Configurações */}
+                <div className="bg-white border border-slate-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">⚙️ Configurações Existentes</h3>
+                  
+                  {webhookConfigs.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <p>Nenhuma configuração criada ainda</p>
+                      <p className="text-sm">Crie sua primeira configuração acima</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {webhookConfigs.map((config: any) => (
+                        <div key={config.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-slate-900">{config.name}</h4>
+                              <p className="text-sm text-slate-600 mt-1">{config.webhook_url}</p>
+                              <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                                <span>Evento: {config.trigger_events?.[0] || 'N/A'}</span>
+                                <span>Status: {config.is_active ? '✅ Ativo' : '❌ Inativo'}</span>
+                                <span>Timeout: {config.timeout_seconds}s</span>
+                                <span>Retry: {config.retry_attempts}x</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => handleEditWebhookConfig(config)}
+                                className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                                title="Editar configuração"
+                              >
+                                Editar
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteWebhookConfig(config.id, config.name)}
+                                disabled={deletingConfigId === config.id}
+                                className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50"
+                                title="Excluir configuração"
+                              >
+                                {deletingConfigId === config.id ? 'Excluindo...' : 'Excluir'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Logs de Disparos */}
+                <div className="bg-white border border-slate-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">📊 Logs de Disparos</h3>
+                  
+                  <div className="text-center py-8 text-slate-500">
+                    <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                    <p>Logs de disparos serão implementados na próxima etapa</p>
+                    <p className="text-sm">Backend funcionando - interface em desenvolvimento</p>
+                  </div>
+                </div>
+
+                {/* Botão para Documentação da API */}
+                <div className="bg-white border border-slate-200 rounded-lg p-6">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">📖 Documentação da API</h3>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Acesse o guia completo para desenvolvedores com exemplos de código e configurações técnicas
+                    </p>
+                    <button
+                      onClick={() => setShowDocumentationModal(true)}
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mx-auto"
+                    >
+                      <SettingsIcon className="w-4 h-4" />
+                      Ver Documentação Completa
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
 
         </div>
       )}
