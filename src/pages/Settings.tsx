@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
@@ -41,7 +41,7 @@ export const Settings: React.FC = () => {
   // Estados para abas principais - NOVA ESTRUTURA
   const [activeTab, setActiveTab] = useState<'integracoes' | 'empresas'>('integracoes');
   const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
-  const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api'>('whatsapp-life');
+  const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   
   // Estado para modal de documentação
@@ -666,6 +666,17 @@ export const Settings: React.FC = () => {
                   <Cloud className="w-4 h-4" />
                   Cloud API WhatsApp
                 </button>
+                <button
+                  onClick={() => setWhatsappTab('modelos')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                    whatsappTab === 'modelos'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Modelos
+                </button>
               </div>
               
               {/* Conteúdo das Sub-abas do WhatsApp */}
@@ -705,6 +716,26 @@ export const Settings: React.FC = () => {
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
                     <p className="text-sm text-green-800">
                       Funcionalidade em desenvolvimento. Em breve você poderá usar a API oficial do WhatsApp Business para envios em massa e automações.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Modelos */}
+              {whatsappTab === 'modelos' && (
+                <div className="text-center py-12">
+                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
+                    <FileText className="w-8 h-8 text-green-600 mx-auto mt-2" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    🚧 Modelos de Mensagens - Em Desenvolvimento
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    Cadastro e gerenciamento de modelos de mensagens do WhatsApp
+                  </p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
+                    <p className="text-sm text-green-800">
+                      Funcionalidade em desenvolvimento. Em breve você poderá criar e gerenciar modelos de mensagens para automações do WhatsApp.
                     </p>
                   </div>
                 </div>
