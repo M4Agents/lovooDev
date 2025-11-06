@@ -801,6 +801,7 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
 
           {/* Documentação Completa da API */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
