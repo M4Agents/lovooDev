@@ -38,8 +38,9 @@ export const Settings: React.FC = () => {
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null);
   
-  // Estados para abas principais
-  const [activeTab, setActiveTab] = useState<'settings' | 'webhook-avancado' | 'empresas'>('settings');
+  // Estados para abas principais - NOVA ESTRUTURA
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'empresas'>('integracoes');
+  const [integracoesTab, setIntegracoesTab] = useState<'webhook-simples' | 'webhook-avancado'>('webhook-simples');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   const [companyData, setCompanyData] = useState({
     // Dados Principais
@@ -558,32 +559,18 @@ export const Settings: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
         
-        {/* Abas principais */}
+        {/* Abas principais - NOVA ESTRUTURA */}
         <div className="flex space-x-1 mt-6 bg-slate-100 p-1 rounded-lg">
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => setActiveTab('integracoes')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'settings'
+              activeTab === 'integracoes'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <SettingsIcon className="w-4 h-4" />
             Integrações
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab('webhook-avancado');
-              if (company?.id) loadWebhookConfigs(); // Carregar configurações ao trocar de aba
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'webhook-avancado'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Zap className="w-4 h-4" />
-            Webhook Avançado
           </button>
           <button
             onClick={() => setActiveTab('empresas')}
@@ -599,11 +586,57 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* Aba Integrações */}
-      {activeTab === 'settings' && (
+      {/* Aba Integrações - NOVA ESTRUTURA */}
+      {activeTab === 'integracoes' && (
         <div className="space-y-6">
-          {/* Webhook Ultra-Simples para Leads */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
+          
+          {/* Sub-navegação das Integrações */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <SettingsIcon className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Integrações</h2>
+                <p className="text-sm text-slate-600">Configure suas integrações e webhooks</p>
+              </div>
+            </div>
+            
+            {/* Sub-abas das Integrações */}
+            <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
+              <button
+                onClick={() => setIntegracoesTab('webhook-simples')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  integracoesTab === 'webhook-simples'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Webhook className="w-4 h-4" />
+                Webhook Ultra-Simples
+              </button>
+              <button
+                onClick={() => {
+                  setIntegracoesTab('webhook-avancado');
+                  if (company?.id) loadWebhookConfigs(); // Carregar configurações ao trocar de aba
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  integracoesTab === 'webhook-avancado'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                Webhook Avançado
+              </button>
+            </div>
+          </div>
+          
+          {/* Conteúdo das Sub-abas */}
+          
+          {/* Sub-aba: Webhook Ultra-Simples */}
+          {integracoesTab === 'webhook-simples' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-emerald-100 rounded-lg">
                 <Webhook className="w-5 h-5 text-emerald-600" />
@@ -931,6 +964,34 @@ export const Settings: React.FC = () => {
               </div>
             )}
           </div>
+          
+          {/* Sub-aba: Webhook Avançado */}
+          {integracoesTab === 'webhook-avancado' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Zap className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Webhook Avançado - Disparos Automáticos</h2>
+                  <p className="text-sm text-slate-600">Configure webhooks que são disparados automaticamente quando eventos específicos acontecem</p>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-blue-900 mb-2">🚀 Sistema Completo</h3>
+                <p className="text-blue-800 text-sm">
+                  Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex: lead convertido).
+                  Diferente do webhook simples, aqui o <strong>sistema envia dados para você</strong> automaticamente.
+                </p>
+              </div>
+              
+              {/* CONTEÚDO DO WEBHOOK AVANÇADO SERÁ MOVIDO AQUI */}
+              <div className="text-center py-8 text-slate-500">
+                <p>Conteúdo do Webhook Avançado será migrado aqui...</p>
+              </div>
+            </div>
+          )}
 
         </div>
       )}
@@ -1711,9 +1772,9 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Nova Aba Webhook Avançado - ISOLADA */}
-      {activeTab === 'webhook-avancado' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+    </div>
+  );
+};
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-orange-100 rounded-lg">
               <Zap className="w-5 h-5 text-orange-600" />
