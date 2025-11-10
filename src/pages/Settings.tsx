@@ -611,7 +611,46 @@ export const Settings: React.FC = () => {
     try {
       console.log('🔄 Carregando logs avançados diretamente da tabela:', { companyId: company.id, filters });
       
-      // Construir query base
+      // TESTE 1: Primeiro vamos buscar logs SEM JOIN para ver se existem
+      console.log('🔍 TESTE 1: Buscando logs sem JOIN');
+      const { data: rawLogs, error: rawError } = await supabase
+        .from('webhook_trigger_logs')
+        .select('*')
+        .limit(10);
+      
+      console.log('📊 TESTE 1 - Logs brutos encontrados:', rawLogs?.length || 0);
+      console.log('📋 TESTE 1 - Primeiro log bruto:', rawLogs?.[0]);
+      if (rawError) console.error('❌ TESTE 1 - Erro:', rawError);
+      
+      // TESTE 2: Buscar configurações de webhook
+      console.log('🔍 TESTE 2: Buscando configurações de webhook');
+      const { data: configs, error: configError } = await supabase
+        .from('webhook_trigger_configs')
+        .select('*')
+        .eq('company_id', company.id);
+      
+      console.log('📊 TESTE 2 - Configurações encontradas:', configs?.length || 0);
+      console.log('📋 TESTE 2 - Primeira config:', configs?.[0]);
+      if (configError) console.error('❌ TESTE 2 - Erro:', configError);
+      
+      // TESTE 3: Buscar logs que pertencem às configurações da empresa
+      console.log('🔍 TESTE 3: Buscando logs com filtro por config_id');
+      const configIds = configs?.map(c => c.id) || [];
+      console.log('🔑 Config IDs da empresa:', configIds);
+      
+      if (configIds.length > 0) {
+        const { data: filteredLogs, error: filteredError } = await supabase
+          .from('webhook_trigger_logs')
+          .select('*')
+          .in('config_id', configIds)
+          .limit(10);
+        
+        console.log('📊 TESTE 3 - Logs filtrados encontrados:', filteredLogs?.length || 0);
+        console.log('📋 TESTE 3 - Primeiro log filtrado:', filteredLogs?.[0]);
+        if (filteredError) console.error('❌ TESTE 3 - Erro:', filteredError);
+      }
+      
+      // Construir query base com LEFT JOIN (mais permissivo)
       let query = supabase
         .from('webhook_trigger_logs')
         .select(`
@@ -623,14 +662,13 @@ export const Settings: React.FC = () => {
           response_body,
           error_message,
           created_at,
-          webhook_trigger_configs!inner (
+          webhook_trigger_configs (
             id,
             name,
             webhook_url,
             company_id
           )
-        `)
-        .eq('webhook_trigger_configs.company_id', company.id);
+        `);
       
       // Aplicar filtros de data se especificados
       if (filters.dateFrom) {
@@ -645,6 +683,16 @@ export const Settings: React.FC = () => {
         dateTo.setHours(23, 59, 59, 999); // Final do dia
         console.log('📅 Filtro Data Fim:', dateTo.toISOString());
         query = query.lte('created_at', dateTo.toISOString());
+      }
+      
+      // Filtrar por logs da empresa usando config_ids
+      if (configIds.length > 0) {
+        query = query.in('config_id', configIds);
+        console.log('🔍 Filtro por config_ids aplicado:', configIds);
+      } else {
+        console.log('⚠️ Nenhuma configuração encontrada - retornando array vazio');
+        setAdvancedLogs([]);
+        return;
       }
       
       // Aplicar filtro de status se especificado
@@ -669,18 +717,23 @@ export const Settings: React.FC = () => {
       }
       
       // Transformar dados para o formato esperado
-      const transformedLogs = (data || []).map((log: any) => ({
-        id: log.id,
-        config_id: log.config_id,
-        webhook_name: log.webhook_trigger_configs?.[0]?.name || 'N8N - Novo Lead',
-        webhook_url: log.webhook_trigger_configs?.[0]?.webhook_url || '',
-        trigger_event: log.trigger_event,
-        success: log.success,
-        response_status: log.response_status,
-        response_body: log.response_body,
-        error_message: log.error_message,
-        created_at: log.created_at
-      }));
+      const transformedLogs = (data || []).map((log: any) => {
+        // Encontrar a configuração correspondente
+        const config = configs?.find(c => c.id === log.config_id);
+        
+        return {
+          id: log.id,
+          config_id: log.config_id,
+          webhook_name: config?.name || 'N8N - Novo Lead',
+          webhook_url: config?.webhook_url || '',
+          trigger_event: log.trigger_event,
+          success: log.success,
+          response_status: log.response_status,
+          response_body: log.response_body,
+          error_message: log.error_message,
+          created_at: log.created_at
+        };
+      });
       
       setAdvancedLogs(transformedLogs);
       console.log('✅ Logs avançados carregados diretamente:', transformedLogs.length);
