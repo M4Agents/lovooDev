@@ -1432,7 +1432,7 @@ export const Settings: React.FC = () => {
                             </div>
                             <h4 className="text-sm font-semibold text-slate-900">Dados do Lead</h4>
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
                             {[
                               { key: 'name', label: 'Nome', desc: 'Nome completo do lead' },
                               { key: 'email', label: 'Email', desc: 'Endereço de email' },
@@ -1474,7 +1474,7 @@ export const Settings: React.FC = () => {
                             </div>
                             <h4 className="text-sm font-semibold text-slate-900">Empresa do Lead</h4>
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
                             {[
                               { key: 'company_name', label: 'Nome da Empresa', desc: 'Nome da empresa do lead' },
                               { key: 'company_cnpj', label: 'CNPJ', desc: 'CNPJ da empresa do lead' },
