@@ -650,13 +650,12 @@ export const Settings: React.FC = () => {
         if (filteredError) console.error('❌ TESTE 3 - Erro:', filteredError);
       }
       
-      // Construir query base (removendo trigger_event que não existe)
+      // Construir query base (usando apenas colunas que existem)
       let query = supabase
         .from('webhook_trigger_logs')
         .select(`
           id,
           config_id,
-          success,
           response_status,
           response_body,
           error_message,
@@ -688,11 +687,16 @@ export const Settings: React.FC = () => {
         return;
       }
       
-      // Aplicar filtro de status se especificado
+      // Aplicar filtro de status se especificado (baseado em response_status)
       if (filters.status && filters.status !== 'todos') {
-        const isSuccess = filters.status === 'success';
-        console.log('🔍 Filtro Status:', { status: filters.status, isSuccess });
-        query = query.eq('success', isSuccess);
+        console.log('🔍 Filtro Status:', { status: filters.status });
+        if (filters.status === 'success') {
+          // Sucesso = response_status 200
+          query = query.eq('response_status', 200);
+        } else if (filters.status === 'error') {
+          // Erro = response_status diferente de 200 ou null
+          query = query.or('response_status.neq.200,response_status.is.null');
+        }
       }
       
       // Aplicar ordenação e limite
@@ -720,7 +724,7 @@ export const Settings: React.FC = () => {
           webhook_name: config?.name || 'N8N - Novo Lead',
           webhook_url: config?.webhook_url || '',
           trigger_event: 'lead_created', // Valor fixo já que todos são lead_created
-          success: log.success,
+          success: log.response_status === 200, // Calcular sucesso baseado no status
           response_status: log.response_status,
           response_body: log.response_body,
           error_message: log.error_message,
