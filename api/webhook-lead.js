@@ -89,9 +89,9 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 }
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V5');
+  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-04-08:30 - Sistema Híbrido: Campos Padrão por Nome + Personalizados por ID');
+  console.log('Deploy Version: 2025-11-10-19:20 - Sistema Híbrido + Disparo Automático de Webhooks Avançados');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
