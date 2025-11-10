@@ -2,6 +2,64 @@
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
+## [1.1.0] - 2025-11-10 🎯 **VERSÃO ESTÁVEL - WEBHOOK AVANÇADO FUNCIONAL**
+
+### ✨ Adicionado
+- **Sistema de Webhook Avançado** completo e funcional
+- **Interface de configuração** para webhooks personalizados
+- **Logs de disparos** com histórico detalhado e filtros
+- **Estatísticas em tempo real** (Total, Sucessos, Erros, Últimas 24h)
+- **Filtros avançados** por data, status e configuração
+- **Seleção de campos** do payload (Lead: name, email, phone, status, origin)
+- **Configurações flexíveis** (timeout, retry, headers personalizados)
+- **Disparo automático** para eventos lead_created
+- **Integração N8N** totalmente funcional
+- **Monitoramento robusto** com detecção inteligente de sucessos/erros
+
+### 🔄 Modificado
+- **Lógica de sucesso** melhorada (aceita status 2xx, detecta erros reais de rede)
+- **Interface de logs** com busca direta na tabela para performance
+- **Estrutura do payload** dinâmica baseada em configurações
+- **Sistema de filtros** otimizado para queries eficientes
+
+### 🛠️ Corrigido
+- **Problema de exibição** dos logs na interface (coluna trigger_event inexistente)
+- **Falsos negativos** em webhooks funcionais (status diferentes de 200)
+- **Query de logs** adaptada para estrutura real da tabela
+- **Filtros de status** baseados em response_status ao invés de success
+- **Carregamento inicial** dos logs sem filtros aplicados
+
+### 🗄️ Banco de Dados
+- **Tabela webhook_trigger_configs** com payload_fields configurável
+- **Tabela webhook_trigger_logs** para histórico completo
+- **RPCs otimizadas** para criação, edição e consulta
+- **Índices de performance** para queries rápidas
+- **Estrutura JSONB** para configurações flexíveis
+
+### 🎨 UI/UX
+- **Interface intuitiva** para configuração de webhooks
+- **Logs organizados** com status visual claro (✅/❌)
+- **Filtros responsivos** com aplicação em tempo real
+- **Estatísticas visuais** em cards informativos
+- **Feedback imediato** para ações do usuário
+
+### 📊 Funcionalidades Técnicas
+- **Disparo automático** via api/webhook-lead.js
+- **Payload configurável** com campos selecionáveis
+- **Headers personalizados** em formato JSON
+- **Retry automático** configurável (1-10 tentativas)
+- **Timeout configurável** (5-60 segundos)
+- **Logs detalhados** com response completo
+
+### 🎯 Status Atual
+- **✅ Webhook disparando** automaticamente para N8N
+- **✅ Logs funcionando** com interface completa
+- **✅ Filtros operacionais** por data e status
+- **✅ Configurações salvas** e carregadas corretamente
+- **✅ Sistema estável** e pronto para produção
+
+---
+
 ## [1.0.0] - 2025-10-31 🚀
 
 ### ✨ Adicionado
