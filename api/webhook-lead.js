@@ -3,6 +3,91 @@
 // Método: POST com api_key no body + dados do formulário
 // Padrão baseado no webhook-visitor que funciona 100%
 
+// Função para disparar webhooks avançados automaticamente
+async function triggerAdvancedWebhooks(leadData, companyId) {
+  console.log('🚀 DISPARANDO WEBHOOKS AVANÇADOS');
+  console.log('Lead ID:', leadData.lead_id);
+  console.log('Company ID:', companyId);
+  
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // 1. Buscar configurações ativas de webhook para lead_created
+    const { data: configs, error: configError } = await supabase.rpc('get_webhook_trigger_configs', {
+      p_company_id: companyId
+    });
+    
+    if (configError) {
+      console.error('❌ Erro ao buscar configurações:', configError);
+      return;
+    }
+    
+    const activeConfigs = configs?.filter(config => 
+      config.is_active && 
+      config.trigger_events?.includes('lead_created')
+    ) || [];
+    
+    console.log(`📋 Encontradas ${activeConfigs.length} configurações ativas para lead_created`);
+    
+    // 2. Disparar cada webhook
+    for (const config of activeConfigs) {
+      console.log(`🎯 Disparando webhook: ${config.name}`);
+      
+      // Construir payload
+      const payload = {
+        event: 'lead_created',
+        timestamp: new Date().toISOString(),
+        data: {
+          lead: {
+            id: leadData.lead_id,
+            name: leadData.name,
+            email: leadData.email,
+            phone: leadData.phone,
+            created_at: new Date().toISOString()
+          },
+          company: {
+            id: companyId
+          }
+        }
+      };
+      
+      console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+      
+      // Fazer requisição HTTP
+      try {
+        const response = await fetch(config.webhook_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...config.headers
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        const responseText = await response.text();
+        
+        console.log(`📥 Resposta: ${response.status} ${response.statusText}`);
+        console.log(`📄 Body: ${responseText}`);
+        
+        if (response.ok) {
+          console.log(`✅ Webhook ${config.name} disparado com sucesso`);
+        } else {
+          console.log(`❌ Webhook ${config.name} falhou: ${response.status}`);
+        }
+        
+      } catch (fetchError) {
+        console.error(`❌ Erro ao disparar webhook ${config.name}:`, fetchError.message);
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro geral ao disparar webhooks:', error);
+  }
+}
+
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V5');
   console.log('Timestamp:', new Date().toISOString());
@@ -171,6 +256,21 @@ async function createLeadDirectSQL(params) {
       }
     } else {
       console.log('⚠️ Nenhum campo personalizado para inserir');
+    }
+    
+    // 6. DISPARAR WEBHOOKS AVANÇADOS AUTOMATICAMENTE
+    console.log('🚀 INICIANDO DISPARO DE WEBHOOKS AVANÇADOS');
+    try {
+      await triggerAdvancedWebhooks({
+        lead_id: lead.lead_id,
+        name: detectedFields.name || 'Lead sem nome',
+        email: detectedFields.email || null,
+        phone: detectedFields.phone || null
+      }, lead.company_id);
+      console.log('✅ Webhooks avançados disparados com sucesso');
+    } catch (webhookError) {
+      console.error('❌ Erro ao disparar webhooks avançados:', webhookError);
+      // Não falhar a criação do lead por causa do webhook
     }
     
     return { success: true, lead_id: lead.lead_id };
