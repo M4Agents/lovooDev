@@ -45,72 +45,63 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       
       console.log('📋 Campos selecionados do lead:', selectedLeadFields);
       
-      // Dados disponíveis do lead
+      // Dados disponíveis do lead (todos os campos da tabela leads)
       const availableLeadData = {
         id: leadData.lead_id,
         name: leadData.name,
         email: leadData.email,
         phone: leadData.phone,
-        status: 'new', // Status padrão para novos leads
-        origin: 'webhook', // Origem padrão
-        created_at: new Date().toISOString()
+        status: leadData.status || 'new',
+        origin: leadData.origin || 'webhook',
+        interest: leadData.interest,
+        responsible_user_id: leadData.responsible_user_id,
+        created_at: new Date().toISOString(),
+        updated_at: leadData.updated_at,
+        // Campos da empresa do lead
+        company_name: leadData.company_name,
+        company_cnpj: leadData.company_cnpj,
+        company_razao_social: leadData.company_razao_social,
+        company_nome_fantasia: leadData.company_nome_fantasia,
+        company_telefone: leadData.company_telefone,
+        company_email: leadData.company_email,
+        company_site: leadData.company_site,
+        company_cidade: leadData.company_cidade,
+        company_estado: leadData.company_estado,
+        company_cep: leadData.company_cep,
+        company_endereco: leadData.company_endereco
       };
       
       // Construir objeto lead apenas com campos selecionados
       const leadPayload = { id: availableLeadData.id }; // ID sempre incluído
       
+      // Adicionar campos do lead selecionados
       selectedLeadFields.forEach(field => {
         if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
           leadPayload[field] = availableLeadData[field];
-          console.log(`✅ Campo incluído: ${field} = ${availableLeadData[field]}`);
+          console.log(`✅ Campo do lead incluído: ${field} = ${availableLeadData[field]}`);
         } else {
-          console.log(`⚠️ Campo não disponível: ${field}`);
+          console.log(`⚠️ Campo do lead não disponível: ${field}`);
         }
       });
       
-      // Construir payload da empresa baseado nos campos selecionados
+      // Adicionar campos da empresa do lead selecionados
       const selectedCompanyFields = config.payload_fields?.empresa || [];
-      console.log('🏢 Campos selecionados da empresa:', selectedCompanyFields);
+      console.log('🏢 Campos selecionados da empresa do lead:', selectedCompanyFields);
       
-      let companyPayload = { id: companyId }; // ID sempre incluído
-      
-      // Se há campos da empresa selecionados, buscar dados da empresa
-      if (selectedCompanyFields.length > 0) {
-        try {
-          console.log('🔍 Buscando dados da empresa:', companyId);
-          
-          const { data: companyData, error: companyError } = await supabase
-            .from('companies')
-            .select('id, name, domain, plan, status, created_at, updated_at')
-            .eq('id', companyId)
-            .single();
-          
-          if (companyError) {
-            console.error('❌ Erro ao buscar dados da empresa:', companyError);
-          } else if (companyData) {
-            console.log('✅ Dados da empresa encontrados:', companyData);
-            
-            // Adicionar campos selecionados da empresa
-            selectedCompanyFields.forEach(field => {
-              if (companyData[field] !== undefined && companyData[field] !== null) {
-                companyPayload[field] = companyData[field];
-                console.log(`✅ Campo da empresa incluído: ${field} = ${companyData[field]}`);
-              } else {
-                console.log(`⚠️ Campo da empresa não disponível: ${field}`);
-              }
-            });
-          }
-        } catch (error) {
-          console.error('❌ Erro ao buscar empresa:', error);
+      selectedCompanyFields.forEach(field => {
+        if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
+          leadPayload[field] = availableLeadData[field];
+          console.log(`✅ Campo da empresa do lead incluído: ${field} = ${availableLeadData[field]}`);
+        } else {
+          console.log(`⚠️ Campo da empresa do lead não disponível: ${field}`);
         }
-      }
+      });
       
       const payload = {
         event: 'lead_created',
         timestamp: new Date().toISOString(),
         data: {
-          lead: leadPayload,
-          company: companyPayload
+          lead: leadPayload
         }
       };
       
@@ -192,7 +183,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-10-21:55 - Payload Dinâmico com Campos do Lead e Empresa');
+  console.log('Deploy Version: 2025-11-10-22:10 - Payload Completo com Todos os Campos do Lead');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 

@@ -1438,7 +1438,11 @@ export const Settings: React.FC = () => {
                               { key: 'email', label: 'Email', desc: 'Endereço de email' },
                               { key: 'phone', label: 'Telefone', desc: 'Número de telefone' },
                               { key: 'status', label: 'Status', desc: 'Status atual do lead' },
-                              { key: 'origin', label: 'Origem', desc: 'Fonte de origem do lead' }
+                              { key: 'origin', label: 'Origem', desc: 'Fonte de origem do lead' },
+                              { key: 'interest', label: 'Interesse', desc: 'Interesse do lead' },
+                              { key: 'responsible_user_id', label: 'Responsável', desc: 'Usuário responsável' },
+                              { key: 'created_at', label: 'Data de Criação', desc: 'Quando o lead foi criado' },
+                              { key: 'updated_at', label: 'Última Atualização', desc: 'Última modificação' }
                             ].map((field) => (
                               <label key={field.key} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group">
                                 <input
@@ -1460,7 +1464,7 @@ export const Settings: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Campos da Empresa */}
+                        {/* Empresa do Lead */}
                         <div className="bg-white rounded-lg border border-slate-200 p-5">
                           <div className="flex items-center gap-2 mb-4">
                             <div className="p-1.5 bg-emerald-100 rounded-md">
@@ -1468,15 +1472,21 @@ export const Settings: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                               </svg>
                             </div>
-                            <h4 className="font-semibold text-slate-900">Dados da Empresa</h4>
+                            <h4 className="font-semibold text-slate-900">Empresa do Lead</h4>
                           </div>
                           <div className="space-y-3">
                             {[
-                              { key: 'name', label: 'Nome', desc: 'Nome da empresa' },
-                              { key: 'domain', label: 'Domínio', desc: 'Domínio web da empresa' },
-                              { key: 'plan', label: 'Plano', desc: 'Plano de assinatura' },
-                              { key: 'status', label: 'Status', desc: 'Status da conta' },
-                              { key: 'created_at', label: 'Data de Criação', desc: 'Quando a empresa foi criada' }
+                              { key: 'company_name', label: 'Nome da Empresa', desc: 'Nome da empresa do lead' },
+                              { key: 'company_cnpj', label: 'CNPJ', desc: 'CNPJ da empresa do lead' },
+                              { key: 'company_razao_social', label: 'Razão Social', desc: 'Razão social da empresa' },
+                              { key: 'company_nome_fantasia', label: 'Nome Fantasia', desc: 'Nome fantasia da empresa' },
+                              { key: 'company_telefone', label: 'Telefone', desc: 'Telefone da empresa' },
+                              { key: 'company_email', label: 'Email', desc: 'Email da empresa' },
+                              { key: 'company_site', label: 'Site', desc: 'Website da empresa' },
+                              { key: 'company_cidade', label: 'Cidade', desc: 'Cidade da empresa' },
+                              { key: 'company_estado', label: 'Estado', desc: 'Estado da empresa' },
+                              { key: 'company_cep', label: 'CEP', desc: 'CEP da empresa' },
+                              { key: 'company_endereco', label: 'Endereço', desc: 'Endereço completo' }
                             ].map((field) => (
                               <label key={field.key} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group">
                                 <input
