@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 
 // Ícone oficial do WhatsApp
@@ -600,21 +601,54 @@ export const Settings: React.FC = () => {
     
     setLoadingAdvancedLogs(true);
     try {
-      console.log('🔄 Carregando logs avançados:', { companyId: company.id, filters });
+      console.log('🔄 Carregando logs avançados diretamente da tabela:', { companyId: company.id, filters });
       
-      const options: any = {
-        limit: filters.limit || 50
-      };
+      // Buscar logs diretamente da tabela com JOIN
+      const { data, error } = await supabase
+        .from('webhook_trigger_logs')
+        .select(`
+          id,
+          config_id,
+          trigger_event,
+          success,
+          response_status,
+          response_body,
+          error_message,
+          created_at,
+          webhook_trigger_configs!inner (
+            id,
+            name,
+            webhook_url,
+            company_id
+          )
+        `)
+        .eq('webhook_trigger_configs.company_id', company.id)
+        .order('created_at', { ascending: false })
+        .limit(filters.limit || 50);
       
-      if (filters.configId) options.configId = filters.configId;
-      if (filters.status) options.status = filters.status as 'success' | 'error';
-      if (filters.dateFrom) options.dateFrom = filters.dateFrom;
-      if (filters.dateTo) options.dateTo = filters.dateTo;
+      if (error) {
+        console.error('❌ Erro ao buscar logs:', error);
+        setAdvancedLogs([]);
+        return;
+      }
       
-      const logs = await api.getAdvancedWebhookLogs(company.id, options);
-      setAdvancedLogs(logs);
+      // Transformar dados para o formato esperado
+      const transformedLogs = (data || []).map((log: any) => ({
+        id: log.id,
+        config_id: log.config_id,
+        webhook_name: log.webhook_trigger_configs?.[0]?.name || 'N8N - Novo Lead',
+        webhook_url: log.webhook_trigger_configs?.[0]?.webhook_url || '',
+        trigger_event: log.trigger_event,
+        success: log.success,
+        response_status: log.response_status,
+        response_body: log.response_body,
+        error_message: log.error_message,
+        created_at: log.created_at
+      }));
       
-      console.log('✅ Logs avançados carregados:', logs.length);
+      setAdvancedLogs(transformedLogs);
+      console.log('✅ Logs avançados carregados diretamente:', transformedLogs.length);
+      console.log('📋 Primeiro log:', transformedLogs[0]);
     } catch (error) {
       console.error('❌ Erro ao carregar logs avançados:', error);
       setAdvancedLogs([]);
