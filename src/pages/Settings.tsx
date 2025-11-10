@@ -1407,45 +1407,112 @@ export const Settings: React.FC = () => {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        📋 Campos do Lead
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                        {['name', 'email', 'phone', 'status', 'origin'].map((field) => (
-                          <label key={field} className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={webhookConfig.payload_fields.lead.includes(field)}
-                              onChange={() => handleFieldToggle('lead', field)}
-                              className="mr-2"
-                            />
-                            {field}
-                          </label>
-                        ))}
+                    {/* Seção de Campos do Payload */}
+                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-6">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-orange-100 rounded-lg">
+                          <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-900">Configuração do Payload</h3>
+                          <p className="text-sm text-slate-600">Selecione quais campos incluir no webhook</p>
+                        </div>
                       </div>
-                    </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        🏢 Campos da Empresa
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {['name', 'domain', 'plan', 'status', 'created_at'].map((field) => (
-                          <label key={field} className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={webhookConfig.payload_fields.empresa.includes(field)}
-                              onChange={() => handleFieldToggle('empresa', field)}
-                              className="mr-2"
-                            />
-                            {field}
-                          </label>
-                        ))}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Campos do Lead */}
+                        <div className="bg-white rounded-lg border border-slate-200 p-5">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="p-1.5 bg-blue-100 rounded-md">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            </div>
+                            <h4 className="font-semibold text-slate-900">Dados do Lead</h4>
+                          </div>
+                          <div className="space-y-3">
+                            {[
+                              { key: 'name', label: 'Nome', desc: 'Nome completo do lead' },
+                              { key: 'email', label: 'Email', desc: 'Endereço de email' },
+                              { key: 'phone', label: 'Telefone', desc: 'Número de telefone' },
+                              { key: 'status', label: 'Status', desc: 'Status atual do lead' },
+                              { key: 'origin', label: 'Origem', desc: 'Fonte de origem do lead' }
+                            ].map((field) => (
+                              <label key={field.key} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={webhookConfig.payload_fields.lead.includes(field.key)}
+                                  onChange={() => handleFieldToggle('lead', field.key)}
+                                  className="mt-0.5 w-4 h-4 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-900 group-hover:text-orange-600 transition-colors">
+                                    {field.label}
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-0.5">
+                                    {field.desc}
+                                  </div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Campos da Empresa */}
+                        <div className="bg-white rounded-lg border border-slate-200 p-5">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="p-1.5 bg-emerald-100 rounded-md">
+                              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                            </div>
+                            <h4 className="font-semibold text-slate-900">Dados da Empresa</h4>
+                          </div>
+                          <div className="space-y-3">
+                            {[
+                              { key: 'name', label: 'Nome', desc: 'Nome da empresa' },
+                              { key: 'domain', label: 'Domínio', desc: 'Domínio web da empresa' },
+                              { key: 'plan', label: 'Plano', desc: 'Plano de assinatura' },
+                              { key: 'status', label: 'Status', desc: 'Status da conta' },
+                              { key: 'created_at', label: 'Data de Criação', desc: 'Quando a empresa foi criada' }
+                            ].map((field) => (
+                              <label key={field.key} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={webhookConfig.payload_fields.empresa.includes(field.key)}
+                                  onChange={() => handleFieldToggle('empresa', field.key)}
+                                  className="mt-0.5 w-4 h-4 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-900 group-hover:text-emerald-600 transition-colors">
+                                    {field.label}
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-0.5">
+                                    {field.desc}
+                                  </div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Campos disponíveis da empresa: nome, domínio, plano, status e data de criação
-                      </p>
+
+                      {/* Informação adicional */}
+                      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div>
+                            <h5 className="font-medium text-blue-900 mb-1">Dica de Configuração</h5>
+                            <p className="text-sm text-blue-800">
+                              Selecione apenas os campos necessários para otimizar o payload. O ID do lead e da empresa são sempre incluídos automaticamente.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div>
