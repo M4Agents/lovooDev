@@ -1478,18 +1478,23 @@ export const Settings: React.FC = () => {
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <h4 className="font-medium text-slate-900">{log.webhook_name || 'Webhook'}</h4>
+                                <h4 className="font-medium text-slate-900">{log.webhook_name || 'N8N - Novo Lead'}</h4>
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
                                   log.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                                 }`}>
                                   {log.success ? '✅ Sucesso' : '❌ Erro'}
                                 </span>
+                                {log.success === false && (
+                                  <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-700">
+                                    ⚠️ Verificar logs
+                                  </span>
+                                )}
                               </div>
                               <p className="text-sm text-slate-600 mb-2">{log.webhook_url}</p>
                               <div className="flex items-center gap-4 text-xs text-slate-500">
                                 <span>Evento: {log.trigger_event || 'N/A'}</span>
                                 {log.response_status && <span>Status: {log.response_status}</span>}
-                                <span>Data: {new Date(log.created_at).toLocaleString('pt-BR')}</span>
+                                <span>Data: {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Data não disponível'}</span>
                               </div>
                             </div>
                           </div>
@@ -1508,6 +1513,23 @@ export const Settings: React.FC = () => {
                               <div className="flex items-start gap-2">
                                 <span className="text-slate-600 font-medium">📄 Resposta:</span>
                                 <span className="text-slate-700 font-mono text-xs">{log.response_body}</span>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Informação de debug para logs com erro */}
+                          {log.success === false && !log.error_message && (
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                              <div className="flex items-start gap-2">
+                                <span className="text-blue-600 font-medium">ℹ️ Informação:</span>
+                                <div className="text-blue-700">
+                                  <p>O webhook foi disparado mas está marcado como erro no banco de dados.</p>
+                                  <p className="mt-1 text-xs">
+                                    <strong>Teste manual:</strong> O webhook responde corretamente (200 OK) quando testado diretamente.
+                                    <br />
+                                    <strong>Problema:</strong> A função RPC que registra os logs precisa ser atualizada.
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           )}
