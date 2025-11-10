@@ -1499,5 +1499,94 @@ export const api = {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  },
+
+  // ===== NOVAS APIs ISOLADAS PARA LOGS AVANÇADOS =====
+  // Implementação completamente isolada para não afetar APIs existentes
+  
+  async getAdvancedWebhookLogs(companyId: string, options: {
+    configId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: 'success' | 'error';
+    limit?: number;
+  } = {}) {
+    console.log('API: getAdvancedWebhookLogs called:', { companyId, options });
+    
+    try {
+      // Usar a mesma RPC existente mas com parâmetros específicos
+      const { data, error } = await supabase.rpc('get_webhook_trigger_logs', {
+        p_company_id: companyId,
+        p_config_id: options.configId || null,
+        p_limit: options.limit || 50
+      });
+
+      if (error) {
+        console.error('Error fetching advanced webhook logs:', error);
+        throw error;
+      }
+
+      let logs = data || [];
+
+      // Aplicar filtros adicionais no frontend se necessário
+      if (options.status) {
+        logs = logs.filter((log: any) => {
+          return options.status === 'success' ? log.success : !log.success;
+        });
+      }
+
+      if (options.dateFrom) {
+        const fromDate = new Date(options.dateFrom);
+        logs = logs.filter((log: any) => new Date(log.created_at) >= fromDate);
+      }
+
+      if (options.dateTo) {
+        const toDate = new Date(options.dateTo);
+        logs = logs.filter((log: any) => new Date(log.created_at) <= toDate);
+      }
+
+      console.log('API: Advanced webhook logs processed:', logs.length);
+      return logs;
+    } catch (error) {
+      console.error('Error in getAdvancedWebhookLogs:', error);
+      throw error;
+    }
+  },
+
+  async refreshAdvancedWebhookLogs(companyId: string) {
+    console.log('API: refreshAdvancedWebhookLogs called for company:', companyId);
+    
+    try {
+      // Buscar logs mais recentes
+      return await this.getAdvancedWebhookLogs(companyId, { limit: 100 });
+    } catch (error) {
+      console.error('Error in refreshAdvancedWebhookLogs:', error);
+      throw error;
+    }
+  },
+
+  async getAdvancedWebhookStats(companyId: string) {
+    console.log('API: getAdvancedWebhookStats called for company:', companyId);
+    
+    try {
+      const logs = await this.getAdvancedWebhookLogs(companyId, { limit: 1000 });
+      
+      const stats = {
+        total: logs.length,
+        success: logs.filter((log: any) => log.success).length,
+        errors: logs.filter((log: any) => !log.success).length,
+        last24h: logs.filter((log: any) => {
+          const logDate = new Date(log.created_at);
+          const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return logDate >= yesterday;
+        }).length
+      };
+
+      console.log('API: Advanced webhook stats:', stats);
+      return stats;
+    } catch (error) {
+      console.error('Error in getAdvancedWebhookStats:', error);
+      throw error;
+    }
   }
 };
