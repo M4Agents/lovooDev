@@ -36,18 +36,43 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
     for (const config of activeConfigs) {
       console.log(`🎯 Disparando webhook: ${config.name}`);
       
-      // Construir payload
+      // Construir payload dinâmico baseado nos campos selecionados
+      console.log('🔍 Configuração payload_fields:', config.payload_fields);
+      
+      // Campos padrão (fallback) se não houver configuração
+      const defaultLeadFields = ['name', 'email', 'phone', 'status', 'origin'];
+      const selectedLeadFields = config.payload_fields?.lead || defaultLeadFields;
+      
+      console.log('📋 Campos selecionados do lead:', selectedLeadFields);
+      
+      // Dados disponíveis do lead
+      const availableLeadData = {
+        id: leadData.lead_id,
+        name: leadData.name,
+        email: leadData.email,
+        phone: leadData.phone,
+        status: 'new', // Status padrão para novos leads
+        origin: 'webhook', // Origem padrão
+        created_at: new Date().toISOString()
+      };
+      
+      // Construir objeto lead apenas com campos selecionados
+      const leadPayload = { id: availableLeadData.id }; // ID sempre incluído
+      
+      selectedLeadFields.forEach(field => {
+        if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
+          leadPayload[field] = availableLeadData[field];
+          console.log(`✅ Campo incluído: ${field} = ${availableLeadData[field]}`);
+        } else {
+          console.log(`⚠️ Campo não disponível: ${field}`);
+        }
+      });
+      
       const payload = {
         event: 'lead_created',
         timestamp: new Date().toISOString(),
         data: {
-          lead: {
-            id: leadData.lead_id,
-            name: leadData.name,
-            email: leadData.email,
-            phone: leadData.phone,
-            created_at: new Date().toISOString()
-          },
+          lead: leadPayload,
           company: {
             id: companyId
           }
@@ -132,7 +157,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-10-19:20 - Sistema Híbrido + Disparo Automático de Webhooks Avançados');
+  console.log('Deploy Version: 2025-11-10-21:40 - Payload Dinâmico com Seleção de Campos do Lead');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
