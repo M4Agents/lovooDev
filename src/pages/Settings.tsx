@@ -191,7 +191,15 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     if (company && activeTab === 'integracoes' && integracoesTab === 'webhook-avancado') {
       console.log('🔄 Carregando dados dos logs avançados...');
-      loadAdvancedLogs();
+      // Carregar logs sem filtros inicialmente
+      const initialFilters = {
+        status: 'todos',
+        dateFrom: '',
+        dateTo: '',
+        configId: '',
+        limit: 50
+      };
+      loadAdvancedLogs(initialFilters);
       loadAdvancedLogsStats();
     }
   }, [company, activeTab, integracoesTab]);
@@ -603,8 +611,8 @@ export const Settings: React.FC = () => {
     try {
       console.log('🔄 Carregando logs avançados diretamente da tabela:', { companyId: company.id, filters });
       
-      // Buscar logs diretamente da tabela com JOIN
-      const { data, error } = await supabase
+      // Construir query base
+      let query = supabase
         .from('webhook_trigger_logs')
         .select(`
           id,
@@ -622,9 +630,37 @@ export const Settings: React.FC = () => {
             company_id
           )
         `)
-        .eq('webhook_trigger_configs.company_id', company.id)
-        .order('created_at', { ascending: false })
-        .limit(filters.limit || 50);
+        .eq('webhook_trigger_configs.company_id', company.id);
+      
+      // Aplicar filtros de data se especificados
+      if (filters.dateFrom) {
+        const dateFrom = new Date(filters.dateFrom);
+        dateFrom.setHours(0, 0, 0, 0); // Início do dia
+        console.log('📅 Filtro Data Início:', dateFrom.toISOString());
+        query = query.gte('created_at', dateFrom.toISOString());
+      }
+      
+      if (filters.dateTo) {
+        const dateTo = new Date(filters.dateTo);
+        dateTo.setHours(23, 59, 59, 999); // Final do dia
+        console.log('📅 Filtro Data Fim:', dateTo.toISOString());
+        query = query.lte('created_at', dateTo.toISOString());
+      }
+      
+      // Aplicar filtro de status se especificado
+      if (filters.status && filters.status !== 'todos') {
+        const isSuccess = filters.status === 'success';
+        console.log('🔍 Filtro Status:', { status: filters.status, isSuccess });
+        query = query.eq('success', isSuccess);
+      }
+      
+      // Aplicar ordenação e limite
+      query = query.order('created_at', { ascending: false }).limit(filters.limit || 50);
+      
+      console.log('🔍 Query final construída com filtros aplicados');
+      
+      // Executar query
+      const { data, error } = await query;
       
       if (error) {
         console.error('❌ Erro ao buscar logs:', error);
@@ -649,6 +685,8 @@ export const Settings: React.FC = () => {
       setAdvancedLogs(transformedLogs);
       console.log('✅ Logs avançados carregados diretamente:', transformedLogs.length);
       console.log('📋 Primeiro log:', transformedLogs[0]);
+      console.log('📋 Todos os logs:', transformedLogs);
+      console.log('📊 Estado advancedLogs atualizado:', { length: transformedLogs.length });
     } catch (error) {
       console.error('❌ Erro ao carregar logs avançados:', error);
       setAdvancedLogs([]);
