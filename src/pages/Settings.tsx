@@ -1409,7 +1409,7 @@ export const Settings: React.FC = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Campos do Payload
+                        📋 Campos do Lead
                       </label>
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                         {['name', 'email', 'phone', 'status', 'origin'].map((field) => (
@@ -1424,6 +1424,28 @@ export const Settings: React.FC = () => {
                           </label>
                         ))}
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        🏢 Campos da Empresa
+                      </label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {['name', 'domain', 'plan', 'status', 'created_at'].map((field) => (
+                          <label key={field} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={webhookConfig.payload_fields.empresa.includes(field)}
+                              onChange={() => handleFieldToggle('empresa', field)}
+                              className="mr-2"
+                            />
+                            {field}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Campos disponíveis da empresa: nome, domínio, plano, status e data de criação
+                      </p>
                     </div>
 
                     <div>

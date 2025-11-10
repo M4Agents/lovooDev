@@ -68,14 +68,49 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       });
       
+      // Construir payload da empresa baseado nos campos selecionados
+      const selectedCompanyFields = config.payload_fields?.empresa || [];
+      console.log('🏢 Campos selecionados da empresa:', selectedCompanyFields);
+      
+      let companyPayload = { id: companyId }; // ID sempre incluído
+      
+      // Se há campos da empresa selecionados, buscar dados da empresa
+      if (selectedCompanyFields.length > 0) {
+        try {
+          console.log('🔍 Buscando dados da empresa:', companyId);
+          
+          const { data: companyData, error: companyError } = await supabase
+            .from('companies')
+            .select('id, name, domain, plan, status, created_at, updated_at')
+            .eq('id', companyId)
+            .single();
+          
+          if (companyError) {
+            console.error('❌ Erro ao buscar dados da empresa:', companyError);
+          } else if (companyData) {
+            console.log('✅ Dados da empresa encontrados:', companyData);
+            
+            // Adicionar campos selecionados da empresa
+            selectedCompanyFields.forEach(field => {
+              if (companyData[field] !== undefined && companyData[field] !== null) {
+                companyPayload[field] = companyData[field];
+                console.log(`✅ Campo da empresa incluído: ${field} = ${companyData[field]}`);
+              } else {
+                console.log(`⚠️ Campo da empresa não disponível: ${field}`);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('❌ Erro ao buscar empresa:', error);
+        }
+      }
+      
       const payload = {
         event: 'lead_created',
         timestamp: new Date().toISOString(),
         data: {
           lead: leadPayload,
-          company: {
-            id: companyId
-          }
+          company: companyPayload
         }
       };
       
@@ -157,7 +192,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-10-21:40 - Payload Dinâmico com Seleção de Campos do Lead');
+  console.log('Deploy Version: 2025-11-10-21:55 - Payload Dinâmico com Campos do Lead e Empresa');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
