@@ -687,15 +687,15 @@ export const Settings: React.FC = () => {
         return;
       }
       
-      // Aplicar filtro de status se especificado (baseado em response_status)
+      // Aplicar filtro de status se especificado (baseado na nova lógica)
       if (filters.status && filters.status !== 'todos') {
         console.log('🔍 Filtro Status:', { status: filters.status });
         if (filters.status === 'success') {
-          // Sucesso = response_status 200
-          query = query.eq('response_status', 200);
+          // Sucesso = response_status 2xx (200-299) e sem erros de rede
+          query = query.gte('response_status', 200).lt('response_status', 300);
         } else if (filters.status === 'error') {
-          // Erro = response_status diferente de 200 ou null
-          query = query.or('response_status.neq.200,response_status.is.null');
+          // Erro = response_status fora de 2xx ou com erros de rede
+          query = query.or('response_status.lt.200,response_status.gte.300,response_status.is.null');
         }
       }
       
@@ -718,13 +718,34 @@ export const Settings: React.FC = () => {
         // Encontrar a configuração correspondente
         const config = configs?.find(c => c.id === log.config_id);
         
+        // Lógica melhorada para determinar sucesso
+        const isSuccess = () => {
+          // Se há erro de rede/timeout/conexão = falha real
+          if (log.error_message && 
+              (log.error_message.toLowerCase().includes('timeout') || 
+               log.error_message.toLowerCase().includes('network') ||
+               log.error_message.toLowerCase().includes('connection') ||
+               log.error_message.toLowerCase().includes('failed to fetch'))) {
+            return false;
+          }
+          
+          // Se conseguiu enviar e tem response_status = verificar se é sucesso
+          if (log.response_status !== null && log.response_status !== undefined) {
+            // Aceitar status 2xx (200-299) como sucesso
+            return log.response_status >= 200 && log.response_status < 300;
+          }
+          
+          // Se não há erro explícito de rede = provavelmente sucesso
+          return !log.error_message;
+        };
+
         return {
           id: log.id,
           config_id: log.config_id,
           webhook_name: config?.name || 'N8N - Novo Lead',
           webhook_url: config?.webhook_url || '',
           trigger_event: 'lead_created', // Valor fixo já que todos são lead_created
-          success: log.response_status === 200, // Calcular sucesso baseado no status
+          success: isSuccess(), // Lógica melhorada para determinar sucesso
           response_status: log.response_status,
           response_body: log.response_body,
           error_message: log.error_message,
