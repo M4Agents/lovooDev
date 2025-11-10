@@ -650,24 +650,17 @@ export const Settings: React.FC = () => {
         if (filteredError) console.error('❌ TESTE 3 - Erro:', filteredError);
       }
       
-      // Construir query base com LEFT JOIN (mais permissivo)
+      // Construir query base (removendo trigger_event que não existe)
       let query = supabase
         .from('webhook_trigger_logs')
         .select(`
           id,
           config_id,
-          trigger_event,
           success,
           response_status,
           response_body,
           error_message,
-          created_at,
-          webhook_trigger_configs (
-            id,
-            name,
-            webhook_url,
-            company_id
-          )
+          created_at
         `);
       
       // Aplicar filtros de data se especificados
@@ -726,7 +719,7 @@ export const Settings: React.FC = () => {
           config_id: log.config_id,
           webhook_name: config?.name || 'N8N - Novo Lead',
           webhook_url: config?.webhook_url || '',
-          trigger_event: log.trigger_event,
+          trigger_event: 'lead_created', // Valor fixo já que todos são lead_created
           success: log.success,
           response_status: log.response_status,
           response_body: log.response_body,
