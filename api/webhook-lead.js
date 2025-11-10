@@ -72,6 +72,29 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         console.log(`📥 Resposta: ${response.status} ${response.statusText}`);
         console.log(`📄 Body: ${responseText}`);
         
+        // Registrar log no banco de dados
+        try {
+          const { data: logResult, error: logError } = await supabase
+            .from('webhook_trigger_logs')
+            .insert({
+              config_id: config.id,
+              trigger_event: 'lead_created',
+              success: response.ok,
+              response_status: response.status,
+              response_body: responseText,
+              error_message: response.ok ? null : `HTTP ${response.status}: ${response.statusText}`,
+              created_at: new Date().toISOString()
+            });
+          
+          if (logError) {
+            console.error('❌ Erro ao registrar log:', logError);
+          } else {
+            console.log('✅ Log registrado no banco de dados');
+          }
+        } catch (logError) {
+          console.error('❌ Erro ao registrar log:', logError);
+        }
+        
         if (response.ok) {
           console.log(`✅ Webhook ${config.name} disparado com sucesso`);
         } else {
@@ -80,6 +103,24 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         
       } catch (fetchError) {
         console.error(`❌ Erro ao disparar webhook ${config.name}:`, fetchError.message);
+        
+        // Registrar erro no log
+        try {
+          await supabase
+            .from('webhook_trigger_logs')
+            .insert({
+              config_id: config.id,
+              trigger_event: 'lead_created',
+              success: false,
+              response_status: null,
+              response_body: null,
+              error_message: fetchError.message,
+              created_at: new Date().toISOString()
+            });
+          console.log('✅ Log de erro registrado no banco de dados');
+        } catch (logError) {
+          console.error('❌ Erro ao registrar log de erro:', logError);
+        }
       }
     }
     
