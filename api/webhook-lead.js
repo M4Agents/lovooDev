@@ -97,6 +97,52 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       });
       
+      // Adicionar campos personalizados selecionados - NOVO E SEGURO
+      const selectedCustomFields = config.payload_fields?.custom_fields || [];
+      console.log('🎯 Campos personalizados selecionados:', selectedCustomFields);
+      
+      if (selectedCustomFields.length > 0) {
+        try {
+          // Buscar valores dos campos personalizados do lead
+          const { data: customValues, error: customError } = await supabase
+            .from('lead_custom_values')
+            .select(`
+              field_id,
+              value,
+              lead_custom_fields (
+                numeric_id,
+                field_name,
+                field_label
+              )
+            `)
+            .eq('lead_id', leadData.lead_id);
+          
+          if (customError) {
+            console.error('❌ Erro ao buscar campos personalizados:', customError);
+          } else if (customValues && customValues.length > 0) {
+            console.log('✅ Valores de campos personalizados encontrados:', customValues.length);
+            
+            // Adicionar campos personalizados selecionados ao payload
+            customValues.forEach(customValue => {
+              const fieldNumericId = customValue.lead_custom_fields?.numeric_id?.toString();
+              const fieldId = customValue.field_id;
+              
+              // Verificar se este campo foi selecionado (por ID numérico ou UUID)
+              if (selectedCustomFields.includes(fieldNumericId) || selectedCustomFields.includes(fieldId)) {
+                const fieldKey = fieldNumericId || fieldId;
+                leadPayload[fieldKey] = customValue.value;
+                console.log(`✅ Campo personalizado incluído: ${fieldKey} = ${customValue.value}`);
+              }
+            });
+          } else {
+            console.log('ℹ️ Nenhum valor de campo personalizado encontrado para este lead');
+          }
+        } catch (error) {
+          console.error('❌ Erro ao processar campos personalizados:', error);
+          // Falha silenciosa para não quebrar o webhook
+        }
+      }
+      
       const payload = {
         event: 'lead_created',
         timestamp: new Date().toISOString(),
@@ -183,7 +229,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-10-22:10 - Payload Completo com Todos os Campos do Lead');
+  console.log('Deploy Version: 2025-11-11-08:45 - Campos Personalizados Implementados');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 

@@ -33,10 +33,14 @@ export const Settings: React.FC = () => {
     headers: '',
     payload_fields: {
       lead: ['name', 'email', 'phone', 'status', 'origin'],
-      empresa: [],
-      analytics: []
+      empresa: [] as string[],
+      analytics: [] as string[],
+      custom_fields: [] as string[] // NOVO: campos personalizados selecionados
     }
   });
+  
+  // Estado para campos personalizados disponíveis - ISOLADO E SEGURO
+  const [availableCustomFields, setAvailableCustomFields] = useState<any[]>([]);
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookConfigs, setWebhookConfigs] = useState<any[]>([]);
@@ -126,6 +130,7 @@ export const Settings: React.FC = () => {
     if (company) {
       loadWebhookLogs();
       loadWebhookConfigs(); // Carregar configurações de webhook avançado
+      loadCustomFields(); // Carregar campos personalizados - SEGURO
       
       // Carregar dados da empresa para as abas cadastrais
       setCompanyData(prev => ({
@@ -336,7 +341,7 @@ export const Settings: React.FC = () => {
     }));
   };
 
-  const handleFieldToggle = (category: 'lead' | 'empresa' | 'analytics', field: string) => {
+  const handleFieldToggle = (category: 'lead' | 'empresa' | 'analytics' | 'custom_fields', field: string) => {
     setWebhookConfig(prev => ({
       ...prev,
       payload_fields: {
@@ -410,8 +415,9 @@ export const Settings: React.FC = () => {
         headers: '',
         payload_fields: {
           lead: ['name', 'email', 'phone', 'status', 'origin'],
-          empresa: [],
-          analytics: []
+          empresa: [] as string[],
+          analytics: [] as string[],
+          custom_fields: [] as string[]
         }
       });
       
@@ -469,8 +475,9 @@ export const Settings: React.FC = () => {
       headers: '',
       payload_fields: {
         lead: ['name', 'email', 'phone', 'status', 'origin'],
-        empresa: [],
-        analytics: []
+        empresa: [] as string[],
+        analytics: [] as string[],
+        custom_fields: [] as string[]
       }
     });
     
@@ -587,6 +594,20 @@ export const Settings: React.FC = () => {
       setWebhookConfigs(configs);
     } catch (error) {
       console.error('Error loading webhook configs:', error);
+    }
+  };
+
+  // Função para carregar campos personalizados - ISOLADA E SEGURA
+  const loadCustomFields = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const customFields = await api.getCustomFields(company.id);
+      setAvailableCustomFields(customFields || []);
+    } catch (error) {
+      console.error('Error loading custom fields:', error);
+      // Falha silenciosa para não quebrar o sistema
+      setAvailableCustomFields([]);
     }
   };
 
@@ -1421,7 +1442,7 @@ export const Settings: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      <div className={`grid grid-cols-1 gap-5 ${availableCustomFields.length > 0 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
                         {/* Campos do Lead */}
                         <div className="bg-white rounded-lg border border-slate-200 p-4">
                           <div className="flex items-center gap-2 mb-3">
@@ -1507,6 +1528,49 @@ export const Settings: React.FC = () => {
                             ))}
                           </div>
                         </div>
+
+                        {/* Campos Personalizados */}
+                        {availableCustomFields.length > 0 && (
+                          <div className="bg-white rounded-lg border border-slate-200 p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="p-1 bg-purple-100 rounded">
+                                <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                                </svg>
+                              </div>
+                              <h4 className="text-sm font-semibold text-slate-900">Campos Personalizados</h4>
+                            </div>
+                            <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+                              {availableCustomFields.map((field) => (
+                                <label key={field.id} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={webhookConfig.payload_fields.custom_fields.includes(field.numeric_id?.toString() || field.id)}
+                                    onChange={() => handleFieldToggle('custom_fields', field.numeric_id?.toString() || field.id)}
+                                    className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-slate-900 group-hover:text-purple-600 transition-colors">
+                                      {field.numeric_id && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">
+                                          {field.numeric_id}
+                                        </span>
+                                      )}
+                                      {field.field_label}
+                                    </div>
+                                    <div className="text-xs text-slate-500 leading-tight">
+                                      {field.field_type === 'text' && 'Campo de texto'}
+                                      {field.field_type === 'number' && 'Campo numérico'}
+                                      {field.field_type === 'date' && 'Campo de data'}
+                                      {field.field_type === 'boolean' && 'Campo sim/não'}
+                                      {field.field_type === 'select' && 'Lista de opções'}
+                                    </div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Informação adicional */}
