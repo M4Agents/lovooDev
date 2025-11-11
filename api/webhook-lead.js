@@ -99,10 +99,18 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       
       // Adicionar campos personalizados selecionados - NOVO E SEGURO
       const selectedCustomFields = config.payload_fields?.custom_fields || [];
+      console.log('🎯 DEBUG CAMPOS PERSONALIZADOS - INÍCIO');
+      console.log('📋 Configuração completa payload_fields:', JSON.stringify(config.payload_fields, null, 2));
       console.log('🎯 Campos personalizados selecionados:', selectedCustomFields);
+      console.log('📊 Tipo dos campos selecionados:', typeof selectedCustomFields, Array.isArray(selectedCustomFields));
+      console.log('📈 Quantidade de campos selecionados:', selectedCustomFields.length);
       
       if (selectedCustomFields.length > 0) {
         try {
+          console.log('🔍 INICIANDO BUSCA DE CAMPOS PERSONALIZADOS');
+          console.log('📊 Lead ID para busca:', leadData.lead_id);
+          console.log('🎯 Campos que estamos procurando:', selectedCustomFields);
+          
           // Buscar valores dos campos personalizados do lead
           const { data: customValues, error: customError } = await supabase
             .from('lead_custom_values')
@@ -117,21 +125,38 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
             `)
             .eq('lead_id', leadData.lead_id);
           
+          console.log('📋 RESULTADO DA BUSCA:');
+          console.log('- Erro:', customError);
+          console.log('- Dados encontrados:', customValues?.length || 0);
+          console.log('- Valores completos:', JSON.stringify(customValues, null, 2));
+          
           if (customError) {
             console.error('❌ Erro ao buscar campos personalizados:', customError);
           } else if (customValues && customValues.length > 0) {
             console.log('✅ Valores de campos personalizados encontrados:', customValues.length);
             
             // Adicionar campos personalizados selecionados ao payload
-            customValues.forEach(customValue => {
+            console.log('🔄 PROCESSANDO CADA CAMPO PERSONALIZADO:');
+            customValues.forEach((customValue, index) => {
               const fieldNumericId = customValue.lead_custom_fields?.numeric_id?.toString();
               const fieldId = customValue.field_id;
+              
+              console.log(`📋 Campo ${index + 1}:`);
+              console.log(`  - field_id: ${fieldId}`);
+              console.log(`  - numeric_id: ${customValue.lead_custom_fields?.numeric_id}`);
+              console.log(`  - numeric_id (string): ${fieldNumericId}`);
+              console.log(`  - field_label: ${customValue.lead_custom_fields?.field_label}`);
+              console.log(`  - value: ${customValue.value}`);
+              console.log(`  - Está nos selecionados (numeric_id)? ${selectedCustomFields.includes(fieldNumericId)}`);
+              console.log(`  - Está nos selecionados (field_id)? ${selectedCustomFields.includes(fieldId)}`);
               
               // Verificar se este campo foi selecionado (por ID numérico ou UUID)
               if (selectedCustomFields.includes(fieldNumericId) || selectedCustomFields.includes(fieldId)) {
                 const fieldKey = fieldNumericId || fieldId;
                 leadPayload[fieldKey] = customValue.value;
                 console.log(`✅ Campo personalizado incluído: ${fieldKey} = ${customValue.value}`);
+              } else {
+                console.log(`⚠️ Campo personalizado NÃO incluído (não selecionado)`);
               }
             });
           } else {
@@ -141,7 +166,12 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
           console.error('❌ Erro ao processar campos personalizados:', error);
           // Falha silenciosa para não quebrar o webhook
         }
+      } else {
+        console.log('ℹ️ Nenhum campo personalizado selecionado na configuração');
       }
+      
+      console.log('🎯 DEBUG CAMPOS PERSONALIZADOS - FIM');
+      console.log('📊 Payload final do lead:', JSON.stringify(leadPayload, null, 2));
       
       const payload = {
         event: 'lead_created',
@@ -229,7 +259,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-08:45 - Campos Personalizados Implementados');
+  console.log('Deploy Version: 2025-11-11-09:00 - Debug Detalhado Campos Personalizados');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
