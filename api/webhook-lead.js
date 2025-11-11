@@ -160,6 +160,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       // Payload construído com sucesso
       
       // Fazer requisição HTTP
+      const startTime = Date.now();
       try {
         const response = await fetch(config.webhook_url, {
           method: 'POST',
@@ -181,12 +182,15 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
             .from('webhook_trigger_logs')
             .insert({
               config_id: config.id,
+              company_id: companyId,
               trigger_event: 'lead_created',
-              success: response.ok,
+              payload: payload,
+              webhook_url: config.webhook_url,
               response_status: response.status,
               response_body: responseText,
+              response_headers: {},
               error_message: response.ok ? null : `HTTP ${response.status}: ${response.statusText}`,
-              created_at: new Date().toISOString()
+              execution_time_ms: Date.now() - startTime
             });
           
           if (logError) {
@@ -213,12 +217,15 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
             .from('webhook_trigger_logs')
             .insert({
               config_id: config.id,
+              company_id: companyId,
               trigger_event: 'lead_created',
-              success: false,
+              payload: payload,
+              webhook_url: config.webhook_url,
               response_status: null,
               response_body: null,
+              response_headers: {},
               error_message: fetchError.message,
-              created_at: new Date().toISOString()
+              execution_time_ms: Date.now() - startTime
             });
           console.log('✅ Log de erro registrado no banco de dados');
         } catch (logError) {
@@ -235,7 +242,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-10:01 - Logs Otimizados Produção');
+  console.log('Deploy Version: 2025-11-11-10:12 - Correção Sistema Logs');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
