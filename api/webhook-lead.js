@@ -104,6 +104,11 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       console.log('🎯 Campos personalizados selecionados:', selectedCustomFields);
       console.log('📊 Tipo dos campos selecionados:', typeof selectedCustomFields, Array.isArray(selectedCustomFields));
       console.log('📈 Quantidade de campos selecionados:', selectedCustomFields.length);
+      console.log('🔍 VERIFICAÇÃO CRÍTICA:');
+      console.log('  - config.payload_fields existe?', !!config.payload_fields);
+      console.log('  - config.payload_fields.custom_fields existe?', !!config.payload_fields?.custom_fields);
+      console.log('  - É array?', Array.isArray(config.payload_fields?.custom_fields));
+      console.log('  - Conteúdo bruto:', config.payload_fields?.custom_fields);
       
       if (selectedCustomFields.length > 0) {
         try {
@@ -168,6 +173,10 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       } else {
         console.log('ℹ️ Nenhum campo personalizado selecionado na configuração');
+        console.log('🔍 DIAGNÓSTICO:');
+        console.log('  - selectedCustomFields.length:', selectedCustomFields.length);
+        console.log('  - selectedCustomFields:', JSON.stringify(selectedCustomFields));
+        console.log('  - config.payload_fields?.custom_fields:', JSON.stringify(config.payload_fields?.custom_fields));
       }
       
       console.log('🎯 DEBUG CAMPOS PERSONALIZADOS - FIM');
@@ -259,7 +268,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:00 - Debug Detalhado Campos Personalizados');
+  console.log('Deploy Version: 2025-11-11-09:18 - Debug Crítico Configuração');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
