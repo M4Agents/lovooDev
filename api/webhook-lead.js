@@ -304,7 +304,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:43 - Correção Timing Issue');
+  console.log('Deploy Version: 2025-11-11-09:53 - Correção Estrutura Dados');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -720,9 +720,26 @@ async function processCustomField(supabase, companyId, fieldName, fieldValue) {
       console.log(`    - ✅ Campo criado via RPC com ID: ${fieldId}`);
     }
     
+    // Buscar dados completos do campo para consistência
+    let fieldData = null;
+    if (existingField) {
+      fieldData = existingField;
+    } else {
+      // Para campos criados, buscar dados completos
+      const { data: createdField } = await supabase
+        .from('lead_custom_fields')
+        .select('*')
+        .eq('id', fieldId)
+        .single();
+      fieldData = createdField;
+    }
+    
     return {
       field_id: fieldId,
-      value: fieldValue
+      value: fieldValue,
+      numeric_id: fieldData?.numeric_id,    // ✅ ADICIONAR para webhook
+      field_name: fieldData?.name,          // ✅ ADICIONAR para webhook
+      field_label: fieldData?.field_label   // ✅ ADICIONAR para webhook
     };
     
   } catch (error) {
@@ -1023,10 +1040,13 @@ async function processCustomFieldById(supabase, companyId, numericId, value) {
     console.log(`- Tipo: ${fieldData.field_type}`);
     console.log(`- ID: ${fieldData.id}`);
     
-    // Retornar dados para inserção
+    // Retornar dados completos para inserção E webhook
     return {
       field_id: fieldData.id,
-      value: String(value)
+      value: String(value),
+      numeric_id: fieldData.numeric_id,    // ✅ ADICIONAR para webhook
+      field_name: fieldData.name,          // ✅ ADICIONAR para webhook
+      field_label: fieldData.field_label   // ✅ ADICIONAR para webhook
     };
     
   } catch (error) {
