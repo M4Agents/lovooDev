@@ -149,6 +149,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       }
       
+      // Construir payload APÓS adicionar todos os campos (incluindo personalizados)
       const payload = {
         event: 'lead_created',
         timestamp: new Date().toISOString(),
@@ -157,7 +158,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       };
       
-      // Payload construído com sucesso
+      // Payload construído com todos os campos (incluindo personalizados)
       
       // Fazer requisição HTTP
       const startTime = Date.now();
