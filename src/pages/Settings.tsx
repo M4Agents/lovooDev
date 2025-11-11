@@ -619,10 +619,43 @@ export const Settings: React.FC = () => {
     if (!company?.id) return;
     
     try {
-      const logs = await api.getWebhookTriggerLogs(company.id);
-      setWebhookLogs(logs);
+      // Usar query direta em vez da RPC problemática
+      const { data: configs } = await supabase
+        .from('webhook_trigger_configs')
+        .select('id, name, webhook_url')
+        .eq('company_id', company.id);
+      
+      const configIds = configs?.map(c => c.id) || [];
+      
+      if (configIds.length > 0) {
+        const { data: logs } = await supabase
+          .from('webhook_trigger_logs')
+          .select('id, config_id, response_status, response_body, error_message, created_at')
+          .in('config_id', configIds)
+          .order('created_at', { ascending: false });
+        
+        // Transformar dados para formato esperado
+        const transformedLogs = logs?.map((log: any) => {
+          const config = configs?.find(c => c.id === log.config_id);
+          return {
+            id: log.id,
+            config_id: log.config_id,
+            config_name: config?.name || 'Webhook',
+            webhook_url: config?.webhook_url || '',
+            response_status: log.response_status,
+            response_body: log.response_body,
+            error_message: log.error_message,
+            created_at: log.created_at
+          };
+        }) || [];
+        
+        setWebhookLogs(transformedLogs);
+      } else {
+        setWebhookLogs([]);
+      }
     } catch (error) {
       console.error('Error loading webhook logs:', error);
+      setWebhookLogs([]);
     }
   };
 
@@ -681,6 +714,7 @@ export const Settings: React.FC = () => {
         .select(`
           id,
           config_id,
+          payload,
           response_status,
           response_body,
           error_message,
@@ -771,10 +805,12 @@ export const Settings: React.FC = () => {
           webhook_url: config?.webhook_url || '',
           trigger_event: 'lead_created', // Valor fixo já que todos são lead_created
           success: isSuccess(), // Lógica melhorada para determinar sucesso
+          payload: log.payload, // Incluir payload para funcionalidade "Ver Payload"
           response_status: log.response_status,
           response_body: log.response_body,
           error_message: log.error_message,
-          created_at: log.created_at
+          created_at: log.created_at,
+          triggered_at: log.created_at // Alias para compatibilidade
         };
       });
       
@@ -796,9 +832,49 @@ export const Settings: React.FC = () => {
     
     try {
       console.log('🔄 Carregando estatísticas dos logs...');
-      const stats = await api.getAdvancedWebhookStats(company.id);
-      setAdvancedLogsStats(stats);
-      console.log('✅ Estatísticas carregadas:', stats);
+      
+      // Buscar configurações da empresa
+      const { data: configs } = await supabase
+        .from('webhook_trigger_configs')
+        .select('id')
+        .eq('company_id', company.id);
+      
+      const configIds = configs?.map(c => c.id) || [];
+      
+      if (configIds.length > 0) {
+        // Buscar logs da empresa usando query direta
+        const { data: logs } = await supabase
+          .from('webhook_trigger_logs')
+          .select('response_status, error_message, created_at')
+          .in('config_id', configIds);
+        
+        // Calcular estatísticas localmente
+        const stats = {
+          total: logs?.length || 0,
+          success: logs?.filter((log: any) => {
+            if (log.response_status !== null && log.response_status !== undefined) {
+              return log.response_status >= 200 && log.response_status < 300;
+            }
+            return !log.error_message;
+          }).length || 0,
+          errors: logs?.filter((log: any) => {
+            if (log.response_status !== null && log.response_status !== undefined) {
+              return log.response_status < 200 || log.response_status >= 300;
+            }
+            return !!log.error_message;
+          }).length || 0,
+          last24h: logs?.filter((log: any) => {
+            const logDate = new Date(log.created_at);
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            return logDate >= yesterday;
+          }).length || 0
+        };
+        
+        setAdvancedLogsStats(stats);
+        console.log('✅ Estatísticas carregadas:', stats);
+      } else {
+        setAdvancedLogsStats({ total: 0, success: 0, errors: 0, last24h: 0 });
+      }
     } catch (error) {
       console.error('❌ Erro ao carregar estatísticas:', error);
     }
