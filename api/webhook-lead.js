@@ -25,16 +25,47 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       return;
     }
     
+    console.log('🔍 DEBUG FILTRO DE CONFIGURAÇÕES:');
+    console.log('📊 Total de configs retornadas:', configs?.length || 0);
+    
+    if (configs && configs.length > 0) {
+      configs.forEach((config, index) => {
+        console.log(`📋 Config ${index + 1}:`);
+        console.log(`  - ID: ${config.id}`);
+        console.log(`  - Nome: ${config.name}`);
+        console.log(`  - is_active: ${config.is_active}`);
+        console.log(`  - trigger_events: ${JSON.stringify(config.trigger_events)}`);
+        console.log(`  - trigger_events tipo: ${typeof config.trigger_events}`);
+        console.log(`  - É array? ${Array.isArray(config.trigger_events)}`);
+        console.log(`  - Inclui 'lead_created'? ${config.trigger_events?.includes('lead_created')}`);
+        console.log(`  - Passa no filtro? ${config.is_active && config.trigger_events?.includes('lead_created')}`);
+      });
+    }
+    
     const activeConfigs = configs?.filter(config => 
       config.is_active && 
       config.trigger_events?.includes('lead_created')
     ) || [];
     
     console.log(`📋 Encontradas ${activeConfigs.length} configurações ativas para lead_created`);
+    console.log('🔍 activeConfigs detalhadas:', JSON.stringify(activeConfigs, null, 2));
     
     // 2. Disparar cada webhook
+    console.log('🔄 INICIANDO LOOP DE CONFIGURAÇÕES ATIVAS');
+    console.log(`📊 Quantidade de configs para processar: ${activeConfigs.length}`);
+    
+    if (activeConfigs.length === 0) {
+      console.log('❌ PROBLEMA: Nenhuma configuração ativa encontrada para lead_created!');
+      console.log('🔍 Possíveis causas:');
+      console.log('  - trigger_events não contém "lead_created"');
+      console.log('  - is_active é false');
+      console.log('  - Configuração não existe');
+      return;
+    }
+    
     for (const config of activeConfigs) {
-      console.log(`🎯 Disparando webhook: ${config.name}`);
+      console.log(`🎯 ENTRANDO NO LOOP - Disparando webhook: ${config.name}`);
+      console.log(`📋 Config ID: ${config.id}`);
       
       // Construir payload dinâmico baseado nos campos selecionados
       console.log('🔍 Configuração payload_fields:', config.payload_fields);
@@ -96,6 +127,8 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
           console.log(`⚠️ Campo da empresa do lead não disponível: ${field}`);
         }
       });
+      
+      console.log('🚀 CHEGOU NA SEÇÃO DE CAMPOS PERSONALIZADOS');
       
       // Adicionar campos personalizados selecionados - NOVO E SEGURO
       const selectedCustomFields = config.payload_fields?.custom_fields || [];
@@ -268,7 +301,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:18 - Debug Crítico Configuração');
+  console.log('Deploy Version: 2025-11-11-09:27 - Debug Filtro Configurações');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
