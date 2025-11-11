@@ -5,6 +5,10 @@
 
 // Função para disparar webhooks avançados automaticamente
 async function triggerAdvancedWebhooks(leadData, companyId) {
+  console.log('🚀 FUNÇÃO triggerAdvancedWebhooks INICIADA');
+  console.log('📋 PARÂMETROS RECEBIDOS:');
+  console.log('  - leadData:', JSON.stringify(leadData, null, 2));
+  console.log('  - companyId:', companyId);
   console.log('🚀 DISPARANDO WEBHOOKS AVANÇADOS');
   console.log('Lead ID:', leadData.lead_id);
   console.log('Company ID:', companyId);
@@ -301,7 +305,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:27 - Debug Filtro Configurações');
+  console.log('Deploy Version: 2025-11-11-09:36 - Debug Chamada Função');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -470,7 +474,15 @@ async function createLeadDirectSQL(params) {
     
     // 6. DISPARAR WEBHOOKS AVANÇADOS AUTOMATICAMENTE
     console.log('🚀 INICIANDO DISPARO DE WEBHOOKS AVANÇADOS');
+    console.log('📊 DADOS PARA WEBHOOK:');
+    console.log('  - lead_id:', lead.lead_id);
+    console.log('  - company_id:', lead.company_id);
+    console.log('  - name:', detectedFields.name || 'Lead sem nome');
+    console.log('  - email:', detectedFields.email || null);
+    console.log('  - phone:', detectedFields.phone || null);
+    
     try {
+      console.log('🎯 CHAMANDO triggerAdvancedWebhooks...');
       await triggerAdvancedWebhooks({
         lead_id: lead.lead_id,
         name: detectedFields.name || 'Lead sem nome',
@@ -480,6 +492,7 @@ async function createLeadDirectSQL(params) {
       console.log('✅ Webhooks avançados disparados com sucesso');
     } catch (webhookError) {
       console.error('❌ Erro ao disparar webhooks avançados:', webhookError);
+      console.error('❌ Stack trace:', webhookError.stack);
       // Não falhar a criação do lead por causa do webhook
     }
     
