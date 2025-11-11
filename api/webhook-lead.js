@@ -149,32 +149,31 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       
       if (selectedCustomFields.length > 0) {
         try {
-          console.log('🔍 INICIANDO BUSCA DE CAMPOS PERSONALIZADOS');
-          console.log('📊 Lead ID para busca:', leadData.lead_id);
+          console.log('🔍 USANDO CAMPOS PERSONALIZADOS JÁ PROCESSADOS (CORREÇÃO TIMING ISSUE)');
+          console.log('📊 Lead ID:', leadData.lead_id);
           console.log('🎯 Campos que estamos procurando:', selectedCustomFields);
           
-          // Buscar valores dos campos personalizados do lead
-          const { data: customValues, error: customError } = await supabase
-            .from('lead_custom_values')
-            .select(`
-              field_id,
-              value,
-              lead_custom_fields (
-                numeric_id,
-                field_name,
-                field_label
-              )
-            `)
-            .eq('lead_id', leadData.lead_id);
+          // CORREÇÃO: Usar dados já processados em vez de buscar no banco
+          // Isso evita o timing issue onde a busca acontece antes do commit
+          const customFieldsFromProcessed = leadData.custom_fields_processed || [];
+          console.log('📊 Campos processados recebidos:', customFieldsFromProcessed.length);
           
-          console.log('📋 RESULTADO DA BUSCA:');
-          console.log('- Erro:', customError);
+          // Converter para formato compatível com a lógica existente
+          const customValues = customFieldsFromProcessed.map(cf => ({
+            field_id: cf.field_id,
+            value: cf.value,
+            lead_custom_fields: {
+              numeric_id: cf.numeric_id,
+              field_name: cf.field_name || `campo_${cf.numeric_id}`,
+              field_label: cf.field_label || `Campo ${cf.numeric_id}`
+            }
+          }));
+          
+          console.log('📋 DADOS CONVERTIDOS PARA PROCESSAMENTO:');
           console.log('- Dados encontrados:', customValues?.length || 0);
           console.log('- Valores completos:', JSON.stringify(customValues, null, 2));
           
-          if (customError) {
-            console.error('❌ Erro ao buscar campos personalizados:', customError);
-          } else if (customValues && customValues.length > 0) {
+          if (customValues && customValues.length > 0) {
             console.log('✅ Valores de campos personalizados encontrados:', customValues.length);
             
             // Adicionar campos personalizados selecionados ao payload
@@ -305,7 +304,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:36 - Debug Chamada Função');
+  console.log('Deploy Version: 2025-11-11-09:43 - Correção Timing Issue');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -437,13 +436,13 @@ async function createLeadDirectSQL(params) {
     console.log('🔧 INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS');
     console.log('Lead Company ID:', lead.company_id);
     console.log('Form Data para campos personalizados:', params.form_data);
-    const customFieldsData = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
-    console.log('🔧 CAMPOS PERSONALIZADOS PROCESSADOS:', customFieldsData);
+    const customFieldsProcessed = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
+    console.log('🔧 CAMPOS PERSONALIZADOS PROCESSADOS:', customFieldsProcessed);
     
     // 5. Inserir valores dos campos personalizados
     console.log('💾 INSERINDO VALORES DOS CAMPOS PERSONALIZADOS');
-    if (customFieldsData.length > 0) {
-      const customValues = customFieldsData.map(field => ({
+    if (customFieldsProcessed.length > 0) {
+      const customValues = customFieldsProcessed.map(field => ({
         lead_id: lead.lead_id,
         field_id: field.field_id,
         value: String(field.value)
@@ -483,11 +482,13 @@ async function createLeadDirectSQL(params) {
     
     try {
       console.log('🎯 CHAMANDO triggerAdvancedWebhooks...');
+      console.log('📊 Passando campos personalizados processados:', customFieldsProcessed.length);
       await triggerAdvancedWebhooks({
         lead_id: lead.lead_id,
         name: detectedFields.name || 'Lead sem nome',
         email: detectedFields.email || null,
-        phone: detectedFields.phone || null
+        phone: detectedFields.phone || null,
+        custom_fields_processed: customFieldsProcessed // NOVO: passar dados já processados
       }, lead.company_id);
       console.log('✅ Webhooks avançados disparados com sucesso');
     } catch (webhookError) {
