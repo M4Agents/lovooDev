@@ -1531,7 +1531,10 @@ export const api = {
       // Aplicar filtros adicionais no frontend se necessário
       if (options.status) {
         logs = logs.filter((log: any) => {
-          return options.status === 'success' ? log.success : !log.success;
+          const isSuccess = log.response_status !== null && log.response_status !== undefined
+            ? (log.response_status >= 200 && log.response_status < 300)
+            : !log.error_message;
+          return options.status === 'success' ? isSuccess : !isSuccess;
         });
       }
 
@@ -1573,10 +1576,24 @@ export const api = {
       
       const stats = {
         total: logs.length,
-        success: logs.filter((log: any) => log.success).length,
-        errors: logs.filter((log: any) => !log.success).length,
+        success: logs.filter((log: any) => {
+          // Sucesso = response_status 2xx (200-299) e sem erros de rede
+          if (log.response_status !== null && log.response_status !== undefined) {
+            return log.response_status >= 200 && log.response_status < 300;
+          }
+          // Se não há erro explícito = provavelmente sucesso
+          return !log.error_message;
+        }).length,
+        errors: logs.filter((log: any) => {
+          // Erro = response_status fora de 2xx ou com erros de rede
+          if (log.response_status !== null && log.response_status !== undefined) {
+            return log.response_status < 200 || log.response_status >= 300;
+          }
+          // Se há erro explícito = erro
+          return !!log.error_message;
+        }).length,
         last24h: logs.filter((log: any) => {
-          const logDate = new Date(log.created_at);
+          const logDate = new Date(log.triggered_at || log.created_at);
           const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
           return logDate >= yesterday;
         }).length
