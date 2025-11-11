@@ -177,14 +177,15 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         console.log(`📥 Resposta: ${response.status} ${response.statusText}`);
         console.log(`📄 Body: ${responseText}`);
         
-        // Registrar log no banco de dados
+        // Registrar log no banco de dados (MESMO payload enviado)
         try {
           const { data: logResult, error: logError } = await supabase
             .from('webhook_trigger_logs')
             .insert({
               config_id: config.id,
               company_id: companyId,
-              trigger_event: 'lead_created',
+              lead_id: leadData.lead_id,
+              event_type: 'lead_created',
               payload: payload,
               webhook_url: config.webhook_url,
               response_status: response.status,
@@ -212,14 +213,15 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       } catch (fetchError) {
         console.error(`❌ Erro ao disparar webhook ${config.name}:`, fetchError.message);
         
-        // Registrar erro no log
+        // Registrar erro no log (MESMO payload que tentou enviar)
         try {
           await supabase
             .from('webhook_trigger_logs')
             .insert({
               config_id: config.id,
               company_id: companyId,
-              trigger_event: 'lead_created',
+              lead_id: leadData.lead_id,
+              event_type: 'lead_created',
               payload: payload,
               webhook_url: config.webhook_url,
               response_status: null,
