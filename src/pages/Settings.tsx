@@ -68,6 +68,10 @@ export const Settings: React.FC = () => {
     limit: 50
   });
   
+  // Estado para modal de visualização do payload
+  const [selectedPayload, setSelectedPayload] = useState<any>(null);
+  const [payloadModalOpen, setPayloadModalOpen] = useState(false);
+  
   // Estados para abas principais - NOVA ESTRUTURA
   const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'empresas'>('integracoes');
   const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
@@ -813,6 +817,19 @@ export const Settings: React.FC = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  // Função para abrir modal de visualização do payload
+  const handleViewPayload = (log: any) => {
+    setSelectedPayload({
+      payload: log.payload,
+      webhookName: log.config_name || 'Webhook',
+      webhookUrl: log.webhook_url,
+      responseStatus: log.response_status,
+      executionTime: log.execution_time_ms,
+      triggeredAt: log.triggered_at
+    });
+    setPayloadModalOpen(true);
   };
 
   const applyLogsFilters = () => {
@@ -1802,6 +1819,21 @@ export const Settings: React.FC = () => {
                                 {log.response_status && <span>Status: {log.response_status}</span>}
                                 <span>Data: {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Data não disponível'}</span>
                               </div>
+                            </div>
+                            
+                            {/* Botão Ver Payload */}
+                            <div className="flex-shrink-0">
+                              <button
+                                onClick={() => handleViewPayload(log)}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                                title="Visualizar payload enviado"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Ver Payload
+                              </button>
                             </div>
                           </div>
                           
@@ -2914,6 +2946,87 @@ export const Settings: React.FC = () => {
                 </div>
 
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualização do Payload */}
+      {payloadModalOpen && selectedPayload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Payload Enviado</h2>
+                <p className="text-sm text-slate-600 mt-1">{selectedPayload.webhookName}</p>
+              </div>
+              <button
+                onClick={() => setPayloadModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {/* Informações do Webhook */}
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-sm font-medium text-slate-600">URL:</span>
+                  <p className="text-sm text-slate-900 font-mono break-all">{selectedPayload.webhookUrl}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-slate-600">Status:</span>
+                  <p className="text-sm text-slate-900">{selectedPayload.responseStatus || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-slate-600">Tempo de Execução:</span>
+                  <p className="text-sm text-slate-900">{selectedPayload.executionTime ? `${selectedPayload.executionTime}ms` : 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-slate-600">Data/Hora:</span>
+                  <p className="text-sm text-slate-900">
+                    {selectedPayload.triggeredAt ? new Date(selectedPayload.triggeredAt).toLocaleString('pt-BR') : 'N/A'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Payload JSON */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium text-slate-900">Payload JSON</h3>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(selectedPayload.payload, null, 2));
+                      // Você pode adicionar um toast aqui se quiser
+                    }}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                    title="Copiar payload"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copiar
+                  </button>
+                </div>
+                
+                <div className="bg-slate-900 text-slate-100 rounded-lg p-4 overflow-auto">
+                  <pre className="text-sm font-mono whitespace-pre-wrap">
+                    {JSON.stringify(selectedPayload.payload, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 p-6 border-t border-slate-200">
+              <button
+                onClick={() => setPayloadModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

@@ -354,6 +354,7 @@ BEGIN
     wtc.name as config_name,
     wtl.trigger_event,
     wtl.webhook_url,
+    wtl.payload,
     wtl.response_status,
     wtl.response_body,
     wtl.error_message,
