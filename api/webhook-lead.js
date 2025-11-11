@@ -29,56 +29,29 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       return;
     }
     
-    console.log('🔍 DEBUG FILTRO DE CONFIGURAÇÕES:');
-    console.log('📊 Total de configs retornadas:', configs?.length || 0);
-    
-    if (configs && configs.length > 0) {
-      configs.forEach((config, index) => {
-        console.log(`📋 Config ${index + 1}:`);
-        console.log(`  - ID: ${config.id}`);
-        console.log(`  - Nome: ${config.name}`);
-        console.log(`  - is_active: ${config.is_active}`);
-        console.log(`  - trigger_events: ${JSON.stringify(config.trigger_events)}`);
-        console.log(`  - trigger_events tipo: ${typeof config.trigger_events}`);
-        console.log(`  - É array? ${Array.isArray(config.trigger_events)}`);
-        console.log(`  - Inclui 'lead_created'? ${config.trigger_events?.includes('lead_created')}`);
-        console.log(`  - Passa no filtro? ${config.is_active && config.trigger_events?.includes('lead_created')}`);
-      });
-    }
+    // Filtrar configurações ativas para lead_created
     
     const activeConfigs = configs?.filter(config => 
       config.is_active && 
       config.trigger_events?.includes('lead_created')
     ) || [];
     
-    console.log(`📋 Encontradas ${activeConfigs.length} configurações ativas para lead_created`);
-    console.log('🔍 activeConfigs detalhadas:', JSON.stringify(activeConfigs, null, 2));
-    
-    // 2. Disparar cada webhook
-    console.log('🔄 INICIANDO LOOP DE CONFIGURAÇÕES ATIVAS');
-    console.log(`📊 Quantidade de configs para processar: ${activeConfigs.length}`);
+    if (activeConfigs.length > 0) {
+      console.log(`📋 Processando ${activeConfigs.length} webhook(s) para lead_created`);
+    }
     
     if (activeConfigs.length === 0) {
-      console.log('❌ PROBLEMA: Nenhuma configuração ativa encontrada para lead_created!');
-      console.log('🔍 Possíveis causas:');
-      console.log('  - trigger_events não contém "lead_created"');
-      console.log('  - is_active é false');
-      console.log('  - Configuração não existe');
+      console.log('⚠️ Nenhuma configuração de webhook ativa encontrada');
       return;
     }
     
+    // 2. Disparar cada webhook
     for (const config of activeConfigs) {
-      console.log(`🎯 ENTRANDO NO LOOP - Disparando webhook: ${config.name}`);
-      console.log(`📋 Config ID: ${config.id}`);
+      console.log(`🎯 Disparando webhook: ${config.name}`);
       
       // Construir payload dinâmico baseado nos campos selecionados
-      console.log('🔍 Configuração payload_fields:', config.payload_fields);
-      
-      // Campos padrão (fallback) se não houver configuração
       const defaultLeadFields = ['name', 'email', 'phone', 'status', 'origin'];
       const selectedLeadFields = config.payload_fields?.lead || defaultLeadFields;
-      
-      console.log('📋 Campos selecionados do lead:', selectedLeadFields);
       
       // Dados disponíveis do lead (todos os campos da tabela leads)
       const availableLeadData = {
@@ -113,7 +86,6 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       selectedLeadFields.forEach(field => {
         if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
           leadPayload[field] = availableLeadData[field];
-          console.log(`✅ Campo do lead incluído: ${field} = ${availableLeadData[field]}`);
         } else {
           console.log(`⚠️ Campo do lead não disponível: ${field}`);
         }
@@ -121,42 +93,23 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
       
       // Adicionar campos da empresa do lead selecionados
       const selectedCompanyFields = config.payload_fields?.empresa || [];
-      console.log('🏢 Campos selecionados da empresa do lead:', selectedCompanyFields);
       
       selectedCompanyFields.forEach(field => {
         if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
           leadPayload[field] = availableLeadData[field];
-          console.log(`✅ Campo da empresa do lead incluído: ${field} = ${availableLeadData[field]}`);
-        } else {
-          console.log(`⚠️ Campo da empresa do lead não disponível: ${field}`);
         }
       });
       
-      console.log('🚀 CHEGOU NA SEÇÃO DE CAMPOS PERSONALIZADOS');
       
       // Adicionar campos personalizados selecionados - NOVO E SEGURO
       const selectedCustomFields = config.payload_fields?.custom_fields || [];
-      console.log('🎯 DEBUG CAMPOS PERSONALIZADOS - INÍCIO');
-      console.log('📋 Configuração completa payload_fields:', JSON.stringify(config.payload_fields, null, 2));
-      console.log('🎯 Campos personalizados selecionados:', selectedCustomFields);
-      console.log('📊 Tipo dos campos selecionados:', typeof selectedCustomFields, Array.isArray(selectedCustomFields));
-      console.log('📈 Quantidade de campos selecionados:', selectedCustomFields.length);
-      console.log('🔍 VERIFICAÇÃO CRÍTICA:');
-      console.log('  - config.payload_fields existe?', !!config.payload_fields);
-      console.log('  - config.payload_fields.custom_fields existe?', !!config.payload_fields?.custom_fields);
-      console.log('  - É array?', Array.isArray(config.payload_fields?.custom_fields));
-      console.log('  - Conteúdo bruto:', config.payload_fields?.custom_fields);
+      // Processar campos personalizados selecionados
       
       if (selectedCustomFields.length > 0) {
         try {
-          console.log('🔍 USANDO CAMPOS PERSONALIZADOS JÁ PROCESSADOS (CORREÇÃO TIMING ISSUE)');
-          console.log('📊 Lead ID:', leadData.lead_id);
-          console.log('🎯 Campos que estamos procurando:', selectedCustomFields);
-          
           // CORREÇÃO: Usar dados já processados em vez de buscar no banco
           // Isso evita o timing issue onde a busca acontece antes do commit
           const customFieldsFromProcessed = leadData.custom_fields_processed || [];
-          console.log('📊 Campos processados recebidos:', customFieldsFromProcessed.length);
           
           // Converter para formato compatível com a lógica existente
           const customValues = customFieldsFromProcessed.map(cf => ({
@@ -169,37 +122,24 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
             }
           }));
           
-          console.log('📋 DADOS CONVERTIDOS PARA PROCESSAMENTO:');
-          console.log('- Dados encontrados:', customValues?.length || 0);
-          console.log('- Valores completos:', JSON.stringify(customValues, null, 2));
-          
           if (customValues && customValues.length > 0) {
-            console.log('✅ Valores de campos personalizados encontrados:', customValues.length);
-            
             // Adicionar campos personalizados selecionados ao payload
-            console.log('🔄 PROCESSANDO CADA CAMPO PERSONALIZADO:');
-            customValues.forEach((customValue, index) => {
+            let includedCount = 0;
+            customValues.forEach((customValue) => {
               const fieldNumericId = customValue.lead_custom_fields?.numeric_id?.toString();
               const fieldId = customValue.field_id;
-              
-              console.log(`📋 Campo ${index + 1}:`);
-              console.log(`  - field_id: ${fieldId}`);
-              console.log(`  - numeric_id: ${customValue.lead_custom_fields?.numeric_id}`);
-              console.log(`  - numeric_id (string): ${fieldNumericId}`);
-              console.log(`  - field_label: ${customValue.lead_custom_fields?.field_label}`);
-              console.log(`  - value: ${customValue.value}`);
-              console.log(`  - Está nos selecionados (numeric_id)? ${selectedCustomFields.includes(fieldNumericId)}`);
-              console.log(`  - Está nos selecionados (field_id)? ${selectedCustomFields.includes(fieldId)}`);
               
               // Verificar se este campo foi selecionado (por ID numérico ou UUID)
               if (selectedCustomFields.includes(fieldNumericId) || selectedCustomFields.includes(fieldId)) {
                 const fieldKey = fieldNumericId || fieldId;
                 leadPayload[fieldKey] = customValue.value;
-                console.log(`✅ Campo personalizado incluído: ${fieldKey} = ${customValue.value}`);
-              } else {
-                console.log(`⚠️ Campo personalizado NÃO incluído (não selecionado)`);
+                includedCount++;
               }
             });
+            
+            if (includedCount > 0) {
+              console.log(`✅ ${includedCount} campos personalizados incluídos no payload`);
+            }
           } else {
             console.log('ℹ️ Nenhum valor de campo personalizado encontrado para este lead');
           }
@@ -207,16 +147,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
           console.error('❌ Erro ao processar campos personalizados:', error);
           // Falha silenciosa para não quebrar o webhook
         }
-      } else {
-        console.log('ℹ️ Nenhum campo personalizado selecionado na configuração');
-        console.log('🔍 DIAGNÓSTICO:');
-        console.log('  - selectedCustomFields.length:', selectedCustomFields.length);
-        console.log('  - selectedCustomFields:', JSON.stringify(selectedCustomFields));
-        console.log('  - config.payload_fields?.custom_fields:', JSON.stringify(config.payload_fields?.custom_fields));
       }
-      
-      console.log('🎯 DEBUG CAMPOS PERSONALIZADOS - FIM');
-      console.log('📊 Payload final do lead:', JSON.stringify(leadPayload, null, 2));
       
       const payload = {
         event: 'lead_created',
@@ -226,7 +157,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
         }
       };
       
-      console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+      // Payload construído com sucesso
       
       // Fazer requisição HTTP
       try {
@@ -304,7 +235,7 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-09:53 - Correção Estrutura Dados');
+  console.log('Deploy Version: 2025-11-11-10:01 - Logs Otimizados Produção');
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
 
@@ -433,11 +364,10 @@ async function createLeadDirectSQL(params) {
     }
     
     // 4. Processar campos personalizados (mapeamento inteligente)
-    console.log('🔧 INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS');
-    console.log('Lead Company ID:', lead.company_id);
-    console.log('Form Data para campos personalizados:', params.form_data);
     const customFieldsProcessed = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
-    console.log('🔧 CAMPOS PERSONALIZADOS PROCESSADOS:', customFieldsProcessed);
+    if (customFieldsProcessed.length > 0) {
+      console.log(`🔧 ${customFieldsProcessed.length} campos personalizados processados`);
+    }
     
     // 5. Inserir valores dos campos personalizados
     console.log('💾 INSERINDO VALORES DOS CAMPOS PERSONALIZADOS');
