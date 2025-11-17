@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
+import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -1175,22 +1176,7 @@ export const Settings: React.FC = () => {
               
               {/* WhatsApp Life */}
               {whatsappTab === 'whatsapp-life' && (
-                <div className="text-center py-12">
-                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
-                    <Smartphone className="w-8 h-8 text-green-600 mx-auto mt-2" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    🚧 WhatsApp Life - Em Desenvolvimento
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    Integração com WhatsApp pessoal/business local
-                  </p>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
-                    <p className="text-sm text-green-800">
-                      Funcionalidade em desenvolvimento. Em breve você poderá conectar seu WhatsApp local para automações avançadas.
-                    </p>
-                  </div>
-                </div>
+                <WhatsAppLifeModule />
               )}
               
               {/* Cloud API WhatsApp */}
