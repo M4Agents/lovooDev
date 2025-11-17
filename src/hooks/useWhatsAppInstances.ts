@@ -131,6 +131,52 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   }, [companyId, fetchInstances]);
 
   // =====================================================
+  // OBTER QR CODE (ANTI-CORS)
+  // =====================================================
+  const getQRCode = useCallback(async (instanceId: string): Promise<{
+    success: boolean;
+    data?: { qrcode: string; expires_at?: string };
+    error?: string;
+  }> => {
+    try {
+      console.log('[useWhatsAppInstances] Getting QR Code for:', instanceId);
+      
+      // ✅ ANTI-CORS: Chamar apenas RPC Function
+      const { data, error } = await supabase.rpc('get_whatsapp_life_qrcode_rpc', {
+        p_instance_id: instanceId,
+      });
+
+      console.log('[useWhatsAppInstances] RPC QR response:', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstances] Erro RPC QR:', error);
+        return {
+          success: false,
+          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
+        };
+      }
+
+      if (data?.success) {
+        return {
+          success: true,
+          data: data.data,
+        };
+      } else {
+        return {
+          success: false,
+          error: data?.error || 'Erro ao obter QR Code',
+        };
+      }
+    } catch (err) {
+      console.error('[useWhatsAppInstances] Erro ao obter QR Code:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao obter QR Code',
+      };
+    }
+  }, []);
+
+  // =====================================================
   // ATUALIZAR INSTÂNCIA
   // =====================================================
   const updateInstance = useCallback(async (
@@ -243,6 +289,7 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
     error,
     refetch,
     createInstance,
+    getQRCode,
     deleteInstance,
     updateInstance,
   };

@@ -3,11 +3,13 @@
 // =====================================================
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Plus, Smartphone, Crown } from 'lucide-react';
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
+import { AddInstanceModal } from './AddInstanceModal';
+import { QRCodeModal } from './QRCodeModal';
 
 // =====================================================
 // COMPONENTE PRINCIPAL (VERSÃO FUNCIONAL)
@@ -15,14 +17,20 @@ import { useCompany } from '../../hooks/useCompany';
 export const WhatsAppLifeModule: React.FC = () => {
   const { company } = useCompany();
   
+  // Estados dos modais
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [currentInstanceId, setCurrentInstanceId] = useState<string>('');
+  const [currentInstanceName, setCurrentInstanceName] = useState<string>('');
+  
   // Debug: Log company data
   console.log('[WhatsAppLifeModule] Company:', company);
   
   const { 
-    instances, 
     loading: instancesLoading, 
     error: instancesError,
     createInstance,
+    getQRCode,
     refetch: refetchInstances 
   } = useWhatsAppInstances(company?.id);
   
@@ -42,39 +50,47 @@ export const WhatsAppLifeModule: React.FC = () => {
 
   const loading = instancesLoading || planLoading;
 
-  // Handler para criar instância
-  const handleCreateInstance = async () => {
-    console.log('[WhatsAppLifeModule] Creating instance...');
-    console.log('[WhatsAppLifeModule] Can add:', canAddInstance);
-    console.log('[WhatsAppLifeModule] Company ID:', company?.id);
-    
+  // Handler para abrir modal de criação
+  const handleOpenAddModal = () => {
     if (!company?.id) {
       alert('Erro: Dados da empresa não encontrados');
       return;
     }
     
     if (!canAddInstance) {
-      alert('Erro: Limite de instâncias atingido ou dados não carregados');
+      alert('Erro: Limite de instâncias atingido para seu plano');
       return;
     }
     
+    setShowAddModal(true);
+  };
+
+  // Handler para confirmar criação da instância
+  const handleConfirmCreateInstance = async (instanceName: string) => {
+    console.log('[WhatsAppLifeModule] Creating instance:', instanceName);
+    
     try {
-      const result = await createInstance('Meu WhatsApp');
+      const result = await createInstance(instanceName);
       console.log('[WhatsAppLifeModule] Create result:', result);
       
       if (result.success) {
+        // Fechar modal de criação
+        setShowAddModal(false);
+        
+        // Atualizar dados
         refetchInstances();
         refetchPlan();
-        alert('✅ Instância criada com sucesso!\n\nID: ' + result.instanceId);
+        
+        // Abrir modal de QR Code
+        setCurrentInstanceId(result.instanceId || '');
+        setCurrentInstanceName(instanceName);
+        setShowQRModal(true);
       } else {
-        const errorMsg = result.error || 'Erro desconhecido ao criar instância';
-        console.error('[WhatsAppLifeModule] Create failed:', result);
-        alert('❌ Falha ao criar instância:\n\n' + errorMsg + '\n\nVerifique o console para mais detalhes.');
+        throw new Error(result.error || 'Erro desconhecido ao criar instância');
       }
     } catch (error) {
       console.error('[WhatsAppLifeModule] Create error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      alert('❌ Erro ao criar instância:\n\n' + errorMsg + '\n\nVerifique o console para mais detalhes.');
+      throw error; // Repassar erro para o modal tratar
     }
   };
 
@@ -108,7 +124,7 @@ export const WhatsAppLifeModule: React.FC = () => {
           </div>
           
           <button 
-            onClick={handleCreateInstance}
+            onClick={handleOpenAddModal}
             disabled={!canAddInstance || loading}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -153,7 +169,7 @@ export const WhatsAppLifeModule: React.FC = () => {
                 Conecte seu primeiro número WhatsApp para começar a usar o atendimento integrado
               </p>
               <button 
-                onClick={handleCreateInstance}
+                onClick={handleOpenAddModal}
                 disabled={!canAddInstance || loading}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -189,6 +205,23 @@ export const WhatsAppLifeModule: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modais */}
+      <AddInstanceModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onConfirm={handleConfirmCreateInstance}
+        loading={instancesLoading}
+        planLimits={planLimits}
+      />
+
+      <QRCodeModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        instanceId={currentInstanceId}
+        instanceName={currentInstanceName}
+        onGetQRCode={getQRCode}
+      />
     </div>
   );
 };

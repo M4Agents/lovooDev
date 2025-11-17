@@ -164,6 +164,11 @@ export interface UseInstancesReturn {
   error: string | null;
   refetch: () => Promise<void>;
   createInstance: (name: string) => Promise<CreateInstanceResponse>;
+  getQRCode: (instanceId: string) => Promise<{
+    success: boolean;
+    data?: { qrcode: string; expires_at?: string };
+    error?: string;
+  }>;
   deleteInstance: (instanceId: string) => Promise<void>;
   updateInstance: (instanceId: string, updates: Partial<WhatsAppLifeInstance>) => Promise<void>;
 }
