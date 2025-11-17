@@ -21,7 +21,7 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   const [error, setError] = useState<string | null>(null);
 
   // =====================================================
-  // BUSCAR INSTÂNCIAS
+  // BUSCAR INSTÂNCIAS (ANTI-CORS)
   // =====================================================
   const fetchInstances = useCallback(async () => {
     if (!companyId) {
@@ -34,27 +34,24 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${WHATSAPP_LIFE_CONSTANTS.API_ENDPOINTS.INSTANCES}?company_id=${companyId}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      console.log('[useWhatsAppInstances] Fetching instances for company:', companyId);
 
-      const data = await response.json();
+      // ✅ ANTI-CORS: Usar Supabase diretamente em vez de fetch
+      const { data, error } = await supabase
+        .from('whatsapp_life_instances')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao buscar instâncias');
+      console.log('[useWhatsAppInstances] Supabase response:', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstances] Supabase error:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
 
-      if (data.success) {
-        setInstances(data.data || []);
-      } else {
-        throw new Error(data.error || 'Erro desconhecido');
-      }
+      // data é um array de instâncias diretamente do Supabase
+      setInstances(data || []);
     } catch (err) {
       console.error('[useWhatsAppInstances] Erro ao buscar instâncias:', err);
       setError(err instanceof Error ? err.message : 'Erro ao buscar instâncias');
@@ -90,17 +87,21 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
     }
 
     try {
+      console.log('[useWhatsAppInstances] Creating instance:', { companyId, name: name.trim() });
+      
       // ✅ ANTI-CORS: Chamar apenas RPC Function
       const { data, error } = await supabase.rpc('create_whatsapp_life_instance_rpc', {
         p_company_id: companyId,
         p_instance_name: name.trim(),
       });
 
+      console.log('[useWhatsAppInstances] RPC create response:', { data, error });
+
       if (error) {
         console.error('[useWhatsAppInstances] Erro RPC:', error);
         return {
           success: false,
-          error: 'Erro ao comunicar com servidor',
+          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
         };
       }
 
