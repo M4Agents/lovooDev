@@ -4,12 +4,12 @@
 // Hook para verificar limites do plano da empresa
 
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 import { 
   PlanLimits, 
   PlanConfig, 
   UsePlanLimitsReturn,
-  PLAN_CONFIGS,
-  WHATSAPP_LIFE_CONSTANTS 
+  PLAN_CONFIGS
 } from '../types/whatsapp-life';
 
 // =====================================================
@@ -27,7 +27,7 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
   const [error, setError] = useState<string | null>(null);
 
   // =====================================================
-  // BUSCAR LIMITES DO PLANO
+  // BUSCAR LIMITES DO PLANO (ANTI-CORS)
   // =====================================================
   const fetchPlanLimits = useCallback(async () => {
     if (!companyId) {
@@ -39,26 +39,26 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${WHATSAPP_LIFE_CONSTANTS.API_ENDPOINTS.PLAN_LIMITS}?company_id=${companyId}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // ✅ ANTI-CORS: Chamar apenas RPC Function
+      const { data, error } = await supabase.rpc('check_whatsapp_life_plan_limit', {
+        p_company_id: companyId,
+      });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao verificar limites do plano');
+      if (error) {
+        console.error('[usePlanLimits] Erro RPC:', error);
+        throw new Error('Erro ao comunicar com servidor');
       }
 
-      if (data.success && data.data) {
-        setPlanLimits(data.data);
+      if (data) {
+        setPlanLimits({
+          canAdd: data.canAdd || false,
+          currentCount: data.currentCount || 0,
+          maxAllowed: data.maxAllowed || 1,
+          planType: data.planType || 'basic',
+          remaining: data.remaining || 0,
+        });
       } else {
-        throw new Error(data.error || 'Dados inválidos recebidos');
+        throw new Error('Dados inválidos recebidos');
       }
     } catch (err) {
       console.error('[usePlanLimits] Erro ao buscar limites:', err);

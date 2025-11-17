@@ -3,14 +3,49 @@
 // =====================================================
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Plus, Smartphone, Crown } from 'lucide-react';
+import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances';
+import { usePlanLimits } from '../../hooks/usePlanLimits';
+import { useCompany } from '../../hooks/useCompany';
 
 // =====================================================
-// COMPONENTE PRINCIPAL (VERSÃO BÁSICA)
+// COMPONENTE PRINCIPAL (VERSÃO FUNCIONAL)
 // =====================================================
 export const WhatsAppLifeModule: React.FC = () => {
-  const [loading] = useState(false);
+  const { company } = useCompany();
+  
+  const { 
+    instances, 
+    loading: instancesLoading, 
+    error: instancesError,
+    createInstance,
+    refetch: refetchInstances 
+  } = useWhatsAppInstances(company?.id);
+  
+  const { 
+    planLimits, 
+    canAddInstance, 
+    planConfig,
+    loading: planLoading,
+    error: planError,
+    refetch: refetchPlan
+  } = usePlanLimits(company?.id);
+
+  const loading = instancesLoading || planLoading;
+
+  // Handler para criar instância
+  const handleCreateInstance = async () => {
+    if (!canAddInstance) return;
+    
+    const result = await createInstance('Meu WhatsApp');
+    if (result.success) {
+      refetchInstances();
+      refetchPlan();
+    } else {
+      alert(result.error || 'Erro ao criar instância');
+    }
+  };
 
   // =====================================================
   // RENDER PRINCIPAL
@@ -30,7 +65,11 @@ export const WhatsAppLifeModule: React.FC = () => {
             </div>
           </div>
           
-          <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={handleCreateInstance}
+            disabled={!canAddInstance || loading}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Plus className="h-4 w-4" />
             Conectar WhatsApp
           </button>
@@ -39,17 +78,17 @@ export const WhatsAppLifeModule: React.FC = () => {
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-blue-600">0</div>
+            <div className="text-2xl font-bold text-blue-600">{planLimits.currentCount}</div>
             <div className="text-sm text-blue-700">Números Conectados</div>
           </div>
           
           <div className="bg-green-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-600">3</div>
+            <div className="text-2xl font-bold text-green-600">{planLimits.remaining}</div>
             <div className="text-sm text-green-700">Disponíveis</div>
           </div>
           
           <div className="bg-purple-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-600">3</div>
+            <div className="text-2xl font-bold text-purple-600">{planLimits.maxAllowed}</div>
             <div className="text-sm text-purple-700">Limite do Plano</div>
           </div>
         </div>
@@ -71,7 +110,11 @@ export const WhatsAppLifeModule: React.FC = () => {
               <p className="text-gray-600 mb-4">
                 Conecte seu primeiro número WhatsApp para começar a usar o atendimento integrado
               </p>
-              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              <button 
+                onClick={handleCreateInstance}
+                disabled={!canAddInstance || loading}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Conectar Primeiro WhatsApp
               </button>
             </div>
@@ -92,11 +135,11 @@ export const WhatsAppLifeModule: React.FC = () => {
         <div className="bg-purple-50 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-lg font-semibold text-purple-900">Plano Start</div>
-              <div className="text-sm text-purple-700">Até 3 números WhatsApp</div>
+              <div className="text-lg font-semibold text-purple-900">Plano {planConfig.planType}</div>
+              <div className="text-sm text-purple-700">Até {planLimits.maxAllowed} números WhatsApp</div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-semibold text-purple-900">R$ 97/mês</div>
+              <div className="text-lg font-semibold text-purple-900">{planConfig.price}</div>
               <button className="text-sm text-purple-600 hover:text-purple-800">
                 Fazer Upgrade
               </button>
