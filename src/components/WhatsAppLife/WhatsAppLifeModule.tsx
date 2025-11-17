@@ -65,13 +65,16 @@ export const WhatsAppLifeModule: React.FC = () => {
       if (result.success) {
         refetchInstances();
         refetchPlan();
-        alert('Instância criada com sucesso!');
+        alert('✅ Instância criada com sucesso!\n\nID: ' + result.instanceId);
       } else {
-        alert(result.error || 'Erro desconhecido ao criar instância');
+        const errorMsg = result.error || 'Erro desconhecido ao criar instância';
+        console.error('[WhatsAppLifeModule] Create failed:', result);
+        alert('❌ Falha ao criar instância:\n\n' + errorMsg + '\n\nVerifique o console para mais detalhes.');
       }
     } catch (error) {
       console.error('[WhatsAppLifeModule] Create error:', error);
-      alert('Erro ao criar instância: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      alert('❌ Erro ao criar instância:\n\n' + errorMsg + '\n\nVerifique o console para mais detalhes.');
     }
   };
 
