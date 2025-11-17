@@ -33,9 +33,11 @@ export const WhatsAppLifeModule: React.FC = () => {
     error: instancesError,
     generateQRCode,
     getTempInstanceStatus,
-    // confirmConnection, // TODO: Usar quando implementar monitoramento
-    // checkConnectionStatus, // TODO: Usar quando implementar monitoramento
-    getQRCode
+    getQRCode,
+    syncWithUazapi,
+    deleteInstance,
+    updateInstanceName,
+    fetchInstances
   } = useWhatsAppInstancesWebhook100(company?.id);
   
   const { 
@@ -124,15 +126,48 @@ export const WhatsAppLifeModule: React.FC = () => {
   }, [generateQRCode]);
 
   // Handlers para editar e excluir instâncias
-  const handleEditInstance = useCallback((instance: any) => {
-    setSelectedInstance(instance);
-    setShowEditModal(true);
-  }, []);
+  const handleEditInstance = useCallback(async (instance: any) => {
+    const newName = prompt(`Alterar nome da instância "${instance.instance_name}":`, instance.instance_name);
+    
+    if (newName && newName.trim() && newName.trim() !== instance.instance_name) {
+      try {
+        const result = await updateInstanceName(instance.id, newName.trim());
+        
+        if (result.success) {
+          alert(`Nome alterado com sucesso!\nDe: "${instance.instance_name}"\nPara: "${newName.trim()}"`);
+        } else {
+          alert(`Erro ao alterar nome: ${result.error}`);
+        }
+      } catch (error) {
+        alert(`Erro ao alterar nome: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+    }
+  }, [updateInstanceName]);
 
-  const handleDeleteInstance = useCallback((instance: any) => {
-    setSelectedInstance(instance);
-    setShowDeleteModal(true);
-  }, []);
+  const handleDeleteInstance = useCallback(async (instance: any) => {
+    const confirmDelete = confirm(
+      `Tem certeza que deseja excluir a instância "${instance.instance_name}"?\n\n` +
+      `Esta ação irá:\n` +
+      `• Remover a instância da aplicação\n` +
+      `• Tentar remover da Uazapi (se existir)\n` +
+      `• Esta ação não pode ser desfeita\n\n` +
+      `Confirmar exclusão?`
+    );
+    
+    if (confirmDelete) {
+      try {
+        const result = await deleteInstance(instance.id);
+        
+        if (result.success) {
+          alert(`Instância "${instance.instance_name}" excluída com sucesso!`);
+        } else {
+          alert(`Erro ao excluir instância: ${result.error}`);
+        }
+      } catch (error) {
+        alert(`Erro ao excluir instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+    }
+  }, [deleteInstance]);
 
   // Estado para armazenar dados do QR Code gerado
   const [qrCodeData, setQrCodeData] = useState<any>(null);
@@ -437,7 +472,15 @@ export const WhatsAppLifeModule: React.FC = () => {
                         </span>
                         {instance.connected_at && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR')}
+                            Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR', {
+                              timeZone: 'America/Sao_Paulo',
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
                           </p>
                         )}
                       </div>

@@ -235,18 +235,103 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   // =====================================================
   // RETORNO DO HOOK
   // =====================================================
+  // =====================================================
+  // SINCRONIZAR COM UAZAPI
+  // =====================================================
+  const syncWithUazapi = useCallback(async () => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { data, error } = await supabase.rpc('sync_instances_with_uazapi', {
+        p_company_id: companyId,
+      });
+
+      if (error) {
+        throw new Error(`Erro na sincronização: ${error.message}`);
+      }
+
+      // Recarregar instâncias após sincronização
+      await fetchInstances();
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro na sincronização:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro na sincronização',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
+  // =====================================================
+  // EXCLUIR INSTÂNCIA
+  // =====================================================
+  const deleteInstance = useCallback(async (instanceId: string) => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { data, error } = await supabase.rpc('delete_whatsapp_instance', {
+        p_instance_id: instanceId,
+        p_company_id: companyId,
+      });
+
+      if (error) {
+        throw new Error(`Erro ao excluir: ${error.message}`);
+      }
+
+      // Recarregar instâncias após exclusão
+      await fetchInstances();
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro ao excluir:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao excluir instância',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
+  // =====================================================
+  // ALTERAR NOME DA INSTÂNCIA
+  // =====================================================
+  const updateInstanceName = useCallback(async (instanceId: string, newName: string) => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { data, error } = await supabase.rpc('update_instance_name', {
+        p_instance_id: instanceId,
+        p_company_id: companyId,
+        p_new_name: newName,
+      });
+
+      if (error) {
+        throw new Error(`Erro ao alterar nome: ${error.message}`);
+      }
+
+      // Recarregar instâncias após alteração
+      await fetchInstances();
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro ao alterar nome:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao alterar nome',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
   return {
     instances,
     loading,
     error,
-    refetch,
-    createInstance,
     generateQRCode,
-    confirmConnection,
-    checkConnectionStatus,
     getTempInstanceStatus,
     getQRCode,
+    syncWithUazapi,
     deleteInstance,
-    updateInstance,
+    updateInstanceName,
+    fetchInstances
   };
 };
