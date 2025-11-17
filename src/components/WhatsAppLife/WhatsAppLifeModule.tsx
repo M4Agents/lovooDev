@@ -147,10 +147,7 @@ export const WhatsAppLifeModule: React.FC = () => {
   const handleDeleteInstance = useCallback(async (instance: any) => {
     const confirmDelete = confirm(
       `Tem certeza que deseja excluir a instância "${instance.instance_name}"?\n\n` +
-      `Esta ação irá:\n` +
-      `• Remover a instância da aplicação\n` +
-      `• Tentar remover da Uazapi (se existir)\n` +
-      `• Esta ação não pode ser desfeita\n\n` +
+      `Esta ação irá remover a instância da aplicação e não poderá ser desfeita.\n\n` +
       `Confirmar exclusão?`
     );
     
@@ -472,15 +469,19 @@ export const WhatsAppLifeModule: React.FC = () => {
                         </span>
                         {instance.connected_at && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR', {
-                              timeZone: 'America/Sao_Paulo',
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
-                            })}
+                            Conectado em {(() => {
+                              const date = new Date(instance.connected_at);
+                              // Ajustar para horário de São Paulo (UTC-3)
+                              const saoPauloTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));
+                              return saoPauloTime.toLocaleString('pt-BR', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit'
+                              });
+                            })()}
                           </p>
                         )}
                       </div>
