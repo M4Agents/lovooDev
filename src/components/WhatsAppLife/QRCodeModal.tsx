@@ -36,17 +36,27 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (isOpen && instanceId) {
       loadQRCode();
       
+      let attempts = 0;
+      const maxAttempts = 20; // 20 tentativas = 1 minuto
+      
       // POLLING PARA ATUALIZAR QR CODE AUTOMATICAMENTE
       const pollInterval = setInterval(() => {
-        if (!qrCode && loading) {
-          console.log('[QRCodeModal] Polling para QR Code...');
+        attempts++;
+        
+        if (!qrCode && loading && attempts < maxAttempts) {
+          console.log(`[QRCodeModal] Polling para QR Code... (${attempts}/${maxAttempts})`);
           loadQRCode();
+        } else if (attempts >= maxAttempts) {
+          console.log('[QRCodeModal] Timeout: Parando polling após', maxAttempts, 'tentativas');
+          setLoading(false);
+          setError('Timeout: QR Code não foi gerado em 1 minuto. Tente novamente.');
+          clearInterval(pollInterval);
         }
       }, 3000); // A cada 3 segundos
       
       return () => clearInterval(pollInterval);
     }
-  }, [isOpen, instanceId, qrCode, loading]);
+  }, [isOpen, instanceId]);
 
   // Timer para expiração do QR Code
   useEffect(() => {
@@ -80,17 +90,18 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
       if (result.success && result.data?.qrcode) {
         setQrCode(result.data.qrcode);
         setExpiresAt(result.data.expires_at || '');
+        setLoading(false); // PARAR LOADING QUANDO QR CODE CHEGAR
       } else if (result.success && result.data?.status === 'created_awaiting_connect') {
-        // TRATAR STATUS created_awaiting_connect - MANTER LOADING
-        setLoading(true); // Manter loading visual
+        // TRATAR STATUS created_awaiting_connect - CONTINUAR TENTANDO
         setError(''); // Sem erro, apenas processando
+        // NÃO PARAR LOADING - CONTINUAR POLLING
       } else if (result.success && result.data?.status === 'loading') {
-        // STATUS DE LOADING - MANTER LOADING VISUAL
-        setLoading(true);
+        // STATUS DE LOADING - CONTINUAR TENTANDO
         setError('');
+        // NÃO PARAR LOADING - CONTINUAR POLLING
       } else {
         setError(result.error || 'Erro ao obter QR Code');
-        setLoading(false);
+        setLoading(false); // PARAR LOADING EM CASO DE ERRO
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar QR Code');
@@ -210,6 +221,12 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                   <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-2" />
                   <p className="text-sm text-blue-600 font-medium">Gerando QR Code</p>
                   <p className="text-xs text-blue-500 mt-1">Aguarde alguns segundos...</p>
+                  <button
+                    onClick={handleClose}
+                    className="mt-3 px-3 py-1 text-xs text-blue-600 hover:text-blue-800 border border-blue-300 rounded hover:bg-blue-100"
+                  >
+                    Cancelar
+                  </button>
                 </div>
               </div>
             )}
