@@ -179,6 +179,12 @@ export interface UseInstancesReturn {
       expires_at: string;
       instance_name: string;
       company_id: string;
+      async_mode?: boolean;
+      status?: string;
+      message?: string;
+      webhook_url?: string;
+      uazapi_instance_id?: string;
+      uazapi_name?: string;
     };
     error?: string;
     planInfo?: any;
@@ -194,6 +200,21 @@ export interface UseInstancesReturn {
     success: boolean;
     status?: string;
     message?: string;
+    error?: string;
+  }>;
+  getTempInstanceStatus: (tempInstanceId: string) => Promise<{
+    success: boolean;
+    data?: {
+      temp_instance_id: string;
+      status: string;
+      qrcode?: string;
+      paircode?: string;
+      error_message?: string;
+      instance_name: string;
+      created_at: string;
+      updated_at: string;
+      expires_at: string;
+    };
     error?: string;
   }>;
   getQRCode: (instanceId: string) => Promise<{

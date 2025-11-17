@@ -3,7 +3,7 @@
 // =====================================================
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Plus, Smartphone, Crown } from 'lucide-react';
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
@@ -30,6 +30,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     loading: instancesLoading, 
     error: instancesError,
     generateQRCode,
+    getTempInstanceStatus,
     // confirmConnection, // TODO: Usar quando implementar monitoramento
     // checkConnectionStatus, // TODO: Usar quando implementar monitoramento
     getQRCode
@@ -66,12 +67,12 @@ export const WhatsAppLifeModule: React.FC = () => {
     setShowAddModal(true);
   };
 
-  // Handler para confirmar criação da instância (NOVO FLUXO)
+  // Handler para confirmar criação da instância (FLUXO WEBHOOK ASSÍNCRONO)
   const handleConfirmCreateInstance = async (instanceName: string) => {
     console.log('[WhatsAppLifeModule] Generating QR Code for:', instanceName);
     
     try {
-      // NOVO FLUXO: Gerar QR Code primeiro (não cria instância ainda)
+      // FLUXO WEBHOOK: Gerar QR Code assíncrono
       const result = await generateQRCode(instanceName);
       console.log('[WhatsAppLifeModule] QR Code result:', result);
       
@@ -79,16 +80,32 @@ export const WhatsAppLifeModule: React.FC = () => {
         // Fechar modal de criação
         setShowAddModal(false);
         
-        // Armazenar dados do QR Code
-        setQrCodeData(result.data);
-        
-        // Abrir modal de QR Code com dados temporários
-        setCurrentInstanceId(result.data.temp_instance_id);
-        setCurrentInstanceName(instanceName);
-        setShowQRModal(true);
-        
-        // TODO: Implementar monitoramento de conexão
-        // Quando WhatsApp for conectado, chamar confirmConnection()
+        // Verificar se é modo assíncrono (webhook)
+        if (result.data.async_mode) {
+          console.log('[WhatsAppLifeModule] Modo assíncrono detectado, iniciando polling...');
+          
+          // Armazenar dados iniciais
+          setQrCodeData({
+            ...result.data,
+            status: 'connecting',
+            qrcode: null, // Será preenchido pelo polling
+            message: 'Gerando QR Code... aguarde até 3 minutos'
+          });
+          
+          // Abrir modal de QR Code
+          setCurrentInstanceId(result.data.temp_instance_id);
+          setCurrentInstanceName(instanceName);
+          setShowQRModal(true);
+          
+          // Iniciar polling para verificar status
+          startTempInstancePolling(result.data.temp_instance_id);
+        } else {
+          // Modo síncrono (fallback)
+          setQrCodeData(result.data);
+          setCurrentInstanceId(result.data.temp_instance_id);
+          setCurrentInstanceName(instanceName);
+          setShowQRModal(true);
+        }
       } else {
         throw new Error(result.error || 'Erro ao gerar QR Code');
       }
@@ -100,6 +117,91 @@ export const WhatsAppLifeModule: React.FC = () => {
 
   // Estado para armazenar dados do QR Code gerado
   const [qrCodeData, setQrCodeData] = useState<any>(null);
+  
+  // Estado para controlar polling
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+
+  // Função para iniciar polling de instância temporária
+  const startTempInstancePolling = useCallback((tempInstanceId: string) => {
+    console.log('[WhatsAppLifeModule] Iniciando polling para:', tempInstanceId);
+    
+    // Limpar polling anterior se existir
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 90; // 3 minutos (90 * 2s = 180s)
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      console.log(`[WhatsAppLifeModule] Polling attempt ${attempts}/${maxAttempts}`);
+      
+      try {
+        const status = await getTempInstanceStatus(tempInstanceId);
+        console.log('[WhatsAppLifeModule] Status response:', status);
+        
+        if (status.success && status.data) {
+          const { qrcode, status: instanceStatus, error_message } = status.data;
+          
+          // Atualizar dados do QR Code
+          setQrCodeData((prev: any) => ({
+            ...prev,
+            qrcode,
+            status: instanceStatus,
+            error_message,
+            updated_at: status.data?.updated_at
+          }));
+          
+          // Se QR Code está disponível ou houve erro, parar polling
+          if (qrcode || instanceStatus === 'ready' || instanceStatus === 'error' || error_message) {
+            console.log('[WhatsAppLifeModule] Polling concluído:', { qrcode: !!qrcode, instanceStatus, error_message });
+            clearInterval(interval);
+            setPollingInterval(null);
+          }
+        }
+        
+        // Parar polling se atingir máximo de tentativas
+        if (attempts >= maxAttempts) {
+          console.log('[WhatsAppLifeModule] Polling timeout após', maxAttempts, 'tentativas');
+          clearInterval(interval);
+          setPollingInterval(null);
+          
+          // Atualizar com erro de timeout
+          setQrCodeData((prev: any) => ({
+            ...prev,
+            error_message: 'Timeout: QR Code não foi gerado em 3 minutos',
+            status: 'error'
+          }));
+        }
+      } catch (error) {
+        console.error('[WhatsAppLifeModule] Erro no polling:', error);
+        
+        // Em caso de erro, continuar tentando até o máximo
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          setPollingInterval(null);
+          
+          setQrCodeData((prev: any) => ({
+            ...prev,
+            error_message: 'Erro ao verificar status da instância',
+            status: 'error'
+          }));
+        }
+      }
+    }, 2000); // Poll a cada 2 segundos
+    
+    setPollingInterval(interval);
+  }, [getTempInstanceStatus, pollingInterval]);
+
+  // Limpar polling quando componente for desmontado
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   // Handler para QR Code personalizado (usa dados da geração)
   const handleGetQRCode = async (tempInstanceId: string) => {

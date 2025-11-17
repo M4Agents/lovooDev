@@ -197,6 +197,7 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   // =====================================================
   const checkConnectionStatus = useCallback(async (tempInstanceId: string): Promise<{
     success: boolean;
+    connected?: boolean;
     status?: string;
     message?: string;
     error?: string;
@@ -218,6 +219,45 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Erro ao verificar status',
+      };
+    }
+  }, []);
+
+  // =====================================================
+  // VERIFICAR STATUS DE INSTÂNCIA TEMPORÁRIA (WEBHOOK)
+  // =====================================================
+  const getTempInstanceStatus = useCallback(async (tempInstanceId: string): Promise<{
+    success: boolean;
+    data?: {
+      temp_instance_id: string;
+      status: string;
+      qrcode?: string;
+      paircode?: string;
+      error_message?: string;
+      instance_name: string;
+      created_at: string;
+      updated_at: string;
+      expires_at: string;
+    };
+    error?: string;
+  }> => {
+    try {
+      const { data, error } = await supabase.rpc('get_temp_instance_status', {
+        p_temp_instance_id: tempInstanceId,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return data || { success: false, error: 'Resposta inválida' };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao verificar status temporário',
       };
     }
   }, []);
@@ -408,6 +448,7 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
     generateQRCode,
     confirmConnection,
     checkConnectionStatus,
+    getTempInstanceStatus,
     getQRCode,
     deleteInstance,
     updateInstance,
