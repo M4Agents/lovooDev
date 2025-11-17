@@ -35,8 +35,18 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   useEffect(() => {
     if (isOpen && instanceId) {
       loadQRCode();
+      
+      // POLLING PARA ATUALIZAR QR CODE AUTOMATICAMENTE
+      const pollInterval = setInterval(() => {
+        if (!qrCode && loading) {
+          console.log('[QRCodeModal] Polling para QR Code...');
+          loadQRCode();
+        }
+      }, 3000); // A cada 3 segundos
+      
+      return () => clearInterval(pollInterval);
     }
-  }, [isOpen, instanceId]);
+  }, [isOpen, instanceId, qrCode, loading]);
 
   // Timer para expiração do QR Code
   useEffect(() => {
@@ -71,14 +81,19 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
         setQrCode(result.data.qrcode);
         setExpiresAt(result.data.expires_at || '');
       } else if (result.success && result.data?.status === 'created_awaiting_connect') {
-        // TRATAR STATUS created_awaiting_connect - SEM MENCIONAR UAZAPI
-        setError('QR Code está sendo gerado. Aguarde alguns segundos e tente novamente.');
+        // TRATAR STATUS created_awaiting_connect - MANTER LOADING
+        setLoading(true); // Manter loading visual
+        setError(''); // Sem erro, apenas processando
+      } else if (result.success && result.data?.status === 'loading') {
+        // STATUS DE LOADING - MANTER LOADING VISUAL
+        setLoading(true);
+        setError('');
       } else {
         setError(result.error || 'Erro ao obter QR Code');
+        setLoading(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar QR Code');
-    } finally {
       setLoading(false);
     }
   };
@@ -190,10 +205,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
+              <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">
                 <div className="text-center">
-                  <Smartphone className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">QR Code não disponível</p>
+                  <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-2" />
+                  <p className="text-sm text-blue-600 font-medium">Gerando QR Code</p>
+                  <p className="text-xs text-blue-500 mt-1">Aguarde alguns segundos...</p>
                 </div>
               </div>
             )}
