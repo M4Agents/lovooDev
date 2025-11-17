@@ -127,6 +127,13 @@ export interface CreateInstanceResponse {
   error?: string;
   message?: string;
   planInfo?: PlanLimits;
+  tempData?: {
+    temp_instance_id: string;
+    qrcode: string;
+    expires_at: string;
+    instance_name: string;
+    company_id: string;
+  };
 }
 
 // =====================================================
@@ -164,6 +171,31 @@ export interface UseInstancesReturn {
   error: string | null;
   refetch: () => Promise<void>;
   createInstance: (name: string) => Promise<CreateInstanceResponse>;
+  generateQRCode: (name: string) => Promise<{
+    success: boolean;
+    data?: {
+      temp_instance_id: string;
+      qrcode: string;
+      expires_at: string;
+      instance_name: string;
+      company_id: string;
+    };
+    error?: string;
+    planInfo?: any;
+  }>;
+  confirmConnection: (
+    tempInstanceId: string,
+    companyId: string,
+    instanceName: string,
+    phoneNumber?: string,
+    profileName?: string
+  ) => Promise<CreateInstanceResponse>;
+  checkConnectionStatus: (tempInstanceId: string) => Promise<{
+    success: boolean;
+    status?: string;
+    message?: string;
+    error?: string;
+  }>;
   getQRCode: (instanceId: string) => Promise<{
     success: boolean;
     data?: { qrcode: string; expires_at?: string };

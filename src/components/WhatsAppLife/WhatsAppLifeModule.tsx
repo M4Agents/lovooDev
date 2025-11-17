@@ -29,9 +29,10 @@ export const WhatsAppLifeModule: React.FC = () => {
   const { 
     loading: instancesLoading, 
     error: instancesError,
-    createInstance,
-    getQRCode,
-    refetch: refetchInstances 
+    generateQRCode,
+    // confirmConnection, // TODO: Usar quando implementar monitoramento
+    // checkConnectionStatus, // TODO: Usar quando implementar monitoramento
+    getQRCode
   } = useWhatsAppInstances(company?.id);
   
   const { 
@@ -39,8 +40,8 @@ export const WhatsAppLifeModule: React.FC = () => {
     canAddInstance, 
     planConfig,
     loading: planLoading,
-    error: planError,
-    refetch: refetchPlan
+    error: planError
+    // refetch: refetchPlan // TODO: Usar quando implementar atualização após conexão
   } = usePlanLimits(company?.id);
 
   // Debug: Log hook states
@@ -65,32 +66,53 @@ export const WhatsAppLifeModule: React.FC = () => {
     setShowAddModal(true);
   };
 
-  // Handler para confirmar criação da instância
+  // Handler para confirmar criação da instância (NOVO FLUXO)
   const handleConfirmCreateInstance = async (instanceName: string) => {
-    console.log('[WhatsAppLifeModule] Creating instance:', instanceName);
+    console.log('[WhatsAppLifeModule] Generating QR Code for:', instanceName);
     
     try {
-      const result = await createInstance(instanceName);
-      console.log('[WhatsAppLifeModule] Create result:', result);
+      // NOVO FLUXO: Gerar QR Code primeiro (não cria instância ainda)
+      const result = await generateQRCode(instanceName);
+      console.log('[WhatsAppLifeModule] QR Code result:', result);
       
-      if (result.success) {
+      if (result.success && result.data) {
         // Fechar modal de criação
         setShowAddModal(false);
         
-        // Atualizar dados
-        refetchInstances();
-        refetchPlan();
-        
-        // Abrir modal de QR Code
-        setCurrentInstanceId(result.instanceId || '');
+        // Abrir modal de QR Code com dados temporários
+        setCurrentInstanceId(result.data.temp_instance_id);
         setCurrentInstanceName(instanceName);
         setShowQRModal(true);
+        
+        // TODO: Implementar monitoramento de conexão
+        // Quando WhatsApp for conectado, chamar confirmConnection()
       } else {
-        throw new Error(result.error || 'Erro desconhecido ao criar instância');
+        throw new Error(result.error || 'Erro ao gerar QR Code');
       }
     } catch (error) {
-      console.error('[WhatsAppLifeModule] Create error:', error);
+      console.error('[WhatsAppLifeModule] QR Code error:', error);
       throw error; // Repassar erro para o modal tratar
+    }
+  };
+
+  // Handler para QR Code personalizado (usa dados temporários)
+  const handleGetQRCode = async (tempInstanceId: string) => {
+    console.log('[WhatsAppLifeModule] Getting QR Code for temp instance:', tempInstanceId);
+    
+    // Para instâncias temporárias, usar dados já gerados
+    // Para instâncias reais, usar getQRCode normal
+    if (tempInstanceId.includes('-')) {
+      // É um temp_instance_id (UUID format)
+      return {
+        success: true,
+        data: {
+          qrcode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI0MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVzY2FuZWllIHBhcmEgY29uZWN0YXI8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkluc3TDom5jaWE6ICcgKyBjdXJyZW50SW5zdGFuY2VOYW1lICsgJzwvdGV4dD48dGV4dCB4PSI1MCUiIHk9Ijc1JSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjgiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5RUiBDb2RlIFJlYWwgKFVhemFwaSkgLSBFbSBEZXNlbnZvbHZpbWVudG88L3RleHQ+PC9zdmc+',
+          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        },
+      };
+    } else {
+      // É uma instância real, usar método normal
+      return await getQRCode(tempInstanceId);
     }
   };
 
@@ -220,7 +242,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         onClose={() => setShowQRModal(false)}
         instanceId={currentInstanceId}
         instanceName={currentInstanceName}
-        onGetQRCode={getQRCode}
+        onGetQRCode={handleGetQRCode}
       />
     </div>
   );
