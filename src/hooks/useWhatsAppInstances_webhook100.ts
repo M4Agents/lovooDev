@@ -319,6 +319,44 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     }
   }, [companyId, fetchInstances]);
 
+  // =====================================================
+  // NOVA FUNÇÃO: SINCRONIZAR DADOS DO PERFIL
+  // =====================================================
+  const syncProfileData = useCallback(async (instanceId: string) => {
+    if (!companyId) {
+      return { success: false, error: 'Company ID não disponível' };
+    }
+
+    try {
+      console.log('[syncProfileData] Iniciando sincronização para instância:', instanceId);
+      
+      const { data, error } = await supabase.rpc('sync_instance_profile_data', {
+        p_instance_id: instanceId,
+        p_company_id: companyId
+      });
+
+      if (error) {
+        console.error('[syncProfileData] Erro no RPC:', error);
+        throw error;
+      }
+
+      console.log('[syncProfileData] Resultado:', data);
+
+      // Recarregar lista após sincronização bem-sucedida
+      if (data?.success) {
+        await fetchInstances();
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[syncProfileData] Erro ao sincronizar dados do perfil:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+    }
+  }, [companyId, supabase, fetchInstances]);
+
   return {
     instances,
     loading,
@@ -334,6 +372,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     updateInstance,
     syncWithUazapi,
     updateInstanceName,
-    fetchInstances
+    fetchInstances,
+    syncProfileData
   };
 };

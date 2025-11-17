@@ -4,12 +4,13 @@
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Smartphone, Plus, Crown, CheckCircle, RefreshCw, Edit2, Trash2 } from 'lucide-react';
+import { Smartphone, Plus, Crown, CheckCircle, RefreshCw, Edit2, Trash2, User } from 'lucide-react';
 import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
 import { AddInstanceModal } from './AddInstanceModal';
 import { QRCodeModal } from './QRCodeModal';
+import { InstanceAvatar } from './InstanceAvatar';
 
 // =====================================================
 // COMPONENTE PRINCIPAL (VERSÃO FUNCIONAL)
@@ -37,7 +38,8 @@ export const WhatsAppLifeModule: React.FC = () => {
     syncWithUazapi,
     deleteInstance,
     updateInstanceName,
-    fetchInstances
+    fetchInstances,
+    syncProfileData
   } = useWhatsAppInstancesWebhook100(company?.id);
   
   const { 
@@ -165,6 +167,23 @@ export const WhatsAppLifeModule: React.FC = () => {
       }
     }
   }, [deleteInstance]);
+
+  // =====================================================
+  // HANDLER: SINCRONIZAR PERFIL DA INSTÂNCIA
+  // =====================================================
+  const handleSyncProfile = useCallback(async (instance: any) => {
+    try {
+      const result = await syncProfileData(instance.id);
+      
+      if (result.success) {
+        alert(`Perfil da instância "${instance.instance_name}" sincronizado com sucesso!`);
+      } else {
+        alert(`Erro ao sincronizar perfil: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Erro ao sincronizar perfil: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  }, [syncProfileData]);
 
   // Estado para armazenar dados do QR Code gerado
   const [qrCodeData, setQrCodeData] = useState<any>(null);
@@ -443,10 +462,13 @@ export const WhatsAppLifeModule: React.FC = () => {
                 <div key={instance.id} className="border rounded-lg p-4 hover:bg-gray-50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        instance.status === 'connected' ? 'bg-green-500' : 
-                        instance.status === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}></div>
+                      <InstanceAvatar
+                        profilePictureUrl={instance.profile_picture_url}
+                        profileName={instance.profile_name}
+                        instanceName={instance.instance_name}
+                        status={instance.status}
+                        size="md"
+                      />
                       <div>
                         <h4 className="font-medium text-gray-900">{instance.instance_name}</h4>
                         <p className="text-sm text-gray-600">
@@ -488,6 +510,13 @@ export const WhatsAppLifeModule: React.FC = () => {
                       
                       {/* Botões de Ação */}
                       <div className="flex gap-1 ml-2">
+                        <button
+                          onClick={() => handleSyncProfile(instance)}
+                          className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"
+                          title="Sincronizar foto do perfil"
+                        >
+                          <User className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => handleEditInstance(instance)}
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"

@@ -239,6 +239,11 @@ export interface UseInstancesReturn {
     error?: string;
   }>;
   fetchInstances: () => Promise<void>;
+  syncProfileData: (instanceId: string) => Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }>;
 }
 
 export interface UseQRCodeReturn {
