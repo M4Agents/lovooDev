@@ -196,6 +196,36 @@ export const WhatsAppLifeModule: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<any>(null);
 
+  // =====================================================
+  // SINCRONIZAÇÃO AUTOMÁTICA DE PERFIS SEM FOTO
+  // =====================================================
+  useEffect(() => {
+    if (!instances || instances.length === 0) return;
+
+    // Buscar instâncias conectadas sem foto de perfil
+    const instancesWithoutPhoto = instances.filter(instance => 
+      instance.status === 'connected' && 
+      instance.provider_type === 'uazapi' &&
+      (!instance.profile_picture_url || instance.profile_picture_url.trim() === '')
+    );
+
+    if (instancesWithoutPhoto.length > 0) {
+      console.log(`[WhatsAppLifeModule] 📸 Sincronizando ${instancesWithoutPhoto.length} perfis sem foto...`);
+      
+      // Sincronizar perfis em background (sem aguardar)
+      instancesWithoutPhoto.forEach(async (instance) => {
+        try {
+          const result = await syncProfileData(instance.id);
+          if (result.success) {
+            console.log(`[WhatsAppLifeModule] ✅ Perfil sincronizado: ${instance.instance_name}`);
+          }
+        } catch (error) {
+          console.log(`[WhatsAppLifeModule] ⚠️ Erro ao sincronizar ${instance.instance_name}:`, error);
+        }
+      });
+    }
+  }, [instances, syncProfileData]);
+
   // Função para iniciar polling de instância temporária
   const startTempInstancePolling = useCallback((tempInstanceId: string) => {
     console.log('[WhatsAppLifeModule] Iniciando polling para:', tempInstanceId);
@@ -265,8 +295,50 @@ export const WhatsAppLifeModule: React.FC = () => {
             }));
             
             // Fechar modal e recarregar após 3 segundos para usuário ver sucesso
-            setTimeout(() => {
+            setTimeout(async () => {
               setShowQRModal(false);
+              
+              // 🎯 SINCRONIZAÇÃO AUTOMÁTICA DO PERFIL APÓS CONEXÃO
+              try {
+                console.log('[WhatsAppLifeModule] 🔄 Sincronizando perfil automaticamente...');
+                
+                // Buscar a instância recém-conectada
+                const tempInstanceId = qrCodeData?.temp_instance_id;
+                if (tempInstanceId) {
+                  // Aguardar um pouco para garantir que a instância foi salva
+                  setTimeout(async () => {
+                    try {
+                      // Buscar instâncias para encontrar a ID real
+                      await fetchInstances();
+                      
+                      // Buscar a instância pelo nome para sincronizar perfil
+                      const instanceName = qrCodeData?.instance_name;
+                      if (instanceName && instances.length > 0) {
+                        const connectedInstance = instances.find(inst => 
+                          inst.instance_name === instanceName && 
+                          inst.status === 'connected'
+                        );
+                        
+                        if (connectedInstance) {
+                          console.log('[WhatsAppLifeModule] 📸 Sincronizando foto do perfil...');
+                          const syncResult = await syncProfileData(connectedInstance.id);
+                          
+                          if (syncResult.success) {
+                            console.log('[WhatsAppLifeModule] ✅ Foto sincronizada automaticamente!');
+                          } else {
+                            console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', syncResult.error);
+                          }
+                        }
+                      }
+                    } catch (error) {
+                      console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', error);
+                    }
+                  }, 2000); // Aguardar 2s para instância ser salva
+                }
+              } catch (error) {
+                console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', error);
+              }
+              
               window.location.reload(); // Recarregar para mostrar nova instância
             }, 3000);
             

@@ -45,6 +45,9 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
       }
 
       setInstances(data || []);
+      
+      // 🎯 SINCRONIZAÇÃO AUTOMÁTICA DE PERFIS SEM FOTO
+      // Será implementada via useEffect no componente para evitar dependência circular
     } catch (err) {
       console.error('[useWhatsAppInstancesWebhook100] Erro ao buscar instâncias:', err);
       setError(err instanceof Error ? err.message : 'Erro ao buscar instâncias');
