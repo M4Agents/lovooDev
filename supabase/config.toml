@@ -1,0 +1,39 @@
+# =====================================================
+# SUPABASE CONFIG - WHATSAPP LIFE
+# =====================================================
+# Configuração isolada para Edge Functions do WhatsApp Life
+
+[project]
+# Link to the project on the Supabase Dashboard: https://supabase.com/dashboard/project/etzdsywunlpbgxkphuil
+project_id = "etzdsywunlpbgxkphuil"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+port = 54324
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://lovoo-dev.vercel.app"]
+jwt_expiry = 3600
+refresh_token_rotation_enabled = true
+security_update_password_require_reauthentication = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[functions.whatsapp-life-create-instance]
+verify_jwt = false
+
+[functions.whatsapp-life-get-qrcode]
+verify_jwt = false
+
+[edge-runtime]
+policy = "per_worker"
+inspector_port = 8083
