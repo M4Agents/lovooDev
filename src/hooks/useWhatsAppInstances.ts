@@ -62,51 +62,8 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   }, [companyId]);
 
   // =====================================================
-  // GERAR QR CODE (NOVO FLUXO - NÃO CRIA INSTÂNCIA)
+  // GERAR QR CODE (WEBHOOK 100% - VERSÃO OTIMIZADA)
   // =====================================================
-  const generateQRCode = useCallback(async (name: string): Promise<{
-    success: boolean;
-    data?: {
-      temp_instance_id: string;
-      qrcode: string;
-      expires_at: string;
-      instance_name: string;
-      company_id: string;
-    };
-    error?: string;
-    planInfo?: any;
-  }> => {
-    if (!companyId) {
-      return {
-        success: false,
-        error: 'ID da empresa não fornecido',
-      };
-    }
-
-    if (!name.trim()) {
-      return {
-        success: false,
-        error: 'Nome da instância é obrigatório',
-      };
-    }
-
-    if (name.length > WHATSAPP_LIFE_CONSTANTS.MAX_INSTANCE_NAME_LENGTH) {
-      return {
-        success: false,
-        error: `Nome deve ter no máximo ${WHATSAPP_LIFE_CONSTANTS.MAX_INSTANCE_NAME_LENGTH} caracteres`,
-      };
-    }
-
-    try {
-      console.log('[useWhatsAppInstances] Generating QR Code:', { companyId, name: name.trim() });
-      
-      // ✅ ANTI-CORS: Gerar QR Code sem criar instância
-      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code', {
-        p_company_id: companyId,
-        p_instance_name: name.trim(),
-      });
-
-      console.log('[useWhatsAppInstances] RPC QR response:', { data, error });
 
       if (error) {
         console.error('[useWhatsAppInstances] Erro RPC:', error);
@@ -331,6 +288,85 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
       };
     }
   }, []);
+
+  // =====================================================
+  // GERAR QR CODE (NOVO FLUXO)
+  // =====================================================
+  const generateQRCode = useCallback(async (name: string): Promise<{
+    success: boolean;
+    data?: {
+      temp_instance_id: string;
+      qrcode: string;
+      expires_at: string;
+      instance_name: string;
+      company_id: string;
+    };
+    error?: string;
+    planInfo?: any;
+  }> => {
+    if (!companyId) {
+      return {
+        success: false,
+        error: 'ID da empresa não encontrado',
+      };
+    }
+
+    try {
+      console.log('[useWhatsAppInstances] Generating QR Code for:', name);
+      
+      // USAR NOVA VERSÃO WEBHOOK 100% (mais rápida e confiável)
+      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_webhook_100', {
+        p_company_id: companyId,
+        p_instance_name: name,
+      });
+
+      console.log('[useWhatsAppInstances] QR Code response (Webhook 100%):', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstances] Erro RPC:', error);
+        
+        // Fallback para versão original se nova falhar
+        console.log('[useWhatsAppInstances] Tentando fallback para versão original...');
+        const fallbackResult = await supabase.rpc('generate_whatsapp_qr_code_async', {
+          p_company_id: companyId,
+          p_instance_name: name,
+        });
+        
+        if (fallbackResult.error) {
+          return {
+            success: false,
+            error: `Erro em ambas as versões: ${error.message}`,
+          };
+        }
+        
+        return {
+          success: fallbackResult.data?.success || false,
+          data: fallbackResult.data?.data,
+          error: fallbackResult.data?.error,
+          planInfo: fallbackResult.data?.planInfo,
+        };
+      }
+
+      if (data && data.success) {
+        return {
+          success: true,
+          data: data.data,
+        };
+      } else {
+        return {
+          success: false,
+          error: data?.error || 'Erro desconhecido',
+          planInfo: data?.planInfo,
+        };
+      }
+    } catch (err) {
+      console.error('[useWhatsAppInstances] Erro ao gerar QR Code:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao gerar QR Code',
+      };
+    }
+  }, [companyId]);
 
   // =====================================================
   // ATUALIZAR INSTÂNCIA
