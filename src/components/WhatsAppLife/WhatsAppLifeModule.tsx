@@ -79,6 +79,9 @@ export const WhatsAppLifeModule: React.FC = () => {
         // Fechar modal de criação
         setShowAddModal(false);
         
+        // Armazenar dados do QR Code
+        setQrCodeData(result.data);
+        
         // Abrir modal de QR Code com dados temporários
         setCurrentInstanceId(result.data.temp_instance_id);
         setCurrentInstanceName(instanceName);
@@ -95,18 +98,48 @@ export const WhatsAppLifeModule: React.FC = () => {
     }
   };
 
-  // Handler para QR Code personalizado (usa dados temporários)
+  // Estado para armazenar dados do QR Code gerado
+  const [qrCodeData, setQrCodeData] = useState<any>(null);
+
+  // Handler para QR Code personalizado (usa dados da geração)
   const handleGetQRCode = async (tempInstanceId: string) => {
     console.log('[WhatsAppLifeModule] Getting QR Code for temp instance:', tempInstanceId);
     
-    // Para instâncias temporárias, usar dados já gerados
-    // Para instâncias reais, usar getQRCode normal
-    if (tempInstanceId.includes('-')) {
-      // É um temp_instance_id (UUID format)
+    // Se temos dados do QR Code armazenados, usar eles
+    if (qrCodeData && qrCodeData.temp_instance_id === tempInstanceId) {
       return {
         success: true,
         data: {
-          qrcode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI0MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVzY2FuZWllIHBhcmEgY29uZWN0YXI8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkluc3TDom5jaWE6ICcgKyBjdXJyZW50SW5zdGFuY2VOYW1lICsgJzwvdGV4dD48dGV4dCB4PSI1MCUiIHk9Ijc1JSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjgiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5RUiBDb2RlIFJlYWwgKFVhemFwaSkgLSBFbSBEZXNlbnZvbHZpbWVudG88L3RleHQ+PC9zdmc+',
+          qrcode: qrCodeData.qrcode,
+          expires_at: qrCodeData.expires_at,
+        },
+      };
+    }
+    
+    // Para instâncias temporárias sem dados, gerar novamente
+    if (tempInstanceId.includes('-')) {
+      try {
+        // Regenerar QR Code usando o nome da instância atual
+        const result = await generateQRCode(currentInstanceName);
+        if (result.success && result.data) {
+          setQrCodeData(result.data);
+          return {
+            success: true,
+            data: {
+              qrcode: result.data.qrcode,
+              expires_at: result.data.expires_at,
+            },
+          };
+        }
+      } catch (error) {
+        console.error('[WhatsAppLifeModule] Erro ao regenerar QR Code:', error);
+      }
+      
+      // Fallback para QR Code de erro
+      return {
+        success: true,
+        data: {
+          qrcode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZmZmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI0MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iI2Q5NTM0ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVycm8gYW8gY2FycmVnYXIgUVIgQ29kZTwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjYwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEwIiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Q2xpcXVlIGVtIEF0dWFsaXphcjwvdGV4dD48L3N2Zz4=',
           expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         },
       };
