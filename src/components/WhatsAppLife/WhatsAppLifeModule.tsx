@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { Plus, Smartphone, Crown } from 'lucide-react';
-import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances';
+import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
 import { AddInstanceModal } from './AddInstanceModal';
@@ -25,6 +25,7 @@ export const WhatsAppLifeModule: React.FC = () => {
   
   // Debug: Log company data
   console.log('[WhatsAppLifeModule] Company:', company);
+  console.log('[WhatsAppLifeModule] 🚀 USANDO WEBHOOK 100% - VERSÃO OTIMIZADA!');
   
   const { 
     loading: instancesLoading, 
@@ -34,7 +35,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     // confirmConnection, // TODO: Usar quando implementar monitoramento
     // checkConnectionStatus, // TODO: Usar quando implementar monitoramento
     getQRCode
-  } = useWhatsAppInstances(company?.id);
+  } = useWhatsAppInstancesWebhook100(company?.id);
   
   const { 
     planLimits, 
