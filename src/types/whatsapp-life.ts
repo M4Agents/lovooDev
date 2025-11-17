@@ -219,7 +219,7 @@ export interface UseInstancesReturn {
   }>;
   getQRCode: (instanceId: string) => Promise<{
     success: boolean;
-    data?: { qrcode: string; expires_at?: string };
+    data?: { qrcode: string; expires_at?: string; status?: string };
     error?: string;
   }>;
   deleteInstance: (instanceId: string) => Promise<void>;

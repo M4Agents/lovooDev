@@ -70,6 +70,9 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
       if (result.success && result.data?.qrcode) {
         setQrCode(result.data.qrcode);
         setExpiresAt(result.data.expires_at || '');
+      } else if (result.success && result.data?.status === 'created_awaiting_connect') {
+        // TRATAR STATUS created_awaiting_connect
+        setError('Instância criada! Clique "Conectar" no painel Uazapi para obter QR Code.\n\nAcesse: https://lovoo.uazapi.com/admin');
       } else {
         setError(result.error || 'Erro ao obter QR Code');
       }

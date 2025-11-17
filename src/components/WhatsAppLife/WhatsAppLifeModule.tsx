@@ -155,7 +155,8 @@ export const WhatsAppLifeModule: React.FC = () => {
           }));
           
           // Se QR Code está disponível ou houve erro, parar polling
-          if (qrcode || instanceStatus === 'ready' || instanceStatus === 'error' || error_message) {
+          // INCLUIR TRATAMENTO PARA created_awaiting_connect
+          if (qrcode || instanceStatus === 'ready' || instanceStatus === 'error' || instanceStatus === 'created_awaiting_connect' || error_message) {
             console.log('[WhatsAppLifeModule] Polling concluído:', { qrcode: !!qrcode, instanceStatus, error_message });
             clearInterval(interval);
             setPollingInterval(null);
@@ -215,6 +216,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         data: {
           qrcode: qrCodeData.qrcode,
           expires_at: qrCodeData.expires_at,
+          status: qrCodeData.status, // INCLUIR STATUS
         },
       };
     }
@@ -231,6 +233,7 @@ export const WhatsAppLifeModule: React.FC = () => {
             data: {
               qrcode: result.data.qrcode,
               expires_at: result.data.expires_at,
+              status: result.data.status, // INCLUIR STATUS
             },
           };
         }
