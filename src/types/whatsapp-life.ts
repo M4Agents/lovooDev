@@ -222,8 +222,23 @@ export interface UseInstancesReturn {
     data?: { qrcode: string; expires_at?: string; status?: string };
     error?: string;
   }>;
-  deleteInstance: (instanceId: string) => Promise<void>;
+  deleteInstance: (instanceId: string) => Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }>;
   updateInstance: (instanceId: string, updates: Partial<WhatsAppLifeInstance>) => Promise<void>;
+  syncWithUazapi: () => Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }>;
+  updateInstanceName: (instanceId: string, newName: string) => Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }>;
+  fetchInstances: () => Promise<void>;
 }
 
 export interface UseQRCodeReturn {

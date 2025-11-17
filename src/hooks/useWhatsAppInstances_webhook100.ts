@@ -216,10 +216,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     console.warn('[useWhatsAppInstancesWebhook100] updateInstance not implemented');
   }, []);
 
-  const deleteInstance = useCallback(async (instanceId: string): Promise<void> => {
-    // Implementação futura
-    console.warn('[useWhatsAppInstancesWebhook100] deleteInstance not implemented');
-  }, []);
+  // deleteInstance implementado abaixo com funcionalidade real
 
   const refetch = useCallback(async () => {
     await fetchInstances();
@@ -326,11 +323,16 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     instances,
     loading,
     error,
+    refetch,
+    createInstance,
     generateQRCode,
+    confirmConnection,
+    checkConnectionStatus,
     getTempInstanceStatus,
     getQRCode,
-    syncWithUazapi,
     deleteInstance,
+    updateInstance,
+    syncWithUazapi,
     updateInstanceName,
     fetchInstances
   };
