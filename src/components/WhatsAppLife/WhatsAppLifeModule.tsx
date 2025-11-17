@@ -15,6 +15,9 @@ import { useCompany } from '../../hooks/useCompany';
 export const WhatsAppLifeModule: React.FC = () => {
   const { company } = useCompany();
   
+  // Debug: Log company data
+  console.log('[WhatsAppLifeModule] Company:', company);
+  
   const { 
     instances, 
     loading: instancesLoading, 
@@ -32,18 +35,43 @@ export const WhatsAppLifeModule: React.FC = () => {
     refetch: refetchPlan
   } = usePlanLimits(company?.id);
 
+  // Debug: Log hook states
+  console.log('[WhatsAppLifeModule] Plan Limits:', planLimits);
+  console.log('[WhatsAppLifeModule] Plan Error:', planError);
+  console.log('[WhatsAppLifeModule] Instances Error:', instancesError);
+
   const loading = instancesLoading || planLoading;
 
   // Handler para criar instância
   const handleCreateInstance = async () => {
-    if (!canAddInstance) return;
+    console.log('[WhatsAppLifeModule] Creating instance...');
+    console.log('[WhatsAppLifeModule] Can add:', canAddInstance);
+    console.log('[WhatsAppLifeModule] Company ID:', company?.id);
     
-    const result = await createInstance('Meu WhatsApp');
-    if (result.success) {
-      refetchInstances();
-      refetchPlan();
-    } else {
-      alert(result.error || 'Erro ao criar instância');
+    if (!company?.id) {
+      alert('Erro: Dados da empresa não encontrados');
+      return;
+    }
+    
+    if (!canAddInstance) {
+      alert('Erro: Limite de instâncias atingido ou dados não carregados');
+      return;
+    }
+    
+    try {
+      const result = await createInstance('Meu WhatsApp');
+      console.log('[WhatsAppLifeModule] Create result:', result);
+      
+      if (result.success) {
+        refetchInstances();
+        refetchPlan();
+        alert('Instância criada com sucesso!');
+      } else {
+        alert(result.error || 'Erro desconhecido ao criar instância');
+      }
+    } catch (error) {
+      console.error('[WhatsAppLifeModule] Create error:', error);
+      alert('Erro ao criar instância: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   };
 
@@ -52,6 +80,17 @@ export const WhatsAppLifeModule: React.FC = () => {
   // =====================================================
   return (
     <div className="space-y-6">
+      {/* Debug Info */}
+      {(planError || instancesError) && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h3 className="text-red-800 font-medium mb-2">🔍 Debug Info:</h3>
+          {planError && <p className="text-red-700 text-sm">Plan Error: {planError}</p>}
+          {instancesError && <p className="text-red-700 text-sm">Instances Error: {instancesError}</p>}
+          <p className="text-red-700 text-sm">Company ID: {company?.id || 'undefined'}</p>
+          <p className="text-red-700 text-sm">Company Name: {company?.name || 'undefined'}</p>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <div className="flex items-center justify-between mb-6">
