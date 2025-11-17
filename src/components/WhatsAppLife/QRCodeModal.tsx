@@ -33,32 +33,45 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   const [expiresAt, setExpiresAt] = useState<string>('');
   const [timeLeft, setTimeLeft] = useState<number>(0);
 
-  // Carregar QR Code quando modal abrir
+  // Usar dados externos quando disponíveis
   useEffect(() => {
-    if (isOpen && instanceId) {
-      loadQRCode();
+    if (qrCodeData) {
+      console.log('[QRCodeModal] Usando dados externos:', qrCodeData);
       
-      let attempts = 0;
-      const maxAttempts = 20; // 20 tentativas = 1 minuto
-      
-      // POLLING PARA ATUALIZAR QR CODE AUTOMATICAMENTE
-      const pollInterval = setInterval(() => {
-        attempts++;
-        
-        if (!qrCode && loading && attempts < maxAttempts) {
-          console.log(`[QRCodeModal] Polling para QR Code... (${attempts}/${maxAttempts})`);
-          loadQRCode();
-        } else if (attempts >= maxAttempts) {
-          console.log('[QRCodeModal] Timeout: Parando polling após', maxAttempts, 'tentativas');
-          setLoading(false);
-          setError('Timeout: QR Code não foi gerado em 1 minuto. Tente novamente.');
-          clearInterval(pollInterval);
-        }
-      }, 3000); // A cada 3 segundos
-      
-      return () => clearInterval(pollInterval);
+      if (qrCodeData.qrcode) {
+        setQrCode(qrCodeData.qrcode);
+        setLoading(false);
+        setError('');
+      } else if (qrCodeData.status === 'loading') {
+        setLoading(true);
+        setError('');
+        setQrCode('');
+      } else if (qrCodeData.status === 'success') {
+        setLoading(false);
+        setError('');
+      } else if (qrCodeData.error_message) {
+        setError(qrCodeData.error_message);
+        setLoading(false);
+        setQrCode('');
+      }
     }
-  }, [isOpen, instanceId]);
+  }, [qrCodeData]);
+
+  // Carregar QR Code quando modal abrir (fallback)
+  useEffect(() => {
+    if (isOpen && instanceId && instanceId !== 'loading' && !qrCodeData) {
+      console.log('[QRCodeModal] Carregando QR Code para:', instanceId);
+      loadQRCode();
+    }
+    
+    // Limpar estados quando modal fechar
+    if (!isOpen) {
+      setQrCode('');
+      setLoading(false);
+      setError('');
+      setExpiresAt('');
+    }
+  }, [isOpen, instanceId, qrCodeData]);
 
   // Timer para expiração do QR Code
   useEffect(() => {
