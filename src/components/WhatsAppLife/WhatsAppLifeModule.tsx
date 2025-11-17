@@ -143,7 +143,16 @@ export const WhatsAppLifeModule: React.FC = () => {
         console.log('[WhatsAppLifeModule] Status response:', status);
         
         if (status.success && status.data) {
-          const { qrcode, status: instanceStatus, error_message } = status.data;
+          const { 
+            qrcode, 
+            status: instanceStatus, 
+            error_message,
+            connected,
+            logged_in,
+            profile_name,
+            phone_number,
+            message
+          } = status.data;
           
           // Atualizar dados do QR Code
           setQrCodeData((prev: any) => ({
@@ -151,8 +160,32 @@ export const WhatsAppLifeModule: React.FC = () => {
             qrcode,
             status: instanceStatus,
             error_message,
+            connected,
+            logged_in,
+            profile_name,
+            phone_number,
+            message,
             updated_at: status.data?.updated_at
           }));
+          
+          // DETECTAR CONEXÃO AUTOMÁTICA
+          if (connected && logged_in && instanceStatus === 'connected') {
+            console.log('[WhatsAppLifeModule] 🎉 WhatsApp conectado com sucesso!', {
+              profile_name,
+              phone_number
+            });
+            
+            // Parar polling - conexão estabelecida
+            clearInterval(interval);
+            setPollingInterval(null);
+            
+            // Atualizar lista de instâncias
+            setTimeout(() => {
+              window.location.reload(); // Recarregar para mostrar nova instância
+            }, 2000);
+            
+            return;
+          }
           
           // Se QR Code está disponível ou houve erro, parar polling
           // INCLUIR TRATAMENTO PARA created_awaiting_connect

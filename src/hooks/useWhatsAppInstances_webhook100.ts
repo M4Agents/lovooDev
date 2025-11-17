@@ -122,34 +122,30 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   // =====================================================
   // VERIFICAR STATUS DE INSTÂNCIA TEMPORÁRIA
   // =====================================================
-  const getTempInstanceStatus = useCallback(async (tempInstanceId: string): Promise<{
-    success: boolean;
-    data?: {
-      temp_instance_id: string;
-      status: string;
-      qrcode?: string;
-      paircode?: string;
-      error_message?: string;
-      instance_name: string;
-      created_at: string;
-      updated_at: string;
-      expires_at: string;
-    };
-    error?: string;
-  }> => {
+  const getTempInstanceStatus = useCallback(async (tempInstanceId: string) => {
+    console.log('[useWhatsAppInstancesWebhook100] Getting temp instance status:', tempInstanceId);
+    
     try {
-      const { data, error } = await supabase.rpc('get_temp_instance_status', {
+      // VERIFICAR STATUS DE CONEXÃO REAL
+      const { data, error } = await supabase.rpc('check_instance_connection_status', {
         p_temp_instance_id: tempInstanceId,
       });
 
+      console.log('[useWhatsAppInstancesWebhook100] Connection status response:', { data, error });
+
       if (error) {
+        console.error('[useWhatsAppInstancesWebhook100] Erro ao verificar status:', error);
         return {
           success: false,
-          error: error.message,
+          error: `Erro ao verificar status: ${error.message}`,
         };
       }
 
-      return data || { success: false, error: 'Resposta inválida' };
+      return {
+        success: data?.success || false,
+        data: data?.data || null,
+        error: data?.error || null,
+      };
     } catch (err) {
       return {
         success: false,
