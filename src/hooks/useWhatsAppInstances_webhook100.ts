@@ -82,13 +82,13 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
       console.log('[useWhatsAppInstancesWebhook100] 🎯 VERSÃO DIRETA BASEADA NA REFERÊNCIA!');
       console.log('[useWhatsAppInstancesWebhook100] Generating QR Code for:', name);
       
-      // USAR VERSÃO RESILIENTE A TIMEOUT COM HEADERS CORRETOS DA REFERÊNCIA
-      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_timeout_resilient', {
+      // USAR VERSÃO COM TIMEOUT DE 180 SEGUNDOS - QR CODE DIRETO NO MODAL
+      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_180s_timeout', {
         p_company_id: companyId,
         p_instance_name: name,
       });
 
-      console.log('[useWhatsAppInstancesWebhook100] QR Code response (Timeout Resilient):', { data, error });
+      console.log('[useWhatsAppInstancesWebhook100] QR Code response (180s Timeout):', { data, error });
 
       if (error) {
         console.error('[useWhatsAppInstancesWebhook100] Erro RPC:', error);
