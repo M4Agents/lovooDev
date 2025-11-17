@@ -79,15 +79,16 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     }
 
     try {
+      console.log('[useWhatsAppInstancesWebhook100] 🎯 WEBHOOK 100% PURO - SEM EDGE FUNCTION!');
       console.log('[useWhatsAppInstancesWebhook100] Generating QR Code for:', name);
       
-      // USAR NOVA VERSÃO WEBHOOK 100% (mais rápida e confiável)
-      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_webhook_100', {
+      // USAR VERSÃO WEBHOOK 100% PURA (apenas init + webhook real)
+      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_pure_webhook', {
         p_company_id: companyId,
         p_instance_name: name,
       });
 
-      console.log('[useWhatsAppInstancesWebhook100] QR Code response (Webhook 100%):', { data, error });
+      console.log('[useWhatsAppInstancesWebhook100] QR Code response (Pure Webhook 100%):', { data, error });
 
       if (error) {
         console.error('[useWhatsAppInstancesWebhook100] Erro RPC:', error);
