@@ -9,13 +9,14 @@ import { X, Smartphone, RefreshCw, CheckCircle, Clock, AlertCircle } from 'lucid
 interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  instanceId?: string;
-  instanceName?: string;
+  instanceId: string;
+  instanceName: string;
   onGetQRCode: (instanceId: string) => Promise<{
     success: boolean;
     data?: { qrcode: string; expires_at?: string };
     error?: string;
   }>;
+  qrCodeData?: any;
 }
 
 export const QRCodeModal: React.FC<QRCodeModalProps> = ({
@@ -23,7 +24,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   onClose,
   instanceId,
   instanceName,
-  onGetQRCode
+  onGetQRCode,
+  qrCodeData
 }) => {
   const [qrCode, setQrCode] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -214,6 +216,17 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                   Atualizar QR Code
                 </button>
+              </div>
+            ) : qrCodeData?.status === 'success' ? (
+              <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-green-300 rounded-lg bg-green-50">
+                <div className="text-center">
+                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-sm text-green-600 font-medium">Conectado com Sucesso!</p>
+                  <p className="text-xs text-green-500 mt-1">
+                    {qrCodeData?.profile_name || 'WhatsApp conectado'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">Fechando em alguns segundos...</p>
+                </div>
               </div>
             ) : (
               <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">

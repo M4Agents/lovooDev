@@ -28,6 +28,7 @@ export const WhatsAppLifeModule: React.FC = () => {
   console.log('[WhatsAppLifeModule] 🚀 USANDO WEBHOOK 100% - VERSÃO OTIMIZADA!');
   
   const { 
+    instances,
     loading: instancesLoading, 
     error: instancesError,
     generateQRCode,
@@ -185,10 +186,22 @@ export const WhatsAppLifeModule: React.FC = () => {
             clearInterval(interval);
             setPollingInterval(null);
             
-            // Atualizar lista de instâncias
+            // MOSTRAR MENSAGEM DE SUCESSO NO MODAL (NÃO FECHAR AINDA)
+            setQrCodeData((prev: any) => ({
+              ...prev,
+              status: 'success',
+              message: `WhatsApp conectado com sucesso! Perfil: ${profile_name || 'Conectado'}`,
+              connected: true,
+              logged_in: true,
+              profile_name,
+              phone_number
+            }));
+            
+            // Fechar modal e recarregar após 3 segundos para usuário ver sucesso
             setTimeout(() => {
+              setShowQRModal(false);
               window.location.reload(); // Recarregar para mostrar nova instância
-            }, 2000);
+            }, 3000);
             
             return;
           }
@@ -359,7 +372,7 @@ export const WhatsAppLifeModule: React.FC = () => {
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-          ) : (
+          ) : instances.length === 0 ? (
             <div className="text-center py-12">
               <Smartphone className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -375,6 +388,45 @@ export const WhatsAppLifeModule: React.FC = () => {
               >
                 Conectar Primeiro WhatsApp
               </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {instances.map((instance) => (
+                <div key={instance.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${
+                        instance.status === 'connected' ? 'bg-green-500' : 
+                        instance.status === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}></div>
+                      <div>
+                        <h4 className="font-medium text-gray-900">{instance.instance_name}</h4>
+                        <p className="text-sm text-gray-600">
+                          {instance.profile_name || 'Perfil não disponível'}
+                        </p>
+                        {instance.phone_number && (
+                          <p className="text-xs text-gray-500">{instance.phone_number}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        instance.status === 'connected' ? 'bg-green-100 text-green-800' :
+                        instance.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {instance.status === 'connected' ? 'Conectado' :
+                         instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
+                      </span>
+                      {instance.connected_at && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -421,6 +473,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         instanceId={currentInstanceId}
         instanceName={currentInstanceName}
         onGetQRCode={handleGetQRCode}
+        qrCodeData={qrCodeData}
       />
     </div>
   );
