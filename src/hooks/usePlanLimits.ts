@@ -40,13 +40,17 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
       setError(null);
 
       // ✅ ANTI-CORS: Chamar apenas RPC Function
+      console.log('[usePlanLimits] Calling RPC with company ID:', companyId);
+      
       const { data, error } = await supabase.rpc('check_whatsapp_life_plan_limit', {
         p_company_id: companyId,
       });
 
+      console.log('[usePlanLimits] RPC Response:', { data, error });
+
       if (error) {
         console.error('[usePlanLimits] Erro RPC:', error);
-        throw new Error('Erro ao comunicar com servidor');
+        throw new Error(`RPC Error: ${error.message || JSON.stringify(error)}`);
       }
 
       if (data) {
