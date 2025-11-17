@@ -138,11 +138,11 @@ export const WhatsAppLifeModule: React.FC = () => {
     }
     
     let attempts = 0;
-    const maxAttempts = 90; // 3 minutos (90 * 2s = 180s)
+    const maxAttempts = 12; // 3 minutos (12 * 15s = 180s)
     
     const interval = setInterval(async () => {
       attempts++;
-      console.log(`[WhatsAppLifeModule] Polling attempt ${attempts}/${maxAttempts}`);
+      console.log(`[WhatsAppLifeModule] Polling attempt ${attempts}/${maxAttempts} (15s interval)`);
       
       try {
         const status = await getTempInstanceStatus(tempInstanceId);
@@ -230,7 +230,7 @@ export const WhatsAppLifeModule: React.FC = () => {
           }));
         }
       }
-    }, 2000); // Poll a cada 2 segundos
+    }, 15000); // A cada 15 segundos (otimizado)
     
     setPollingInterval(interval);
   }, [getTempInstanceStatus, pollingInterval]);
