@@ -4,7 +4,7 @@
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Plus, Smartphone, Crown } from 'lucide-react';
+import { Smartphone, Plus, Crown, CheckCircle, RefreshCw, Edit2, Trash2 } from 'lucide-react';
 import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
@@ -123,11 +123,27 @@ export const WhatsAppLifeModule: React.FC = () => {
     }
   }, [generateQRCode]);
 
+  // Handlers para editar e excluir instâncias
+  const handleEditInstance = useCallback((instance: any) => {
+    setSelectedInstance(instance);
+    setShowEditModal(true);
+  }, []);
+
+  const handleDeleteInstance = useCallback((instance: any) => {
+    setSelectedInstance(instance);
+    setShowDeleteModal(true);
+  }, []);
+
   // Estado para armazenar dados do QR Code gerado
   const [qrCodeData, setQrCodeData] = useState<any>(null);
   
   // Estado para controlar polling
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  
+  // Estados para modais de edição/exclusão
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedInstance, setSelectedInstance] = useState<any>(null);
 
   // Função para iniciar polling de instância temporária
   const startTempInstancePolling = useCallback((tempInstanceId: string) => {
@@ -409,20 +425,40 @@ export const WhatsAppLifeModule: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        instance.status === 'connected' ? 'bg-green-100 text-green-800' :
-                        instance.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {instance.status === 'connected' ? 'Conectado' :
-                         instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
-                      </span>
-                      {instance.connected_at && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR')}
-                        </p>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          instance.status === 'connected' ? 'bg-green-100 text-green-800' :
+                          instance.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {instance.status === 'connected' ? 'Conectado' :
+                           instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
+                        </span>
+                        {instance.connected_at && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Conectado em {new Date(instance.connected_at).toLocaleString('pt-BR')}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Botões de Ação */}
+                      <div className="flex gap-1 ml-2">
+                        <button
+                          onClick={() => handleEditInstance(instance)}
+                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                          title="Alterar nome"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInstance(instance)}
+                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                          title="Excluir instância"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
