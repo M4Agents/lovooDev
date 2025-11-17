@@ -68,53 +68,59 @@ export const WhatsAppLifeModule: React.FC = () => {
     setShowAddModal(true);
   };
 
-  // Handler para confirmar criação da instância (FLUXO WEBHOOK ASSÍNCRONO)
-  const handleConfirmCreateInstance = async (instanceName: string) => {
-    console.log('[WhatsAppLifeModule] Generating QR Code for:', instanceName);
-    
+  // Handler para confirmar criação da instância (MODAL IMEDIATO + LOADING)
+  const handleConfirmCreateInstance = useCallback(async (name: string) => {
+    if (!name.trim()) {
+      return;
+    }
+
     try {
-      // FLUXO WEBHOOK: Gerar QR Code assíncrono
-      const result = await generateQRCode(instanceName);
-      console.log('[WhatsAppLifeModule] QR Code result:', result);
+      console.log('[WhatsAppLifeModule] Creating instance:', name);
       
+      // ABRIR MODAL IMEDIATAMENTE COM LOADING
+      setCurrentInstanceName(name);
+      setShowQRModal(true);
+      
+      // Inicializar dados com loading
+      setQrCodeData({
+        temp_instance_id: 'loading',
+        status: 'loading',
+        message: 'Gerando QR Code...',
+        qrcode: null,
+        instance_name: name,
+      });
+      
+      const result = await generateQRCode(name);
+      console.log('[WhatsAppLifeModule] QR Code result:', result);
+
       if (result.success && result.data) {
-        // Fechar modal de criação
-        setShowAddModal(false);
+        // Atualizar dados do QR Code
+        setQrCodeData(result.data);
+        setCurrentInstanceId(result.data.temp_instance_id);
         
-        // Verificar se é modo assíncrono (webhook)
-        if (result.data.async_mode) {
-          console.log('[WhatsAppLifeModule] Modo assíncrono detectado, iniciando polling...');
-          
-          // Armazenar dados iniciais
-          setQrCodeData({
-            ...result.data,
-            status: 'connecting',
-            qrcode: null, // Será preenchido pelo polling
-            message: 'Gerando QR Code... aguarde até 3 minutos'
-          });
-          
-          // Abrir modal de QR Code
-          setCurrentInstanceId(result.data.temp_instance_id);
-          setCurrentInstanceName(instanceName);
-          setShowQRModal(true);
-          
-          // Iniciar polling para verificar status
+        // Iniciar polling para detectar conexão
+        if (result.data.temp_instance_id) {
           startTempInstancePolling(result.data.temp_instance_id);
-        } else {
-          // Modo síncrono (fallback)
-          setQrCodeData(result.data);
-          setCurrentInstanceId(result.data.temp_instance_id);
-          setCurrentInstanceName(instanceName);
-          setShowQRModal(true);
         }
       } else {
-        throw new Error(result.error || 'Erro ao gerar QR Code');
+        // Atualizar com erro
+        setQrCodeData((prev: any) => ({
+          ...prev,
+          status: 'error',
+          message: result.error || 'Erro ao gerar QR Code',
+          error_message: result.error,
+        }));
       }
     } catch (error) {
-      console.error('[WhatsAppLifeModule] QR Code error:', error);
-      throw error; // Repassar erro para o modal tratar
+      console.error('[WhatsAppLifeModule] Erro ao criar instância:', error);
+      setQrCodeData((prev: any) => ({
+        ...prev,
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Erro interno',
+        error_message: error instanceof Error ? error.message : 'Erro interno',
+      }));
     }
-  };
+  }, [generateQRCode]);
 
   // Estado para armazenar dados do QR Code gerado
   const [qrCodeData, setQrCodeData] = useState<any>(null);

@@ -139,12 +139,13 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           </div>
 
           {/* QR Code Area */}
-          <div className="flex flex-col items-center">
+          <div className="flex justify-center mb-6">
             {loading ? (
               <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
                 <div className="text-center">
                   <RefreshCw className="h-8 w-8 text-gray-400 animate-spin mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Carregando QR Code...</p>
+                  <p className="text-sm text-gray-500">Gerando QR Code...</p>
+                  <p className="text-xs text-gray-400 mt-1">Aguarde alguns segundos</p>
                 </div>
               </div>
             ) : error ? (
