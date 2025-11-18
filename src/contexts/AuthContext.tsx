@@ -57,6 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCompany(impersonatedCompany);
             setIsImpersonating(true); // Garantir que o estado está correto
             
+            // Sincronizar currentCompanyId no localStorage para analytics
+            localStorage.setItem('currentCompanyId', impersonatedCompany.id);
+            
             // Recuperar originalUser do localStorage se não estiver definido
             if (!originalUser) {
               const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
@@ -96,6 +99,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext: Setting company:', selectedCompany);
         console.log('AuthContext: Available companies:', data.map(c => ({ name: c.name, is_super_admin: c.is_super_admin })));
         setCompany(selectedCompany);
+        
+        // Sincronizar currentCompanyId no localStorage para analytics
+        localStorage.setItem('currentCompanyId', selectedCompany.id);
       } else {
         console.log('AuthContext: No company found or error:', error);
         setAvailableCompanies([]);
@@ -128,6 +134,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('AuthContext: Refreshed impersonated company:', impersonatedCompany.name);
             setCompany(impersonatedCompany);
             setIsImpersonating(true);
+            
+            // Sincronizar currentCompanyId no localStorage para analytics
+            localStorage.setItem('currentCompanyId', impersonatedCompany.id);
             
             // Recuperar originalUser se necessário
             if (!originalUser) {
@@ -281,6 +290,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsImpersonating(true);
         setCompany(targetCompany);
         
+        // Sincronizar currentCompanyId no localStorage para analytics
+        localStorage.setItem('currentCompanyId', targetCompany.id);
+        
         console.log('AuthContext: Impersonation complete, company set to:', targetCompany.name);
       } else {
         throw new Error('Target company not found');
@@ -319,6 +331,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (targetCompany) {
       console.log('AuthContext: Switching to company:', targetCompany);
       setCompany(targetCompany);
+      
+      // Sincronizar currentCompanyId no localStorage para analytics
+      localStorage.setItem('currentCompanyId', targetCompany.id);
     }
   };
 

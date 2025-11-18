@@ -5,6 +5,7 @@ import { api } from '../services/api';
 interface UseAnalyticsOptions {
   autoRefresh?: boolean;
   refreshInterval?: number; // in milliseconds
+  companyId?: string; // Company ID for analytics data
 }
 
 export const useAnalytics = (
@@ -15,7 +16,7 @@ export const useAnalytics = (
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { autoRefresh = false, refreshInterval = 30000 } = options;
+  const { autoRefresh = false, refreshInterval = 30000, companyId } = options;
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -27,7 +28,7 @@ export const useAnalytics = (
         return;
       }
 
-      const analyticsData = await api.getAnalyticsData(period);
+      const analyticsData = await api.getAnalyticsData(period, companyId);
       setData(analyticsData);
     } catch (err) {
       console.error('Error fetching analytics:', err);
@@ -37,7 +38,7 @@ export const useAnalytics = (
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, companyId]);
 
   // Initial load and when period changes
   useEffect(() => {

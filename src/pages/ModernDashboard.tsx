@@ -41,7 +41,8 @@ export const ModernDashboard: React.FC = () => {
     shouldLoadAnalytics ? selectedPeriod : { ...defaultPeriod, startDate: undefined, endDate: undefined }, 
     { 
       autoRefresh: shouldLoadAnalytics ? autoRefresh : false, 
-      refreshInterval: 30000 
+      refreshInterval: 30000,
+      companyId: shouldLoadAnalytics ? company?.id : undefined
     }
   );
 

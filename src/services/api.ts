@@ -1621,11 +1621,17 @@ export const api = {
   },
 
   // Analytics functions
-  async getAnalyticsData(period: any) {
+  async getAnalyticsData(period: any, companyId?: string) {
     try {
       // Use the same approach as getDashboardStats for consistency
-      const companyId = localStorage.getItem('currentCompanyId');
-      if (!companyId) {
+      let targetCompanyId = companyId;
+      
+      // Fallback to localStorage if companyId not provided (backward compatibility)
+      if (!targetCompanyId) {
+        targetCompanyId = localStorage.getItem('currentCompanyId');
+      }
+      
+      if (!targetCompanyId) {
         throw new Error('ID da empresa não encontrado');
       }
 
@@ -1633,7 +1639,7 @@ export const api = {
       const { data: company, error: companyError } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', companyId)
+        .eq('id', targetCompanyId)
         .single();
 
       if (companyError) {
