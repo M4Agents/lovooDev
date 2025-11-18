@@ -1623,13 +1623,17 @@ export const api = {
   // Analytics functions
   async getAnalyticsData(period: any) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      // Use the same approach as getDashboardStats for consistency
+      const companyId = localStorage.getItem('currentCompanyId');
+      if (!companyId) {
+        throw new Error('ID da empresa não encontrado');
+      }
 
+      // Get company data using the same method as other functions
       const { data: company, error: companyError } = await supabase
         .from('companies')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('id', companyId)
         .single();
 
       if (companyError) {
