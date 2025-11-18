@@ -16,7 +16,8 @@ import {
   Bell,
   Search,
   User,
-  Users
+  Users,
+  Crown
 } from 'lucide-react';
 
 type ModernLayoutProps = {
@@ -41,6 +42,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
     { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
+    ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];
 
