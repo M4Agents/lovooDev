@@ -16,7 +16,8 @@ import {
   Search,
   User,
   Users,
-  Crown
+  Crown,
+  MessageCircle
 } from 'lucide-react';
 
 type ModernLayoutProps = {
@@ -38,6 +39,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/chat', icon: MessageCircle, label: 'Chat' },
     { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),

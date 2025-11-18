@@ -10,6 +10,7 @@ import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
 import { Leads } from './pages/Leads';
 import { PlansManagement } from './pages/PlansManagement';
+import Chat from './pages/Chat';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -116,6 +117,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <PlansManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <Chat />
           </ProtectedRoute>
         }
       />
