@@ -82,15 +82,22 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
+      <div className="p-6 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="h-8 w-8 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-lg flex items-center justify-center shadow-sm">
+              <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Conversas</h2>
+          </div>
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+            className="p-2.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-white/60 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow-md"
           >
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
@@ -102,7 +109,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             <select
               value={selectedInstance || ''}
               onChange={(e) => onSelectInstance(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
             >
               <option value="">Selecione uma instância</option>
               {instances.map(instance => (
@@ -121,30 +128,36 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             placeholder="Buscar conversas..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-slate-400"
           />
-          <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
         </div>
       </div>
 
       {/* Filtros */}
-      <div className="px-4 py-3 border-b border-gray-200 bg-white">
-        <div className="flex space-x-1">
+      <div className="px-6 py-4 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
+        <div className="flex space-x-2">
           {filterOptions.map(option => (
             <button
               key={option.key}
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                 filter.type === option.key
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105'
+                  : 'text-slate-600 hover:bg-white/60 hover:shadow-md'
               }`}
             >
               <div className="text-center">
-                <div>{option.label}</div>
-                <div className="text-xs opacity-75">({option.count})</div>
+                <div className="font-semibold">{option.label}</div>
+                <div className={`text-xs mt-1 ${
+                  filter.type === option.key ? 'text-blue-100' : 'text-slate-400'
+                }`}>
+                  {option.count} conversas
+                </div>
               </div>
             </button>
           ))}
@@ -152,22 +165,35 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       </div>
 
       {/* Lista de Conversas */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-slate-50/50">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <div className="flex items-center justify-center py-12">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-blue-500"></div>
+              <div className="absolute inset-0 rounded-full h-8 w-8 border-2 border-transparent border-t-indigo-400 animate-pulse"></div>
+            </div>
           </div>
         ) : filteredConversations.length === 0 ? (
-          <div className="text-center py-8 px-4">
-            <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-            </svg>
-            <p className="text-gray-600 text-sm">
+          <div className="text-center py-12 px-6">
+            <div className="mb-4">
+              <div className="mx-auto h-16 w-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center shadow-sm">
+                <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                </svg>
+              </div>
+            </div>
+            <h4 className="text-lg font-semibold text-slate-700 mb-2">
               {searchTerm ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
+            </h4>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              {searchTerm 
+                ? 'Tente ajustar os termos da busca' 
+                : 'As conversas aparecerão aqui quando você receber mensagens'
+              }
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-slate-100">
             {filteredConversations.map(conversation => (
               <ConversationItem
                 key={conversation.id}
@@ -226,15 +252,17 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   return (
     <button
       onClick={onClick}
-      className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-        isSelected ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+      className={`w-full p-4 text-left transition-all duration-200 ${
+        isSelected 
+          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-r-4 border-blue-500 shadow-sm' 
+          : 'hover:bg-white/80 hover:shadow-sm'
       }`}
     >
       <div className="flex items-start space-x-3">
         {/* Avatar */}
         <div className="flex-shrink-0">
-          <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+          <div className="w-12 h-12 bg-gradient-to-br from-slate-300 to-slate-400 rounded-xl flex items-center justify-center shadow-sm">
+            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
             </svg>
           </div>
@@ -242,18 +270,22 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-sm font-medium text-gray-900 truncate">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className={`text-sm font-semibold truncate ${
+              isSelected ? 'text-slate-800' : 'text-slate-700'
+            }`}>
               {conversation.contact_name || formatPhone(conversation.contact_phone)}
             </h4>
             <div className="flex items-center space-x-2">
               {conversation.last_message_at && (
-                <span className="text-xs text-gray-500">
+                <span className={`text-xs font-medium ${
+                  isSelected ? 'text-slate-600' : 'text-slate-500'
+                }`}>
                   {formatTime(conversation.last_message_at)}
                 </span>
               )}
               {conversation.unread_count > 0 && (
-                <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-blue-600 rounded-full">
+                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-sm">
                   {conversation.unread_count}
                 </span>
               )}
@@ -261,22 +293,28 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           </div>
 
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600 truncate">
+            <p className={`text-sm truncate ${
+              isSelected ? 'text-slate-600' : 'text-slate-500'
+            }`}>
               {conversation.last_message_direction === 'outbound' && (
-                <span className="text-blue-600 mr-1">→</span>
+                <span className="text-emerald-500 mr-1 font-medium">→</span>
               )}
-              {conversation.last_message_content || 'Sem mensagens'}
+              {conversation.last_message_content || (
+                <span className="italic">Sem mensagens</span>
+              )}
             </p>
             
             {conversation.assigned_to && (
               <div className="flex-shrink-0 ml-2">
-                <div className="w-4 h-4 bg-green-500 rounded-full" title="Atribuída"></div>
+                <div className="w-3 h-3 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full shadow-sm" title="Atribuída"></div>
               </div>
             )}
           </div>
 
           {!conversation.contact_name && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className={`text-xs mt-1 ${
+              isSelected ? 'text-slate-500' : 'text-slate-400'
+            }`}>
               {formatPhone(conversation.contact_phone)}
             </p>
           )}

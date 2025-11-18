@@ -27,10 +27,14 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   if (chatData.instancesLoading) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
+      <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando instâncias...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-slate-600 mx-auto mb-6"></div>
+            <div className="absolute inset-0 rounded-full h-10 w-10 border-2 border-transparent border-t-blue-500 animate-pulse mx-auto"></div>
+          </div>
+          <p className="text-slate-600 font-medium">Carregando instâncias...</p>
+          <p className="text-slate-400 text-sm mt-1">Preparando seu ambiente de chat</p>
         </div>
       </div>
     )
@@ -42,23 +46,28 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   if (chatData.instances.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="mb-4">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-            </svg>
+      <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
+        <div className="text-center max-w-md p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20">
+          <div className="mb-6">
+            <div className="mx-auto h-16 w-16 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
+              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+              </svg>
+            </div>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Nenhuma instância WhatsApp conectada
+          <h3 className="text-xl font-semibold text-slate-800 mb-3">
+            Bem-vindo ao Chat WhatsApp
           </h3>
-          <p className="text-gray-600 mb-4">
-            Você precisa conectar pelo menos uma instância WhatsApp para usar o chat.
+          <p className="text-slate-600 mb-6 leading-relaxed">
+            Para começar a usar o chat, você precisa conectar pelo menos uma instância WhatsApp Business.
           </p>
           <button
             onClick={() => window.location.href = '/settings/whatsapp-life'}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
             Conectar WhatsApp
           </button>
         </div>
@@ -71,9 +80,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   // =====================================================
 
   return (
-    <div className="flex h-full bg-white">
+    <div className="flex h-full bg-gradient-to-br from-slate-50 to-gray-100">
       {/* Sidebar Conversas - 25% */}
-      <div className="w-1/4 min-w-[300px] border-r border-gray-200 bg-gray-50">
+      <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
         <ConversationSidebar
           instances={chatData.instances}
           conversations={chatData.conversations}
@@ -89,7 +98,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       </div>
 
       {/* Área Chat - 50% */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col bg-white/60 backdrop-blur-sm">
         {chatData.selectedConversation ? (
           <ChatArea
             conversationId={chatData.selectedConversation}
@@ -97,18 +106,20 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             userId={userId}
           />
         ) : (
-          <div className="flex items-center justify-center h-full bg-white">
-            <div className="text-center">
-              <div className="mb-4">
-                <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                </svg>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+              <div className="mb-6">
+                <div className="mx-auto h-20 w-20 bg-gradient-to-br from-slate-400 to-slate-600 rounded-3xl flex items-center justify-center shadow-lg">
+                  <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                  </svg>
+                </div>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-xl font-semibold text-slate-800 mb-3">
                 Selecione uma conversa
               </h3>
-              <p className="text-gray-600">
-                Escolha uma conversa na sidebar para começar a conversar
+              <p className="text-slate-600 leading-relaxed">
+                Escolha uma conversa na sidebar para começar a trocar mensagens com seus clientes
               </p>
             </div>
           </div>
@@ -116,25 +127,27 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       </div>
 
       {/* Painel Lead - 25% */}
-      <div className="w-1/4 min-w-[300px] border-l border-gray-200 bg-gray-50">
+      <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm">
         {chatData.selectedConversation ? (
           <LeadPanel
             conversationId={chatData.selectedConversation}
             companyId={companyId}
           />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center px-4">
-              <div className="mb-4">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+          <div className="flex items-center justify-center h-full p-6">
+            <div className="text-center">
+              <div className="mb-6">
+                <div className="mx-auto h-16 w-16 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
               </div>
-              <h4 className="text-sm font-medium text-gray-900 mb-1">
+              <h4 className="text-lg font-semibold text-slate-800 mb-2">
                 Informações do Lead
               </h4>
-              <p className="text-xs text-gray-600">
-                Selecione uma conversa para ver as informações do contato
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Selecione uma conversa para visualizar e editar as informações do contato
               </p>
             </div>
           </div>
