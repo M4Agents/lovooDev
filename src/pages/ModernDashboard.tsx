@@ -4,6 +4,11 @@ import { api } from '../services/api';
 import { MetricCard, Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { TrendingUp, Users, Target, Activity, Building2, ArrowUpRight, Eye, MessageSquare } from 'lucide-react';
+import { PeriodFilter } from '../components/PeriodFilter';
+import { AnalyticsCards, PlanDistributionMini } from '../components/AnalyticsCards';
+import { SimpleBarChart, SimplePieChart } from '../components/SimpleChart';
+import { useAnalytics, useDefaultPeriod } from '../hooks/useAnalytics';
+import { PeriodFilter as PeriodFilterType } from '../types/analytics';
 
 type DashboardStats = {
   totalPages: number;
@@ -19,6 +24,22 @@ export const ModernDashboard: React.FC = () => {
   const { user, company, isImpersonating, refreshCompany } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Analytics state (only for super admin)
+  const defaultPeriod = useDefaultPeriod();
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType>(defaultPeriod);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  
+  // Analytics data hook
+  const { 
+    data: analyticsData, 
+    loading: analyticsLoading, 
+    error: analyticsError,
+    refresh: refreshAnalytics 
+  } = useAnalytics(selectedPeriod, { 
+    autoRefresh, 
+    refreshInterval: 30000 
+  });
 
   useEffect(() => {
     loadStats();
@@ -276,6 +297,76 @@ export const ModernDashboard: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Analytics Section - Only for Super Admin */}
+      {company?.is_super_admin && (
+        <div className="space-y-6">
+          {/* Period Filter */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Analytics Avançados</h2>
+            <PeriodFilter
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={setSelectedPeriod}
+              autoRefresh={autoRefresh}
+              onAutoRefreshToggle={setAutoRefresh}
+            />
+          </div>
+
+          {/* Analytics Cards */}
+          {analyticsData && (
+            <AnalyticsCards data={analyticsData} loading={analyticsLoading} />
+          )}
+
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* Growth Chart */}
+            {analyticsData && (
+              <SimpleBarChart
+                data={analyticsData.growthData}
+                title="Crescimento de Empresas no Período"
+                height={250}
+              />
+            )}
+
+            {/* Plan Distribution Chart */}
+            {analyticsData && (
+              <SimplePieChart
+                data={analyticsData.companiesByPlan}
+                title="Distribuição por Planos"
+              />
+            )}
+          </div>
+
+          {/* Plan Details */}
+          {analyticsData && analyticsData.companiesByPlan.length > 0 && (
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Detalhes dos Planos
+                </h3>
+                <PlanDistributionMini data={analyticsData} />
+              </div>
+            </Card>
+          )}
+
+          {/* Error State */}
+          {analyticsError && (
+            <Card className="border-red-200 bg-red-50">
+              <div className="p-6 text-center">
+                <div className="text-red-600 mb-2">⚠️ Erro ao carregar analytics</div>
+                <p className="text-sm text-red-700 mb-4">{analyticsError}</p>
+                <Button 
+                  variant="outline" 
+                  onClick={refreshAnalytics}
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                >
+                  Tentar Novamente
+                </Button>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
