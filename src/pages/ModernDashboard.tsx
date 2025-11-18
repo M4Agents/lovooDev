@@ -201,48 +201,53 @@ export const ModernDashboard: React.FC = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'xl:grid-cols-7' : 'xl:grid-cols-4'} gap-6`}>
-        <MetricCard
-          title="Landing Pages"
-          value={stats?.totalPages || 0}
-          subtitle={company?.is_super_admin ? "Total da plataforma" : "Páginas ativas"}
-          icon={<TrendingUp className="w-6 h-6" />}
-          color="blue"
-        />
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-6`}>
+        {/* Métricas para empresas normais */}
+        {!company?.is_super_admin && (
+          <>
+            <MetricCard
+              title="Landing Pages"
+              value={stats?.totalPages || 0}
+              subtitle="Páginas ativas"
+              icon={<TrendingUp className="w-6 h-6" />}
+              color="blue"
+            />
 
-        <MetricCard
-          title="Total de Visitantes"
-          value={stats?.totalVisitors || 0}
-          subtitle="Visitantes únicos"
-          icon={<Users className="w-6 h-6" />}
-          color="green"
-          trend={{
-            value: "+12.5%",
-            isPositive: true
-          }}
-        />
+            <MetricCard
+              title="Total de Visitantes"
+              value={stats?.totalVisitors || 0}
+              subtitle="Visitantes únicos"
+              icon={<Users className="w-6 h-6" />}
+              color="green"
+              trend={{
+                value: "+12.5%",
+                isPositive: true
+              }}
+            />
 
-        <MetricCard
-          title="Conversões"
-          value={stats?.totalConversions || 0}
-          subtitle={`Taxa: ${conversionRate}%`}
-          icon={<Target className="w-6 h-6" />}
-          color="purple"
-          trend={{
-            value: `${conversionRate}%`,
-            isPositive: parseFloat(conversionRate) > 0
-          }}
-        />
+            <MetricCard
+              title="Conversões"
+              value={stats?.totalConversions || 0}
+              subtitle={`Taxa: ${conversionRate}%`}
+              icon={<Target className="w-6 h-6" />}
+              color="purple"
+              trend={{
+                value: `${conversionRate}%`,
+                isPositive: parseFloat(conversionRate) > 0
+              }}
+            />
 
-        <MetricCard
-          title="Engagement Médio"
-          value={stats?.avgEngagementScore || 0}
-          subtitle="de 10.0"
-          icon={<Activity className="w-6 h-6" />}
-          color="orange"
-        />
+            <MetricCard
+              title="Engagement Médio"
+              value={stats?.avgEngagementScore || 0}
+              subtitle="de 10.0"
+              icon={<Activity className="w-6 h-6" />}
+              color="orange"
+            />
+          </>
+        )}
 
-        {/* Cards exclusivos para Super Admin */}
+        {/* Métricas exclusivas para Super Admin (Empresa Pai) */}
         {company?.is_super_admin && (
           <>
             <MetricCard
