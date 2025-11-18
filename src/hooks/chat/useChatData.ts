@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { chatApi } from '../../services/chat/chatApi'
+import { supabase } from '../../lib/supabase'
 import type {
   ChatConversation,
   ConversationFilter,
@@ -181,21 +182,34 @@ export const useChatData = (
     if (!companyId) return
 
     // Subscrever mudanças nas conversas
-    const subscription = chatApi.subscribeToConversations(
-      companyId,
-      (payload) => {
-        console.log('Conversation change:', payload)
-        
-        // Atualizar lista de conversas
-        if (payload.eventType === 'INSERT') {
-          const newConversation = payload.new
-          setConversations(prev => [newConversation, ...prev])
-        } else if (payload.eventType === 'UPDATE') {
-          const updatedConversation = payload.new
-          setConversations(prev => 
-            prev.map(conv => 
-              conv.id === updatedConversation.id ? updatedConversation : conv
-            )
+    const conversationSubscription = supabase
+      .channel('chat_conversations')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chat_conversations',
+          filter: `company_id=eq.${companyId}`
+        },
+        (payload) => {
+          console.log('Conversation change:', payload)
+          
+          // Atualizar lista de conversas
+          if (payload.eventType === 'INSERT') {
+            const newConversation = payload.new as ChatConversation
+            setConversations(prev => {
+              // Verificar se já existe para evitar duplicatas
+              const exists = prev.some(conv => conv.id === newConversation.id)
+              if (exists) return prev
+              return [newConversation, ...prev]
+            })
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedConversation = payload.new as ChatConversation
+            setConversations(prev => 
+              prev.map(conv => 
+                conv.id === updatedConversation.id ? updatedConversation : conv
+              )
           )
         } else if (payload.eventType === 'DELETE') {
           const deletedId = payload.old.id
@@ -205,9 +219,34 @@ export const useChatData = (
         }
       }
     )
+    .subscribe()
+
+    // Subscrever mudanças nas mensagens para atualizar contadores
+    const messageSubscription = supabase
+      .channel('chat_messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+        },
+        (payload) => {
+          console.log('New message received:', payload)
+          
+          // Atualizar conversa relacionada
+          const newMessage = payload.new as any
+          if (newMessage.conversation_id) {
+            // Buscar conversa atualizada
+            fetchConversations()
+          }
+        }
+      )
+      .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      conversationSubscription.unsubscribe()
+      messageSubscription.unsubscribe()
     }
   }, [companyId])
 
