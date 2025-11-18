@@ -931,79 +931,48 @@ export const Settings: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
         
-        {/* Navegação Principal Moderna - OTIMIZADA */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-          {/* Card Integrações */}
-          <div 
-            onClick={() => setActiveTab('integracoes')}
-            className="group cursor-pointer"
-          >
-            <div className={`bg-gradient-to-br from-blue-50 to-indigo-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-              activeTab === 'integracoes' 
-                ? 'border-blue-400 shadow-md scale-[1.02]' 
-                : 'border-transparent hover:border-blue-300'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg shadow-sm transition-all duration-200 ${
-                  activeTab === 'integracoes' ? 'bg-blue-600' : 'bg-blue-500'
-                }`}>
-                  <SettingsIcon className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-slate-900 truncate">Integrações</h3>
-                  <p className="text-xs text-slate-600 truncate">Configure suas integrações e automações</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Card Usuários - OTIMIZADO */}
-          <div 
-            onClick={() => setActiveTab('usuarios')}
-            className="group cursor-pointer"
-          >
-            <div className={`bg-gradient-to-br from-orange-50 to-red-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-              activeTab === 'usuarios' 
-                ? 'border-orange-400 shadow-md scale-[1.02]' 
-                : 'border-transparent hover:border-orange-300'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg shadow-sm transition-all duration-200 ${
-                  activeTab === 'usuarios' ? 'bg-orange-600' : 'bg-orange-500'
-                }`}>
-                  <Users className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-slate-900 truncate">Usuários</h3>
-                  <p className="text-xs text-slate-600 truncate">Gerencie usuários e permissões</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Card Dados da Empresa - OTIMIZADO */}
-          <div 
-            onClick={() => setActiveTab('empresas')}
-            className="group cursor-pointer"
-          >
-            <div className={`bg-gradient-to-br from-emerald-50 to-green-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-              activeTab === 'empresas' 
-                ? 'border-emerald-400 shadow-md scale-[1.02]' 
-                : 'border-transparent hover:border-emerald-300'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg shadow-sm transition-all duration-200 ${
-                  activeTab === 'empresas' ? 'bg-emerald-600' : 'bg-emerald-500'
-                }`}>
-                  <Building className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-slate-900 truncate">Dados da Empresa</h3>
-                  <p className="text-xs text-slate-600 truncate">Gerencie informações da sua empresa</p>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Navegação Principal - ABAS SIMPLES */}
+        <div className="border-b border-gray-200 mt-8">
+          <nav className="-mb-px flex space-x-8">
+            {/* Aba Integrações */}
+            <button
+              onClick={() => setActiveTab('integracoes')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'integracoes'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <SettingsIcon className="w-4 h-4" />
+              Integrações
+            </button>
+            
+            {/* Aba Usuários */}
+            <button
+              onClick={() => setActiveTab('usuarios')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'usuarios'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Usuários
+            </button>
+            
+            {/* Aba Dados da Empresa */}
+            <button
+              onClick={() => setActiveTab('empresas')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'empresas'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Building className="w-4 h-4" />
+              Dados da Empresa
+            </button>
+          </nav>
         </div>
       </div>
 
