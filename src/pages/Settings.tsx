@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
+import { ModernLandingPages } from './ModernLandingPages';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -14,6 +16,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 
 export const Settings: React.FC = () => {
   const { company, refreshCompany } = useAuth();
+  const [searchParams] = useSearchParams();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
@@ -74,7 +77,15 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - NOVA ESTRUTURA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'empresas'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas'>('integracoes');
+
+  // Detectar parâmetro tab na URL para ativar aba correta
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'tracking') {
+      setActiveTab('tracking');
+    }
+  }, [searchParams]);
   const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
@@ -958,6 +969,19 @@ export const Settings: React.FC = () => {
             >
               <Users className="w-4 h-4" />
               Usuários
+            </button>
+            
+            {/* Aba Tracking Site */}
+            <button
+              onClick={() => setActiveTab('tracking')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'tracking'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              Tracking Site
             </button>
             
             {/* Aba Dados da Empresa */}
@@ -1968,6 +1992,13 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Aba Tracking Site */}
+      {activeTab === 'tracking' && (
+        <div className="space-y-6">
+          <ModernLandingPages />
         </div>
       )}
 

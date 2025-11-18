@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeAnalytics';
 import {
   LayoutDashboard,
-  FileText,
   Settings,
   LogOut,
   Menu,
@@ -39,7 +38,6 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
     { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),

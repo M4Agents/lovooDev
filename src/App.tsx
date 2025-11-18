@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModernLayout } from './components/ModernLayout';
 import { Login } from './pages/Login';
 import { ModernDashboard } from './pages/ModernDashboard';
-import { ModernLandingPages } from './pages/ModernLandingPages';
 import { Analytics } from './pages/Analytics';
 import { AdvancedAnalytics } from './pages/AdvancedAnalytics';
 import { Settings } from './pages/Settings';
@@ -70,11 +69,7 @@ function AppRoutes() {
       />
       <Route
         path="/landing-pages"
-        element={
-          <ProtectedRoute>
-            <ModernLandingPages />
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/settings?tab=tracking" replace />}
       />
       <Route
         path="/analytics/:id"
