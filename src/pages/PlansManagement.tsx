@@ -7,11 +7,9 @@ import {
   Trash2, 
   Save, 
   X, 
-  DollarSign, 
   Users, 
   MessageSquare, 
   FileText,
-  Crown,
   Star,
   Eye,
   EyeOff
@@ -96,7 +94,14 @@ export const PlansManagement: React.FC = () => {
         throw new Error(error.message);
       }
 
-      setPlans(data || []);
+      // Garantir que features seja sempre um array
+      const plansWithParsedFeatures = (data || []).map((plan: any) => ({
+        ...plan,
+        features: Array.isArray(plan.features) ? plan.features : 
+                 (typeof plan.features === 'string' ? JSON.parse(plan.features) : [])
+      }));
+
+      setPlans(plansWithParsedFeatures);
     } catch (err) {
       console.error('Erro ao carregar planos:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar planos');
@@ -385,11 +390,11 @@ export const PlansManagement: React.FC = () => {
               )}
 
               {/* Status Badge */}
-              <div className="absolute top-4 right-4">
+              <div className="absolute top-4 right-4" title={plan.is_active ? "Ativo" : "Inativo"}>
                 {plan.is_active ? (
-                  <Eye className="w-5 h-5 text-green-500" title="Ativo" />
+                  <Eye className="w-5 h-5 text-green-500" />
                 ) : (
-                  <EyeOff className="w-5 h-5 text-gray-400" title="Inativo" />
+                  <EyeOff className="w-5 h-5 text-gray-400" />
                 )}
               </div>
 
@@ -431,13 +436,13 @@ export const PlansManagement: React.FC = () => {
               <div className="mb-6">
                 <h4 className="font-medium text-slate-900 mb-2">Recursos:</h4>
                 <ul className="space-y-1">
-                  {plan.features.slice(0, 3).map((feature, index) => (
+                  {(Array.isArray(plan.features) ? plan.features : []).slice(0, 3).map((feature, index) => (
                     <li key={index} className="text-sm text-slate-600 flex items-start gap-2">
                       <span className="text-green-500 mt-0.5">✓</span>
                       {feature}
                     </li>
                   ))}
-                  {plan.features.length > 3 && (
+                  {Array.isArray(plan.features) && plan.features.length > 3 && (
                     <li className="text-sm text-slate-500">
                       +{plan.features.length - 3} recursos adicionais
                     </li>
