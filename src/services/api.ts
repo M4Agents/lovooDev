@@ -1622,130 +1622,144 @@ export const api = {
 
   // Analytics functions
   async getAnalyticsData(period: any) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
 
-    const { data: company } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-    if (!company?.is_super_admin || company?.company_type !== 'parent') {
-      throw new Error('Unauthorized: Super admin access required');
+      if (companyError) {
+        console.error('Error fetching company:', companyError);
+        throw new Error('Erro ao buscar dados da empresa');
+      }
+
+      if (!company?.is_super_admin || company?.company_type !== 'parent') {
+        throw new Error('Acesso negado: Apenas super administradores podem acessar analytics');
+      }
+
+      const startDate = period.startDate?.toISOString();
+      const endDate = period.endDate?.toISOString();
+
+      if (!startDate || !endDate) {
+        throw new Error('Período de datas inválido');
+      }
+
+      // Get previous period data first
+      const previousPeriodData = await this.getPreviousPeriodData(period);
+
+      // Parallel queries for better performance
+      const [
+        newCompaniesResult,
+        companiesByPlanResult,
+        growthDataResult
+      ] = await Promise.all([
+        // Count new companies in period
+        supabase
+          .from('companies')
+          .select('id', { count: 'exact' })
+          .eq('company_type', 'client')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate),
+
+        // Companies by plan distribution
+        supabase
+          .from('companies')
+          .select('plan')
+          .eq('company_type', 'client')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate),
+
+        // Daily growth data
+        supabase
+          .from('companies')
+          .select('created_at')
+          .eq('company_type', 'client')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate)
+          .order('created_at')
+      ]);
+
+      // Process companies by plan
+      const planCounts: Record<string, number> = {};
+      companiesByPlanResult.data?.forEach((company: any) => {
+        const plan = company.plan || 'basic';
+        planCounts[plan] = (planCounts[plan] || 0) + 1;
+      });
+
+      const totalCompanies = Object.values(planCounts).reduce((sum, count) => sum + count, 0);
+      
+      const companiesByPlan = Object.entries(planCounts).map(([plan, count]) => ({
+        plan,
+        count,
+        percentage: totalCompanies > 0 ? Math.round((count / totalCompanies) * 100) : 0,
+        color: this.getPlanColor(plan)
+      })).sort((a, b) => b.count - a.count);
+
+      // Process growth data
+      const growthByDate: Record<string, number> = {};
+      growthDataResult.data?.forEach((company: any) => {
+        const date = new Date(company.created_at).toISOString().split('T')[0];
+        growthByDate[date] = (growthByDate[date] || 0) + 1;
+      });
+
+      const growthData = Object.entries(growthByDate).map(([date, count], index, arr) => {
+        const cumulative = arr.slice(0, index + 1).reduce((sum, [, c]) => sum + c, 0);
+        return { date, count, cumulative };
+      });
+
+      // Calculate period comparison
+      const currentCount = newCompaniesResult.count || 0;
+      const previousCount = previousPeriodData || 0;
+      const growth = currentCount - previousCount;
+      const growthPercentage = previousCount > 0 ? Math.round((growth / previousCount) * 100) : 0;
+
+      // Calculate average daily growth
+      const periodDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
+      const averageDailyGrowth = periodDays > 0 ? Math.round((currentCount / periodDays) * 100) / 100 : 0;
+
+      return {
+        newCompaniesCount: currentCount,
+        companiesByPlan,
+        topPlans: companiesByPlan.slice(0, 5), // Top 5 plans
+        growthData,
+        periodComparison: {
+          current: currentCount,
+          previous: previousCount,
+          growth,
+          growthPercentage
+        },
+        averageDailyGrowth
+      };
+    } catch (error) {
+      console.error('Error in getAnalyticsData:', error);
+      throw error;
     }
-
-    const startDate = period.startDate?.toISOString();
-    const endDate = period.endDate?.toISOString();
-
-    if (!startDate || !endDate) {
-      throw new Error('Invalid date range');
-    }
-
-    // Parallel queries for better performance
-    const [
-      newCompaniesResult,
-      companiesByPlanResult,
-      growthDataResult,
-      previousPeriodResult
-    ] = await Promise.all([
-      // Count new companies in period
-      supabase
-        .from('companies')
-        .select('id', { count: 'exact' })
-        .eq('company_type', 'client')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate),
-
-      // Companies by plan distribution
-      supabase
-        .from('companies')
-        .select('plan')
-        .eq('company_type', 'client')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate),
-
-      // Daily growth data
-      supabase
-        .from('companies')
-        .select('created_at')
-        .eq('company_type', 'client')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate)
-        .order('created_at'),
-
-      // Previous period for comparison
-      this.getPreviousPeriodData(period)
-    ]);
-
-    // Process companies by plan
-    const planCounts: Record<string, number> = {};
-    companiesByPlanResult.data?.forEach(company => {
-      const plan = company.plan || 'basic';
-      planCounts[plan] = (planCounts[plan] || 0) + 1;
-    });
-
-    const totalCompanies = Object.values(planCounts).reduce((sum, count) => sum + count, 0);
-    
-    const companiesByPlan = Object.entries(planCounts).map(([plan, count]) => ({
-      plan,
-      count,
-      percentage: totalCompanies > 0 ? Math.round((count / totalCompanies) * 100) : 0,
-      color: this.getPlanColor(plan)
-    })).sort((a, b) => b.count - a.count);
-
-    // Process growth data
-    const growthByDate: Record<string, number> = {};
-    growthDataResult.data?.forEach(company => {
-      const date = new Date(company.created_at).toISOString().split('T')[0];
-      growthByDate[date] = (growthByDate[date] || 0) + 1;
-    });
-
-    const growthData = Object.entries(growthByDate).map(([date, count], index, arr) => {
-      const cumulative = arr.slice(0, index + 1).reduce((sum, [, c]) => sum + c, 0);
-      return { date, count, cumulative };
-    });
-
-    // Calculate period comparison
-    const currentCount = newCompaniesResult.count || 0;
-    const previousCount = previousPeriodResult || 0;
-    const growth = currentCount - previousCount;
-    const growthPercentage = previousCount > 0 ? Math.round((growth / previousCount) * 100) : 0;
-
-    // Calculate average daily growth
-    const periodDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
-    const averageDailyGrowth = periodDays > 0 ? Math.round((currentCount / periodDays) * 100) / 100 : 0;
-
-    return {
-      newCompaniesCount: currentCount,
-      companiesByPlan,
-      topPlans: companiesByPlan.slice(0, 5), // Top 5 plans
-      growthData,
-      periodComparison: {
-        current: currentCount,
-        previous: previousCount,
-        growth,
-        growthPercentage
-      },
-      averageDailyGrowth
-    };
   },
 
   async getPreviousPeriodData(period: any) {
-    if (!period.startDate || !period.endDate) return 0;
+    try {
+      if (!period.startDate || !period.endDate) return 0;
 
-    const periodLength = period.endDate.getTime() - period.startDate.getTime();
-    const previousStartDate = new Date(period.startDate.getTime() - periodLength);
-    const previousEndDate = new Date(period.startDate.getTime());
+      const periodLength = period.endDate.getTime() - period.startDate.getTime();
+      const previousStartDate = new Date(period.startDate.getTime() - periodLength);
+      const previousEndDate = new Date(period.startDate.getTime());
 
-    const { count } = await supabase
-      .from('companies')
-      .select('id', { count: 'exact' })
-      .eq('company_type', 'client')
-      .gte('created_at', previousStartDate.toISOString())
-      .lt('created_at', previousEndDate.toISOString());
+      const { count } = await supabase
+        .from('companies')
+        .select('id', { count: 'exact' })
+        .eq('company_type', 'client')
+        .gte('created_at', previousStartDate.toISOString())
+        .lt('created_at', previousEndDate.toISOString());
 
-    return count || 0;
+      return count || 0;
+    } catch (error) {
+      console.error('Error in getPreviousPeriodData:', error);
+      return 0;
+    }
   },
 
   getPlanColor(plan: string): string {

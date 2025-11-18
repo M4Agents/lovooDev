@@ -30,16 +30,20 @@ export const ModernDashboard: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType>(defaultPeriod);
   const [autoRefresh, setAutoRefresh] = useState(false);
   
-  // Analytics data hook
+  // Analytics data hook - only for super admin
+  const shouldLoadAnalytics = company?.is_super_admin && company?.company_type === 'parent';
   const { 
     data: analyticsData, 
     loading: analyticsLoading, 
     error: analyticsError,
     refresh: refreshAnalytics 
-  } = useAnalytics(selectedPeriod, { 
-    autoRefresh, 
-    refreshInterval: 30000 
-  });
+  } = useAnalytics(
+    shouldLoadAnalytics ? selectedPeriod : { ...defaultPeriod, startDate: undefined, endDate: undefined }, 
+    { 
+      autoRefresh: shouldLoadAnalytics ? autoRefresh : false, 
+      refreshInterval: 30000 
+    }
+  );
 
   useEffect(() => {
     loadStats();
@@ -299,7 +303,7 @@ export const ModernDashboard: React.FC = () => {
       </div>
 
       {/* Analytics Section - Only for Super Admin */}
-      {company?.is_super_admin && (
+      {shouldLoadAnalytics && (
         <div className="space-y-6">
           {/* Period Filter */}
           <div className="flex items-center justify-between">

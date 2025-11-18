@@ -22,6 +22,7 @@ export const useAnalytics = (
       setError(null);
       
       if (!period.startDate || !period.endDate) {
+        setData(null);
         setLoading(false);
         return;
       }
@@ -30,7 +31,9 @@ export const useAnalytics = (
       setData(analyticsData);
     } catch (err) {
       console.error('Error fetching analytics:', err);
-      setError('Erro ao carregar dados de analytics');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar dados de analytics';
+      setError(errorMessage);
+      setData(null);
     } finally {
       setLoading(false);
     }
