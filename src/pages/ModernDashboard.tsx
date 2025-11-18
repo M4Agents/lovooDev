@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { MetricCard, Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { TrendingUp, Users, Target, Activity, Building2, ArrowUpRight, Eye } from 'lucide-react';
+import { TrendingUp, Users, Target, Activity, Building2, ArrowUpRight, Eye, MessageSquare } from 'lucide-react';
 
 type DashboardStats = {
   totalPages: number;
@@ -11,6 +11,8 @@ type DashboardStats = {
   totalConversions: number;
   avgEngagementScore: number;
   totalCompanies?: number;
+  totalUsers?: number;
+  activeInstances?: number;
 };
 
 export const ModernDashboard: React.FC = () => {
@@ -199,7 +201,7 @@ export const ModernDashboard: React.FC = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-6`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'xl:grid-cols-7' : 'xl:grid-cols-4'} gap-6`}>
         <MetricCard
           title="Landing Pages"
           value={stats?.totalPages || 0}
@@ -240,15 +242,33 @@ export const ModernDashboard: React.FC = () => {
           color="orange"
         />
 
-        {/* Card de Empresas - apenas para Super Admin */}
+        {/* Cards exclusivos para Super Admin */}
         {company?.is_super_admin && (
-          <MetricCard
-            title="Empresas Clientes"
-            value={stats?.totalCompanies || 0}
-            subtitle="Total da plataforma"
-            icon={<Building2 className="w-6 h-6" />}
-            color="purple"
-          />
+          <>
+            <MetricCard
+              title="Empresas Clientes"
+              value={stats?.totalCompanies || 0}
+              subtitle="Total da plataforma"
+              icon={<Building2 className="w-6 h-6" />}
+              color="purple"
+            />
+            
+            <MetricCard
+              title="Total de Usuários"
+              value={stats?.totalUsers || 0}
+              subtitle="Usuários cadastrados"
+              icon={<Users className="w-6 h-6" />}
+              color="green"
+            />
+            
+            <MetricCard
+              title="Instâncias Ativas"
+              value={stats?.activeInstances || 0}
+              subtitle="WhatsApp conectados"
+              icon={<MessageSquare className="w-6 h-6" />}
+              color="blue"
+            />
+          </>
         )}
       </div>
 

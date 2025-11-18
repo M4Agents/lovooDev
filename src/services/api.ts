@@ -259,19 +259,30 @@ export const api = {
       const pageIds = pages?.map(p => p.id) || [];
 
       if (pageIds.length === 0) {
+        // Mesmo sem páginas, buscar dados globais para super admin
+        const [companiesResult, usersResult, instancesResult] = await Promise.all([
+          supabase.from('companies').select('id', { count: 'exact' }).eq('company_type', 'client'),
+          supabase.from('companies').select('user_id', { count: 'exact' }).not('user_id', 'is', null),
+          supabase.from('whatsapp_life_instances').select('id', { count: 'exact' }).neq('status', 'disconnected')
+        ]);
+
         return {
           totalPages: 0,
           totalVisitors: 0,
           totalConversions: 0,
           avgEngagementScore: 0,
-          totalCompanies: 0
+          totalCompanies: companiesResult.count || 0,
+          totalUsers: usersResult.count || 0,
+          activeInstances: instancesResult.count || 0
         };
       }
 
-      const [visitorsResult, conversionsResult, companiesResult] = await Promise.all([
+      const [visitorsResult, conversionsResult, companiesResult, usersResult, instancesResult] = await Promise.all([
         supabase.from('visitors').select('id', { count: 'exact' }).in('landing_page_id', pageIds),
         supabase.from('conversions').select('engagement_score').in('landing_page_id', pageIds),
-        supabase.from('companies').select('id', { count: 'exact' }).eq('company_type', 'client')
+        supabase.from('companies').select('id', { count: 'exact' }).eq('company_type', 'client'),
+        supabase.from('companies').select('user_id', { count: 'exact' }).not('user_id', 'is', null),
+        supabase.from('whatsapp_life_instances').select('id', { count: 'exact' }).neq('status', 'disconnected')
       ]);
 
       const avgEngagement = conversionsResult.data?.length
@@ -283,7 +294,9 @@ export const api = {
         totalVisitors: visitorsResult.count || 0,
         totalConversions: conversionsResult.data?.length || 0,
         avgEngagementScore: Number(avgEngagement.toFixed(2)),
-        totalCompanies: companiesResult.count || 0
+        totalCompanies: companiesResult.count || 0,
+        totalUsers: usersResult.count || 0,
+        activeInstances: instancesResult.count || 0
       };
     } else {
       // Empresa normal vê apenas suas próprias métricas
