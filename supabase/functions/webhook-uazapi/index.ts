@@ -1,7 +1,7 @@
 // =====================================================
-// EDGE FUNCTION - WEBHOOK UAZAPI
+// EDGE FUNCTION - WEBHOOK UAZAPI REAL FORMAT
 // =====================================================
-// Endpoint HTTP para receber webhooks da Uazapi
+// Endpoint HTTP PÚBLICO para receber webhooks da Uazapi no formato real
 // URL: https://[project].supabase.co/functions/v1/webhook-uazapi
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -39,10 +39,27 @@ serve(async (req) => {
       )
     }
 
-    // Inicializar cliente Supabase
+    // Inicializar cliente Supabase com service role key (bypass RLS)
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables')
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
 
     // Ler payload
     let payload: any
@@ -66,8 +83,8 @@ serve(async (req) => {
       timestamp: new Date().toISOString()
     })
 
-    // Processar webhook via RPC
-    const { data, error } = await supabase.rpc('process_uazapi_webhook', {
+    // Processar webhook via RPC com formato real
+    const { data, error } = await supabase.rpc('process_uazapi_webhook_real', {
       p_payload: payload
     })
 
