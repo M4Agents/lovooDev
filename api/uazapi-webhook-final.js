@@ -244,7 +244,7 @@ async function processMessage(payload) {
             name: senderName,
             phone: phoneNumber,
             company_id: company.id,
-            source: 'whatsapp_webhook',
+            origin: 'whatsapp_webhook',
             status: 'new',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
