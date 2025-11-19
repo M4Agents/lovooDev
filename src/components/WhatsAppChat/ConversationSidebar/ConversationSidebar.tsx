@@ -270,13 +270,22 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className={`text-sm font-semibold truncate ${
-              isSelected ? 'text-slate-800' : 'text-slate-700'
-            }`}>
-              {conversation.contact_name || formatPhone(conversation.contact_phone)}
-            </h4>
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex-1 min-w-0">
+              {/* Nome do Lead */}
+              <h4 className={`text-sm font-semibold truncate ${
+                isSelected ? 'text-slate-800' : 'text-slate-700'
+              }`}>
+                {conversation.contact_name || 'Lead sem nome'}
+              </h4>
+              {/* Telefone com fonte menor */}
+              <p className={`text-xs truncate mt-0.5 ${
+                isSelected ? 'text-slate-500' : 'text-slate-400'
+              }`}>
+                {formatPhone(conversation.contact_phone)}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2 ml-3">
               {conversation.last_message_at && (
                 <span className={`text-xs font-medium ${
                   isSelected ? 'text-slate-600' : 'text-slate-500'
@@ -292,7 +301,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-2">
             <p className={`text-sm truncate ${
               isSelected ? 'text-slate-600' : 'text-slate-500'
             }`}>
@@ -310,14 +319,6 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               </div>
             )}
           </div>
-
-          {!conversation.contact_name && (
-            <p className={`text-xs mt-1 ${
-              isSelected ? 'text-slate-500' : 'text-slate-400'
-            }`}>
-              {formatPhone(conversation.contact_phone)}
-            </p>
-          )}
         </div>
       </div>
     </button>
