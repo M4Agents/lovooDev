@@ -144,6 +144,7 @@ export class ChatApi {
     userId: string
   ): Promise<string> {
     try {
+      // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
         p_conversation_id: conversationId,
         p_company_id: companyId,
@@ -157,12 +158,53 @@ export class ChatApi {
       if (error) throw error
 
       if (!data.success) {
-        throw new Error(data.error || 'Erro ao enviar mensagem')
+        throw new Error(data.error || 'Erro ao criar mensagem')
       }
 
-      return data.message_id
+      const messageId = data.message_id
+
+      // PASSO 2: Enviar via Uazapi de forma assíncrona (não bloqueia UI)
+      this.sendViaUazapiAsync(messageId, companyId).catch(error => {
+        console.error('Erro no envio via Uazapi:', error)
+        // Erro será tratado pela função SQL que atualiza status para 'failed'
+      })
+
+      return messageId
     } catch (error) {
       console.error('Error sending message:', error)
+      throw error
+    }
+  }
+
+  /**
+   * FUNÇÃO ISOLADA: Envio via Uazapi de forma assíncrona
+   * Não afeta o fluxo principal do sistema
+   */
+  private static async sendViaUazapiAsync(messageId: string, companyId: string): Promise<void> {
+    try {
+      console.log('🚀 Iniciando envio via Uazapi:', { messageId, companyId })
+
+      const response = await fetch('/api/uazapi-send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message_id: messageId,
+          company_id: companyId
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        console.error('❌ Falha no envio via Uazapi:', result)
+        throw new Error(result.error || 'Falha no envio')
+      }
+
+      console.log('✅ Mensagem enviada via Uazapi:', result)
+    } catch (error) {
+      console.error('💥 Erro no envio via Uazapi:', error)
       throw error
     }
   }
