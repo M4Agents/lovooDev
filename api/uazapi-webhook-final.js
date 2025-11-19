@@ -206,8 +206,6 @@ async function processMessage(payload) {
         message_type: 'text',
         direction: 'inbound',
         status: 'delivered',
-        sender_name: senderName,
-        sender_phone: phoneNumber,
         timestamp: new Date(timestamp).toISOString(),
         created_at: new Date().toISOString()
       })
