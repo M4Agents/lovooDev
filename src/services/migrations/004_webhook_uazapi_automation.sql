@@ -319,8 +319,8 @@ BEGIN
         );
     END IF;
     
-    -- URL do nosso webhook
-    v_webhook_url := 'https://etzdsywunlpbgxkphuil.supabase.co/functions/v1/webhook-uazapi';
+    -- URL do nosso webhook (domínio de desenvolvimento)
+    v_webhook_url := 'https://lovoo-dev.vercel.app/api/webhook-uazapi-real';
     
     -- Endpoint correto da Uazapi
     v_uazapi_endpoint := 'https://lovoo.uazapi.com/webhook';
