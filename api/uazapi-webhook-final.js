@@ -221,20 +221,35 @@ async function processMessage(payload) {
     // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS)
     let leadId = null;
     try {
-      console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE...');
+      console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA...');
+      console.log('📍 Empresa da instância:', company.id, '-', company.name);
       
-      // Verificar se já existe lead com este telefone na empresa
+      // Normalizar telefone para busca mais eficiente
+      const phoneVariations = [
+        phoneNumber,                    // 5511999198369
+        `+55${phoneNumber}`,           // +555511999198369
+        phoneNumber.substring(2),       // 11999198369
+        `+55${phoneNumber.substring(2)}` // +5511999198369
+      ];
+      
+      console.log('📞 Variações de telefone para busca:', phoneVariations);
+      
+      // Verificar se já existe lead APENAS na empresa da instância (isolamento total)
       const { data: existingLead } = await supabase
         .from('leads')
-        .select('id')
-        .eq('company_id', company.id)
-        .or(`phone.eq.${phoneNumber},phone.eq.+55${phoneNumber},phone.eq.${phoneNumber.substring(2)}`)
+        .select('id, phone, name')
+        .eq('company_id', company.id)  // ISOLAMENTO: apenas na empresa da instância
+        .in('phone', phoneVariations)
+        .limit(1)
         .single();
       
       if (existingLead) {
         leadId = existingLead.id;
-        console.log('👤 LEAD JÁ EXISTE:', leadId);
+        console.log('👤 LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA:', leadId);
+        console.log('📋 Dados do lead encontrado:', existingLead);
       } else {
+        console.log('🚫 NENHUM LEAD ENCONTRADO NA EMPRESA DA INSTÂNCIA');
+        console.log('📍 Criando novo lead na empresa:', company.name);
         console.log('🆕 CRIANDO NOVO LEAD (RPC API)...');
         
         // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
