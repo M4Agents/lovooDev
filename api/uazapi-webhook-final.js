@@ -218,11 +218,59 @@ async function processMessage(payload) {
     
     console.log('✅ MENSAGEM SALVA:', savedMessage.id);
     
+    // 🎯 CRIAR LEAD AUTOMATICAMENTE (SOMENTE SE NÃO EXISTIR)
+    let leadId = null;
+    try {
+      console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE...');
+      
+      // Verificar se já existe lead com este telefone na empresa
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('company_id', company.id)
+        .or(`phone.eq.${phoneNumber},phone.eq.+55${phoneNumber},phone.eq.${phoneNumber.substring(2)}`)
+        .single();
+      
+      if (existingLead) {
+        leadId = existingLead.id;
+        console.log('👤 LEAD JÁ EXISTE:', leadId);
+      } else {
+        console.log('🆕 CRIANDO NOVO LEAD...');
+        
+        // Criar novo lead automaticamente
+        const { data: newLead, error: leadError } = await supabase
+          .from('leads')
+          .insert({
+            name: senderName,
+            phone: phoneNumber,
+            company_id: company.id,
+            source: 'whatsapp_webhook',
+            status: 'new',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+        
+        if (leadError) {
+          console.error('⚠️ ERRO AO CRIAR LEAD:', leadError.message);
+          // NÃO FALHA - apenas loga o erro
+        } else {
+          leadId = newLead.id;
+          console.log('🎉 NOVO LEAD CRIADO:', leadId);
+        }
+      }
+    } catch (leadException) {
+      console.error('⚠️ EXCEPTION AO PROCESSAR LEAD:', leadException.message);
+      // NÃO FALHA - sistema continua funcionando
+    }
+    
     return { 
       success: true, 
       message_id: savedMessage.id,
       contact_id: contactId,
-      conversation_id: conversationId
+      conversation_id: conversationId,
+      lead_id: leadId
     };
     
   } catch (error) {
