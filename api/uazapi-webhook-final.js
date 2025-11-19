@@ -235,35 +235,38 @@ async function processMessage(payload) {
         leadId = existingLead.id;
         console.log('👤 LEAD JÁ EXISTE:', leadId);
       } else {
-        console.log('🆕 CRIANDO NOVO LEAD (PADRÃO API)...');
+        console.log('🆕 CRIANDO NOVO LEAD (RPC API)...');
         
-        // USAR EXATAMENTE O MESMO PADRÃO DA API DE LEADS QUE FUNCIONA
+        // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
         const leadData = {
-          company_id: company.id,
+          api_key: null, // Não usado no RPC, mas mantemos estrutura
           name: senderName || 'Lead WhatsApp',
           email: null,
           phone: phoneNumber,
-          origin: 'webhook',
-          status: 'novo',
           interest: null,
           company_name: null,
           company_cnpj: null,
           company_email: null,
-          company_telefone: null
+          visitor_id: null
         };
         
-        const { data: newLead, error: leadError } = await supabase
-          .from('leads')
-          .insert(leadData)
-          .select()
-          .single();
+        // Usar RPC que bypassa trigger e captura exceções
+        const { data: rpcResult, error: leadError } = await supabase
+          .rpc('public_create_lead_webhook', { 
+            lead_data: {
+              ...leadData,
+              company_id: company.id // Adicionar company_id para o RPC
+            }
+          });
         
         if (leadError) {
-          console.error('⚠️ ERRO AO CRIAR LEAD:', leadError.message);
+          console.error('⚠️ ERRO AO CRIAR LEAD (RPC):', leadError.message);
           // NÃO FALHA - apenas loga o erro
+        } else if (rpcResult && rpcResult.success) {
+          leadId = rpcResult.lead_id;
+          console.log('🎉 NOVO LEAD CRIADO (RPC API):', leadId);
         } else {
-          leadId = newLead.id;
-          console.log('🎉 NOVO LEAD CRIADO (PADRÃO API):', leadId);
+          console.error('⚠️ RPC RETORNOU ERRO:', rpcResult?.error || 'Erro desconhecido');
         }
       }
     } catch (leadException) {
