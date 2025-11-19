@@ -113,6 +113,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Listener para refresh automático de mensagens
+  useEffect(() => {
+    const handleRefreshMessages = (event: CustomEvent) => {
+      const { conversationId: eventConvId, companyId: eventCompanyId } = event.detail
+      if (eventConvId === conversationId && eventCompanyId === companyId) {
+        console.log('🔄 Refresh automático de mensagens disparado')
+        fetchMessages()
+      }
+    }
+
+    window.addEventListener('refreshMessages', handleRefreshMessages as EventListener)
+    
+    return () => {
+      window.removeEventListener('refreshMessages', handleRefreshMessages as EventListener)
+    }
+  }, [conversationId, companyId, fetchMessages])
+
   // =====================================================
   // SUBSCRIPTION TEMPO REAL
   // =====================================================
