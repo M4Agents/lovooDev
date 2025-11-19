@@ -128,6 +128,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           if (prev.some(m => m.id === newMessage.id)) return prev
           return [...prev, newMessage]
         })
+      } else if (payload.eventType === 'UPDATE') {
+        // Atualizar status da mensagem em tempo real
+        const updatedMessage = payload.new
+        setMessages(prev => 
+          prev.map(m => 
+            m.id === updatedMessage.id 
+              ? { ...m, status: updatedMessage.status, uazapi_message_id: updatedMessage.uazapi_message_id }
+              : m
+          )
+        )
       }
     })
 
