@@ -144,6 +144,13 @@ export class ChatApi {
     userId: string
   ): Promise<string> {
     try {
+      console.log('🚀 ChatApi.sendMessage - Iniciando:', {
+        conversationId,
+        companyId,
+        userId,
+        message
+      })
+
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
         p_conversation_id: conversationId,
@@ -155,23 +162,31 @@ export class ChatApi {
         p_media_url: message.media_url || null
       })
 
-      if (error) throw error
+      console.log('📝 RPC chat_create_message - Resultado:', { data, error })
+
+      if (error) {
+        console.error('❌ Erro no RPC:', error)
+        throw error
+      }
 
       if (!data.success) {
+        console.error('❌ RPC retornou erro:', data)
         throw new Error(data.error || 'Erro ao criar mensagem')
       }
 
       const messageId = data.message_id
+      console.log('✅ Mensagem criada no banco:', messageId)
 
       // PASSO 2: Enviar via Uazapi de forma assíncrona (não bloqueia UI)
       this.sendViaUazapiAsync(messageId, companyId).catch(error => {
-        console.error('Erro no envio via Uazapi:', error)
+        console.error('💥 Erro no envio via Uazapi:', error)
         // Erro será tratado pela função SQL que atualiza status para 'failed'
       })
 
+      console.log('🎯 ChatApi.sendMessage - Concluído com sucesso')
       return messageId
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('💥 ChatApi.sendMessage - Erro geral:', error)
       throw error
     }
   }
