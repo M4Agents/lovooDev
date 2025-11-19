@@ -155,11 +155,24 @@ async function processMessage(payload) {
     if (existingConversation) {
       conversationId = existingConversation.id;
       console.log('💬 CONVERSA EXISTENTE:', conversationId);
+      
+      // Atualizar contact_name se estiver vazio
+      await supabase
+        .from('chat_conversations')
+        .update({
+          contact_name: senderName,
+          last_message_at: new Date(timestamp).toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .is('contact_name', null);
+        
     } else {
       const { data: newConversation, error: conversationError } = await supabase
         .from('chat_conversations')
         .insert({
           contact_phone: phoneNumber,
+          contact_name: senderName,
           company_id: company.id,
           instance_id: instance.id,
           status: 'active',
