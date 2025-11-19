@@ -197,29 +197,43 @@ export class ChatApi {
    */
   private static async sendViaUazapiAsync(messageId: string, companyId: string): Promise<void> {
     try {
-      console.log('🚀 Iniciando envio via Uazapi:', { messageId, companyId })
+      console.log('🚀 sendViaUazapiAsync - INICIANDO:', { messageId, companyId })
 
+      const payload = {
+        message_id: messageId,
+        company_id: companyId
+      }
+      console.log('📦 Payload para envio:', payload)
+
+      console.log('🌐 Fazendo fetch para /api/uazapi-send-message...')
       const response = await fetch('/api/uazapi-send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          message_id: messageId,
-          company_id: companyId
-        })
+        body: JSON.stringify(payload)
       })
 
+      console.log('📡 Response status:', response.status, response.statusText)
+
       const result = await response.json()
+      console.log('📋 Response body:', result)
 
       if (!response.ok || !result.success) {
-        console.error('❌ Falha no envio via Uazapi:', result)
+        console.error('❌ FALHA no envio via Uazapi:', {
+          status: response.status,
+          result: result
+        })
         throw new Error(result.error || 'Falha no envio')
       }
 
-      console.log('✅ Mensagem enviada via Uazapi:', result)
+      console.log('✅ SUCESSO - Mensagem enviada via Uazapi:', result)
     } catch (error) {
-      console.error('💥 Erro no envio via Uazapi:', error)
+      console.error('💥 ERRO CRÍTICO no envio via Uazapi:', {
+        error: error,
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+        stack: error instanceof Error ? error.stack : undefined
+      })
       throw error
     }
   }
