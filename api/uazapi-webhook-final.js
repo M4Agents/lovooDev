@@ -218,7 +218,7 @@ async function processMessage(payload) {
     
     console.log('✅ MENSAGEM SALVA:', savedMessage.id);
     
-    // 🎯 CRIAR LEAD AUTOMATICAMENTE (SOMENTE SE NÃO EXISTIR)
+    // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS)
     let leadId = null;
     try {
       console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE...');
@@ -235,21 +235,27 @@ async function processMessage(payload) {
         leadId = existingLead.id;
         console.log('👤 LEAD JÁ EXISTE:', leadId);
       } else {
-        console.log('🆕 CRIANDO NOVO LEAD...');
+        console.log('🆕 CRIANDO NOVO LEAD (PADRÃO API)...');
         
-        // Criar novo lead automaticamente
+        // USAR EXATAMENTE O MESMO PADRÃO DA API DE LEADS QUE FUNCIONA
+        const leadData = {
+          company_id: company.id,
+          name: senderName || 'Lead WhatsApp',
+          email: null,
+          phone: phoneNumber,
+          origin: 'webhook',
+          status: 'novo',
+          interest: null,
+          company_name: null,
+          company_cnpj: null,
+          company_email: null,
+          company_telefone: null
+        };
+        
         const { data: newLead, error: leadError } = await supabase
           .from('leads')
-          .insert({
-            name: senderName,
-            phone: phoneNumber,
-            company_id: company.id,
-            origin: 'whatsapp_webhook',
-            status: 'new',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select('id')
+          .insert(leadData)
+          .select()
           .single();
         
         if (leadError) {
@@ -257,7 +263,7 @@ async function processMessage(payload) {
           // NÃO FALHA - apenas loga o erro
         } else {
           leadId = newLead.id;
-          console.log('🎉 NOVO LEAD CRIADO:', leadId);
+          console.log('🎉 NOVO LEAD CRIADO (PADRÃO API):', leadId);
         }
       }
     } catch (leadException) {
