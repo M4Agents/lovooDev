@@ -210,7 +210,7 @@ async function processUazapiRealMessage(params) {
           name: senderName,
           company_id: company.id,
           lead_source: 'whatsapp_webhook',
-          profile_image_url: chat?.imagePreview || null,
+          profile_picture_url: chat?.imagePreview || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
