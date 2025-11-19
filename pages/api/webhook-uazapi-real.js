@@ -96,7 +96,7 @@ async function processUazapiRealMessage(params) {
       }
     });
     
-    console.log('🔑 USANDO MESMA CHAVE ANON DO WEBHOOK-LEAD QUE FUNCIONA');
+    console.log('🔑 USANDO MESMA CHAVE ANON DO WEBHOOK-LEAD QUE FUNCIONA - V2');
     
     // Extrair dados do payload real (formato N8N)
     const payload = params.payload;
