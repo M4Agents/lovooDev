@@ -240,6 +240,7 @@ async function processMessage(payload) {
         .select('id, phone, name')
         .eq('company_id', company.id)  // ISOLAMENTO: apenas na empresa da instância
         .in('phone', phoneVariations)
+        .is('deleted_at', null)        // IGNORAR leads deletados (soft delete)
         .limit(1)
         .single();
       
