@@ -94,7 +94,7 @@ async function processMessage(payload) {
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id, company_id, companies(id, name)')
+      .select('id, company_id, companies(id, name, api_key)')
       .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
@@ -255,7 +255,7 @@ async function processMessage(payload) {
         
         // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
         const leadData = {
-          api_key: null, // Não usado no RPC, mas mantemos estrutura
+          api_key: company.api_key, // Usar api_key real da empresa
           name: senderName || 'Lead WhatsApp',
           email: null,
           phone: phoneNumber,
