@@ -56,7 +56,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         timestamp: new Date().toISOString()
       })
       
-      const messagesData = await chatApi.getMessages(conversationId, companyId, 100) // Aumentar limite para 100
+      const messagesData = await chatApi.getMessages(conversationId, companyId, 0) // 0 = sem limite
       
       console.log('📊 DEBUG: Dados retornados da API:', {
         total: messagesData?.length || 0,
@@ -201,10 +201,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         try {
           console.log('⏰ DEBUG: Iniciando recarregamento após 2s delay')
           
-          // 🔧 CORREÇÃO: Buscar mais mensagens para garantir que a nova seja incluída
-          const messagesData = await chatApi.getMessages(conversationId, companyId, 100) // Aumentar limite
+          // 🔧 CORREÇÃO: Buscar TODAS as mensagens sem limite
+          const messagesData = await chatApi.getMessages(conversationId, companyId, 0) // 0 = sem limite
           
-          console.log('📊 DEBUG: Recarregamento com limite aumentado:', {
+          console.log('📊 DEBUG: Recarregamento SEM LIMITE:', {
             total: messagesData?.length || 0,
             contemMensagemEnviada: messagesData?.some(m => m.id === messageId) || false
           })

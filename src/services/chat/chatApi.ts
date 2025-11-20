@@ -113,14 +113,18 @@ export class ChatApi {
   static async getMessages(
     conversationId: string,
     companyId: string,
-    limit: number = 50,
+    limit: number = 0, // 0 = sem limite por padrão
     offset: number = 0
   ): Promise<ChatMessage[]> {
     try {
+      // Se limit for 0, usar um número muito alto para "sem limite"
+      const effectiveLimit = limit === 0 ? 999999 : limit
+      
       console.log('🔍 DEBUG: chatApi.getMessages chamado', {
         conversationId,
         companyId,
-        limit,
+        limit: limit,
+        effectiveLimit: effectiveLimit,
         offset,
         timestamp: new Date().toISOString()
       })
@@ -128,7 +132,7 @@ export class ChatApi {
       const { data, error } = await supabase.rpc('chat_get_messages', {
         p_conversation_id: conversationId,
         p_company_id: companyId,
-        p_limit: limit,
+        p_limit: effectiveLimit,
         p_offset: offset
       })
 
