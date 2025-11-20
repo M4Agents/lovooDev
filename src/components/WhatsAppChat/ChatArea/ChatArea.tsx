@@ -27,9 +27,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // ✅ CACHE PERSISTENTE de mensagens enviadas (sobrevive a recarregamentos)
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>(() => {
     try {
+      if (!conversationId) return []
       const cached = localStorage.getItem(`sentMessages_${conversationId}`)
-      return cached ? JSON.parse(cached) : []
-    } catch {
+      if (!cached) return []
+      
+      const parsed = JSON.parse(cached)
+      // ✅ PROTEÇÃO: Validar estrutura das mensagens do cache
+      return Array.isArray(parsed) ? parsed.filter(msg => 
+        msg && typeof msg === 'object' && msg.id && msg.content
+      ) : []
+    } catch (error) {
+      console.warn('⚠️ Erro ao carregar cache, limpando:', error)
+      if (conversationId) {
+        localStorage.removeItem(`sentMessages_${conversationId}`)
+      }
       return []
     }
   })
@@ -38,10 +49,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // ✅ PERSISTIR CACHE no localStorage sempre que atualizar
   useEffect(() => {
     try {
+      if (!conversationId || !Array.isArray(sentMessages)) return
       localStorage.setItem(`sentMessages_${conversationId}`, JSON.stringify(sentMessages))
       console.log('💾 Cache persistido:', sentMessages.length, 'mensagens')
     } catch (error) {
       console.warn('⚠️ Erro ao persistir cache:', error)
+      // Limpar cache corrompido
+      if (conversationId) {
+        localStorage.removeItem(`sentMessages_${conversationId}`)
+      }
     }
   }, [sentMessages, conversationId])
 
@@ -105,10 +121,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           array.findIndex(m => m.id === message.id) === index
         )
         
-        // Ordenar por timestamp
-        const finalMessages = uniqueMessages.sort((a, b) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        )
+        // ✅ CORREÇÃO: Ordenação robusta por timestamp
+        const finalMessages = uniqueMessages.sort((a, b) => {
+          try {
+            const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime()
+            const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime()
+            return timeA - timeB
+          } catch (error) {
+            console.warn('⚠️ Erro na ordenação, usando fallback:', error)
+            return 0 // Mantém ordem original se houver erro
+          }
+        })
         
         console.log('✅ ESTADO FINAL:', {
           total: finalMessages.length,
