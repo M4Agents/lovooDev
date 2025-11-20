@@ -33,10 +33,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
+      console.log('🔍 FETCH MESSAGES DEBUG:', {
+        conversationId,
+        companyId,
+        timestamp: new Date().toISOString()
+      })
+      
       const messagesData = await chatApi.getMessages(conversationId, companyId)
+      
+      console.log('📊 MENSAGENS DO BANCO:', {
+        total: messagesData.length,
+        ultimasMensagens: messagesData.slice(-3).map(m => ({
+          id: m.id,
+          content: m.content?.substring(0, 30),
+          direction: m.direction,
+          timestamp: m.timestamp
+        }))
+      })
       
       // ✅ CORREÇÃO: Preservar mensagens otimísticas durante recarregamento
       setMessages(prev => {
+        console.log('📋 ESTADO ANTERIOR:', {
+          total: prev.length,
+          otimisticas: prev.filter(m => (m as any)._isOptimistic).length
+        })
+        
         // Encontrar mensagens otimísticas que ainda não foram confirmadas
         const optimisticMessages = prev.filter(m => (m as any)._isOptimistic)
         
@@ -49,9 +70,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )
         
         // Ordenar por timestamp
-        return uniqueMessages.sort((a, b) => 
+        const finalMessages = uniqueMessages.sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
+        
+        console.log('✅ ESTADO FINAL:', {
+          total: finalMessages.length,
+          ultimasMensagens: finalMessages.slice(-3).map(m => ({
+            id: m.id,
+            content: m.content?.substring(0, 30),
+            direction: m.direction,
+            isOptimistic: (m as any)._isOptimistic
+          }))
+        })
+        
+        return finalMessages
       })
     } catch (error) {
       console.error('Error fetching messages:', error)
