@@ -183,17 +183,8 @@ export class ChatApi {
         // Erro será tratado pela função SQL que atualiza status para 'failed'
       })
 
-      // PASSO 3: Aguardar um pouco e recarregar mensagens para garantir UI atualizada
-      setTimeout(async () => {
-        try {
-          // Disparar evento customizado para recarregar mensagens
-          window.dispatchEvent(new CustomEvent('refreshMessages', { 
-            detail: { conversationId, companyId } 
-          }))
-        } catch (error) {
-          console.log('Refresh automático não disponível')
-        }
-      }, 2000) // 2 segundos após envio
+      // ✅ CORREÇÃO: Removido auto-refresh que causava loop e experiência ruim
+      // O sistema de cache agora garante que mensagens permaneçam visíveis
 
       console.log('🎯 ChatApi.sendMessage - Concluído com sucesso')
       return messageId
