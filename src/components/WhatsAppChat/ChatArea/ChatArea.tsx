@@ -24,8 +24,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
-  const [sentMessages, setSentMessages] = useState<ChatMessage[]>([]) // ✅ CACHE de mensagens enviadas
+  // ✅ CACHE PERSISTENTE de mensagens enviadas (sobrevive a recarregamentos)
+  const [sentMessages, setSentMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const cached = localStorage.getItem(`sentMessages_${conversationId}`)
+      return cached ? JSON.parse(cached) : []
+    } catch {
+      return []
+    }
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // ✅ PERSISTIR CACHE no localStorage sempre que atualizar
+  useEffect(() => {
+    try {
+      localStorage.setItem(`sentMessages_${conversationId}`, JSON.stringify(sentMessages))
+      console.log('💾 Cache persistido:', sentMessages.length, 'mensagens')
+    } catch (error) {
+      console.warn('⚠️ Erro ao persistir cache:', error)
+    }
+  }, [sentMessages, conversationId])
 
   // =====================================================
   // BUSCAR MENSAGENS
@@ -67,6 +85,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const cachedMessages = sentMessages.filter(cached => 
           !messagesData.some(db => db.id === cached.id) // Só se não estiver no banco
         )
+        
+        // ✅ LIMPEZA: Remover do cache mensagens que já estão no banco
+        const confirmedInDB = sentMessages.filter(cached => 
+          messagesData.some(db => db.id === cached.id)
+        )
+        if (confirmedInDB.length > 0) {
+          console.log('🧹 Limpando cache:', confirmedInDB.length, 'mensagens confirmadas no DB')
+          setSentMessages(prev => prev.filter(cached => 
+            !messagesData.some(db => db.id === cached.id)
+          ))
+        }
         
         // Combinar: banco + cache + otimísticas
         const allMessages = [...messagesData, ...cachedMessages, ...optimisticMessages]
