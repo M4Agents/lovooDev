@@ -134,10 +134,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               : m
           })
         )
-      } else {
-        // Fallback: recarregar mensagens (comportamento atual)
-        await fetchMessages()
       }
+      // ✅ CORREÇÃO: Removido fetchMessages() que causava sumiço das mensagens
 
       // ✅ MELHORIA: Emitir evento para outros componentes
       if (ChatFeatureManager.shouldUseEventBus()) {
