@@ -6,6 +6,9 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
+import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
+import { ChatFeatureManager } from '../../../config/chatFeatures'
+import { useConversationRealtime } from '../../../hooks/chat/useChatRealtime'
 import type { ChatMessage, SendMessageForm, ChatAreaProps } from '../../../types/whatsapp-chat'
 
 // =====================================================
@@ -60,38 +63,114 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSendMessage = async (messageForm: SendMessageForm) => {
     if (!messageForm.content.trim()) return
 
+    const useOptimistic = ChatFeatureManager.shouldUseOptimisticMessages()
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    const messageTimeout = ChatFeatureManager.getMessageTimeout()
+
+    let tempId: string | null = null
+    let timeoutId: NodeJS.Timeout | null = null
+
     try {
       setSending(true)
       
-      // Adicionar mensagem otimisticamente
-      const optimisticMessage: ChatMessage = {
-        id: `temp-${Date.now()}`,
-        conversation_id: conversationId,
-        company_id: companyId,
-        instance_id: conversation?.instance_id || '',
-        message_type: messageForm.message_type,
-        content: messageForm.content,
-        media_url: messageForm.media_url,
-        direction: 'outbound',
-        status: 'sending',
-        is_scheduled: false,
-        sent_by: userId,
-        timestamp: new Date(),
-        created_at: new Date(),
-        updated_at: new Date()
+      if (debugLogs) {
+        console.log('🚀 Enviando mensagem:', { conversationId, messageForm, useOptimistic })
+      }
+      
+      // ✅ MELHORIA: Mensagem otimística aprimorada (se habilitada)
+      if (useOptimistic) {
+        tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        
+        const optimisticMessage: ChatMessage & { _isOptimistic?: boolean; _tempId?: string } = {
+          id: tempId,
+          conversation_id: conversationId,
+          company_id: companyId,
+          instance_id: conversation?.instance_id || '',
+          message_type: messageForm.message_type,
+          content: messageForm.content,
+          media_url: messageForm.media_url,
+          direction: 'outbound',
+          status: 'sending',
+          is_scheduled: false,
+          sent_by: userId,
+          timestamp: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+          // Marcadores para controle
+          _isOptimistic: true,
+          _tempId: tempId
+        }
+
+        setMessages(prev => [...prev, optimisticMessage])
+
+        // ✅ MELHORIA: Timeout para remover mensagem se falhar
+        timeoutId = setTimeout(() => {
+          setMessages(prev => prev.filter(m => (m as any)._tempId !== tempId))
+          if (debugLogs) {
+            console.warn('⏰ Mensagem otimística removida por timeout:', tempId)
+          }
+        }, messageTimeout)
       }
 
-      setMessages(prev => [...prev, optimisticMessage])
-
-      // Enviar mensagem
-      await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
+      // Enviar mensagem (mantém API atual)
+      const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
       
-      // Recarregar mensagens para pegar a versão real
-      await fetchMessages()
+      if (debugLogs) {
+        console.log('✅ Mensagem enviada com sucesso:', messageId)
+      }
+
+      // ✅ MELHORIA: Limpar timeout se sucesso
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
+      if (useOptimistic && tempId) {
+        // ✅ MELHORIA: Substituir mensagem otimística pela real
+        setMessages(prev => 
+          prev.map(m => {
+            const msg = m as any
+            return msg._tempId === tempId 
+              ? { ...m, id: messageId, status: 'sent', _isOptimistic: false }
+              : m
+          })
+        )
+      } else {
+        // Fallback: recarregar mensagens (comportamento atual)
+        await fetchMessages()
+      }
+
+      // ✅ MELHORIA: Emitir evento para outros componentes
+      if (ChatFeatureManager.shouldUseEventBus()) {
+        ChatEventBus.emit('chat:message:sent', {
+          messageId,
+          conversationId,
+          companyId,
+          content: messageForm.content
+        })
+      }
+      
     } catch (error) {
-      console.error('Error sending message:', error)
-      // Remover mensagem otimística em caso de erro
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')))
+      console.error('❌ Erro ao enviar mensagem:', error)
+      
+      if (useOptimistic && tempId) {
+        // ✅ MELHORIA: Marcar mensagem como falhada ao invés de remover
+        setMessages(prev => 
+          prev.map(m => {
+            const msg = m as any
+            return msg._tempId === tempId 
+              ? { ...m, status: 'failed' }
+              : m
+          })
+        )
+      }
+      
+      // Emitir evento de erro
+      if (ChatFeatureManager.shouldUseEventBus()) {
+        ChatEventBus.emit('chat:message:failed', {
+          conversationId,
+          error: error instanceof Error ? error.message : 'Erro desconhecido'
+        })
+      }
     } finally {
       setSending(false)
     }
@@ -131,22 +210,109 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }, [conversationId, companyId, fetchMessages])
 
   // =====================================================
-  // SUBSCRIPTION TEMPO REAL
+  // SUBSCRIPTION TEMPO REAL OTIMIZADA
   // =====================================================
 
+  // Hook para receber mensagens em tempo real desta conversa
+  useConversationRealtime(
+    conversationId,
+    // Callback para nova mensagem recebida
+    (message) => {
+      const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+      
+      if (debugLogs) {
+        console.log('📨 Nova mensagem recebida via realtime:', message)
+      }
+      
+      setMessages(prev => {
+        // Evitar duplicatas
+        if (prev.some(m => m.id === message.id)) {
+          if (debugLogs) {
+            console.log('⚠️ Mensagem duplicada ignorada:', message.id)
+          }
+          return prev
+        }
+        return [...prev, message]
+      })
+    },
+    // Callback para status de mensagem atualizado
+    (statusUpdate) => {
+      const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+      
+      if (debugLogs) {
+        console.log('🔄 Status de mensagem atualizado:', statusUpdate)
+      }
+      
+      setMessages(prev => 
+        prev.map(m => {
+          // Atualizar por ID ou por tempId (para mensagens otimísticas)
+          const msg = m as any
+          if (m.id === statusUpdate.messageId || msg._tempId === statusUpdate.messageId) {
+            return { ...m, status: statusUpdate.status }
+          }
+          return m
+        })
+      )
+    }
+  )
+
+  // ✅ NOVO: Listener para eventos do chat via Event Bus
+  useChatEvent(`chat:conversation:${conversationId}:message`, (payload) => {
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('📨 Evento de mensagem via Event Bus:', payload)
+    }
+    
+    if (payload.action === 'insert' && payload.data) {
+      setMessages(prev => {
+        // Evitar duplicatas
+        if (prev.some(m => m.id === payload.data.id)) return prev
+        return [...prev, payload.data]
+      })
+    }
+  }, [conversationId])
+
+  // ✅ NOVO: Listener para atualizações de status via Event Bus
+  useChatEvent(`chat:conversation:${conversationId}:status`, (payload) => {
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('🔄 Evento de status via Event Bus:', payload)
+    }
+    
+    if (payload.action === 'update' && payload.data) {
+      const { messageId, status } = payload.data
+      setMessages(prev => 
+        prev.map(m => {
+          const msg = m as any
+          if (m.id === messageId || msg._tempId === messageId) {
+            return { ...m, status }
+          }
+          return m
+        })
+      )
+    }
+  }, [conversationId])
+
+  // ✅ FALLBACK: Manter subscription legada se Event Bus desabilitado
   useEffect(() => {
-    if (!conversationId) return
+    if (!conversationId || ChatFeatureManager.shouldUseEventBus()) return
+
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('🔄 Usando subscription legada (fallback)')
+    }
 
     const subscription = chatApi.subscribeToMessages(conversationId, (payload) => {
       if (payload.eventType === 'INSERT') {
         const newMessage = payload.new
         setMessages(prev => {
-          // Evitar duplicatas
           if (prev.some(m => m.id === newMessage.id)) return prev
           return [...prev, newMessage]
         })
       } else if (payload.eventType === 'UPDATE') {
-        // Atualizar status da mensagem em tempo real
         const updatedMessage = payload.new
         setMessages(prev => 
           prev.map(m => 

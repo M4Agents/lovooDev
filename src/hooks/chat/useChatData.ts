@@ -7,6 +7,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { chatApi } from '../../services/chat/chatApi'
 import { supabase } from '../../lib/supabase'
+import { useChatRealtime } from './useChatRealtime'
+import { ChatEventBus, useChatEvent } from '../../services/chat/chatEventBus'
+import { ChatFeatureManager } from '../../config/chatFeatures'
 import type {
   ChatConversation,
   ConversationFilter,
@@ -95,6 +98,79 @@ export const useChatData = (
       fetchConversations()
     }
   }, [fetchConversations, selectedInstance])
+
+  // =====================================================
+  // SISTEMA DE TEMPO REAL UNIFICADO
+  // =====================================================
+
+  // Ativar subscription unificada para esta empresa
+  const realtimeStatus = useChatRealtime(companyId, {
+    enabled: ChatFeatureManager.shouldUseUnifiedRealtime(),
+    debug: ChatFeatureManager.shouldShowDebugLogs(),
+    fallbackToLegacy: ChatFeatureManager.shouldFallbackToLegacy()
+  })
+
+  // Listener para novas conversas criadas
+  useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('💬 Nova conversa criada via Event Bus:', conversation)
+    }
+    
+    if (conversation.company_id === companyId) {
+      setConversations(prev => {
+        // Evitar duplicatas
+        if (prev.some(conv => conv.id === conversation.id)) return prev
+        return [conversation, ...prev]
+      })
+    }
+  }, [companyId])
+
+  // Listener para conversas atualizadas
+  useChatEvent('chat:conversation:updated', (payload: any) => {
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('🔄 Conversa atualizada via Event Bus:', payload)
+    }
+    
+    if (payload.data && payload.data.company_id === companyId) {
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === payload.data.id ? payload.data : conv
+        )
+      )
+    }
+  }, [companyId])
+
+  // Listener para mensagens recebidas (atualizar última mensagem da conversa)
+  useChatEvent('chat:message:received', (payload: any) => {
+    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+    
+    if (debugLogs) {
+      console.log('📨 Mensagem recebida - atualizando conversa:', payload)
+    }
+    
+    if (payload.data && payload.companyId === companyId) {
+      const message = payload.data
+      
+      setConversations(prev => 
+        prev.map(conv => {
+          if (conv.id === message.conversation_id) {
+            return {
+              ...conv,
+              last_message_at: new Date(message.timestamp),
+              last_message_content: message.content,
+              last_message_direction: message.direction,
+              unread_count: message.direction === 'inbound' ? conv.unread_count + 1 : conv.unread_count
+            }
+          }
+          return conv
+        })
+      )
+    }
+  }, [companyId])
 
   // =====================================================
   // HANDLERS
