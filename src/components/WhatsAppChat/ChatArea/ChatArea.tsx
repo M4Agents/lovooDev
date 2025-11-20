@@ -50,13 +50,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
-      console.log('🔍 Buscando mensagens com merge inteligente')
+      console.log('🔍 DEBUG: Iniciando fetchMessages', {
+        conversationId,
+        companyId,
+        timestamp: new Date().toISOString()
+      })
       
       const messagesData = await chatApi.getMessages(conversationId, companyId)
-      console.log('📊 Mensagens do banco:', messagesData.length)
+      
+      console.log('📊 DEBUG: Dados retornados da API:', {
+        total: messagesData?.length || 0,
+        primeiras3: messagesData?.slice(0, 3).map(m => ({
+          id: m.id,
+          content: m.content?.substring(0, 30),
+          direction: m.direction,
+          status: m.status,
+          timestamp: m.timestamp
+        })),
+        ultimas3: messagesData?.slice(-3).map(m => ({
+          id: m.id,
+          content: m.content?.substring(0, 30),
+          direction: m.direction,
+          status: m.status,
+          timestamp: m.timestamp
+        }))
+      })
       
       // Merge inteligente: preservar mensagens locais temporárias
       setMessages(prev => {
+        console.log('🔄 DEBUG: Estado anterior do chat:', {
+          total: prev.length,
+          temporarias: prev.filter(msg => msg.id.startsWith('temp-')).length,
+          permanentes: prev.filter(msg => !msg.id.startsWith('temp-')).length
+        })
+        
         // Mensagens temporárias (ainda não confirmadas no banco)
         const tempMessages = prev.filter(msg => msg.id.startsWith('temp-'))
         
@@ -71,17 +98,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
         
-        console.log('✅ Merge concluído:', {
+        console.log('✅ DEBUG: Merge concluído:', {
           banco: bankMessages.length,
           temporarias: tempMessages.length,
-          total: sortedMessages.length
+          total: sortedMessages.length,
+          finalMessages: sortedMessages.slice(-3).map(m => ({
+            id: m.id,
+            content: m.content?.substring(0, 30),
+            direction: m.direction,
+            status: m.status,
+            source: bankMessages.find(b => b.id === m.id) ? 'BANCO' : 'TEMP'
+          }))
         })
         
         return sortedMessages
       })
       
     } catch (error) {
-      console.error('❌ Erro ao buscar mensagens:', error)
+      console.error('❌ DEBUG: Erro ao buscar mensagens:', error)
       // Em caso de erro, manter mensagens existentes
     } finally {
       setLoading(false)
@@ -129,29 +163,47 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     try {
       setSending(true)
-      console.log('🚀 Enviando mensagem com garantia de aparição')
+      console.log('🚀 DEBUG: Iniciando envio de mensagem', {
+        conversationId,
+        companyId,
+        userId,
+        content: messageForm.content,
+        tempId: tempMessage.id
+      })
       
       // Adicionar mensagem local imediatamente
-      setMessages(prev => [...prev, tempMessage])
+      setMessages(prev => {
+        console.log('📝 DEBUG: Adicionando mensagem temporária ao estado')
+        return [...prev, tempMessage]
+      })
       
       // 2. Enviar para o banco
       const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
-      console.log('✅ Mensagem enviada:', messageId)
+      console.log('✅ DEBUG: Mensagem enviada com sucesso', {
+        tempId: tempMessage.id,
+        realId: messageId,
+        timestamp: new Date().toISOString()
+      })
       
       // 3. Atualizar mensagem local com ID real
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempMessage.id 
-          ? { ...msg, id: messageId, status: 'sent' }
-          : msg
-      ))
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === tempMessage.id 
+            ? { ...msg, id: messageId, status: 'sent' as const }
+            : msg
+        )
+        console.log('🔄 DEBUG: Mensagem temporária atualizada com ID real')
+        return updated
+      })
       
       // 4. Aguardar um pouco e recarregar para garantir sincronização
       setTimeout(async () => {
         try {
+          console.log('⏰ DEBUG: Iniciando recarregamento após 2s delay')
           await fetchMessages()
-          console.log('🔄 Mensagens recarregadas para garantir sincronização')
+          console.log('🔄 DEBUG: Recarregamento concluído')
         } catch (error) {
-          console.warn('⚠️ Erro ao recarregar mensagens:', error)
+          console.warn('⚠️ DEBUG: Erro ao recarregar mensagens:', error)
         }
       }, 2000)
       

@@ -117,6 +117,14 @@ export class ChatApi {
     offset: number = 0
   ): Promise<ChatMessage[]> {
     try {
+      console.log('🔍 DEBUG: chatApi.getMessages chamado', {
+        conversationId,
+        companyId,
+        limit,
+        offset,
+        timestamp: new Date().toISOString()
+      })
+
       const { data, error } = await supabase.rpc('chat_get_messages', {
         p_conversation_id: conversationId,
         p_company_id: companyId,
@@ -124,15 +132,40 @@ export class ChatApi {
         p_offset: offset
       })
 
-      if (error) throw error
+      console.log('📊 DEBUG: RPC chat_get_messages resultado', {
+        error: error,
+        dataSuccess: data?.success,
+        dataError: data?.error,
+        rawDataLength: data?.data?.length || 0
+      })
+
+      if (error) {
+        console.error('❌ DEBUG: Erro na RPC:', error)
+        throw error
+      }
 
       if (!data.success) {
+        console.error('❌ DEBUG: RPC retornou erro:', data.error)
         throw new Error(data.error || 'Erro ao buscar mensagens')
       }
 
-      return (data.data || []).map(this.mapMessage)
+      const rawMessages = data.data || []
+      const mappedMessages = rawMessages.map(this.mapMessage)
+      
+      console.log('✅ DEBUG: Mensagens processadas', {
+        raw: rawMessages.length,
+        mapped: mappedMessages.length,
+        primeiras3: mappedMessages.slice(0, 3).map((m: any) => ({
+          id: m.id,
+          content: m.content?.substring(0, 30),
+          direction: m.direction,
+          status: m.status
+        }))
+      })
+
+      return mappedMessages
     } catch (error) {
-      console.error('Error fetching messages:', error)
+      console.error('❌ DEBUG: Erro geral em getMessages:', error)
       throw error
     }
   }
