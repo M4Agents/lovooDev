@@ -185,55 +185,56 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         timestamp: new Date().toISOString()
       })
       
-      // 3. Atualizar mensagem local com ID real
+      // 3. Atualizar mensagem local com ID real (manter status 'sending')
       setMessages(prev => {
         const updated = prev.map(msg => 
           msg.id === tempMessage.id 
-            ? { ...msg, id: messageId, status: 'sent' as const }
+            ? { ...msg, id: messageId } // Não mudar status ainda, aguardar confirmação
             : msg
         )
-        console.log('🔄 DEBUG: Mensagem temporária atualizada com ID real')
+        console.log('🔄 DEBUG: Mensagem temporária atualizada com ID real (status ainda "sending")')
         return updated
       })
       
-      // 4. Aguardar um pouco e recarregar para garantir sincronização
-      setTimeout(async () => {
+      // 4. Monitorar status da mensagem em tempo real
+      const checkStatusInterval = setInterval(async () => {
         try {
-          console.log('⏰ DEBUG: Iniciando recarregamento após 2s delay')
+          console.log('🔍 DEBUG: Verificando status da mensagem:', messageId)
           
-          // 🔧 CORREÇÃO: Buscar TODAS as mensagens sem limite
-          const messagesData = await chatApi.getMessages(conversationId, companyId, 0) // 0 = sem limite
+          // Buscar apenas a mensagem específica para verificar status
+          const messagesData = await chatApi.getMessages(conversationId, companyId, 0)
+          const sentMessage = messagesData?.find(m => m.id === messageId)
           
-          console.log('📊 DEBUG: Recarregamento SEM LIMITE:', {
-            total: messagesData?.length || 0,
-            contemMensagemEnviada: messagesData?.some(m => m.id === messageId) || false
-          })
-          
-          // Se a mensagem não estiver no resultado, forçar inclusão
-          setMessages(prev => {
-            const bankMessages = messagesData || []
-            const hasNewMessage = bankMessages.some(m => m.id === messageId)
+          if (sentMessage) {
+            console.log('📊 DEBUG: Status atual da mensagem:', {
+              id: messageId,
+              status: sentMessage.status,
+              timestamp: sentMessage.timestamp
+            })
             
-            if (!hasNewMessage) {
-              console.log('🚨 DEBUG: Mensagem não encontrada no banco, mantendo no estado')
-              // Manter mensagem atual se não estiver no banco
-              return prev
+            // Atualizar status na UI se mudou
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, status: sentMessage.status }
+                : msg
+            ))
+            
+            // Se status foi atualizado para 'sent' ou 'failed', parar monitoramento
+            if (sentMessage.status === 'sent' || sentMessage.status === 'failed') {
+              console.log('✅ DEBUG: Status final alcançado, parando monitoramento')
+              clearInterval(checkStatusInterval)
             }
-            
-            // Se encontrou, usar dados do banco
-            const sortedMessages = bankMessages.sort((a, b) => 
-              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-            )
-            
-            console.log('✅ DEBUG: Mensagem encontrada no banco, atualizando estado')
-            return sortedMessages
-          })
-          
-          console.log('🔄 DEBUG: Recarregamento concluído')
+          }
         } catch (error) {
-          console.warn('⚠️ DEBUG: Erro ao recarregar mensagens:', error)
+          console.warn('⚠️ DEBUG: Erro ao verificar status:', error)
         }
-      }, 2000)
+      }, 1000) // Verificar a cada 1 segundo
+      
+      // Limpar interval após 30 segundos (timeout)
+      setTimeout(() => {
+        clearInterval(checkStatusInterval)
+        console.log('⏰ DEBUG: Timeout do monitoramento de status')
+      }, 30000)
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error)
