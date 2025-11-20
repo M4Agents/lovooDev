@@ -268,12 +268,52 @@ export class ChatApi {
       }
 
       console.log('✅ SUCESSO - Mensagem enviada via Uazapi:', result)
+      
+      // 🔧 CORREÇÃO: Atualizar status no banco para 'sent'
+      try {
+        console.log('🔄 Atualizando status da mensagem para "sent"...')
+        const { error: updateError } = await supabase
+          .from('chat_messages')
+          .update({ 
+            status: 'sent',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', messageId)
+          .eq('company_id', companyId)
+        
+        if (updateError) {
+          console.error('❌ Erro ao atualizar status:', updateError)
+        } else {
+          console.log('✅ Status atualizado para "sent" no banco')
+        }
+      } catch (updateError) {
+        console.error('💥 Erro crítico ao atualizar status:', updateError)
+      }
+      
     } catch (error) {
       console.error('💥 ERRO CRÍTICO no envio via Uazapi:', {
         error: error,
         message: error instanceof Error ? error.message : 'Erro desconhecido',
         stack: error instanceof Error ? error.stack : undefined
       })
+      
+      // 🔧 CORREÇÃO: Atualizar status no banco para 'failed' em caso de erro
+      try {
+        console.log('🔄 Atualizando status da mensagem para "failed"...')
+        await supabase
+          .from('chat_messages')
+          .update({ 
+            status: 'failed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', messageId)
+          .eq('company_id', companyId)
+        
+        console.log('✅ Status atualizado para "failed" no banco')
+      } catch (updateError) {
+        console.error('💥 Erro crítico ao atualizar status de falha:', updateError)
+      }
+      
       throw error
     }
   }
