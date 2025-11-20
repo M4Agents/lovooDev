@@ -24,42 +24,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
-  // ✅ CACHE PERSISTENTE de mensagens enviadas (sobrevive a recarregamentos)
-  const [sentMessages, setSentMessages] = useState<ChatMessage[]>(() => {
-    try {
-      if (!conversationId) return []
-      const cached = localStorage.getItem(`sentMessages_${conversationId}`)
-      if (!cached) return []
-      
-      const parsed = JSON.parse(cached)
-      // ✅ PROTEÇÃO: Validar estrutura das mensagens do cache
-      return Array.isArray(parsed) ? parsed.filter(msg => 
-        msg && typeof msg === 'object' && msg.id && msg.content
-      ) : []
-    } catch (error) {
-      console.warn('⚠️ Erro ao carregar cache, limpando:', error)
-      if (conversationId) {
+  // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
+  const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
+  
+  // Limpar qualquer cache existente que possa estar corrompido
+  useEffect(() => {
+    if (conversationId) {
+      try {
         localStorage.removeItem(`sentMessages_${conversationId}`)
+        console.log('🧹 Cache limpo para resolver tela branca')
+      } catch (error) {
+        console.warn('Erro ao limpar cache:', error)
       }
-      return []
     }
-  })
+  }, [conversationId])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // ✅ PERSISTIR CACHE no localStorage sempre que atualizar
-  useEffect(() => {
-    try {
-      if (!conversationId || !Array.isArray(sentMessages)) return
-      localStorage.setItem(`sentMessages_${conversationId}`, JSON.stringify(sentMessages))
-      console.log('💾 Cache persistido:', sentMessages.length, 'mensagens')
-    } catch (error) {
-      console.warn('⚠️ Erro ao persistir cache:', error)
-      // Limpar cache corrompido
-      if (conversationId) {
-        localStorage.removeItem(`sentMessages_${conversationId}`)
-      }
-    }
-  }, [sentMessages, conversationId])
+  // 🚨 EMERGÊNCIA: Persistência desabilitada temporariamente
+  // useEffect para cache desabilitado até resolver tela branca
 
   // =====================================================
   // BUSCAR MENSAGENS
@@ -68,89 +50,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
-      console.log('🔍 FETCH MESSAGES DEBUG:', {
-        conversationId,
-        companyId,
-        timestamp: new Date().toISOString()
-      })
+      console.log('🔍 EMERGÊNCIA: Fetch simples para resolver tela branca')
       
       const messagesData = await chatApi.getMessages(conversationId, companyId)
+      console.log('📊 Mensagens recebidas:', messagesData.length)
       
-      console.log('📊 MENSAGENS DO BANCO:', {
-        total: messagesData.length,
-        ultimasMensagens: messagesData.slice(-3).map(m => ({
-          id: m.id,
-          content: m.content?.substring(0, 30),
-          direction: m.direction,
-          timestamp: m.timestamp
-        }))
-      })
+      // 🚨 EMERGÊNCIA: Lógica ultra-simples sem cache nem ordenação complexa
+      setMessages(messagesData || [])
       
-      // ✅ SOLUÇÃO DEFINITIVA: Sempre preservar mensagens enviadas + otimísticas
-      setMessages(prev => {
-        console.log('📋 ESTADO ANTERIOR:', {
-          total: prev.length,
-          otimisticas: prev.filter(m => (m as any)._isOptimistic).length,
-          cache: sentMessages.length
-        })
-        
-        // Encontrar mensagens otimísticas que ainda não foram confirmadas
-        const optimisticMessages = prev.filter(m => (m as any)._isOptimistic)
-        
-        // ✅ GARANTIA: Sempre incluir mensagens do cache (enviadas)
-        const cachedMessages = sentMessages.filter(cached => 
-          !messagesData.some(db => db.id === cached.id) // Só se não estiver no banco
-        )
-        
-        // ✅ LIMPEZA: Remover do cache mensagens que já estão no banco
-        const confirmedInDB = sentMessages.filter(cached => 
-          messagesData.some(db => db.id === cached.id)
-        )
-        if (confirmedInDB.length > 0) {
-          console.log('🧹 Limpando cache:', confirmedInDB.length, 'mensagens confirmadas no DB')
-          setSentMessages(prev => prev.filter(cached => 
-            !messagesData.some(db => db.id === cached.id)
-          ))
-        }
-        
-        // Combinar: banco + cache + otimísticas
-        const allMessages = [...messagesData, ...cachedMessages, ...optimisticMessages]
-        
-        // Remover duplicatas
-        const uniqueMessages = allMessages.filter((message, index, array) => 
-          array.findIndex(m => m.id === message.id) === index
-        )
-        
-        // ✅ CORREÇÃO: Ordenação robusta por timestamp
-        const finalMessages = uniqueMessages.sort((a, b) => {
-          try {
-            const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime()
-            const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime()
-            return timeA - timeB
-          } catch (error) {
-            console.warn('⚠️ Erro na ordenação, usando fallback:', error)
-            return 0 // Mantém ordem original se houver erro
-          }
-        })
-        
-        console.log('✅ ESTADO FINAL:', {
-          total: finalMessages.length,
-          fromDB: messagesData.length,
-          fromCache: cachedMessages.length,
-          optimistic: optimisticMessages.length,
-          ultimasMensagens: finalMessages.slice(-3).map(m => ({
-            id: m.id,
-            content: m.content?.substring(0, 30),
-            direction: m.direction,
-            source: messagesData.some(db => db.id === m.id) ? 'DB' : 
-                   cachedMessages.some(c => c.id === m.id) ? 'CACHE' : 'OPTIMISTIC'
-          }))
-        })
-        
-        return finalMessages
-      })
     } catch (error) {
-      console.error('Error fetching messages:', error)
+      console.error('❌ Erro ao buscar mensagens:', error)
+      setMessages([]) // Fallback seguro
     } finally {
       setLoading(false)
     }
@@ -177,144 +87,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSendMessage = async (messageForm: SendMessageForm) => {
     if (!messageForm.content.trim()) return
 
-    const useOptimistic = ChatFeatureManager.shouldUseOptimisticMessages()
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    const messageTimeout = ChatFeatureManager.getMessageTimeout()
-
-    let tempId: string | null = null
-    let timeoutId: NodeJS.Timeout | null = null
-
     try {
       setSending(true)
+      console.log('🚨 EMERGÊNCIA: Envio simples para resolver tela branca')
       
-      if (debugLogs) {
-        console.log('🚀 Enviando mensagem:', { conversationId, messageForm, useOptimistic })
-      }
-      
-      // ✅ MELHORIA: Mensagem otimística aprimorada (se habilitada)
-      if (useOptimistic) {
-        tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        
-        const optimisticMessage: ChatMessage & { _isOptimistic?: boolean; _tempId?: string } = {
-          id: tempId,
-          conversation_id: conversationId,
-          company_id: companyId,
-          instance_id: conversation?.instance_id || '',
-          message_type: messageForm.message_type,
-          content: messageForm.content,
-          media_url: messageForm.media_url,
-          direction: 'outbound',
-          status: 'sending',
-          is_scheduled: false,
-          sent_by: userId,
-          timestamp: new Date(),
-          created_at: new Date(),
-          updated_at: new Date(),
-          // Marcadores para controle
-          _isOptimistic: true,
-          _tempId: tempId
-        }
-
-        setMessages(prev => [...prev, optimisticMessage])
-
-        // ✅ MELHORIA: Timeout para remover mensagem se falhar
-        timeoutId = setTimeout(() => {
-          setMessages(prev => prev.filter(m => (m as any)._tempId !== tempId))
-          if (debugLogs) {
-            console.warn('⏰ Mensagem otimística removida por timeout:', tempId)
-          }
-        }, messageTimeout)
-      }
-
-      // Enviar mensagem (mantém API atual)
+      // Enviar mensagem (lógica ultra-simples)
       const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
+      console.log('✅ Mensagem enviada:', messageId)
       
-      if (debugLogs) {
-        console.log('✅ Mensagem enviada com sucesso:', messageId)
-      }
-
-      // ✅ MELHORIA: Limpar timeout se sucesso
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-
-      // ✅ SOLUÇÃO DEFINITIVA: Criar mensagem real para o cache
-      const realMessage: ChatMessage = {
-        id: messageId,
-        conversation_id: conversationId,
-        company_id: companyId,
-        instance_id: conversation?.instance_id || '',
-        message_type: messageForm.message_type,
-        content: messageForm.content,
-        media_url: messageForm.media_url,
-        direction: 'outbound',
-        status: 'sent',
-        is_scheduled: false,
-        sent_by: userId,
-        timestamp: new Date(),
-        created_at: new Date(),
-        updated_at: new Date()
-      }
-
-      // ✅ GARANTIA: Adicionar ao cache de mensagens enviadas
-      setSentMessages(prev => {
-        const exists = prev.some(m => m.id === messageId)
-        if (exists) return prev
-        return [...prev, realMessage]
-      })
-
-      if (useOptimistic && tempId) {
-        // ✅ MELHORIA: Substituir mensagem otimística pela real
-        setMessages(prev => 
-          prev.map(m => {
-            const msg = m as any
-            return msg._tempId === tempId 
-              ? realMessage
-              : m
-          })
-        )
-      } else {
-        // ✅ FALLBACK: Adicionar mensagem diretamente se não há otimística
-        setMessages(prev => {
-          const exists = prev.some(m => m.id === messageId)
-          if (exists) return prev
-          return [...prev, realMessage]
-        })
-      }
-      // ✅ CORREÇÃO: Removido fetchMessages() que causava sumiço das mensagens
-
-      // ✅ MELHORIA: Emitir evento para outros componentes
-      if (ChatFeatureManager.shouldUseEventBus()) {
-        ChatEventBus.emit('chat:message:sent', {
-          messageId,
-          conversationId,
-          companyId,
-          content: messageForm.content
-        })
-      }
+      // Recarregar mensagens após envio
+      await fetchMessages()
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error)
-      
-      if (useOptimistic && tempId) {
-        // ✅ MELHORIA: Marcar mensagem como falhada ao invés de remover
-        setMessages(prev => 
-          prev.map(m => {
-            const msg = m as any
-            return msg._tempId === tempId 
-              ? { ...m, status: 'failed' }
-              : m
-          })
-        )
-      }
-      
-      // Emitir evento de erro
-      if (ChatFeatureManager.shouldUseEventBus()) {
-        ChatEventBus.emit('chat:message:failed', {
-          conversationId,
-          error: error instanceof Error ? error.message : 'Erro desconhecido'
-        })
-      }
+      throw error
     } finally {
       setSending(false)
     }
