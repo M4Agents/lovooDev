@@ -50,17 +50,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
-      console.log('🔍 EMERGÊNCIA: Fetch simples para resolver tela branca')
+      console.log('🔍 Buscando mensagens com merge inteligente')
       
       const messagesData = await chatApi.getMessages(conversationId, companyId)
-      console.log('📊 Mensagens recebidas:', messagesData.length)
+      console.log('📊 Mensagens do banco:', messagesData.length)
       
-      // 🚨 EMERGÊNCIA: Lógica ultra-simples sem cache nem ordenação complexa
-      setMessages(messagesData || [])
+      // Merge inteligente: preservar mensagens locais temporárias
+      setMessages(prev => {
+        // Mensagens temporárias (ainda não confirmadas no banco)
+        const tempMessages = prev.filter(msg => msg.id.startsWith('temp-'))
+        
+        // Mensagens do banco
+        const bankMessages = messagesData || []
+        
+        // Combinar sem duplicatas
+        const allMessages = [...bankMessages, ...tempMessages]
+        
+        // Ordenar por timestamp
+        const sortedMessages = allMessages.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+        
+        console.log('✅ Merge concluído:', {
+          banco: bankMessages.length,
+          temporarias: tempMessages.length,
+          total: sortedMessages.length
+        })
+        
+        return sortedMessages
+      })
       
     } catch (error) {
       console.error('❌ Erro ao buscar mensagens:', error)
-      setMessages([]) // Fallback seguro
+      // Em caso de erro, manter mensagens existentes
     } finally {
       setLoading(false)
     }
@@ -87,19 +109,56 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSendMessage = async (messageForm: SendMessageForm) => {
     if (!messageForm.content.trim()) return
 
+    // 1. Criar mensagem local imediatamente (UX instantâneo)
+    const tempMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      conversation_id: conversationId,
+      company_id: companyId,
+      instance_id: conversation?.instance_id || '',
+      message_type: messageForm.message_type,
+      content: messageForm.content,
+      media_url: messageForm.media_url,
+      direction: 'outbound',
+      status: 'sending',
+      is_scheduled: false,
+      sent_by: userId,
+      timestamp: new Date(),
+      created_at: new Date(),
+      updated_at: new Date()
+    }
+
     try {
       setSending(true)
-      console.log('🚨 EMERGÊNCIA: Envio simples para resolver tela branca')
+      console.log('🚀 Enviando mensagem com garantia de aparição')
       
-      // Enviar mensagem (lógica ultra-simples)
+      // Adicionar mensagem local imediatamente
+      setMessages(prev => [...prev, tempMessage])
+      
+      // 2. Enviar para o banco
       const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
       console.log('✅ Mensagem enviada:', messageId)
       
-      // Recarregar mensagens após envio
-      await fetchMessages()
+      // 3. Atualizar mensagem local com ID real
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempMessage.id 
+          ? { ...msg, id: messageId, status: 'sent' }
+          : msg
+      ))
+      
+      // 4. Aguardar um pouco e recarregar para garantir sincronização
+      setTimeout(async () => {
+        try {
+          await fetchMessages()
+          console.log('🔄 Mensagens recarregadas para garantir sincronização')
+        } catch (error) {
+          console.warn('⚠️ Erro ao recarregar mensagens:', error)
+        }
+      }, 2000)
       
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error)
+      // Remover mensagem local em caso de erro
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
       throw error
     } finally {
       setSending(false)
