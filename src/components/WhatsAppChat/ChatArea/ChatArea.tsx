@@ -34,7 +34,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       setLoading(true)
       const messagesData = await chatApi.getMessages(conversationId, companyId)
-      setMessages(messagesData)
+      
+      // ✅ CORREÇÃO: Preservar mensagens otimísticas durante recarregamento
+      setMessages(prev => {
+        // Encontrar mensagens otimísticas que ainda não foram confirmadas
+        const optimisticMessages = prev.filter(m => (m as any)._isOptimistic)
+        
+        // Combinar mensagens do banco + mensagens otimísticas
+        const allMessages = [...messagesData, ...optimisticMessages]
+        
+        // Remover duplicatas (caso mensagem otimística já esteja no banco)
+        const uniqueMessages = allMessages.filter((message, index, array) => 
+          array.findIndex(m => m.id === message.id) === index
+        )
+        
+        // Ordenar por timestamp
+        return uniqueMessages.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+      })
     } catch (error) {
       console.error('Error fetching messages:', error)
     } finally {
