@@ -262,6 +262,50 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // 🔧 BACKUP: Polling para mensagens recebidas (fallback do realtime)
+  useEffect(() => {
+    if (!conversationId || !companyId) return
+
+    console.log('🔄 DEBUG: Iniciando polling backup para mensagens recebidas')
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const messagesData = await chatApi.getMessages(conversationId, companyId, 0)
+        
+        setMessages(prev => {
+          // Verificar se há mensagens novas
+          const newMessages = messagesData?.filter(msg => 
+            !prev.some(prevMsg => prevMsg.id === msg.id)
+          ) || []
+          
+          if (newMessages.length > 0) {
+            console.log('🆕 DEBUG: Polling detectou novas mensagens:', {
+              novas: newMessages.length,
+              ids: newMessages.map(m => m.id)
+            })
+            
+            // Combinar e ordenar
+            const allMessages = [...prev, ...newMessages].sort((a, b) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            )
+            
+            return allMessages
+          }
+          
+          return prev
+        })
+      } catch (error) {
+        console.warn('⚠️ DEBUG: Erro no polling backup:', error)
+      }
+    }, 3000) // Polling a cada 3 segundos
+
+    // Cleanup
+    return () => {
+      console.log('🛑 DEBUG: Parando polling backup')
+      clearInterval(pollInterval)
+    }
+  }, [conversationId, companyId])
+
   // ✅ CORREÇÃO: Removido listener de refreshMessages que causava loop
   // O sistema de cache + tempo real agora garante atualizações sem auto-refresh
 
@@ -274,21 +318,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     conversationId,
     // Callback para nova mensagem recebida
     (message) => {
-      const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
+      const debugLogs = true // Forçar logs para debug
       
-      if (debugLogs) {
-        console.log('📨 Nova mensagem recebida via realtime:', message)
-      }
+      console.log('🔔 DEBUG: Nova mensagem recebida via realtime:', {
+        messageId: message.id,
+        conversationId: message.conversation_id,
+        content: message.content?.substring(0, 30),
+        direction: message.direction,
+        timestamp: message.timestamp
+      })
       
       setMessages(prev => {
         // Evitar duplicatas
         if (prev.some(m => m.id === message.id)) {
-          if (debugLogs) {
-            console.log('⚠️ Mensagem duplicada ignorada:', message.id)
-          }
+          console.log('⚠️ DEBUG: Mensagem duplicada ignorada:', message.id)
           return prev
         }
-        return [...prev, message]
+        
+        console.log('✅ DEBUG: Adicionando nova mensagem ao estado:', {
+          estadoAnterior: prev.length,
+          novoEstado: prev.length + 1
+        })
+        
+        const newMessages = [...prev, message].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+        
+        return newMessages
       })
     },
     // Callback para status de mensagem atualizado
@@ -313,24 +369,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   )
 
   // ✅ NOVO: Listener para eventos do chat via Event Bus
-  useChatEvent(`chat:conversation:${conversationId}:message`, (payload) => {
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('📨 Evento de mensagem via Event Bus:', payload)
-    }
+  useChatEvent(`chat:conversation:${conversationId}:message`, (payload: any) => {
+    console.log('🎯 DEBUG: Evento de mensagem via Event Bus:', {
+      conversationId,
+      action: payload.action,
+      messageId: payload.data?.id,
+      content: payload.data?.content?.substring(0, 30)
+    })
     
     if (payload.action === 'insert' && payload.data) {
       setMessages(prev => {
         // Evitar duplicatas
-        if (prev.some(m => m.id === payload.data.id)) return prev
-        return [...prev, payload.data]
+        if (prev.some(m => m.id === payload.data.id)) {
+          console.log('⚠️ DEBUG: Mensagem duplicada via EventBus ignorada:', payload.data.id)
+          return prev
+        }
+        
+        console.log('✅ DEBUG: Adicionando mensagem via EventBus ao estado')
+        const newMessages = [...prev, payload.data].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+        
+        return newMessages
       })
     }
   }, [conversationId])
 
   // ✅ NOVO: Listener para atualizações de status via Event Bus
-  useChatEvent(`chat:conversation:${conversationId}:status`, (payload) => {
+  useChatEvent(`chat:conversation:${conversationId}:status`, (payload: any) => {
     const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
     
     if (debugLogs) {
