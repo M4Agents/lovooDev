@@ -21,9 +21,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   userId
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
+  const [sentMessages, setSentMessages] = useState<ChatMessage[]>([]) // ✅ CACHE de mensagens enviadas
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // =====================================================
@@ -51,20 +52,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }))
       })
       
-      // ✅ CORREÇÃO: Preservar mensagens otimísticas durante recarregamento
+      // ✅ SOLUÇÃO DEFINITIVA: Sempre preservar mensagens enviadas + otimísticas
       setMessages(prev => {
         console.log('📋 ESTADO ANTERIOR:', {
           total: prev.length,
-          otimisticas: prev.filter(m => (m as any)._isOptimistic).length
+          otimisticas: prev.filter(m => (m as any)._isOptimistic).length,
+          cache: sentMessages.length
         })
         
         // Encontrar mensagens otimísticas que ainda não foram confirmadas
         const optimisticMessages = prev.filter(m => (m as any)._isOptimistic)
         
-        // Combinar mensagens do banco + mensagens otimísticas
-        const allMessages = [...messagesData, ...optimisticMessages]
+        // ✅ GARANTIA: Sempre incluir mensagens do cache (enviadas)
+        const cachedMessages = sentMessages.filter(cached => 
+          !messagesData.some(db => db.id === cached.id) // Só se não estiver no banco
+        )
         
-        // Remover duplicatas (caso mensagem otimística já esteja no banco)
+        // Combinar: banco + cache + otimísticas
+        const allMessages = [...messagesData, ...cachedMessages, ...optimisticMessages]
+        
+        // Remover duplicatas
         const uniqueMessages = allMessages.filter((message, index, array) => 
           array.findIndex(m => m.id === message.id) === index
         )
@@ -76,11 +83,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         
         console.log('✅ ESTADO FINAL:', {
           total: finalMessages.length,
+          fromDB: messagesData.length,
+          fromCache: cachedMessages.length,
+          optimistic: optimisticMessages.length,
           ultimasMensagens: finalMessages.slice(-3).map(m => ({
             id: m.id,
             content: m.content?.substring(0, 30),
             direction: m.direction,
-            isOptimistic: (m as any)._isOptimistic
+            source: messagesData.some(db => db.id === m.id) ? 'DB' : 
+                   cachedMessages.some(c => c.id === m.id) ? 'CACHE' : 'OPTIMISTIC'
           }))
         })
         
@@ -175,16 +186,48 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         clearTimeout(timeoutId)
       }
 
+      // ✅ SOLUÇÃO DEFINITIVA: Criar mensagem real para o cache
+      const realMessage: ChatMessage = {
+        id: messageId,
+        conversation_id: conversationId,
+        company_id: companyId,
+        instance_id: conversation?.instance_id || '',
+        message_type: messageForm.message_type,
+        content: messageForm.content,
+        media_url: messageForm.media_url,
+        direction: 'outbound',
+        status: 'sent',
+        is_scheduled: false,
+        sent_by: userId,
+        timestamp: new Date(),
+        created_at: new Date(),
+        updated_at: new Date()
+      }
+
+      // ✅ GARANTIA: Adicionar ao cache de mensagens enviadas
+      setSentMessages(prev => {
+        const exists = prev.some(m => m.id === messageId)
+        if (exists) return prev
+        return [...prev, realMessage]
+      })
+
       if (useOptimistic && tempId) {
         // ✅ MELHORIA: Substituir mensagem otimística pela real
         setMessages(prev => 
           prev.map(m => {
             const msg = m as any
             return msg._tempId === tempId 
-              ? { ...m, id: messageId, status: 'sent', _isOptimistic: false }
+              ? realMessage
               : m
           })
         )
+      } else {
+        // ✅ FALLBACK: Adicionar mensagem diretamente se não há otimística
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === messageId)
+          if (exists) return prev
+          return [...prev, realMessage]
+        })
       }
       // ✅ CORREÇÃO: Removido fetchMessages() que causava sumiço das mensagens
 
