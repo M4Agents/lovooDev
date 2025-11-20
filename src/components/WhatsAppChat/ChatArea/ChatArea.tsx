@@ -533,8 +533,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               isOwn={message.direction === 'outbound'}
               showTimestamp={
                 index === 0 ||
-                (messages[index - 1] &&
-                  Math.abs(message.timestamp.getTime() - messages[index - 1].timestamp.getTime()) > 300000) // 5 minutos
+                (messages[index - 1] && (() => {
+                  try {
+                    const currentTime = message.timestamp instanceof Date ? 
+                      message.timestamp.getTime() : new Date(message.timestamp).getTime()
+                    const prevTime = messages[index - 1].timestamp instanceof Date ? 
+                      messages[index - 1].timestamp.getTime() : new Date(messages[index - 1].timestamp).getTime()
+                    return Math.abs(currentTime - prevTime) > 300000 // 5 minutos
+                  } catch (error) {
+                    console.warn('⚠️ Erro ao calcular timestamp, mostrando sempre:', error)
+                    return true // Mostrar timestamp em caso de erro
+                  }
+                })())
               }
             />
           ))

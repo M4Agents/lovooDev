@@ -240,11 +240,18 @@ export const useChatData = (
       )
     }
 
-    // Ordenar por última mensagem (mais recentes primeiro)
+    // ✅ CORREÇÃO: Ordenar por última mensagem (mais recentes primeiro) com proteção
     filtered.sort((a, b) => {
-      const aTime = a.last_message_at?.getTime() || 0
-      const bTime = b.last_message_at?.getTime() || 0
-      return bTime - aTime
+      try {
+        const aTime = a.last_message_at ? 
+          (a.last_message_at instanceof Date ? a.last_message_at.getTime() : new Date(a.last_message_at).getTime()) : 0
+        const bTime = b.last_message_at ? 
+          (b.last_message_at instanceof Date ? b.last_message_at.getTime() : new Date(b.last_message_at).getTime()) : 0
+        return bTime - aTime
+      } catch (error) {
+        console.warn('⚠️ Erro na ordenação de conversas, usando fallback:', error)
+        return 0 // Mantém ordem original em caso de erro
+      }
     })
 
     return filtered
