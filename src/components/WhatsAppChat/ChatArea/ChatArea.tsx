@@ -56,7 +56,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         timestamp: new Date().toISOString()
       })
       
-      const messagesData = await chatApi.getMessages(conversationId, companyId)
+      const messagesData = await chatApi.getMessages(conversationId, companyId, 100) // Aumentar limite para 100
       
       console.log('📊 DEBUG: Dados retornados da API:', {
         total: messagesData?.length || 0,
@@ -200,7 +200,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setTimeout(async () => {
         try {
           console.log('⏰ DEBUG: Iniciando recarregamento após 2s delay')
-          await fetchMessages()
+          
+          // 🔧 CORREÇÃO: Buscar mais mensagens para garantir que a nova seja incluída
+          const messagesData = await chatApi.getMessages(conversationId, companyId, 100) // Aumentar limite
+          
+          console.log('📊 DEBUG: Recarregamento com limite aumentado:', {
+            total: messagesData?.length || 0,
+            contemMensagemEnviada: messagesData?.some(m => m.id === messageId) || false
+          })
+          
+          // Se a mensagem não estiver no resultado, forçar inclusão
+          setMessages(prev => {
+            const bankMessages = messagesData || []
+            const hasNewMessage = bankMessages.some(m => m.id === messageId)
+            
+            if (!hasNewMessage) {
+              console.log('🚨 DEBUG: Mensagem não encontrada no banco, mantendo no estado')
+              // Manter mensagem atual se não estiver no banco
+              return prev
+            }
+            
+            // Se encontrou, usar dados do banco
+            const sortedMessages = bankMessages.sort((a, b) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            )
+            
+            console.log('✅ DEBUG: Mensagem encontrada no banco, atualizando estado')
+            return sortedMessages
+          })
+          
           console.log('🔄 DEBUG: Recarregamento concluído')
         } catch (error) {
           console.warn('⚠️ DEBUG: Erro ao recarregar mensagens:', error)
