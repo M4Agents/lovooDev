@@ -97,6 +97,7 @@ async function processMessage(payload) {
 
     let messageText = message.text || '';
     let mediaUrl = null;
+    let mediaMimeType = null;
 
     if (!messageText && typeof message.content === 'string') {
       messageText = message.content;
@@ -104,6 +105,7 @@ async function processMessage(payload) {
 
     if (isMediaMessage && message.content && typeof message.content === 'object') {
       mediaUrl = message.content.URL || message.content.url || null;
+      mediaMimeType = message.content.mimetype || null;
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
@@ -261,8 +263,26 @@ async function processMessage(payload) {
     if (messageError) {
       return { success: false, error: messageError.message };
     }
-    
+
     console.log('✅ MENSAGEM SALVA:', savedMessage.id);
+
+    // Download automático da mídia inbound para o bucket chat-media
+    if (isMediaMessage && mediaUrl) {
+      try {
+        await downloadAndStoreMedia({
+          supabase,
+          companyId: company.id,
+          conversationId,
+          chatMessageId: savedMessage.id,
+          mediaUrl,
+          mediaType: messageTypeForDb,
+          mediaMimeType
+        });
+      } catch (mediaError) {
+        console.error('⚠️ Erro ao processar mídia inbound:', mediaError);
+        // Não falha o webhook
+      }
+    }
     
     // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS)
     let leadId = null;
@@ -347,5 +367,87 @@ async function processMessage(payload) {
   } catch (error) {
     console.error('❌ EXCEPTION:', error);
     return { success: false, error: error.message };
+  }
+}
+
+async function downloadAndStoreMedia({
+  supabase,
+  companyId,
+  conversationId,
+  chatMessageId,
+  mediaUrl,
+  mediaType,
+  mediaMimeType
+}) {
+  try {
+    console.log('⬇️ Baixando mídia inbound da Uazapi...', { mediaUrl, mediaType });
+
+    const response = await fetch(mediaUrl);
+    if (!response.ok) {
+      console.error('❌ Falha ao baixar mídia da Uazapi:', response.status, response.statusText);
+      return;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Determinar extensão de arquivo
+    let ext = 'bin';
+    if (mediaMimeType) {
+      if (mediaMimeType.includes('jpeg') || mediaMimeType.includes('jpg')) ext = 'jpg';
+      else if (mediaMimeType.includes('png')) ext = 'png';
+      else if (mediaMimeType.includes('gif')) ext = 'gif';
+      else if (mediaMimeType.includes('pdf')) ext = 'pdf';
+      else if (mediaMimeType.includes('audio')) ext = 'ogg';
+      else if (mediaMimeType.includes('mp4')) ext = 'mp4';
+    } else {
+      const urlPath = new URL(mediaUrl).pathname;
+      const dotIndex = urlPath.lastIndexOf('.');
+      if (dotIndex !== -1) {
+        ext = urlPath.substring(dotIndex + 1);
+      }
+    }
+
+    const fileName = `${companyId}/${conversationId}/${chatMessageId}.${ext}`;
+
+    console.log('⬆️ Enviando mídia para Supabase Storage...', { fileName, mediaMimeType });
+
+    const { error: uploadError } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, buffer, {
+        contentType: mediaMimeType || undefined,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error('❌ Erro ao subir mídia para Supabase:', uploadError.message || uploadError);
+      return;
+    }
+
+    const { data: publicData } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    const publicUrl = publicData?.publicUrl;
+    if (!publicUrl) {
+      console.error('❌ Não foi possível obter URL pública da mídia.');
+      return;
+    }
+
+    console.log('🔗 Mídia disponível em URL pública:', publicUrl);
+
+    const { error: updateError } = await supabase
+      .from('chat_messages')
+      .update({ media_url: publicUrl })
+      .eq('id', chatMessageId);
+
+    if (updateError) {
+      console.error('❌ Erro ao atualizar media_url em chat_messages:', updateError.message || updateError);
+      return;
+    }
+
+    console.log('✅ media_url atualizada com sucesso para mensagem:', chatMessageId);
+  } catch (error) {
+    console.error('❌ EXCEPTION em downloadAndStoreMedia:', error);
   }
 }

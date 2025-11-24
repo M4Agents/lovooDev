@@ -98,6 +98,7 @@ async function processMessage(payload) {
     // Para texto, content é string; para mídia, content é objeto com URL
     let messageText = message.text || '';
     let mediaUrl = null;
+    let mediaMimeType = null;
 
     if (!messageText && typeof message.content === 'string') {
       messageText = message.content;
@@ -105,6 +106,7 @@ async function processMessage(payload) {
 
     if (isMediaMessage && message.content && typeof message.content === 'object') {
       mediaUrl = message.content.URL || message.content.url || null;
+      mediaMimeType = message.content.mimetype || null;
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
@@ -241,28 +243,72 @@ async function processMessage(payload) {
         direction: 'inbound',
         status: 'delivered',
         sender_name: senderName,
-        sender_phone: phoneNumber,
         timestamp: new Date(timestamp).toISOString(),
         created_at: new Date().toISOString()
       })
       .select('id')
-      .single();
-    
-    if (messageError) {
-      return { success: false, error: messageError.message };
     }
-    
-    console.log('✅ MENSAGEM SALVA:', savedMessage.id);
-    
-    return { 
-      success: true, 
-      message_id: savedMessage.id,
-      contact_id: contactId,
-      conversation_id: conversationId
-    };
-    
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Determinar extensão de arquivo
+    let ext = 'bin';
+    if (mediaMimeType) {
+      if (mediaMimeType.includes('jpeg') || mediaMimeType.includes('jpg')) ext = 'jpg';
+      else if (mediaMimeType.includes('png')) ext = 'png';
+      else if (mediaMimeType.includes('gif')) ext = 'gif';
+      else if (mediaMimeType.includes('pdf')) ext = 'pdf';
+      else if (mediaMimeType.includes('audio')) ext = 'ogg';
+      else if (mediaMimeType.includes('mp4')) ext = 'mp4';
+    } else {
+      const urlPath = new URL(mediaUrl).pathname;
+      const dotIndex = urlPath.lastIndexOf('.');
+      if (dotIndex !== -1) {
+        ext = urlPath.substring(dotIndex + 1);
+      }
+    }
+
+    const fileName = `${companyId}/${conversationId}/${chatMessageId}.${ext}`;
+
+    console.log(' Enviando mídia para Supabase Storage...', { fileName, mediaMimeType });
+
+    const { error: uploadError } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, buffer, {
+        contentType: mediaMimeType || undefined,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error(' Erro ao subir mídia para Supabase:', uploadError.message || uploadError);
+      return;
+    }
+
+    const { data: publicData } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    const publicUrl = publicData?.publicUrl;
+    if (!publicUrl) {
+      console.error(' Não foi possível obter URL pública da mídia.');
+      return;
+    }
+
+    console.log(' Mídia disponível em URL pública:', publicUrl);
+
+    const { error: updateError } = await supabase
+      .from('chat_messages')
+      .update({ media_url: publicUrl })
+      .eq('id', chatMessageId);
+
+    if (updateError) {
+      console.error(' Erro ao atualizar media_url em chat_messages:', updateError.message || updateError);
+      return;
+    }
+
+    console.log(' media_url atualizada com sucesso para mensagem:', chatMessageId);
   } catch (error) {
-    console.error('❌ EXCEPTION:', error);
-    return { success: false, error: error.message };
+    console.error(' EXCEPTION em downloadAndStoreMedia:', error);
   }
 }
