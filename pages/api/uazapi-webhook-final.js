@@ -3,7 +3,7 @@
 // SOLUÇÃO DEFINITIVA PARA PROBLEMA DE CACHE DO VERCEL
 
 export default async function handler(req, res) {
-  console.log('🎯 WEBHOOK UAZAPI FINAL - NOVO ARQUIVO SEM CACHE');
+  console.log(' WEBHOOK UAZAPI FINAL - NOVO ARQUIVO SEM CACHE');
   console.log('Timestamp:', new Date().toISOString());
 
   // CORS headers
@@ -23,24 +23,24 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('📥 PAYLOAD RECEBIDO:', req.body);
+    console.log(' PAYLOAD RECEBIDO:', req.body);
     
     const result = await processMessage(req.body);
     
     if (result.success) {
-      console.log('✅ SUCESSO:', result.message_id);
+      console.log(' SUCESSO:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
         message: 'Mensagem processada!'
       });
     } else {
-      console.log('⚠️ FILTRADO:', result.error);
+      console.log(' FILTRADO:', result.error);
       res.status(200).json({ success: false, error: result.error });
     }
     
   } catch (error) {
-    console.error('❌ ERRO:', error);
+    console.error(' ERRO:', error);
     res.status(200).json({ success: false, error: error.message });
   }
 }
@@ -58,7 +58,7 @@ async function processMessage(payload) {
       }
     );
     
-    console.log('🔑 SUPABASE CONECTADO - ARQUIVO NOVO');
+    console.log(' SUPABASE CONECTADO - ARQUIVO NOVO');
     
     // Validações
     if (payload.EventType !== 'messages') {
@@ -98,7 +98,6 @@ async function processMessage(payload) {
     // Para texto, content é string; para mídia, content é objeto com URL
     let messageText = message.text || '';
     let mediaUrl = null;
-    let mediaMimeType = null;
 
     if (!messageText && typeof message.content === 'string') {
       messageText = message.content;
@@ -106,13 +105,12 @@ async function processMessage(payload) {
 
     if (isMediaMessage && message.content && typeof message.content === 'object') {
       mediaUrl = message.content.URL || message.content.url || null;
-      mediaMimeType = message.content.mimetype || null;
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
-    console.log('📞 DADOS:', { phoneNumber, senderName, instanceName });
+    console.log(' DADOS:', { phoneNumber, senderName, instanceName });
     
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
@@ -127,7 +125,7 @@ async function processMessage(payload) {
     }
     
     const company = instance.companies;
-    console.log('🏢 EMPRESA:', company.name);
+    console.log(' EMPRESA:', company.name);
     
     // Buscar/criar contato
     let contactId;
@@ -140,7 +138,7 @@ async function processMessage(payload) {
     
     if (existingContact) {
       contactId = existingContact.id;
-      console.log('👤 CONTATO EXISTENTE:', contactId);
+      console.log(' CONTATO EXISTENTE:', contactId);
     } else {
       // USAR NOME CORRETO DA COLUNA
       const { data: newContact, error: contactError } = await supabase
@@ -158,12 +156,12 @@ async function processMessage(payload) {
         .single();
       
       if (contactError) {
-        console.error('❌ ERRO CONTATO:', contactError);
+        console.error(' ERRO CONTATO:', contactError);
         return { success: false, error: contactError.message };
       }
       
       contactId = newContact.id;
-      console.log('👤 NOVO CONTATO:', contactId);
+      console.log(' NOVO CONTATO:', contactId);
     }
     
     // Buscar/criar conversa
@@ -177,7 +175,7 @@ async function processMessage(payload) {
     
     if (existingConversation) {
       conversationId = existingConversation.id;
-      console.log('💬 CONVERSA EXISTENTE:', conversationId);
+      console.log(' CONVERSA EXISTENTE:', conversationId);
     } else {
       const { data: newConversation, error: conversationError } = await supabase
         .from('chat_conversations')
@@ -198,7 +196,7 @@ async function processMessage(payload) {
       }
       
       conversationId = newConversation.id;
-      console.log('💬 NOVA CONVERSA:', conversationId);
+      console.log(' NOVA CONVERSA:', conversationId);
     }
     
     // Verificar duplicata
@@ -209,7 +207,7 @@ async function processMessage(payload) {
       .single();
     
     if (existingMessage) {
-      console.log('📝 DUPLICATA IGNORADA');
+      console.log(' DUPLICATA IGNORADA');
       return { 
         success: true, 
         message_id: existingMessage.id,
@@ -225,90 +223,99 @@ async function processMessage(payload) {
             ? 'document'
             : (rawMediaType === 'audio' || rawMediaType === 'ptt')
               ? 'audio'
-              : rawMediaType === 'video'
-                ? 'video'
-                : 'document')
+              : 'unknown')
       : 'text';
-
-    const { data: savedMessage, error: messageError } = await supabase
+    
+    const { data: newMessage, error: messageError } = await supabase
       .from('chat_messages')
       .insert({
-        conversation_id: conversationId,
-        company_id: company.id,
-        instance_id: instance.id,
         uazapi_message_id: messageId,
-        content: messageText,
+        conversation_id: conversationId,
+        contact_id: contactId,
         message_type: messageTypeForDb,
+        message_text: messageText,
         media_url: mediaUrl,
-        direction: 'inbound',
-        status: 'delivered',
-        sender_name: senderName,
-        timestamp: new Date(timestamp).toISOString(),
-        created_at: new Date().toISOString()
+        created_at: new Date(timestamp).toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select('id')
+      .single();
+    
+    if (messageError) {
+      console.error(' ERRO MENSAGEM:', messageError);
+      return { success: false, error: messageError.message };
     }
+    
+    const chatMessageId = newMessage.id;
+    console.log(' MENSAGEM SALVA:', chatMessageId);
+    
+    // Download e armazenamento de mídia
+    if (isMediaMessage) {
+      const response = await fetch(mediaUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Determinar extensão de arquivo
-    let ext = 'bin';
-    if (mediaMimeType) {
-      if (mediaMimeType.includes('jpeg') || mediaMimeType.includes('jpg')) ext = 'jpg';
-      else if (mediaMimeType.includes('png')) ext = 'png';
-      else if (mediaMimeType.includes('gif')) ext = 'gif';
-      else if (mediaMimeType.includes('pdf')) ext = 'pdf';
-      else if (mediaMimeType.includes('audio')) ext = 'ogg';
-      else if (mediaMimeType.includes('mp4')) ext = 'mp4';
-    } else {
-      const urlPath = new URL(mediaUrl).pathname;
-      const dotIndex = urlPath.lastIndexOf('.');
-      if (dotIndex !== -1) {
-        ext = urlPath.substring(dotIndex + 1);
+      // Determinar extensão de arquivo
+      let ext = 'bin';
+      if (mediaMimeType) {
+        if (mediaMimeType.includes('jpeg') || mediaMimeType.includes('jpg')) ext = 'jpg';
+        else if (mediaMimeType.includes('png')) ext = 'png';
+        else if (mediaMimeType.includes('gif')) ext = 'gif';
+        else if (mediaMimeType.includes('pdf')) ext = 'pdf';
+        else if (mediaMimeType.includes('audio')) ext = 'ogg';
+        else if (mediaMimeType.includes('mp4')) ext = 'mp4';
+      } else {
+        const urlPath = new URL(mediaUrl).pathname;
+        const dotIndex = urlPath.lastIndexOf('.');
+        if (dotIndex !== -1) {
+          ext = urlPath.substring(dotIndex + 1);
+        }
       }
+
+      const fileName = `${companyId}/${conversationId}/${chatMessageId}.${ext}`;
+
+      console.log(' Enviando mídia para Supabase Storage...', { fileName, mediaMimeType });
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-media')
+        .upload(fileName, buffer, {
+          contentType: mediaMimeType || undefined,
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error(' Erro ao subir mídia para Supabase:', uploadError.message || uploadError);
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicData?.publicUrl;
+      if (!publicUrl) {
+        console.error(' Não foi possível obter URL pública da mídia.');
+        return;
+      }
+
+      console.log(' Mídia disponível em URL pública:', publicUrl);
+
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ media_url: publicUrl })
+        .eq('id', chatMessageId);
+
+      if (updateError) {
+        console.error(' Erro ao atualizar media_url em chat_messages:', updateError.message || updateError);
+        return;
+      }
+
+      console.log(' media_url atualizada com sucesso para mensagem:', chatMessageId);
     }
-
-    const fileName = `${companyId}/${conversationId}/${chatMessageId}.${ext}`;
-
-    console.log(' Enviando mídia para Supabase Storage...', { fileName, mediaMimeType });
-
-    const { error: uploadError } = await supabase.storage
-      .from('chat-media')
-      .upload(fileName, buffer, {
-        contentType: mediaMimeType || undefined,
-        upsert: true
-      });
-
-    if (uploadError) {
-      console.error(' Erro ao subir mídia para Supabase:', uploadError.message || uploadError);
-      return;
-    }
-
-    const { data: publicData } = supabase.storage
-      .from('chat-media')
-      .getPublicUrl(fileName);
-
-    const publicUrl = publicData?.publicUrl;
-    if (!publicUrl) {
-      console.error(' Não foi possível obter URL pública da mídia.');
-      return;
-    }
-
-    console.log(' Mídia disponível em URL pública:', publicUrl);
-
-    const { error: updateError } = await supabase
-      .from('chat_messages')
-      .update({ media_url: publicUrl })
-      .eq('id', chatMessageId);
-
-    if (updateError) {
-      console.error(' Erro ao atualizar media_url em chat_messages:', updateError.message || updateError);
-      return;
-    }
-
-    console.log(' media_url atualizada com sucesso para mensagem:', chatMessageId);
+    
+    return { success: true, message_id: chatMessageId };
   } catch (error) {
-    console.error(' EXCEPTION em downloadAndStoreMedia:', error);
+    console.error(' EXCEPTION:', error);
+    return { success: false, error: error.message };
   }
 }

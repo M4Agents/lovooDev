@@ -97,7 +97,6 @@ async function processMessage(payload) {
 
     let messageText = message.text || '';
     let mediaUrl = null;
-    let mediaMimeType = null;
 
     if (!messageText && typeof message.content === 'string') {
       messageText = message.content;
@@ -105,7 +104,6 @@ async function processMessage(payload) {
 
     if (isMediaMessage && message.content && typeof message.content === 'object') {
       mediaUrl = message.content.URL || message.content.url || null;
-      mediaMimeType = message.content.mimetype || null;
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
@@ -266,20 +264,18 @@ async function processMessage(payload) {
 
     console.log('✅ MENSAGEM SALVA:', savedMessage.id);
 
-    // Download automático da mídia inbound para o bucket chat-media
+    // Download automático da mídia inbound via Uazapi (message/download)
     if (isMediaMessage && mediaUrl) {
       try {
         await downloadAndStoreMedia({
           supabase,
-          companyId: company.id,
-          conversationId,
+          baseUrl: payload.BaseUrl,
+          token: payload.token,
           chatMessageId: savedMessage.id,
-          mediaUrl,
-          mediaType: messageTypeForDb,
-          mediaMimeType
+          messageId,
         });
       } catch (mediaError) {
-        console.error('⚠️ Erro ao processar mídia inbound:', mediaError);
+        console.error('⚠️ Erro ao processar mídia inbound (message/download):', mediaError);
         // Não falha o webhook
       }
     }
@@ -370,71 +366,49 @@ async function processMessage(payload) {
   }
 }
 
+// ... (rest of the code remains the same)
+
 async function downloadAndStoreMedia({
   supabase,
-  companyId,
-  conversationId,
+  baseUrl,
+  token,
   chatMessageId,
-  mediaUrl,
-  mediaType,
-  mediaMimeType
+  messageId,
 }) {
   try {
-    console.log('⬇️ Baixando mídia inbound da Uazapi...', { mediaUrl, mediaType });
+    console.log('⬇️ Solicitando download de mídia via Uazapi /message/download...', { baseUrl, messageId });
 
-    const response = await fetch(mediaUrl);
+    const url = `${baseUrl.replace(/\/$/, '')}/message/download`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token,
+      },
+      body: JSON.stringify({
+        id: messageId,
+        return_base64: false,
+        generate_mp3: false,
+        return_link: true,
+        transcribe: false,
+        download_quoted: false,
+      }),
+    });
+
     if (!response.ok) {
-      console.error('❌ Falha ao baixar mídia da Uazapi:', response.status, response.statusText);
+      console.error('❌ Falha ao chamar /message/download na Uazapi:', response.status, response.statusText);
       return;
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Determinar extensão de arquivo
-    let ext = 'bin';
-    if (mediaMimeType) {
-      if (mediaMimeType.includes('jpeg') || mediaMimeType.includes('jpg')) ext = 'jpg';
-      else if (mediaMimeType.includes('png')) ext = 'png';
-      else if (mediaMimeType.includes('gif')) ext = 'gif';
-      else if (mediaMimeType.includes('pdf')) ext = 'pdf';
-      else if (mediaMimeType.includes('audio')) ext = 'ogg';
-      else if (mediaMimeType.includes('mp4')) ext = 'mp4';
-    } else {
-      const urlPath = new URL(mediaUrl).pathname;
-      const dotIndex = urlPath.lastIndexOf('.');
-      if (dotIndex !== -1) {
-        ext = urlPath.substring(dotIndex + 1);
-      }
-    }
-
-    const fileName = `${companyId}/${conversationId}/${chatMessageId}.${ext}`;
-
-    console.log('⬆️ Enviando mídia para Supabase Storage...', { fileName, mediaMimeType });
-
-    const { error: uploadError } = await supabase.storage
-      .from('chat-media')
-      .upload(fileName, buffer, {
-        contentType: mediaMimeType || undefined,
-        upsert: true
-      });
-
-    if (uploadError) {
-      console.error('❌ Erro ao subir mídia para Supabase:', uploadError.message || uploadError);
-      return;
-    }
-
-    const { data: publicData } = supabase.storage
-      .from('chat-media')
-      .getPublicUrl(fileName);
-
-    const publicUrl = publicData?.publicUrl;
+    const data = await response.json();
+    const publicUrl = data.fileURL || data.fileUrl || data.url;
     if (!publicUrl) {
-      console.error('❌ Não foi possível obter URL pública da mídia.');
+      console.error('❌ Resposta de /message/download sem fileURL:', data);
       return;
     }
 
-    console.log('🔗 Mídia disponível em URL pública:', publicUrl);
+    console.log('🔗 URL de mídia retornada pela Uazapi:', publicUrl);
 
     const { error: updateError } = await supabase
       .from('chat_messages')
