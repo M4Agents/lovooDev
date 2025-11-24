@@ -692,12 +692,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const recordingTimerRef = useRef<number | null>(null)
   const shouldSendRef = useRef(true)
+  const [isEmojiOpen, setIsEmojiOpen] = useState(false)
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -710,6 +713,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     })
 
     setMessage('')
+    setIsEmojiOpen(false)
   }
 
   const handleAttachClick = () => {
@@ -737,6 +741,35 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } finally {
       e.target.value = ''
     }
+  }
+
+  const handleSelectEmoji = (emoji: string) => {
+    if (disabled) return
+
+    const el = textareaRef.current
+    const value = message
+
+    if (!el) {
+      setMessage(value + emoji)
+      return
+    }
+
+    const start = el.selectionStart ?? value.length
+    const end = el.selectionEnd ?? value.length
+
+    const newValue = value.slice(0, start) + emoji + value.slice(end)
+    setMessage(newValue)
+
+    // Reposicionar o cursor após o emoji
+    requestAnimationFrame(() => {
+      try {
+        el.focus()
+        const caret = start + emoji.length
+        el.setSelectionRange(caret, caret)
+      } catch (error) {
+        console.warn('Erro ao reposicionar cursor após emoji:', error)
+      }
+    })
   }
 
   const handleToggleRecord = async () => {
@@ -822,8 +855,26 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   }
 
+  // Fechar painel de emoji se clicar fora
+  useEffect(() => {
+    if (!isEmojiOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const pickerEl = emojiPickerRef.current
+      if (!pickerEl) return
+      if (!pickerEl.contains(event.target as Node)) {
+        setIsEmojiOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isEmojiOpen])
+
   return (
-    <form onSubmit={handleSubmit} className="flex items-end space-x-3">
+    <form onSubmit={handleSubmit} className="flex items-end space-x-3 relative">
       <div className="flex-1">
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
@@ -869,11 +920,50 @@ const MessageInput: React.FC<MessageInputProps> = ({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
+          ref={textareaRef}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50"
           style={{ minHeight: '40px', maxHeight: '120px' }}
         />
+
+        {isEmojiOpen && !disabled && (
+          <div
+            ref={emojiPickerRef}
+            className="absolute bottom-14 left-0 z-40 w-64 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg p-2"
+          >
+            <div className="mb-2 text-xs font-medium text-gray-500">Emojis rápidos</div>
+            <div className="grid grid-cols-8 gap-1 text-xl">
+              {[
+                '😀','😁','😂','🤣','😊','😍','😘','😎',
+                '🙌','👍','🙏','👏','👌','🤝','💪','🔥',
+                '❤️','💙','💚','💛','🧡','💜','🖤','🤍',
+                '😢','😡','😱','😴','🤔','😏','😇','🤩',
+                '🎉','✅','❌','⚠️','⭐','📞','📎','✈️'
+              ].map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="hover:bg-gray-100 rounded text-center"
+                  onClick={() => handleSelectEmoji(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {/* Botão de microfone */}
+      <button
+        type="button"
+        onClick={() => !disabled && setIsEmojiOpen((prev) => !prev)}
+        className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+        disabled={disabled}
+      >
+        <span role="img" aria-label="Emoji" className="text-xl">
+          😊
+        </span>
+      </button>
+
       <button
         type="button"
         onClick={handleToggleRecord}
