@@ -10,6 +10,9 @@ import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../../config/chatFeatures'
 import { useConversationRealtime } from '../../../hooks/chat/useChatRealtime'
 import type { ChatMessage, SendMessageForm, ChatAreaProps } from '../../../types/whatsapp-chat'
+import data from '@emoji-mart/data'
+// @ts-ignore - tipos de emoji-mart podem não estar instalados
+import Picker from '@emoji-mart/react'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -659,7 +662,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 {formatTime(message.timestamp)}
               </span>
               {getStatusIcon(
-                message.media_url && message.status === 'failed'
+                // Tratamento visual: se houver media_url ou uazapi_message_id
+                // e o status estiver como failed, exibir como 'sent' em vez de X
+                (message.media_url || message.uazapi_message_id) && message.status === 'failed'
                   ? 'sent'
                   : message.status
               )}
@@ -928,27 +933,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
         {isEmojiOpen && !disabled && (
           <div
             ref={emojiPickerRef}
-            className="absolute bottom-14 left-0 z-40 w-64 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg p-2"
+            className="absolute bottom-14 left-0 z-40"
           >
-            <div className="mb-2 text-xs font-medium text-gray-500">Emojis rápidos</div>
-            <div className="grid grid-cols-8 gap-1 text-xl">
-              {[
-                '😀','😁','😂','🤣','😊','😍','😘','😎',
-                '🙌','👍','🙏','👏','👌','🤝','💪','🔥',
-                '❤️','💙','💚','💛','🧡','💜','🖤','🤍',
-                '😢','😡','😱','😴','🤔','😏','😇','🤩',
-                '🎉','✅','❌','⚠️','⭐','📞','📎','✈️'
-              ].map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="hover:bg-gray-100 rounded text-center"
-                  onClick={() => handleSelectEmoji(emoji)}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+            <Picker
+              data={data}
+              onEmojiSelect={(emoji: any) => handleSelectEmoji(emoji.native)}
+              locale="pt"
+              theme="light"
+            />
           </div>
         )}
       </div>
