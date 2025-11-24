@@ -615,8 +615,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           }`}
         >
           {message.media_url && isAudioMessage && (
-            <div className="mb-1">
-              <audio controls src={message.media_url} className="w-full">
+            <div className="mb-1 flex items-center justify-center">
+              <audio
+                controls
+                src={message.media_url}
+                className="w-48 h-10"
+              >
                 Seu navegador não suporta o elemento de áudio.
               </audio>
             </div>
