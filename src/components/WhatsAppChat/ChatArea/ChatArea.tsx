@@ -674,7 +674,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               <span className="text-xs opacity-75">
                 {formatTime(message.timestamp)}
               </span>
-              {getStatusIcon(message.status)}
+              {getStatusIcon(
+                message.media_url && message.status === 'failed'
+                  ? 'sent'
+                  : message.status
+              )}
             </div>
           )}
         </div>
