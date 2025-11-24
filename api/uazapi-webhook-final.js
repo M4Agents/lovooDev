@@ -429,16 +429,9 @@ async function downloadAndStoreMedia({
     const { error: updateError } = await supabase
       .from('chat_messages')
       .update({ media_url: publicUrl })
-      .eq('id', chatMessageId);
-
-    if (updateError) {
-      console.error(' Erro ao atualizar media_url em chat_messages:', updateError.message || updateError);
-      return;
-    }
-
-    console.log(' media_url atualizada com sucesso para mensagem:', chatMessageId);
   } catch (error) {
-    console.error(' EXCEPTION em downloadAndStoreMedia:', error);
+    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    return null;
   }
 }
 
@@ -483,15 +476,25 @@ async function syncContactProfilePictureFromUazapi({
     const profileUrl = data?.data?.profilePictureUrl;
 
     if (!data?.success || !profileUrl) {
-      console.log('[syncContactProfilePictureFromUazapi] Resposta sem profilePictureUrl útil:', data);
+      console.log('[syncContactProfilePictureFromUazapi] Resposta sem profilePictureUrl util:', data);
       return;
     }
 
-    console.log('[syncContactProfilePictureFromUazapi] URL de foto obtida:', profileUrl.substring(0, 80) + '...');
+    console.log('[syncContactProfilePictureFromUazapi] URL de foto obtida da Uazapi:', profileUrl.substring(0, 80) + '...');
+
+    // Baixar avatar da Uazapi e armazenar em Storage proprio para obter URL estavel
+    const stableAvatarUrl = await downloadAndStoreContactAvatar({
+      supabase,
+      profileUrl,
+      companyId,
+      phoneNumber,
+    });
+
+    const finalUrl = stableAvatarUrl || profileUrl;
 
     const { error: updateError } = await supabase
       .from('chat_contacts')
-      .update({ profile_picture_url: profileUrl, updated_at: new Date().toISOString() })
+      .update({ profile_picture_url: finalUrl, updated_at: new Date().toISOString() })
       .eq('company_id', companyId)
       .eq('phone_number', phoneNumber);
 
@@ -505,3 +508,5 @@ async function syncContactProfilePictureFromUazapi({
     console.error('[syncContactProfilePictureFromUazapi] EXCEPTION:', error);
   }
 }
+
+// ... (rest of the code remains the same)

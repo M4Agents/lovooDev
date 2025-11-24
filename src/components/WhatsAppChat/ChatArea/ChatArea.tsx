@@ -27,6 +27,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
+  const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
   
@@ -131,9 +132,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const fetchConversation = async () => {
     try {
+      console.log('🔍 DEBUG ChatArea.fetchConversation:', { companyId, userId, conversationId })
       const conversations = await chatApi.getConversations(companyId, userId, { type: 'all' })
+      console.log('🔍 DEBUG ChatArea.fetchConversation - total conversas:', conversations.length)
       const conv = conversations.find(c => c.id === conversationId)
+      console.log('🔍 DEBUG ChatArea.fetchConversation - conversa encontrada:', conv)
       setConversation(conv)
+
+      // Carregar foto do contato a partir das informações detalhadas do contato
+      if (conv) {
+        try {
+          console.log('🔍 DEBUG ChatArea.fetchConversation - buscando contato para foto:', {
+            companyId,
+            phone: conv.contact_phone
+          })
+          const contactInfo = await chatApi.getContactInfo(companyId, conv.contact_phone)
+          console.log('🔍 DEBUG ChatArea.fetchConversation - contactInfo retornado:', contactInfo)
+          setContactPhotoUrl(contactInfo?.profile_picture_url || null)
+        } catch (error) {
+          console.error('❌ DEBUG ChatArea.fetchConversation - erro ao carregar foto do contato:', error)
+          setContactPhotoUrl(null)
+        }
+      } else {
+        setContactPhotoUrl(null)
+      }
     } catch (error) {
       console.error('Error fetching conversation:', error)
     }
@@ -446,10 +468,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-300 flex items-center justify-center">
-              {conversation?.profile_picture_url ? (
+              {contactPhotoUrl ? (
                 <img
-                  src={conversation.profile_picture_url}
-                  alt={conversation.contact_name || conversation.contact_phone || 'Contato'}
+                  src={contactPhotoUrl}
+                  alt={conversation?.contact_name || conversation?.contact_phone || 'Contato'}
                   className="w-full h-full object-cover"
                 />
               ) : (
