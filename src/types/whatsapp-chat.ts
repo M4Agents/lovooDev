@@ -14,6 +14,7 @@ export interface ChatConversation {
   instance_id: string
   contact_phone: string
   contact_name?: string
+  profile_picture_url?: string
   assigned_to?: {
     id: string
     email: string
