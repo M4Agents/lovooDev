@@ -75,16 +75,36 @@ async function processMessage(payload) {
     if (message.fromMe || message.wasSentByApi || message.isGroup) {
       return { success: false, error: 'Mensagem filtrada' };
     }
-    
-    const messageType = (message.messageType || '').toLowerCase();
-    if (messageType !== 'conversation' && messageType !== 'extendedtextmessage') {
+
+    const rawMessageType = (message.messageType || '').toLowerCase();
+    const rawType = (message.type || '').toLowerCase();
+    const rawMediaType = (message.mediaType || '').toLowerCase();
+
+    const isTextMessage =
+      rawMessageType === 'conversation' ||
+      rawMessageType === 'extendedtextmessage';
+
+    const isMediaMessage =
+      rawType === 'media' && !!rawMediaType;
+
+    if (!isTextMessage && !isMediaMessage) {
       return { success: false, error: 'Tipo não suportado' };
     }
     
     // Extrair dados
     const phoneNumber = message.sender.replace(/@.*$/, '');
     const senderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
-    const messageText = message.text || message.content || '';
+
+    let messageText = message.text || '';
+    let mediaUrl = null;
+
+    if (!messageText && typeof message.content === 'string') {
+      messageText = message.content;
+    }
+
+    if (isMediaMessage && message.content && typeof message.content === 'object') {
+      mediaUrl = message.content.URL || message.content.url || null;
+    }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
@@ -208,6 +228,18 @@ async function processMessage(payload) {
     }
     
     // Salvar mensagem
+    const messageTypeForDb = isMediaMessage
+      ? (rawMediaType === 'image'
+          ? 'image'
+          : rawMediaType === 'document'
+            ? 'document'
+            : rawMediaType === 'audio'
+              ? 'audio'
+              : rawMediaType === 'video'
+                ? 'video'
+                : 'document')
+      : 'text';
+
     const { data: savedMessage, error: messageError } = await supabase
       .from('chat_messages')
       .insert({
@@ -216,7 +248,8 @@ async function processMessage(payload) {
         instance_id: instance.id,
         uazapi_message_id: messageId,
         content: messageText,
-        message_type: 'text',
+        message_type: messageTypeForDb,
+        media_url: mediaUrl,
         direction: 'inbound',
         status: 'delivered',
         timestamp: new Date(timestamp).toISOString(),
