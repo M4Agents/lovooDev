@@ -50,7 +50,7 @@ const ChatPage: React.FC = () => {
   // =====================================================
 
   return (
-    <div className="h-full bg-gray-50 overflow-hidden">
+    <div className="h-screen bg-gray-50">
       <AdaptiveChatLayout 
         companyId={company.id}
         userId={user.id}
