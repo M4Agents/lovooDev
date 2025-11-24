@@ -851,7 +851,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 .toString()
                 .padStart(2, '0')}`}
             </span>
-            <span className="text-[11px] text-gray-500">Gravando áudio...</span>
             <div className="flex-1 flex items-end space-x-0.5 h-6">
               {[2,4,1,5,3,6,2,4,5,3,4,2,5,1,3].map((h, i) => (
                 <span
