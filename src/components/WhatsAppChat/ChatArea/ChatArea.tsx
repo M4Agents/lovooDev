@@ -660,7 +660,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && message.message_type !== 'image' && (
+          {message.media_url && message.message_type !== 'image' && message.message_type !== 'audio' && (
             <div className="mb-1">
               <a
                 href={message.media_url}
