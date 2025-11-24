@@ -649,7 +649,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.content && (
+          {message.content && !isAudioMessage && (
             <p className="text-sm">{message.content}</p>
           )}
           
