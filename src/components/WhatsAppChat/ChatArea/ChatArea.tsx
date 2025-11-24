@@ -417,25 +417,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [conversationId])
 
-            m.id === updatedMessage.id 
-              ? { 
-                  ...m, 
-                  status: updatedMessage.status, 
-                  uazapi_message_id: updatedMessage.uazapi_message_id,
-                  media_url: updatedMessage.media_url ?? m.media_url,
-                  message_type: updatedMessage.message_type ?? m.message_type,
-                }
-              : m
-          )
-        )
-      }
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [conversationId])
-
   // =====================================================
   // LOADING STATE
   // =====================================================
