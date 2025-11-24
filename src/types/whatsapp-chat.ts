@@ -183,6 +183,7 @@ export interface ChatAreaProps {
 export interface LeadPanelProps {
   conversationId: string
   companyId: string
+  userId: string
 }
 
 export interface MessageBubbleProps {

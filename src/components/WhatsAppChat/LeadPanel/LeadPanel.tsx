@@ -20,7 +20,8 @@ import type {
 
 export const LeadPanel: React.FC<LeadPanelProps> = ({
   conversationId,
-  companyId
+  companyId,
+  userId
 }) => {
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
@@ -37,7 +38,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
       setLoading(true)
       
       // Buscar conversa para pegar telefone
-      const conversations = await chatApi.getConversations(companyId, '', { type: 'all' })
+      const conversations = await chatApi.getConversations(companyId, userId, { type: 'all' })
       const conv = conversations.find(c => c.id === conversationId)
       setConversation(conv)
       

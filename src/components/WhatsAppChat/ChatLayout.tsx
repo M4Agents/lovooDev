@@ -132,6 +132,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           <LeadPanel
             conversationId={chatData.selectedConversation}
             companyId={companyId}
+            userId={userId}
           />
         ) : (
           <div className="flex items-center justify-center h-full p-6">
@@ -251,6 +252,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
           <LeadPanel
             conversationId={chatData.selectedConversation}
             companyId={companyId}
+            userId={userId}
           />
         )}
       </div>
