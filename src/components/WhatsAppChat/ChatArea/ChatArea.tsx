@@ -695,6 +695,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [isRecording, setIsRecording] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const recordingTimerRef = useRef<number | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -779,12 +781,21 @@ const MessageInput: React.FC<MessageInputProps> = ({
         mediaRecorderRef.current = recorder
         recorder.start()
         setIsRecording(true)
+
+        // Iniciar timer de gravação
+        setRecordingSeconds(0)
+        if (recordingTimerRef.current) {
+          window.clearInterval(recordingTimerRef.current)
+        }
+        recordingTimerRef.current = window.setInterval(() => {
+          setRecordingSeconds((prev) => prev + 1)
+        }, 1000)
       } catch (error) {
         console.error('Erro ao acessar microfone:', error)
         setIsRecording(false)
       }
     } else {
-      // Parar gravação
+      // Parar gravação manualmente
       try {
         mediaRecorderRef.current?.stop()
       } catch (error) {
@@ -803,6 +814,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
   return (
     <form onSubmit={handleSubmit} className="flex items-end space-x-3">
       <div className="flex-1">
+        {isRecording && (
+          <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs font-medium text-gray-700 min-w-[2.5rem]">
+              {`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60)
+                .toString()
+                .padStart(2, '0')}`}
+            </span>
+            <div className="flex-1 flex items-end space-x-0.5 h-6">
+              {[2,4,1,5,3,6,2,4,5,3,4,2,5,1,3].map((h, i) => (
+                <span
+                  key={i}
+                  className="w-0.5 bg-gray-500 rounded-sm animate-pulse"
+                  style={{ height: `${4 + h * 3}px` }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
