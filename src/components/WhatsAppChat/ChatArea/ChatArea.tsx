@@ -697,6 +697,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const recordedChunksRef = useRef<Blob[]>([])
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const recordingTimerRef = useRef<number | null>(null)
+  const shouldSendRef = useRef(true)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -748,6 +749,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         const recorder = new MediaRecorder(stream)
 
         recordedChunksRef.current = []
+        shouldSendRef.current = true
 
         recorder.ondataavailable = (event: BlobEvent) => {
           if (event.data.size > 0) {
@@ -757,6 +759,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
         recorder.onstop = async () => {
           try {
+            if (!shouldSendRef.current) {
+              // Cancelado: apenas descartar
+              return
+            }
+
             if (recordedChunksRef.current.length === 0) return
 
             const blob = new Blob(recordedChunksRef.current, { type: 'audio/ogg' })
@@ -774,6 +781,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
           } finally {
             // Encerrar uso do microfone
             stream.getTracks().forEach(track => track.stop())
+            if (recordingTimerRef.current) {
+              window.clearInterval(recordingTimerRef.current)
+              recordingTimerRef.current = null
+            }
             setIsRecording(false)
           }
         }
@@ -795,7 +806,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         setIsRecording(false)
       }
     } else {
-      // Parar gravação manualmente
+      // Parar gravação manualmente (enviar)
       try {
         mediaRecorderRef.current?.stop()
       } catch (error) {
@@ -816,6 +827,24 @@ const MessageInput: React.FC<MessageInputProps> = ({
       <div className="flex-1">
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
+            {/* Botão cancelar gravação */}
+            <button
+              type="button"
+              onClick={() => {
+                shouldSendRef.current = false
+                try {
+                  mediaRecorderRef.current?.stop()
+                } catch (error) {
+                  console.error('Erro ao cancelar gravação:', error)
+                }
+              }}
+              className="p-1 rounded-full border border-gray-400 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-400"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M6 18L18 6" />
+              </svg>
+            </button>
+
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <span className="text-xs font-medium text-gray-700 min-w-[2.5rem]">
               {`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60)
