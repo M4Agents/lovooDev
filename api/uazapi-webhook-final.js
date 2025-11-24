@@ -233,7 +233,7 @@ async function processMessage(payload) {
           ? 'image'
           : rawMediaType === 'document'
             ? 'document'
-            : rawMediaType === 'audio'
+            : (rawMediaType === 'audio' || rawMediaType === 'ptt')
               ? 'audio'
               : rawMediaType === 'video'
                 ? 'video'

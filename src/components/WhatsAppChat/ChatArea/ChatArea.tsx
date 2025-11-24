@@ -642,6 +642,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               : 'bg-white text-gray-900'
           }`}
         >
+          {message.media_url && message.message_type === 'audio' && (
+            <div className="mb-1">
+              <audio controls src={message.media_url} className="w-full">
+                Seu navegador não suporta o elemento de áudio.
+              </audio>
+            </div>
+          )}
+
           {message.media_url && message.message_type === 'image' && (
             <div className="mb-1">
               <img
