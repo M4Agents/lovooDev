@@ -642,7 +642,32 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               : 'bg-white text-gray-900'
           }`}
         >
-          <p className="text-sm">{message.content}</p>
+          {message.media_url && message.message_type === 'image' && (
+            <div className="mb-1">
+              <img
+                src={message.media_url}
+                alt={message.content || 'Imagem'}
+                className="max-w-full rounded-md"
+              />
+            </div>
+          )}
+
+          {message.media_url && message.message_type !== 'image' && (
+            <div className="mb-1">
+              <a
+                href={message.media_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 underline"
+              >
+                {message.content || 'Abrir arquivo'}
+              </a>
+            </div>
+          )}
+
+          {message.content && (
+            <p className="text-sm">{message.content}</p>
+          )}
           
           {isOwn && (
             <div className="flex items-center justify-end mt-1 space-x-1">
@@ -709,7 +734,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       const isImage = mimeType.startsWith('image/')
 
       onSendMessage({
-        content: '',
+        content: file.name || '[arquivo]',
         message_type: isImage ? 'image' : 'document',
         media_url: mediaUrl
       })
