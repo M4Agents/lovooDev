@@ -254,7 +254,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       onClick={onClick}
       className={`w-full p-4 text-left transition-all duration-200 ${
         isSelected 
-          ? 'bg-blue-50 border-r-4 border-blue-500 shadow-sm' 
+          ? 'bg-blue-50 border-r-4 border-[#00a884] shadow-sm' 
           : 'hover:bg-white/80 hover:shadow-sm'
       }`}
     >
