@@ -692,6 +692,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -733,6 +736,63 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   }
 
+  const handleToggleRecord = async () => {
+    if (disabled) return
+
+    // Iniciar gravação
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const recorder = new MediaRecorder(stream)
+
+        recordedChunksRef.current = []
+
+        recorder.ondataavailable = (event: BlobEvent) => {
+          if (event.data.size > 0) {
+            recordedChunksRef.current.push(event.data)
+          }
+        }
+
+        recorder.onstop = async () => {
+          try {
+            if (recordedChunksRef.current.length === 0) return
+
+            const blob = new Blob(recordedChunksRef.current, { type: 'audio/ogg' })
+            const file = new File([blob], `gravacao-${Date.now()}.ogg`, { type: 'audio/ogg' })
+
+            const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
+
+            onSendMessage({
+              content: '[áudio]',
+              message_type: 'audio',
+              media_url: mediaUrl
+            })
+          } catch (error) {
+            console.error('Erro ao processar gravação de áudio:', error)
+          } finally {
+            // Encerrar uso do microfone
+            stream.getTracks().forEach(track => track.stop())
+            setIsRecording(false)
+          }
+        }
+
+        mediaRecorderRef.current = recorder
+        recorder.start()
+        setIsRecording(true)
+      } catch (error) {
+        console.error('Erro ao acessar microfone:', error)
+        setIsRecording(false)
+      }
+    } else {
+      // Parar gravação
+      try {
+        mediaRecorderRef.current?.stop()
+      } catch (error) {
+        console.error('Erro ao parar gravação:', error)
+      }
+    }
+  }
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -754,7 +814,24 @@ const MessageInput: React.FC<MessageInputProps> = ({
           style={{ minHeight: '40px', maxHeight: '120px' }}
         />
       </div>
-      
+      {/* Botão de microfone */}
+      <button
+        type="button"
+        onClick={handleToggleRecord}
+        disabled={disabled}
+        className={`p-2 rounded-lg ${
+          isRecording
+            ? 'text-red-600 bg-red-50'
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 2a2 2 0 00-2 2v5a2 2 0 104 0V4a2 2 0 00-2-2z" />
+          <path d="M5 9a5 5 0 0010 0h-1.5a3.5 3.5 0 01-7 0H5z" />
+          <path d="M8.5 14h3v2h-3z" />
+        </svg>
+      </button>
+
       <button
         type="button"
         onClick={handleAttachClick}
