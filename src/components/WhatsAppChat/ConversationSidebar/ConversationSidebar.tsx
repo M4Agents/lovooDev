@@ -85,7 +85,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       <div className="p-6 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <div className="h-8 w-8 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-lg flex items-center justify-center shadow-sm">
+            <div className="h-8 w-8 bg-[#00a884] rounded-lg flex items-center justify-center shadow-sm">
               <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
               </svg>
@@ -147,14 +147,14 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
               className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
                 filter.type === option.key
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105'
+                  ? 'bg-[#00a884] text-white shadow-lg transform scale-105'
                   : 'text-slate-600 hover:bg-white/60 hover:shadow-md'
               }`}
             >
               <div className="text-center">
                 <div className="font-semibold">{option.label}</div>
                 <div className={`text-xs mt-1 ${
-                  filter.type === option.key ? 'text-blue-100' : 'text-slate-400'
+                  filter.type === option.key ? 'text-[#00a884]' : 'text-slate-400'
                 }`}>
                   {option.count} conversas
                 </div>
@@ -169,8 +169,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="relative">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-blue-500"></div>
-              <div className="absolute inset-0 rounded-full h-8 w-8 border-2 border-transparent border-t-indigo-400 animate-pulse"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-[#00a884]"></div>
+              <div className="absolute inset-0 rounded-full h-8 w-8 border-2 border-transparent border-t-[#00a884] animate-pulse"></div>
             </div>
           </div>
         ) : filteredConversations.length === 0 ? (
@@ -254,7 +254,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       onClick={onClick}
       className={`w-full p-4 text-left transition-all duration-200 ${
         isSelected 
-          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-r-4 border-blue-500 shadow-sm' 
+          ? 'bg-gradient-to-r from-[#00a884] to-[#00a884] border-r-4 border-[#00a884] shadow-sm' 
           : 'hover:bg-white/80 hover:shadow-sm'
       }`}
     >
@@ -294,7 +294,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                 </span>
               )}
               {conversation.unread_count > 0 && (
-                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full shadow-sm">
+                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-[#00a884] rounded-full shadow-sm">
                   {conversation.unread_count}
                 </span>
               )}
@@ -306,7 +306,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               isSelected ? 'text-slate-600' : 'text-slate-500'
             }`}>
               {conversation.last_message_direction === 'outbound' && (
-                <span className="text-emerald-500 mr-1 font-medium">→</span>
+                <span className="text-[#00a884] mr-1 font-medium">→</span>
               )}
               {conversation.last_message_content || (
                 <span className="italic">Sem mensagens</span>
