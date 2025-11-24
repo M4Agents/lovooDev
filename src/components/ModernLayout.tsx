@@ -240,7 +240,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <main className="p-6">
+        <main
+          className={`
+            p-6
+            ${location.pathname === '/chat' ? 'h-[calc(100vh-80px)] overflow-hidden' : ''}
+          `}
+        >
           {children}
         </main>
       </div>
