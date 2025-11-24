@@ -227,10 +227,18 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     <div className="p-4 space-y-6">
       {/* Avatar e Info Básica */}
       <div className="text-center">
-        <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-3">
-          <svg className="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-          </svg>
+        <div className="w-16 h-16 rounded-full mx-auto mb-3 overflow-hidden bg-gray-300 flex items-center justify-center">
+          {contact?.profile_picture_url ? (
+            <img
+              src={contact.profile_picture_url}
+              alt={contact.name || conversation?.contact_name || 'Foto do lead'}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <svg className="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+            </svg>
+          )}
         </div>
         
         <h3 className="text-lg font-medium text-gray-900">

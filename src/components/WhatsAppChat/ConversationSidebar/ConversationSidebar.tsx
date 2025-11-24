@@ -261,11 +261,19 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       <div className="flex items-start space-x-3">
         {/* Avatar */}
         <div className="flex-shrink-0">
-          <div className="w-12 h-12 bg-gradient-to-br from-slate-300 to-slate-400 rounded-xl flex items-center justify-center shadow-sm">
-            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-            </svg>
-          </div>
+          {conversation.profile_picture_url ? (
+            <img
+              src={conversation.profile_picture_url}
+              alt={conversation.contact_name || conversation.contact_phone || 'Contato'}
+              className="w-12 h-12 rounded-xl object-cover shadow-sm bg-slate-200"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gradient-to-br from-slate-300 to-slate-400 rounded-xl flex items-center justify-center shadow-sm">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Conteúdo */}
