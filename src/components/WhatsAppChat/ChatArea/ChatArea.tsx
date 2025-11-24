@@ -141,7 +141,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // =====================================================
 
   const handleSendMessage = async (messageForm: SendMessageForm) => {
-    if (!messageForm.content.trim()) return
+    if (!messageForm.content.trim() && !messageForm.media_url) return
 
     // 1. Criar mensagem local imediatamente (UX instantâneo)
     const tempMessage: ChatMessage = {
@@ -550,6 +550,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onSendMessage={handleSendMessage}
           disabled={sending}
           placeholder="Digite sua mensagem..."
+          companyId={companyId}
+          conversationId={conversationId}
         />
       </div>
     </div>
@@ -664,14 +666,19 @@ interface MessageInputProps {
   onSendMessage: (message: SendMessageForm) => void
   disabled?: boolean
   placeholder?: string
+  companyId: string
+  conversationId: string
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   disabled,
-  placeholder = 'Digite sua mensagem...'
+  placeholder = 'Digite sua mensagem...',
+  companyId,
+  conversationId
 }) => {
   const [message, setMessage] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -684,6 +691,33 @@ const MessageInput: React.FC<MessageInputProps> = ({
     })
 
     setMessage('')
+  }
+
+  const handleAttachClick = () => {
+    if (disabled) return
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
+
+      const mimeType = file.type || ''
+      const isImage = mimeType.startsWith('image/')
+
+      onSendMessage({
+        content: '',
+        message_type: isImage ? 'image' : 'document',
+        media_url: mediaUrl
+      })
+    } catch (error) {
+      console.error('Erro ao anexar arquivo:', error)
+    } finally {
+      e.target.value = ''
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -710,12 +744,20 @@ const MessageInput: React.FC<MessageInputProps> = ({
       
       <button
         type="button"
+        onClick={handleAttachClick}
         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
         </svg>
       </button>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       <button
         type="submit"
