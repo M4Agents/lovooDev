@@ -417,29 +417,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [conversationId])
 
-  // ✅ FALLBACK: Manter subscription legada se Event Bus desabilitado
-  useEffect(() => {
-    if (!conversationId || ChatFeatureManager.shouldUseEventBus()) return
-
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('🔄 Usando subscription legada (fallback)')
-    }
-
-    const subscription = chatApi.subscribeToMessages(conversationId, (payload) => {
-      if (payload.eventType === 'INSERT') {
-        const newMessage = payload.new
-        setMessages(prev => {
-          if (prev.some(m => m.id === newMessage.id)) return prev
-          return [...prev, newMessage]
-        })
-      } else if (payload.eventType === 'UPDATE') {
-        const updatedMessage = payload.new
-        setMessages(prev => 
-          prev.map(m => 
             m.id === updatedMessage.id 
-              ? { ...m, status: updatedMessage.status, uazapi_message_id: updatedMessage.uazapi_message_id }
+              ? { 
+                  ...m, 
+                  status: updatedMessage.status, 
+                  uazapi_message_id: updatedMessage.uazapi_message_id,
+                  media_url: updatedMessage.media_url ?? m.media_url,
+                  message_type: updatedMessage.message_type ?? m.message_type,
+                }
               : m
           )
         )
@@ -626,6 +611,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   }
 
+  const isAudioMessage = (() => {
+    if (message.message_type === 'audio') return true
+    if (!message.media_url) return false
+    return /\.(ogg|mp3|wav)(?:$|[?#])/i.test(message.media_url)
+  })()
+
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
@@ -642,7 +633,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               : 'bg-white text-gray-900'
           }`}
         >
-          {message.media_url && message.message_type === 'audio' && (
+          {message.media_url && isAudioMessage && (
             <div className="mb-1">
               <audio controls src={message.media_url} className="w-full">
                 Seu navegador não suporta o elemento de áudio.
@@ -660,7 +651,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && message.message_type !== 'image' && message.message_type !== 'audio' && (
+          {message.media_url && !isAudioMessage && message.message_type !== 'image' && (
             <div className="mb-1">
               <a
                 href={message.media_url}
