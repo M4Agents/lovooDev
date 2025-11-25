@@ -451,7 +451,7 @@ async function syncContactProfilePictureFromUazapi({
     }
 
     const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-    const url = `${cleanBaseUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
+    const url = `${cleanBaseUrl}/chat/GetNameAndImageURL/${instanceName}`;
 
     console.log('[syncContactProfilePictureFromUazapi] Chamando Uazapi para foto do contato...', {
       url,
