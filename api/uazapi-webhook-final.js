@@ -445,13 +445,13 @@ async function syncContactProfilePictureFromUazapi({
   phoneNumber,
 }) {
   try {
-    if (!baseUrl || !token || !instanceName || !companyId || !phoneNumber) {
+    if (!token || !instanceName || !companyId || !phoneNumber) {
       console.log('[syncContactProfilePictureFromUazapi] Dados insuficientes para sincronizar foto, abortando.');
       return;
     }
 
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-    const url = `${cleanBaseUrl}/chat/GetNameAndImageURL/${instanceName}`;
+    // Usar endpoint oficial da Uazapi para buscar nome e imagem do contato
+    const url = `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceName}`;
 
     console.log('[syncContactProfilePictureFromUazapi] Chamando Uazapi para foto do contato...', {
       url,
@@ -462,7 +462,8 @@ async function syncContactProfilePictureFromUazapi({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        token,
+        // Conforme documentação: usar header apikey
+        apikey: token,
       },
       body: JSON.stringify({ phone: phoneNumber }),
     });
