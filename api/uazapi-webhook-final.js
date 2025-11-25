@@ -92,7 +92,20 @@ async function processMessage(payload) {
     }
     
     // Extrair dados
-    const phoneNumber = message.sender.replace(/@.*$/, '');
+    // Priorizar o número real do WhatsApp (jid ou phone), evitando usar o LID como telefone
+    const rawPhone =
+      message.sender_pn ||
+      message.chatid ||
+      payload.chat?.wa_chatid ||
+      payload.chat?.phone ||
+      message.sender;
+
+    // Remover qualquer sufixo @... (ex: 5511992195126@s.whatsapp.net)
+    // e caracteres não numéricos (ex: +55 11 99219-5126)
+    const phoneNumber = rawPhone
+      .replace(/@.*$/, '')
+      .replace(/\D/g, '');
+
     const senderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
 
     let messageText = message.text || '';
