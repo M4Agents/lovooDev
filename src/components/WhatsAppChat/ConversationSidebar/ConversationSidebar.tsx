@@ -102,9 +102,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       try {
         const contact = await chatApi.getContactInfo(companyId, phoneDigits)
         if (contact?.profile_picture_url) {
+          const url = contact.profile_picture_url
           setPhotosByPhone(prev => {
             if (prev[phoneDigits]) return prev
-            return { ...prev, [phoneDigits]: contact.profile_picture_url }
+            return { ...prev, [phoneDigits]: url }
           })
         }
       } catch (error) {
@@ -327,13 +328,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               {/* Nome do Lead */}
               <h4 className={`text-sm font-semibold truncate ${
                 isSelected ? 'text-slate-800' : 'text-slate-700'
+              }`}>
+                {conversation.contact_name || 'Lead sem nome'}
+              </h4>
               {/* Telefone com fonte menor */}
               <p className={`text-xs truncate mt-0.5 ${
                 isSelected ? 'text-slate-500' : 'text-slate-400'
               }`}>
                 {formatPhone(conversation.contact_phone.replace(/\D/g, ''))}
               </p>
-          </div>
+            </div>
 
           <div className="flex items-center justify-between mt-2">
             <p className={`text-sm truncate ${
