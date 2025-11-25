@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   User,
@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Eye
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { chatApi } from '../services/chat/chatApi';
 
 interface Lead {
   id: number;
@@ -47,6 +49,38 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   lead,
   onEdit
 }) => {
+  const { company } = useAuth();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadPhoto = async () => {
+      try {
+        if (!company?.id || !lead?.phone) {
+          setPhotoUrl(null);
+          return;
+        }
+
+        const phoneDigits = lead.phone.replace(/\D/g, '');
+        if (!phoneDigits) {
+          setPhotoUrl(null);
+          return;
+        }
+
+        const contact = await chatApi.getContactInfo(company.id, phoneDigits);
+        setPhotoUrl(contact?.profile_picture_url || null);
+      } catch (error) {
+        console.error('Erro ao carregar foto do lead no modal de visualização:', error);
+        setPhotoUrl(null);
+      }
+    };
+
+    if (isOpen && lead) {
+      loadPhoto();
+    } else {
+      setPhotoUrl(null);
+    }
+  }, [isOpen, lead, company?.id]);
+
   if (!isOpen || !lead) return null;
 
   const getStatusColor = (status: string) => {
@@ -106,8 +140,16 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <Eye className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 overflow-hidden">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt={lead.name}
+                  className="w-10 h-10 object-cover"
+                />
+              ) : (
+                <Eye className="w-5 h-5 text-blue-600" />
+              )}
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">

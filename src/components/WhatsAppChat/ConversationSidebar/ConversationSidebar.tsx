@@ -217,12 +217,14 @@ interface ConversationItemProps {
   conversation: ChatConversation
   isSelected: boolean
   onClick: () => void
+  photoUrl?: string
 }
 
 const ConversationItem: React.FC<ConversationItemProps> = ({
   conversation,
   isSelected,
-  onClick
+  onClick,
+  photoUrl
 }) => {
   const formatTime = (date?: Date) => {
     if (!date) return ''
@@ -261,9 +263,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       <div className="flex items-start space-x-3">
         {/* Avatar */}
         <div className="flex-shrink-0">
-          {conversation.profile_picture_url ? (
+          {photoUrl ? (
             <img
-              src={conversation.profile_picture_url}
+              src={photoUrl}
               alt={conversation.contact_name || conversation.contact_phone || 'Contato'}
               className="w-12 h-12 rounded-xl object-cover shadow-sm bg-slate-200"
             />

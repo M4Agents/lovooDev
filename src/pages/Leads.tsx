@@ -7,6 +7,7 @@ import { CustomFieldsModal } from '../components/CustomFieldsModal';
 import { ImportLeadsModal } from '../components/ImportLeadsModal';
 import { DuplicateNotifications } from '../components/DuplicateNotifications';
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
+import { chatApi } from '../services/chat/chatApi';
 import {
   Users,
   Plus,
@@ -78,6 +79,7 @@ export const Leads: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDuplicateNotification, setSelectedDuplicateNotification] = useState<any>(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [leadPhotos, setLeadPhotos] = useState<Record<string, string>>({});
   
   // NOVOS ESTADOS PARA EXPORTAÇÃO
   const [showExportDropdown, setShowExportDropdown] = useState(false);
@@ -140,6 +142,34 @@ export const Leads: React.FC = () => {
       
       setLeads(leadsData);
       setStats(statsData);
+
+      // Carregar fotos dos leads a partir do telefone (se houver)
+      const phones = Array.from(new Set(
+        leadsData
+          .map((lead) => lead.phone)
+          .filter((phone): phone is string => !!phone)
+      ));
+
+      const missingPhones = phones
+        .map((p) => p.replace(/\D/g, ''))
+        .filter((phone) => phone && !leadPhotos[phone]);
+
+      missingPhones.forEach(async (rawPhone) => {
+        try {
+          const phoneDigits = rawPhone.replace(/\D/g, '');
+          if (!phoneDigits) return;
+
+          const contact = await chatApi.getContactInfo(company.id, phoneDigits);
+          if (contact?.profile_picture_url) {
+            setLeadPhotos((prev) => {
+              if (prev[phoneDigits]) return prev;
+              return { ...prev, [phoneDigits]: contact.profile_picture_url };
+            });
+          }
+        } catch (error) {
+          console.error('Erro ao carregar foto do lead na lista de Leads:', error);
+        }
+      });
     } catch (error) {
       console.error('Error loading leads data:', error);
     } finally {
@@ -711,9 +741,24 @@ export const Leads: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
-                        </div>
+                        {(() => {
+                          const phoneKey = lead.phone ? lead.phone.replace(/\D/g, '') : '';
+                          const photoUrl = phoneKey ? leadPhotos[phoneKey] : undefined;
+                          if (photoUrl) {
+                            return (
+                              <img
+                                src={photoUrl}
+                                alt={lead.name}
+                                className="h-10 w-10 rounded-full object-cover"
+                              />
+                            );
+                          }
+                          return (
+                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                              <User className="w-5 h-5 text-blue-600" />
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{lead.name}</div>

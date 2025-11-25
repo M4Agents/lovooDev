@@ -86,6 +86,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         <ConversationSidebar
           instances={chatData.instances}
           conversations={chatData.conversations}
+          companyId={companyId}
           selectedInstance={chatData.selectedInstance}
           selectedConversation={chatData.selectedConversation}
           filter={chatData.filter}
@@ -226,6 +227,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
           <ConversationSidebar
             instances={chatData.instances}
             conversations={chatData.conversations}
+            companyId={companyId}
             selectedInstance={chatData.selectedInstance}
             selectedConversation={chatData.selectedConversation}
             filter={chatData.filter}
