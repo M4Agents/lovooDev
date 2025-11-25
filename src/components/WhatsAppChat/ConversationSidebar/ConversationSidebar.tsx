@@ -52,11 +52,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
   const filterOptions = [
     { key: 'all', label: 'Todas as Conversas', count: conversations.length },
-    { 
-      key: 'assigned', 
-      label: 'Atribuídas', 
-      count: conversations.filter(c => c.assigned_to).length 
-    },
+    { key: 'assigned', label: 'Atribuídas', count: conversations.filter(c => c.assigned_to).length },
+    { key: 'unassigned', label: 'Não Atribuídas', count: conversations.filter(c => !c.assigned_to).length }
     { 
       key: 'unassigned', 
       label: 'Não Atribuídas', 
