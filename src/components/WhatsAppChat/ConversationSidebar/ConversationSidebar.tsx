@@ -4,8 +4,9 @@
 // Sidebar com lista de conversas e filtros
 // NÃO MODIFICA componentes existentes
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
+import { chatApi } from '../../../services/chat/chatApi'
 
 // =====================================================
 // TIPOS DO COMPONENTE
@@ -14,6 +15,7 @@ import type { ChatConversation, ConversationFilter } from '../../../types/whatsa
 interface ConversationSidebarProps {
   instances: any[]
   conversations: ChatConversation[]
+  companyId: string
   selectedInstance?: string
   selectedConversation?: string
   filter: ConversationFilter
@@ -31,6 +33,7 @@ interface ConversationSidebarProps {
 export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   instances,
   conversations,
+  companyId,
   selectedInstance,
   selectedConversation,
   filter,
@@ -41,6 +44,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onRefresh
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
+  const [photosByPhone, setPhotosByPhone] = useState<Record<string, string>>({})
 
   // =====================================================
   // FILTROS
@@ -74,6 +78,40 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       conversation.last_message_content?.toLowerCase().includes(searchLower)
     )
   })
+
+  // =====================================================
+  // CARREGAR FOTOS DOS CONTATOS (SOMENTE FRONTEND)
+  // =====================================================
+
+  useEffect(() => {
+    if (!companyId || conversations.length === 0) return
+
+    // Normalizar telefones para apenas dígitos (mesmo padrão do webhook)
+    const uniquePhones = Array.from(new Set(
+      conversations
+        .map(c => c.contact_phone)
+        .filter((p): p is string => !!p)
+        .map(p => p.replace(/\D/g, ''))
+        .filter(p => !!p)
+    ))
+
+    const missingPhones = uniquePhones.filter(phone => !photosByPhone[phone])
+    if (missingPhones.length === 0) return
+
+    missingPhones.forEach(async (phoneDigits) => {
+      try {
+        const contact = await chatApi.getContactInfo(companyId, phoneDigits)
+        if (contact?.profile_picture_url) {
+          setPhotosByPhone(prev => {
+            if (prev[phoneDigits]) return prev
+            return { ...prev, [phoneDigits]: contact.profile_picture_url }
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao carregar foto do contato para sidebar:', error)
+      }
+    })
+  }, [companyId, conversations, photosByPhone])
 
   // =====================================================
   // RENDER
@@ -198,6 +236,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               <ConversationItem
                 key={conversation.id}
                 conversation={conversation}
+                photoUrl={(() => {
+                  const phoneDigits = conversation.contact_phone.replace(/\D/g, '')
+                  return photosByPhone[phoneDigits]
+                })()}
                 isSelected={conversation.id === selectedConversation}
                 onClick={() => onSelectConversation(conversation.id)}
               />
@@ -285,30 +327,12 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               {/* Nome do Lead */}
               <h4 className={`text-sm font-semibold truncate ${
                 isSelected ? 'text-slate-800' : 'text-slate-700'
-              }`}>
-                {conversation.contact_name || 'Lead sem nome'}
-              </h4>
               {/* Telefone com fonte menor */}
               <p className={`text-xs truncate mt-0.5 ${
                 isSelected ? 'text-slate-500' : 'text-slate-400'
               }`}>
-                {formatPhone(conversation.contact_phone)}
+                {formatPhone(conversation.contact_phone.replace(/\D/g, ''))}
               </p>
-            </div>
-            <div className="flex items-center space-x-2 ml-3">
-              {conversation.last_message_at && (
-                <span className={`text-xs font-medium ${
-                  isSelected ? 'text-slate-600' : 'text-slate-500'
-                }`}>
-                  {formatTime(conversation.last_message_at)}
-                </span>
-              )}
-              {conversation.unread_count > 0 && (
-                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-[#00a884] rounded-full shadow-sm">
-                  {conversation.unread_count}
-                </span>
-              )}
-            </div>
           </div>
 
           <div className="flex items-center justify-between mt-2">
