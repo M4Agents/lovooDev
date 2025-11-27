@@ -109,6 +109,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (isOpen && company?.id) {
       loadCustomFields();
       if (lead) {
+        console.log('🔍 LEADMODAL - PREENCHENDO FORM DATA COM LEAD:', lead);
         // Edição - preencher dados existentes
         setFormData({
           name: lead.name || '',
@@ -142,6 +143,11 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           customValues[value.field_id] = value.value;
         });
         setCustomFieldValues(customValues);
+        console.log('✅ LEADMODAL - FORM DATA PREENCHIDO:', {
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone
+        });
       } else {
         // Criação - limpar formulário
         setFormData({
