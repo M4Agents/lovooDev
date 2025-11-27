@@ -856,7 +856,7 @@ export const Leads: React.FC = () => {
           setShowEditModal(false);
           setSelectedLead(null);
         }}
-        lead={showEditModal ? selectedLead : null}
+        lead={selectedLead}
         onSave={loadData}
       />
 
