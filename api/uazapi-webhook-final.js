@@ -217,6 +217,9 @@ async function processMessage(payload) {
       .eq('company_id', company.id)
       .single();
     
+    // Determinar se é contato novo ou existente
+    const isNewContact = !existingContact;
+    
     if (existingContact) {
       contactId = existingContact.id;
       console.log('👤 CONTATO EXISTENTE:', contactId);
@@ -243,9 +246,18 @@ async function processMessage(payload) {
       
       contactId = newContact.id;
       console.log('👤 NOVO CONTATO:', contactId);
+    }
 
-      // Sincronizar foto de perfil do contato via Uazapi em background
-      try {
+    // =====================================================
+    // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
+    // =====================================================
+    // Verificar se precisa sincronizar foto (otimização de performance)
+    try {
+      const needsSync = await shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact);
+      
+      if (needsSync) {
+        console.log('📸 Sincronizando foto do contato:', phoneNumber);
+        // Sincronizar foto de perfil do contato via Uazapi em background
         syncContactProfilePictureFromUazapi({
           supabase,
           baseUrl: payload.BaseUrl,
@@ -256,9 +268,12 @@ async function processMessage(payload) {
         }).catch((syncError) => {
           console.error('⚠️ Erro ao sincronizar foto do contato (async):', syncError);
         });
-      } catch (syncInitError) {
-        console.error('⚠️ Erro ao iniciar sync de foto do contato:', syncInitError);
+      } else {
+        console.log('⏭️ Pulando sincronização de foto (não necessária):', phoneNumber);
       }
+    } catch (syncInitError) {
+      console.error('⚠️ Erro ao verificar/iniciar sync de foto do contato:', syncInitError);
+      // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
     }
     
     // Buscar/criar conversa
@@ -516,6 +531,73 @@ async function downloadAndStoreMedia({
   } catch (error) {
     console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
     return null;
+  }
+}
+
+// =====================================================
+// FUNÇÃO PARA VERIFICAÇÃO INTELIGENTE DE SINCRONIZAÇÃO
+// =====================================================
+// Implementada em: 2025-11-27 - Otimização de performance e escalabilidade
+// Backup criado: uazapi-webhook-final.js.backup-pre-sync-YYYYMMDD-HHMMSS
+async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = false) {
+  try {
+    console.log('[shouldSyncPhoto] Verificando necessidade de sincronização:', {
+      companyId,
+      phoneNumber,
+      isNewContact
+    });
+
+    // 1. CONTATO NOVO: sempre sincronizar
+    if (isNewContact) {
+      console.log('[shouldSyncPhoto] Contato novo - sincronizar');
+      return true;
+    }
+
+    // 2. BUSCAR DADOS ATUAIS DO CONTATO (query otimizada)
+    const { data: contact, error } = await supabase
+      .from('chat_contacts')
+      .select('profile_picture_url, updated_at')
+      .eq('company_id', companyId)
+      .eq('phone_number', phoneNumber)
+      .single();
+
+    if (error || !contact) {
+      console.log('[shouldSyncPhoto] Contato não encontrado ou erro na query - sincronizar por segurança');
+      return true;
+    }
+
+    const currentUrl = contact.profile_picture_url;
+    const lastUpdate = new Date(contact.updated_at);
+
+    // 3. SEM FOTO: sincronizar para tentar obter
+    if (!currentUrl) {
+      console.log('[shouldSyncPhoto] Sem foto - sincronizar');
+      return true;
+    }
+
+    // 4. URL TEMPORÁRIA: sincronizar para migrar para Storage
+    if (currentUrl.includes('pps.whatsapp.net')) {
+      console.log('[shouldSyncPhoto] URL temporária detectada - migrar para Storage');
+      return true;
+    }
+
+    // 5. VERIFICAR SE JÁ SINCRONIZOU HOJE
+    const today = new Date().toDateString();
+    const lastUpdateDate = lastUpdate.toDateString();
+    
+    if (today === lastUpdateDate) {
+      console.log('[shouldSyncPhoto] Já sincronizado hoje (' + lastUpdateDate + ') - pular');
+      return false;
+    }
+
+    // 6. PRIMEIRA INTERAÇÃO DO DIA: sincronizar
+    console.log('[shouldSyncPhoto] Primeira interação do dia (última: ' + lastUpdateDate + ') - sincronizar');
+    return true;
+
+  } catch (error) {
+    console.error('[shouldSyncPhoto] EXCEPTION na verificação:', error);
+    // Em caso de erro, sincronizar por segurança (não quebrar sistema)
+    return true;
   }
 }
 
