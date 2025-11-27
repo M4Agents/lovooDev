@@ -852,9 +852,14 @@ export const Leads: React.FC = () => {
       <LeadModal
         isOpen={showCreateModal || showEditModal}
         onClose={() => {
-          setShowCreateModal(false);
-          setShowEditModal(false);
-          setSelectedLead(null);
+          if (showCreateModal) {
+            setShowCreateModal(false);
+            setSelectedLead(null);
+          }
+          if (showEditModal) {
+            setShowEditModal(false);
+            setSelectedLead(null);
+          }
         }}
         lead={selectedLead}
         onSave={loadData}
