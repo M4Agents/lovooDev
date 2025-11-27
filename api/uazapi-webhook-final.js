@@ -70,10 +70,42 @@ async function processMessage(payload) {
     }
     
     const message = payload.message;
-    
-    // Filtros
-    if (message.fromMe || message.wasSentByApi || message.isGroup) {
-      return { success: false, error: 'Mensagem filtrada' };
+
+    // =====================================================
+    // Direção / origem da mensagem (espelho do WhatsApp)
+    // =====================================================
+
+    const isFromMe = !!message.fromMe;
+    const isFromApi = !!message.wasSentByApi;
+    const isDeviceSent = !!message.deviceSent;
+
+    // Manter comportamento de ignorar grupos
+    if (message.isGroup) {
+      return { success: false, error: 'Mensagem de grupo filtrada' };
+    }
+
+    let direction = 'inbound';
+    let source = 'device';
+
+    // Cliente -> empresa (mensagem recebida)
+    if (!isFromMe && !isFromApi) {
+      direction = 'inbound';
+      source = 'device';
+    }
+    // Empresa -> cliente (enviado pelo painel / API)
+    else if (isFromMe && isFromApi && !isDeviceSent) {
+      direction = 'outbound';
+      source = 'panel';
+    }
+    // Empresa -> cliente (enviado do celular / WhatsApp Web)
+    else if (isFromMe && isDeviceSent) {
+      direction = 'outbound';
+      source = 'device';
+    }
+    // Fallback seguro para outros casos fromMe
+    else if (isFromMe) {
+      direction = 'outbound';
+      source = 'device';
     }
 
     const rawMessageType = (message.messageType || '').toLowerCase();
@@ -92,13 +124,27 @@ async function processMessage(payload) {
     }
     
     // Extrair dados
-    // Priorizar o número real do WhatsApp (jid ou phone), evitando usar o LID como telefone
-    const rawPhone =
-      message.sender_pn ||
-      message.chatid ||
-      payload.chat?.wa_chatid ||
-      payload.chat?.phone ||
-      message.sender;
+    // Para inbound, priorizar sender_pn (número de quem está falando com a empresa)
+    // Para outbound (painel/celular), priorizar chatid/wa_chatid/phone (número do lead)
+    let rawPhone;
+
+    if (direction === 'outbound') {
+      // Outbound: usar sempre o número do chat/contato (lead), nunca o número do owner/sender
+      rawPhone =
+        message.chatid ||
+        payload.chat?.wa_chatid ||
+        payload.chat?.phone ||
+        message.sender_pn ||
+        message.sender;
+    } else {
+      // Inbound: manter comportamento atual, priorizando quem enviou a mensagem
+      rawPhone =
+        message.sender_pn ||
+        message.chatid ||
+        payload.chat?.wa_chatid ||
+        payload.chat?.phone ||
+        message.sender;
+    }
 
     // Remover qualquer sufixo @... (ex: 5511992195126@s.whatsapp.net)
     // e caracteres não numéricos (ex: +55 11 99219-5126)
@@ -279,7 +325,7 @@ async function processMessage(payload) {
         content: messageText,
         message_type: messageTypeForDb,
         media_url: mediaUrl,
-        direction: 'inbound',
+        direction,
         status: 'delivered',
         timestamp: new Date(timestamp).toISOString(),
         created_at: new Date().toISOString()
@@ -309,76 +355,78 @@ async function processMessage(payload) {
       }
     }
     
-    // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS)
+    // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS) APENAS PARA MENSAGENS INBOUND
     let leadId = null;
-    try {
-      console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA...');
-      console.log('📍 Empresa da instância:', company.id, '-', company.name);
-      
-      // Normalizar telefone para busca mais eficiente
-      const phoneVariations = [
-        phoneNumber,                    // 5511999198369
-        `+55${phoneNumber}`,           // +555511999198369
-        phoneNumber.substring(2),       // 11999198369
-        `+55${phoneNumber.substring(2)}` // +5511999198369
-      ];
-      
-      console.log('📞 Variações de telefone para busca:', phoneVariations);
-      
-      // Verificar se já existe lead APENAS na empresa da instância (isolamento total)
-      const { data: existingLead } = await supabase
-        .from('leads')
-        .select('id, phone, name')
-        .eq('company_id', company.id)  // ISOLAMENTO: apenas na empresa da instância
-        .in('phone', phoneVariations)
-        .is('deleted_at', null)        // IGNORAR leads deletados (soft delete)
-        .limit(1)
-        .single();
-      
-      if (existingLead) {
-        leadId = existingLead.id;
-        console.log('👤 LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA:', leadId);
-        console.log('📋 Dados do lead encontrado:', existingLead);
-      } else {
-        console.log('🚫 NENHUM LEAD ENCONTRADO NA EMPRESA DA INSTÂNCIA');
-        console.log('📍 Criando novo lead na empresa:', company.name);
-        console.log('🆕 CRIANDO NOVO LEAD (RPC API)...');
+    if (direction === 'inbound') {
+      try {
+        console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA...');
+        console.log('📍 Empresa da instância:', company.id, '-', company.name);
+
+        // Normalizar telefone para busca mais eficiente
+        const phoneVariations = [
+          phoneNumber,                    // 5511999198369
+          `+55${phoneNumber}`,           // +555511999198369
+          phoneNumber.substring(2),       // 11999198369
+          `+55${phoneNumber.substring(2)}` // +5511999198369
+        ];
         
-        // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
-        const leadData = {
-          api_key: company.api_key, // Usar api_key real da empresa
-          name: senderName || 'Lead WhatsApp',
-          email: null,
-          phone: phoneNumber,
-          interest: null,
-          company_name: null,
-          company_cnpj: null,
-          company_email: null,
-          visitor_id: null
-        };
+        console.log('📞 Variações de telefone para busca:', phoneVariations);
         
-        // Usar RPC que bypassa trigger e captura exceções
-        const { data: rpcResult, error: leadError } = await supabase
-          .rpc('public_create_lead_webhook', { 
-            lead_data: {
-              ...leadData,
-              company_id: company.id // Adicionar company_id para o RPC
-            }
-          });
+        // Verificar se já existe lead APENAS na empresa da instância (isolamento total)
+        const { data: existingLead } = await supabase
+          .from('leads')
+          .select('id, phone, name')
+          .eq('company_id', company.id)  // ISOLAMENTO: apenas na empresa da instância
+          .in('phone', phoneVariations)
+          .is('deleted_at', null)        // IGNORAR leads deletados (soft delete)
+          .limit(1)
+          .single();
         
-        if (leadError) {
-          console.error('⚠️ ERRO AO CRIAR LEAD (RPC):', leadError.message);
-          // NÃO FALHA - apenas loga o erro
-        } else if (rpcResult && rpcResult.success) {
-          leadId = rpcResult.lead_id;
-          console.log('🎉 NOVO LEAD CRIADO (RPC API):', leadId);
+        if (existingLead) {
+          leadId = existingLead.id;
+          console.log('👤 LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA:', leadId);
+          console.log('📋 Dados do lead encontrado:', existingLead);
         } else {
-          console.error('⚠️ RPC RETORNOU ERRO:', rpcResult?.error || 'Erro desconhecido');
+          console.log('🚫 NENHUM LEAD ENCONTRADO NA EMPRESA DA INSTÂNCIA');
+          console.log('📍 Criando novo lead na empresa:', company.name);
+          console.log('🆕 CRIANDO NOVO LEAD (RPC API)...');
+          
+          // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
+          const leadData = {
+            api_key: company.api_key, // Usar api_key real da empresa
+            name: senderName || 'Lead WhatsApp',
+            email: null,
+            phone: phoneNumber,
+            interest: null,
+            company_name: null,
+            company_cnpj: null,
+            company_email: null,
+            visitor_id: null
+          };
+          
+          // Usar RPC que bypassa trigger e captura exceções
+          const { data: rpcResult, error: leadError } = await supabase
+            .rpc('public_create_lead_webhook', { 
+              lead_data: {
+                ...leadData,
+                company_id: company.id // Adicionar company_id para o RPC
+              }
+            });
+          
+          if (leadError) {
+            console.error('⚠️ ERRO AO CRIAR LEAD (RPC):', leadError.message);
+            // NÃO FALHA - apenas loga o erro
+          } else if (rpcResult && rpcResult.success) {
+            leadId = rpcResult.lead_id;
+            console.log('🎉 NOVO LEAD CRIADO (RPC API):', leadId);
+          } else {
+            console.error('⚠️ RPC RETORNOU ERRO:', rpcResult?.error || 'Erro desconhecido');
+          }
         }
+      } catch (leadException) {
+        console.error('⚠️ EXCEPTION AO PROCESSAR LEAD:', leadException.message);
+        // NÃO FALHA - sistema continua funcionando
       }
-    } catch (leadException) {
-      console.error('⚠️ EXCEPTION AO PROCESSAR LEAD:', leadException.message);
-      // NÃO FALHA - sistema continua funcionando
     }
     
     return { 
