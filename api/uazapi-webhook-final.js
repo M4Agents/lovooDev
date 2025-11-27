@@ -152,7 +152,29 @@ async function processMessage(payload) {
       .replace(/@.*$/, '')
       .replace(/\D/g, '');
 
-    const senderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
+    // =====================================================
+    // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
+    // =====================================================
+    // Primeiro: buscar no cadastro de leads para usar nome correto
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('name')
+      .eq('phone', phoneNumber)
+      .eq('company_id', company.id)
+      .is('deleted_at', null)
+      .single();
+
+    // Fallback robusto: cadastro → API → chat → genérico
+    const senderName = existingLead?.name || 
+                       message.senderName || 
+                       payload.chat?.name || 
+                       `Contato ${phoneNumber}`;
+    
+    console.log('👤 NOME RESOLVIDO:', { 
+      leadName: existingLead?.name, 
+      apiName: message.senderName, 
+      finalName: senderName 
+    });
 
     let messageText = message.text || '';
     let mediaUrl = null;
