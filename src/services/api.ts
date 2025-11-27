@@ -938,6 +938,12 @@ export const api = {
       console.log('🔍 EMAIL É UNDEFINED?:', (leadUpdates as any).email === undefined);
       console.log('🔍 TODOS OS CAMPOS DE LEAD UPDATES:', Object.keys(leadUpdates));
       
+      // Limpar campo email vazio para evitar violação da constraint valid_email
+      if ((leadUpdates as any).email === '') {
+        console.log('🔧 REMOVENDO EMAIL VAZIO para evitar constraint violation');
+        delete (leadUpdates as any).email;
+      }
+      
       const { data: lead, error } = await supabase
         .from('leads')
         .update(leadUpdates)
