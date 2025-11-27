@@ -916,10 +916,16 @@ export const api = {
     company_email?: string;
     company_site?: string;
   }) {
-    console.log('API: updateLead called with:', { leadId, updates });
+    console.log('🔍 API updateLead - INÍCIO:', { leadId, updates });
     
     try {
       const { custom_fields, ...leadUpdates } = updates;
+      console.log('🔍 DADOS SEPARADOS:', { 
+        leadUpdates, 
+        custom_fields, 
+        hasCustomFields: !!custom_fields,
+        customFieldsCount: custom_fields ? Object.keys(custom_fields).length : 0
+      });
       
       const { data: lead, error } = await supabase
         .from('leads')
@@ -928,15 +934,32 @@ export const api = {
         .select()
         .single();
 
-      if (error) throw error;
+      console.log('🔍 RESULTADO UPDATE LEADS:', { 
+        success: !error, 
+        leadData: lead, 
+        error: error 
+      });
+
+      if (error) {
+        console.error('❌ ERRO NO UPDATE LEADS:', error);
+        throw error;
+      }
 
       // Atualizar campos personalizados se fornecidos
       if (custom_fields) {
+        console.log('🔍 PROCESSANDO CUSTOM FIELDS:', custom_fields);
+        
         // Primeiro, deletar valores existentes
-        await supabase
+        console.log('🔍 DELETANDO custom_values existentes para leadId:', leadId);
+        const { error: deleteError } = await supabase
           .from('lead_custom_values')
           .delete()
           .eq('lead_id', leadId);
+        
+        console.log('🔍 RESULTADO DELETE custom_values:', { 
+          success: !deleteError, 
+          error: deleteError 
+        });
 
         // Inserir novos valores
         if (Object.keys(custom_fields).length > 0) {
@@ -946,20 +969,37 @@ export const api = {
             value: String(value)
           }));
 
+          console.log('🔍 INSERINDO custom_values:', customValues);
+
           const { error: customError } = await supabase
             .from('lead_custom_values')
             .insert(customValues);
 
+          console.log('🔍 RESULTADO INSERT custom_values:', { 
+            success: !customError, 
+            error: customError 
+          });
+
           if (customError) {
-            console.error('Error updating custom field values:', customError);
+            console.error('❌ ERRO EM CUSTOM FIELDS:', customError);
           }
+        } else {
+          console.log('🔍 NENHUM custom_field para inserir');
         }
+      } else {
+        console.log('🔍 SEM custom_fields para processar');
       }
 
-      console.log('API: Lead updated successfully:', lead);
+      console.log('✅ API updateLead - SUCESSO COMPLETO:', lead);
       return lead;
     } catch (error) {
-      console.error('Error in updateLead:', error);
+      console.error('❌ API updateLead - ERRO GERAL:', error);
+      console.error('❌ DETALHES DO ERRO:', {
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        details: (error as any)?.details,
+        hint: (error as any)?.hint
+      });
       throw error;
     }
   },
