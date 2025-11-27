@@ -481,16 +481,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               )}
             </div>
             <div>
-              <h3 className="text-lg font-medium text-gray-900">
+              <h3 className="text-lg font-medium text-gray-900 truncate">
                 {conversation?.contact_name || conversation?.contact_phone || 'Conversa'}
+                {/* NOVO: Empresa na mesma linha com tracinho */}
+                {conversation?.company_name && conversation.company_name.trim() !== '' && (
+                  <span className="text-sm text-slate-500 font-normal"> - {conversation.company_name}</span>
+                )}
               </h3>
-              
-              {/* NOVO: Nome da Empresa (sutil e delicado) */}
-              {conversation?.company_name && conversation.company_name.trim() !== '' && (
-                <p className="text-xs text-slate-400 font-normal">
-                  {conversation.company_name}
-                </p>
-              )}
               
               {conversation?.contact_name && (
                 <p className="text-sm text-gray-600">{conversation.contact_phone}</p>
