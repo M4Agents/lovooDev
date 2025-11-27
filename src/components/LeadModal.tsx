@@ -106,12 +106,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
-    console.log('🔍 LEADMODAL useEffect - TRIGGER:', { isOpen, companyId: company?.id, lead: lead?.id, leadName: lead?.name });
-    
     if (isOpen && company?.id) {
       loadCustomFields();
       if (lead) {
-        console.log('🔍 LEADMODAL - PREENCHENDO DADOS DO LEAD:', lead);
         // Edição - preencher dados existentes
         setFormData({
           name: lead.name || '',
@@ -146,7 +143,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         });
         setCustomFieldValues(customValues);
       } else {
-        console.log('🔍 LEADMODAL - MODO CRIAÇÃO (lead é null/undefined)');
         // Criação - limpar formulário
         setFormData({
           name: '',
@@ -176,6 +172,16 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       setValidationErrors({});
     }
   }, [isOpen, lead, company?.id]);
+
+  // Log adicional para diagnosticar problema
+  useEffect(() => {
+    console.log('🔍 LEADMODAL - DIAGNÓSTICO LEAD:', { 
+      isOpen, 
+      leadId: lead?.id, 
+      leadName: lead?.name,
+      leadExists: !!lead 
+    });
+  }, [isOpen, lead]);
 
   const loadCustomFields = async () => {
     if (!company?.id) return;
