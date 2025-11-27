@@ -497,6 +497,19 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Nome completo do lead"
                   />
+                  
+                  {/* NOVO: Exibição da Empresa (apenas visualização, sutil e delicado) */}
+                  {lead?.company_name && lead.company_name.trim() !== '' && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium text-gray-400">
+                        <Building className="w-3 h-3 inline mr-1" />
+                        Empresa
+                      </label>
+                      <p className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-md border">
+                        {lead.company_name}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

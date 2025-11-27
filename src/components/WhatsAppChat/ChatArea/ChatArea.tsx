@@ -484,6 +484,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <h3 className="text-lg font-medium text-gray-900">
                 {conversation?.contact_name || conversation?.contact_phone || 'Conversa'}
               </h3>
+              
+              {/* NOVO: Nome da Empresa (sutil e delicado) */}
+              {conversation?.company_name && conversation.company_name.trim() !== '' && (
+                <p className="text-xs text-slate-400 font-normal">
+                  {conversation.company_name}
+                </p>
+              )}
+              
               {conversation?.contact_name && (
                 <p className="text-sm text-gray-600">{conversation.contact_phone}</p>
               )}

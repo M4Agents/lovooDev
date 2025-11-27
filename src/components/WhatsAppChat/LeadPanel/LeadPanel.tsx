@@ -246,6 +246,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           {contact?.name || conversation?.contact_name || 'Sem nome'}
         </h3>
         
+        {/* NOVO: Nome da Empresa (sutil e delicado) */}
+        {conversation?.company_name && conversation.company_name.trim() !== '' && (
+          <p className="text-xs text-slate-400 font-normal mt-1">
+            {conversation.company_name}
+          </p>
+        )}
+        
         <p className="text-sm text-gray-600">
           {formatPhone(conversation?.contact_phone || '')}
         </p>
