@@ -213,13 +213,21 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
 
     // Verificar se company está disponível
+    console.log('🔍 LEADMODAL - COMPANY CONTEXT:', company);
+    console.log('🔍 LEADMODAL - COMPANY ID:', company?.id);
+    
     if (!company?.id) {
+      console.error('❌ LEADMODAL - COMPANY ID MISSING:', { company, companyId: company?.id });
       alert('Erro: Empresa não identificada. Recarregue a página e tente novamente.');
       return;
     }
 
     setLoading(true);
     try {
+      console.log('🔍 LEADMODAL - FORM DATA:', formData);
+      console.log('🔍 LEADMODAL - COMPANY DATA:', companyData);
+      console.log('🔍 LEADMODAL - CUSTOM FIELDS:', customFieldValues);
+      
       const leadData = {
         ...formData,
         ...companyData,
@@ -229,6 +237,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         visitor_id: formData.visitor_id || null,
         custom_fields: customFieldValues
       };
+      
+      console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
+      console.log('🔍 LEADMODAL - COMPANY_ID FINAL:', leadData.company_id);
 
       if (lead?.id) {
         // Edição
@@ -238,10 +249,16 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         await api.createLead(leadData);
       }
 
+      console.log('✅ LEADMODAL - SUCESSO:', 'Lead salvo com sucesso');
       onSave();
       onClose();
     } catch (error) {
-      console.error('Error saving lead:', error);
+      console.error('❌ LEADMODAL - ERRO GERAL:', error);
+      console.error('❌ LEADMODAL - DETALHES:', {
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        details: (error as any)?.details
+      });
       alert('Erro ao salvar lead. Tente novamente.');
     } finally {
       setLoading(false);
