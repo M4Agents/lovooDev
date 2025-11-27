@@ -903,6 +903,8 @@ export const api = {
     responsible_user_id?: string | null;
     visitor_id?: string | null;
     custom_fields?: Record<string, any>;
+    // Campo obrigatório para updates
+    company_id?: string;
     // Campos da empresa
     company_name?: string;
     company_cnpj?: string;
