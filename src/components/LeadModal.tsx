@@ -226,6 +226,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     try {
       console.log('🔍 LEADMODAL - FORM DATA:', formData);
       console.log('🔍 LEADMODAL - FORM DATA COMPANY_ID:', (formData as any).company_id);
+      console.log('🔍 LEADMODAL - FORM DATA EMAIL:', formData.email);
+      console.log('🔍 LEADMODAL - EMAIL TIPO:', typeof formData.email);
+      console.log('🔍 LEADMODAL - EMAIL VAZIO?:', formData.email === '');
       console.log('🔍 LEADMODAL - COMPANY DATA:', companyData);
       console.log('🔍 LEADMODAL - COMPANY DATA COMPANY_ID:', (companyData as any).company_id);
       console.log('🔍 LEADMODAL - CUSTOM FIELDS:', customFieldValues);

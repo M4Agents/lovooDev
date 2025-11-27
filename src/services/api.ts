@@ -931,6 +931,11 @@ export const api = {
       
       console.log('🔍 LEAD UPDATES ANTES DO SUPABASE:', leadUpdates);
       console.log('🔍 COMPANY_ID EM LEAD UPDATES:', (leadUpdates as any).company_id);
+      console.log('🔍 EMAIL EM LEAD UPDATES:', (leadUpdates as any).email);
+      console.log('🔍 TIPO DO EMAIL:', typeof (leadUpdates as any).email);
+      console.log('🔍 EMAIL É VAZIO?:', (leadUpdates as any).email === '');
+      console.log('🔍 EMAIL É NULL?:', (leadUpdates as any).email === null);
+      console.log('🔍 EMAIL É UNDEFINED?:', (leadUpdates as any).email === undefined);
       console.log('🔍 TODOS OS CAMPOS DE LEAD UPDATES:', Object.keys(leadUpdates));
       
       const { data: lead, error } = await supabase
