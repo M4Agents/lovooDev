@@ -152,29 +152,8 @@ async function processMessage(payload) {
       .replace(/@.*$/, '')
       .replace(/\D/g, '');
 
-    // =====================================================
-    // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
-    // =====================================================
-    // Primeiro: buscar no cadastro de leads para usar nome correto
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('name')
-      .eq('phone', phoneNumber)
-      .eq('company_id', company.id)
-      .is('deleted_at', null)
-      .single();
-
-    // Fallback robusto: cadastro → API → chat → genérico
-    const senderName = existingLead?.name || 
-                       message.senderName || 
-                       payload.chat?.name || 
-                       `Contato ${phoneNumber}`;
-    
-    console.log('👤 NOME RESOLVIDO:', { 
-      leadName: existingLead?.name, 
-      apiName: message.senderName, 
-      finalName: senderName 
-    });
+    // Nome temporário - será corrigido após buscar company
+    const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
 
     let messageText = message.text || '';
     let mediaUrl = null;
@@ -190,7 +169,7 @@ async function processMessage(payload) {
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
-    console.log('📞 DADOS:', { phoneNumber, senderName, instanceName });
+    console.log('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
@@ -206,6 +185,28 @@ async function processMessage(payload) {
     
     const company = instance.companies;
     console.log('🏢 EMPRESA:', company.name);
+    
+    // =====================================================
+    // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
+    // =====================================================
+    // Agora que temos company, buscar nome correto do lead
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('name')
+      .eq('phone', phoneNumber)
+      .eq('company_id', company.id)
+      .is('deleted_at', null)
+      .single();
+
+    // Fallback robusto: cadastro → API → chat → genérico
+    const senderName = existingLead?.name || 
+                       tempSenderName;
+    
+    console.log('👤 NOME RESOLVIDO:', { 
+      leadName: existingLead?.name, 
+      tempName: tempSenderName, 
+      finalName: senderName 
+    });
     
     // Buscar/criar contato
     let contactId;
