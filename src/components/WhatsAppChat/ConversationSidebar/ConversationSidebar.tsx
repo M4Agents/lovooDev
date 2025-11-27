@@ -200,6 +200,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 conversation={conversation}
                 isSelected={conversation.id === selectedConversation}
                 onClick={() => onSelectConversation(conversation.id)}
+                photoUrl={conversation.profile_picture_url}
               />
             ))}
           </div>
