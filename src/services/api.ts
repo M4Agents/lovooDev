@@ -927,6 +927,10 @@ export const api = {
         customFieldsCount: custom_fields ? Object.keys(custom_fields).length : 0
       });
       
+      console.log('🔍 LEAD UPDATES ANTES DO SUPABASE:', leadUpdates);
+      console.log('🔍 COMPANY_ID EM LEAD UPDATES:', (leadUpdates as any).company_id);
+      console.log('🔍 TODOS OS CAMPOS DE LEAD UPDATES:', Object.keys(leadUpdates));
+      
       const { data: lead, error } = await supabase
         .from('leads')
         .update(leadUpdates)

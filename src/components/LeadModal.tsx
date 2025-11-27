@@ -225,7 +225,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     setLoading(true);
     try {
       console.log('🔍 LEADMODAL - FORM DATA:', formData);
+      console.log('🔍 LEADMODAL - FORM DATA COMPANY_ID:', (formData as any).company_id);
       console.log('🔍 LEADMODAL - COMPANY DATA:', companyData);
+      console.log('🔍 LEADMODAL - COMPANY DATA COMPANY_ID:', (companyData as any).company_id);
       console.log('🔍 LEADMODAL - CUSTOM FIELDS:', customFieldValues);
       
       const leadData = {
@@ -240,6 +242,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       
       console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
       console.log('🔍 LEADMODAL - COMPANY_ID FINAL:', leadData.company_id);
+      console.log('🔍 LEADMODAL - VERIFICAR SE COMPANY_ID FOI SOBRESCRITO:', {
+        formDataCompanyId: (formData as any).company_id,
+        companyDataCompanyId: (companyData as any).company_id,
+        contextCompanyId: company?.id,
+        finalCompanyId: leadData.company_id
+      });
 
       if (lead?.id) {
         // Edição
