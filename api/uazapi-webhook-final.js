@@ -519,6 +519,86 @@ async function downloadAndStoreMedia({
   }
 }
 
+// =====================================================
+// FUNÇÃO PARA DOWNLOAD E ARMAZENAMENTO NO SUPABASE STORAGE
+// =====================================================
+// Implementada em: 2025-11-27 - Corrigir sistema de fotos
+// Backup criado: uazapi-webhook-final.js.backup-YYYYMMDD-HHMMSS
+async function downloadAndStoreContactAvatar({
+  supabase,
+  profileUrl,
+  companyId,
+  phoneNumber,
+}) {
+  try {
+    console.log('[downloadAndStoreContactAvatar] Iniciando download da foto:', {
+      profileUrl: profileUrl?.substring(0, 80) + '...',
+      companyId,
+      phoneNumber
+    });
+
+    // Validar parâmetros obrigatórios
+    if (!profileUrl || !companyId || !phoneNumber) {
+      console.log('[downloadAndStoreContactAvatar] Parâmetros insuficientes, abortando');
+      return null;
+    }
+
+    // 1. Fazer download da imagem da URL temporária
+    const response = await fetch(profileUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LovooCRM/1.0)',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('[downloadAndStoreContactAvatar] Falha no download:', response.status, response.statusText);
+      return null;
+    }
+
+    // 2. Converter para buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = new Uint8Array(arrayBuffer);
+
+    console.log('[downloadAndStoreContactAvatar] Download concluído, tamanho:', buffer.length, 'bytes');
+
+    // 3. Definir nome do arquivo no Storage
+    // Formato: avatars/{companyId}/{phoneNumber}_{timestamp}.jpg
+    const timestamp = Date.now();
+    const fileName = `avatars/${companyId}/${phoneNumber}_${timestamp}.jpg`;
+
+    console.log('[downloadAndStoreContactAvatar] Fazendo upload para Storage:', fileName);
+
+    // 4. Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, buffer, {
+        contentType: 'image/jpeg',
+        upsert: false, // Não sobrescrever, criar novo arquivo sempre
+      });
+
+    if (uploadError) {
+      console.error('[downloadAndStoreContactAvatar] Erro no upload:', uploadError);
+      return null;
+    }
+
+    console.log('[downloadAndStoreContactAvatar] Upload concluído:', uploadData?.path);
+
+    // 5. Obter URL pública estável
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    console.log('[downloadAndStoreContactAvatar] URL estável gerada:', publicUrl?.substring(0, 80) + '...');
+
+    return publicUrl;
+
+  } catch (error) {
+    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    return null;
+  }
+}
+
 // Sincronizar foto de perfil do contato usando Uazapi v2
 async function syncContactProfilePictureFromUazapi({
   supabase,
