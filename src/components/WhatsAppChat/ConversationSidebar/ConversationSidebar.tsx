@@ -289,6 +289,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               }`}>
                 {conversation.contact_name || 'Lead sem nome'}
               </h4>
+              
+              {/* NOVO: Nome da Empresa (só aparece se existir) */}
+              {conversation.company_name && conversation.company_name.trim() !== '' && (
+                <p className={`text-xs truncate mt-0.5 ${
+                  isSelected ? 'text-slate-500' : 'text-slate-400'
+                }`}>
+                  {conversation.company_name}
+                </p>
+              )}
+              
               {/* Telefone com fonte menor */}
               <p className={`text-xs truncate mt-0.5 ${
                 isSelected ? 'text-slate-500' : 'text-slate-400'

@@ -549,6 +549,7 @@ export class ChatApi {
       contact_phone: raw.contact_phone,
       contact_name: raw.contact_name,
       profile_picture_url: raw.profile_picture_url,
+      company_name: raw.company_name,  // NOVO: nome da empresa do lead
       assigned_to: raw.assigned_to,
       last_message_at: raw.last_message_at ? new Date(raw.last_message_at) : undefined,
       last_message_content: raw.last_message_content,
