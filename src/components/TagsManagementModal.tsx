@@ -26,6 +26,8 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
   const [showTagForm, setShowTagForm] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [deletingTag, setDeletingTag] = useState<Tag | null>(null);
+  const [canDeleteCurrentTag, setCanDeleteCurrentTag] = useState<boolean>(true);
+  const [checkingDelete, setCheckingDelete] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   // Carregar tags quando modal abrir
@@ -85,23 +87,32 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
   };
 
   const handleDeleteTag = async (tag: Tag) => {
-    try {
-      // Verificar se pode excluir
-      const canDelete = await tagsApi.canDeleteTag(tag.id);
-      if (!canDelete) {
-        setError(`Não é possível excluir a tag "${tag.name}" pois ela está vinculada a leads.`);
-        return;
-      }
+    // Sempre abrir modal de confirmação primeiro
+    setDeletingTag(tag);
+    setCheckingDelete(true);
+    setCanDeleteCurrentTag(true); // Assumir que pode excluir inicialmente
+    setError('');
 
-      setDeletingTag(tag);
+    try {
+      // Verificar se pode excluir em background
+      const canDelete = await tagsApi.canDeleteTag(tag.id);
+      setCanDeleteCurrentTag(canDelete);
     } catch (error) {
       console.error('Error checking if tag can be deleted:', error);
-      setError('Erro ao verificar se a tag pode ser excluída.');
+      setCanDeleteCurrentTag(false);
+    } finally {
+      setCheckingDelete(false);
     }
   };
 
   const confirmDeleteTag = async () => {
     if (!deletingTag) return;
+
+    // Se não pode excluir, não tentar
+    if (!canDeleteCurrentTag) {
+      setDeletingTag(null);
+      return;
+    }
 
     try {
       await tagsApi.deleteTag(deletingTag.id);
@@ -112,6 +123,7 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
     } catch (error) {
       console.error('Error deleting tag:', error);
       setError('Erro ao excluir tag. Tente novamente.');
+      setDeletingTag(null);
     }
   };
 
@@ -235,28 +247,71 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div className="p-6">
-              <div className="flex items-center mb-4">
-                <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
-                <h3 className="text-lg font-semibold text-gray-900">Confirmar Exclusão</h3>
-              </div>
-              <p className="text-gray-600 mb-6">
-                Tem certeza que deseja excluir a tag <strong>"{deletingTag.name}"</strong>?
-                Esta ação não pode ser desfeita.
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setDeletingTag(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmDeleteTag}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-lg hover:bg-red-700"
-                >
-                  Excluir
-                </button>
-              </div>
+              {checkingDelete ? (
+                /* Loading state */
+                <div className="text-center">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Verificando...</h3>
+                  <p className="text-gray-600">Verificando se a tag pode ser excluída...</p>
+                </div>
+              ) : canDeleteCurrentTag ? (
+                /* Pode excluir - Modal de confirmação normal */
+                <>
+                  <div className="flex items-center mb-4">
+                    <AlertTriangle className="w-6 h-6 text-yellow-600 mr-3" />
+                    <h3 className="text-lg font-semibold text-gray-900">Confirmar Exclusão</h3>
+                  </div>
+                  <p className="text-gray-600 mb-6">
+                    Tem certeza que deseja excluir a tag <strong>"{deletingTag.name}"</strong>?
+                    Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => setDeletingTag(null)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDeleteTag}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-lg hover:bg-red-700"
+                    >
+                      Excluir Tag
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Não pode excluir - Modal de erro */
+                <>
+                  <div className="flex items-center mb-4">
+                    <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
+                    <h3 className="text-lg font-semibold text-gray-900">Não é Possível Excluir</h3>
+                  </div>
+                  <div className="mb-6">
+                    <p className="text-gray-600 mb-3">
+                      A tag <strong>"{deletingTag.name}"</strong> não pode ser excluída pois está vinculada a leads.
+                    </p>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-700">
+                        <strong>💡 Para excluir esta tag:</strong>
+                      </p>
+                      <ul className="text-sm text-red-600 mt-2 ml-4 list-disc">
+                        <li>Remova a tag de todos os leads que a utilizam</li>
+                        <li>Ou edite os leads para usar outras tags</li>
+                        <li>Depois tente excluir novamente</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setDeletingTag(null)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      Entendi
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
