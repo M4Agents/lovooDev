@@ -355,6 +355,19 @@ export const Leads: React.FC = () => {
     }
   };
 
+  const getRecordTypeColor = (recordType: string) => {
+    switch (recordType) {
+      case 'Lead': return 'bg-blue-100 text-blue-800';
+      case 'Oportunidade': return 'bg-orange-100 text-orange-800';
+      case 'Cliente Ativo': return 'bg-green-100 text-green-800';
+      case 'Cliente Inativo': return 'bg-yellow-100 text-yellow-800';
+      case 'Ex-cliente': return 'bg-red-100 text-red-800';
+      case 'Parceiro': return 'bg-purple-100 text-purple-800';
+      case 'Fornecedor': return 'bg-amber-100 text-amber-800';
+      default: return 'bg-blue-100 text-blue-800'; // Fallback para Lead
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -794,7 +807,7 @@ export const Leads: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRecordTypeColor(lead.record_type || 'Lead')}`}>
                       {lead.record_type || 'Lead'}
                     </span>
                   </td>
