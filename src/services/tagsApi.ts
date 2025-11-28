@@ -4,6 +4,10 @@
 import { supabase } from '../lib/supabase';
 import { Tag, TagFormData } from '../types/tags';
 
+// Debug: Verificar se supabase está disponível
+console.log('🔍 [TAGS-API] Supabase imported:', !!supabase);
+console.log('🔍 [TAGS-API] Supabase object:', supabase);
+
 export const tagsApi = {
   // Listar todas as tags da empresa
   async getTags(companyId: string): Promise<Tag[]> {
@@ -106,8 +110,19 @@ export const tagsApi = {
   // Verificar se tag pode ser excluída
   async canDeleteTag(tagId: string): Promise<boolean> {
     console.log('API: canDeleteTag called:', tagId);
+    console.log('🔍 [TAGS-API] Supabase in canDeleteTag:', !!supabase);
+    console.log('🔍 [TAGS-API] Supabase.rpc available:', !!supabase?.rpc);
     
     try {
+      if (!supabase) {
+        throw new Error('Supabase client is not available');
+      }
+      
+      if (!supabase.rpc) {
+        throw new Error('Supabase RPC method is not available');
+      }
+      
+      console.log('🔍 [TAGS-API] Calling supabase.rpc with:', { tag_uuid: tagId });
       const { data, error } = await supabase
         .rpc('can_delete_tag', { tag_uuid: tagId });
 
