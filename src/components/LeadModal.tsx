@@ -29,6 +29,7 @@ interface Lead {
   interest?: string;
   responsible_user_id?: string;
   visitor_id?: string;
+  record_type?: string;  // NOVO: Tipo de registro do lead
   // Campos da empresa
   company_name?: string;
   company_cnpj?: string;
@@ -61,6 +62,7 @@ interface CustomField {
   is_required: boolean;
 }
 
+
 interface LeadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,7 +88,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     status: 'novo',
     interest: '',
     responsible_user_id: '',
-    visitor_id: ''
+    visitor_id: '',
+    record_type: 'Lead'  // NOVO: Valor padrão para tipo de registro
   });
   const [companyData, setCompanyData] = useState({
     company_name: '',
@@ -119,7 +122,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           status: lead.status || 'novo',
           interest: lead.interest || '',
           responsible_user_id: lead.responsible_user_id || '',
-          visitor_id: lead.visitor_id || ''
+          visitor_id: lead.visitor_id || '',
+          record_type: lead.record_type || 'Lead'
         });
 
         // Preencher dados da empresa
@@ -158,7 +162,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           status: 'novo',
           interest: '',
           responsible_user_id: '',
-          visitor_id: ''
+          visitor_id: '',
+          record_type: 'Lead'
         });
         setCompanyData({
           company_name: '',
@@ -572,6 +577,27 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     <option value="em_qualificacao">Em Qualificação</option>
                     <option value="convertido">Convertido</option>
                     <option value="perdido">Perdido</option>
+                  </select>
+                </div>
+
+                {/* NOVO: Campo Tipo de Registro */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Type className="w-4 h-4 inline mr-1" />
+                    Tipo de Registro
+                  </label>
+                  <select
+                    value={formData.record_type}
+                    onChange={(e) => handleInputChange('record_type', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Lead">Lead</option>
+                    <option value="Oportunidade">Oportunidade</option>
+                    <option value="Cliente Ativo">Cliente Ativo</option>
+                    <option value="Cliente Inativo">Cliente Inativo</option>
+                    <option value="Ex-cliente">Ex-cliente</option>
+                    <option value="Parceiro">Parceiro</option>
+                    <option value="Fornecedor">Fornecedor</option>
                   </select>
                 </div>
 
