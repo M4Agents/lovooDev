@@ -7,6 +7,7 @@ import { CustomFieldsModal } from '../components/CustomFieldsModal';
 import { ImportLeadsModal } from '../components/ImportLeadsModal';
 import { DuplicateNotifications } from '../components/DuplicateNotifications';
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
+import { TagsManagementModal } from '../components/TagsManagementModal';
 import { chatApi } from '../services/chat/chatApi';
 import {
   Users,
@@ -27,7 +28,8 @@ import {
   Download,
   ChevronDown,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Tag
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 
@@ -75,6 +77,7 @@ export const Leads: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCustomFieldsModal, setShowCustomFieldsModal] = useState(false);
+  const [showTagsModal, setShowTagsModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -424,6 +427,13 @@ export const Leads: React.FC = () => {
           >
             <Settings className="w-4 h-4" />
             Campos Personalizados
+          </button>
+          <button
+            onClick={() => setShowTagsModal(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+            Tags
           </button>
           <button
             onClick={() => setShowImportModal(true)}
@@ -904,6 +914,12 @@ export const Leads: React.FC = () => {
         isOpen={showCustomFieldsModal}
         onClose={() => setShowCustomFieldsModal(false)}
         onSave={loadData}
+      />
+
+      <TagsManagementModal
+        isOpen={showTagsModal}
+        onClose={() => setShowTagsModal(false)}
+        onTagsChange={loadData}
       />
 
       <ImportLeadsModal

@@ -4,6 +4,9 @@ import { api } from '../services/api';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
+import { LeadTagsField } from './LeadTagsField';
+import { Tag as TagType } from '../types/tags';
+import { tagsApi } from '../services/tagsApi';
 import {
   X,
   Save,
@@ -79,6 +82,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
   const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
   const [formData, setFormData] = useState({
     name: '',
@@ -108,6 +112,17 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [cepLoading, setCepLoading] = useState(false);
 
+  // Função para carregar tags do lead
+  const loadLeadTags = async (leadId: number) => {
+    try {
+      const tags = await tagsApi.getLeadTags(leadId);
+      setSelectedTags(tags);
+    } catch (error) {
+      console.error('Error loading lead tags:', error);
+      setSelectedTags([]);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && company?.id) {
       loadCustomFields();
@@ -125,6 +140,11 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           visitor_id: lead.visitor_id || '',
           record_type: lead.record_type || 'Lead'
         });
+
+        // Carregar tags do lead
+        if (lead.id) {
+          loadLeadTags(lead.id);
+        }
 
         // Preencher dados da empresa
         setCompanyData({
@@ -165,6 +185,10 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           visitor_id: '',
           record_type: 'Lead'
         });
+        
+        // Limpar tags para novo lead
+        setSelectedTags([]);
+        
         setCompanyData({
           company_name: '',
           company_cnpj: '',
@@ -273,15 +297,25 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         finalCompanyId: leadData.company_id
       });
 
+      let savedLeadId: number;
+      
       if (lead?.id) {
         // Edição
         await api.updateLead(lead.id, leadData);
+        savedLeadId = lead.id;
       } else {
         // Criação
-        await api.createLead(leadData);
+        const newLead = await api.createLead(leadData);
+        savedLeadId = newLead.id;
       }
 
-      console.log('✅ LEADMODAL - SUCESSO:', 'Lead salvo com sucesso');
+      // Salvar tags do lead
+      if (savedLeadId) {
+        const tagIds = selectedTags.map(tag => tag.id);
+        await tagsApi.updateLeadTags(savedLeadId, tagIds);
+      }
+
+      console.log('✅ LEADMODAL - SUCESSO:', 'Lead e tags salvos com sucesso');
       onSave();
       onClose();
     } catch (error) {
@@ -614,6 +648,13 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     placeholder="Produto ou serviço de interesse"
                   />
                 </div>
+
+                {/* NOVO: Campo de Tags */}
+                <LeadTagsField
+                  selectedTags={selectedTags}
+                  onTagsChange={setSelectedTags}
+                  disabled={loading}
+                />
               </div>
 
               {/* Campos Personalizados */}
