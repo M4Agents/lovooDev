@@ -4,14 +4,9 @@
 import { supabase } from '../lib/supabase';
 import { Tag, TagFormData } from '../types/tags';
 
-// Debug: Verificar se supabase está disponível
-console.log('🔍 [TAGS-API] Supabase imported:', !!supabase);
-console.log('🔍 [TAGS-API] Supabase object:', supabase);
-
 export const tagsApi = {
   // Listar todas as tags da empresa
   async getTags(companyId: string): Promise<Tag[]> {
-    console.log('API: getTags called for company:', companyId);
     
     try {
       const { data, error } = await supabase
@@ -35,7 +30,6 @@ export const tagsApi = {
         leads_count: tag.leads_count?.[0]?.count || 0
       })) || [];
 
-      console.log('API: Tags retrieved successfully:', tags.length);
       return tags;
     } catch (error) {
       console.error('Error in getTags:', error);
@@ -45,7 +39,6 @@ export const tagsApi = {
 
   // Criar nova tag
   async createTag(companyId: string, tagData: TagFormData): Promise<Tag> {
-    console.log('API: createTag called:', { companyId, tagData });
     
     try {
       const { data, error } = await supabase
@@ -64,7 +57,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Tag created successfully:', data);
       return data;
     } catch (error) {
       console.error('Error in createTag:', error);
@@ -74,7 +66,6 @@ export const tagsApi = {
 
   // Atualizar tag existente
   async updateTag(tagId: string, tagData: Partial<TagFormData>): Promise<Tag> {
-    console.log('API: updateTag called:', { tagId, tagData });
     
     try {
       const updateData: any = {
@@ -99,7 +90,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Tag updated successfully:', data);
       return data;
     } catch (error) {
       console.error('Error in updateTag:', error);
@@ -109,20 +99,7 @@ export const tagsApi = {
 
   // Verificar se tag pode ser excluída
   async canDeleteTag(tagId: string): Promise<boolean> {
-    console.log('API: canDeleteTag called:', tagId);
-    console.log('🔍 [TAGS-API] Supabase in canDeleteTag:', !!supabase);
-    console.log('🔍 [TAGS-API] Supabase.rpc available:', !!supabase?.rpc);
-    
     try {
-      if (!supabase) {
-        throw new Error('Supabase client is not available');
-      }
-      
-      if (!supabase.rpc) {
-        throw new Error('Supabase RPC method is not available');
-      }
-      
-      console.log('🔍 [TAGS-API] Calling supabase.rpc with:', { tag_uuid: tagId });
       const { data, error } = await supabase
         .rpc('can_delete_tag', { tag_uuid: tagId });
 
@@ -131,7 +108,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Can delete tag result:', data);
       return data;
     } catch (error) {
       console.error('Error in canDeleteTag:', error);
@@ -141,7 +117,6 @@ export const tagsApi = {
 
   // Excluir tag (soft delete)
   async deleteTag(tagId: string): Promise<void> {
-    console.log('API: deleteTag called:', tagId);
     
     try {
       // Primeiro verificar se pode excluir
@@ -160,7 +135,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Tag deleted successfully');
     } catch (error) {
       console.error('Error in deleteTag:', error);
       throw error;
@@ -169,7 +143,6 @@ export const tagsApi = {
 
   // Obter tags de um lead específico
   async getLeadTags(leadId: number): Promise<Tag[]> {
-    console.log('API: getLeadTags called for lead:', leadId);
     
     try {
       const { data, error } = await supabase
@@ -195,7 +168,6 @@ export const tagsApi = {
       }
 
       const tags = data?.map((assignment: any) => assignment.lead_tags).filter(Boolean) || [];
-      console.log('API: Lead tags retrieved successfully:', tags.length);
       return tags as Tag[];
     } catch (error) {
       console.error('Error in getLeadTags:', error);
@@ -205,7 +177,6 @@ export const tagsApi = {
 
   // Atualizar tags de um lead
   async updateLeadTags(leadId: number, tagIds: string[]): Promise<void> {
-    console.log('API: updateLeadTags called:', { leadId, tagIds });
     
     try {
       // Remover todas as tags existentes do lead
@@ -236,7 +207,6 @@ export const tagsApi = {
         }
       }
 
-      console.log('API: Lead tags updated successfully');
     } catch (error) {
       console.error('Error in updateLeadTags:', error);
       throw error;
@@ -245,7 +215,6 @@ export const tagsApi = {
 
   // Adicionar tag a um lead
   async addTagToLead(leadId: number, tagId: string): Promise<void> {
-    console.log('API: addTagToLead called:', { leadId, tagId });
     
     try {
       const { error } = await supabase
@@ -260,7 +229,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Tag added to lead successfully');
     } catch (error) {
       console.error('Error in addTagToLead:', error);
       throw error;
@@ -269,7 +237,6 @@ export const tagsApi = {
 
   // Remover tag de um lead
   async removeTagFromLead(leadId: number, tagId: string): Promise<void> {
-    console.log('API: removeTagFromLead called:', { leadId, tagId });
     
     try {
       const { error } = await supabase
@@ -283,7 +250,6 @@ export const tagsApi = {
         throw error;
       }
 
-      console.log('API: Tag removed from lead successfully');
     } catch (error) {
       console.error('Error in removeTagFromLead:', error);
       throw error;

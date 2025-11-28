@@ -87,84 +87,44 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
   };
 
   const handleDeleteTag = async (tag: Tag) => {
-    console.log('🔍 [DEBUG] handleDeleteTag called with tag:', tag);
-    console.log('🔍 [DEBUG] Tag ID:', tag.id, 'Tag Name:', tag.name);
-    
     try {
       // Sempre abrir modal de confirmação primeiro
-      console.log('🔍 [DEBUG] Setting deletingTag state...');
       setDeletingTag(tag);
-      
-      console.log('🔍 [DEBUG] Setting checkingDelete to true...');
       setCheckingDelete(true);
-      
-      console.log('🔍 [DEBUG] Setting canDeleteCurrentTag to false initially (loading state)...');
       setCanDeleteCurrentTag(false); // Começar com false para mostrar loading
-      
-      console.log('🔍 [DEBUG] Clearing error state...');
       setError('');
 
-      console.log('🔍 [DEBUG] Adding small delay to ensure modal renders...');
       // Pequeno delay para garantir que o modal seja renderizado antes da verificação
       await new Promise(resolve => setTimeout(resolve, 150));
-
-      console.log('🔍 [DEBUG] Modal should be visible now. Calling API...');
       
       // Verificar se pode excluir em background
-      console.log('🔍 [DEBUG] Calling tagsApi.canDeleteTag with ID:', tag.id);
       const canDelete = await tagsApi.canDeleteTag(tag.id);
-      console.log('🔍 [DEBUG] API response - canDelete:', canDelete);
-      
-      console.log('🔍 [DEBUG] Setting canDeleteCurrentTag to:', canDelete);
       setCanDeleteCurrentTag(canDelete);
-      
-      console.log('🔍 [DEBUG] handleDeleteTag completed successfully');
     } catch (error) {
-      console.error('❌ [DEBUG] Error in handleDeleteTag:', error);
-      console.error('❌ [DEBUG] Error details:', {
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
+      console.error('Error in handleDeleteTag:', error);
       setCanDeleteCurrentTag(false);
     } finally {
-      console.log('🔍 [DEBUG] Setting checkingDelete to false...');
       setCheckingDelete(false);
     }
   };
 
   const confirmDeleteTag = async () => {
-    console.log('✅ [DEBUG] confirmDeleteTag called');
-    console.log('✅ [DEBUG] deletingTag:', deletingTag);
-    console.log('✅ [DEBUG] canDeleteCurrentTag:', canDeleteCurrentTag);
-    
-    if (!deletingTag) {
-      console.log('❌ [DEBUG] No deletingTag, returning');
-      return;
-    }
+    if (!deletingTag) return;
 
     // Se não pode excluir, não tentar
     if (!canDeleteCurrentTag) {
-      console.log('❌ [DEBUG] Cannot delete tag, closing modal');
       setDeletingTag(null);
       return;
     }
 
     try {
-      console.log('🗑️ [DEBUG] Calling tagsApi.deleteTag...');
       await tagsApi.deleteTag(deletingTag.id);
-      console.log('🗑️ [DEBUG] Tag deleted successfully, reloading tags...');
-      
       await loadTags();
-      console.log('🔄 [DEBUG] Tags reloaded, calling onTagsChange...');
-      
       onTagsChange?.();
-      console.log('🔄 [DEBUG] Closing modal...');
-      
       setDeletingTag(null);
       setError('');
-      console.log('✅ [DEBUG] confirmDeleteTag completed successfully');
     } catch (error) {
-      console.error('❌ [DEBUG] Error deleting tag:', error);
+      console.error('Error deleting tag:', error);
       setError('Erro ao excluir tag. Tente novamente.');
       setDeletingTag(null);
     }
@@ -259,14 +219,7 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={(e) => {
-                          console.log('🖱️ [DEBUG] Delete button clicked!');
-                          console.log('🖱️ [DEBUG] Event:', e);
-                          console.log('🖱️ [DEBUG] Tag to delete:', tag);
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteTag(tag);
-                        }}
+                        onClick={() => handleDeleteTag(tag)}
                         className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                         title="Excluir tag"
                       >
@@ -293,12 +246,7 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
       />
 
       {/* Delete Confirmation Modal */}
-      {deletingTag && (() => {
-        console.log('🎭 [DEBUG] Rendering delete modal for tag:', deletingTag.name);
-        console.log('🎭 [DEBUG] checkingDelete:', checkingDelete);
-        console.log('🎭 [DEBUG] canDeleteCurrentTag:', canDeleteCurrentTag);
-        console.log('🎭 [DEBUG] Modal should be VISIBLE with z-index 9999');
-        return (
+      {deletingTag && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 9999 }}>
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
               <div className="p-6">
@@ -370,8 +318,7 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
             </div>
           </div>
         </div>
-        );
-      })()}
+      )}
     </>
   );
 };
