@@ -297,8 +297,9 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
         console.log('🎭 [DEBUG] Rendering delete modal for tag:', deletingTag.name);
         console.log('🎭 [DEBUG] checkingDelete:', checkingDelete);
         console.log('🎭 [DEBUG] canDeleteCurrentTag:', canDeleteCurrentTag);
+        console.log('🎭 [DEBUG] Modal should be VISIBLE with z-index 9999');
         return (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 9999 }}>
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
               <div className="p-6">
               {checkingDelete ? (
