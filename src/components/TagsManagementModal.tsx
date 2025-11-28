@@ -98,13 +98,17 @@ export const TagsManagementModal: React.FC<TagsManagementModalProps> = ({
       console.log('🔍 [DEBUG] Setting checkingDelete to true...');
       setCheckingDelete(true);
       
-      console.log('🔍 [DEBUG] Setting canDeleteCurrentTag to true initially...');
-      setCanDeleteCurrentTag(true); // Assumir que pode excluir inicialmente
+      console.log('🔍 [DEBUG] Setting canDeleteCurrentTag to false initially (loading state)...');
+      setCanDeleteCurrentTag(false); // Começar com false para mostrar loading
       
       console.log('🔍 [DEBUG] Clearing error state...');
       setError('');
 
-      console.log('🔍 [DEBUG] Modal should be open now. Calling API...');
+      console.log('🔍 [DEBUG] Adding small delay to ensure modal renders...');
+      // Pequeno delay para garantir que o modal seja renderizado antes da verificação
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      console.log('🔍 [DEBUG] Modal should be visible now. Calling API...');
       
       // Verificar se pode excluir em background
       console.log('🔍 [DEBUG] Calling tagsApi.canDeleteTag with ID:', tag.id);
