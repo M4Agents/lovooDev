@@ -699,23 +699,15 @@ export const LeadModal: React.FC<LeadModalProps> = ({
 
           {/* Conteúdo da Aba - Dados do Lead */}
           {activeTab === 'lead' && (
-            <div className="space-y-6">
-              {/* CARD: Informações Básicas */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <User className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Informações Básicas</h3>
-                    <p className="text-sm text-gray-500">Dados principais do lead</p>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                Informações do Lead
+              </h3>
             
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <User className="w-4 h-4 text-blue-600" />
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <User className="w-4 h-4 inline mr-1" />
                     Nome *
                   </label>
                   <input
@@ -741,9 +733,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <Mail className="w-4 h-4 text-blue-600" />
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Mail className="w-4 h-4 inline mr-1" />
                     Email
                   </label>
                   <input
@@ -755,9 +747,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   />
                 </div>
 
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <Phone className="w-4 h-4 text-blue-600" />
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Phone className="w-4 h-4 inline mr-1" />
                     Telefone
                   </label>
                   <input
@@ -769,15 +761,15 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   />
                 </div>
 
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <Building className="w-4 h-4 text-blue-600" />
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <Building className="w-4 h-4 inline mr-1" />
                     Origem
                   </label>
                   <select
                     value={formData.origin}
                     onChange={(e) => handleInputChange('origin', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 hover:border-gray-400 bg-white"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                   >
                     <option value="manual">Manual</option>
                     <option value="landing_page">Landing Page</option>
@@ -795,7 +787,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   <select
                     value={formData.status}
                     onChange={(e) => handleInputChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                   >
                     <option value="novo">Novo</option>
                     <option value="em_qualificacao">Em Qualificação</option>
@@ -813,7 +805,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   <select
                     value={formData.record_type}
                     onChange={(e) => handleInputChange('record_type', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                   >
                     <option value="Lead">Lead</option>
                     <option value="Oportunidade">Oportunidade</option>
@@ -834,45 +826,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={formData.interest}
                     onChange={(e) => handleInputChange('interest', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Produto ou serviço de interesse"
                   />
                 </div>
-              </div>
-              </div>
 
-              {/* CARD 2: Redes Sociais */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Redes Sociais</h3>
-                    <p className="text-sm text-gray-500">Links e perfis do lead</p>
-                  </div>
-                </div>
+                {/* NOVOS CAMPOS - Redes Sociais */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
+                    Redes Sociais
+                  </h4>
                   
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                      <div className="w-5 h-5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">IG</span>
-                      </div>
-                      Instagram
-                    </label>
-                    <input
-                      type="text"
-                      value={socialData.instagram}
-                      onChange={(e) => setSocialData(prev => ({ ...prev, instagram: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                      placeholder="usuario (sem @)"
-                    />
-                    {socialData.instagram && (
-                      <p className="text-xs text-purple-600 bg-purple-50 px-3 py-2 rounded-md">
-                        🔗 {formatInstagram(socialData.instagram)}
-                      </p>
-                    )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Instagram
+                      </label>
+                      <input
+                        type="text"
+                        value={socialData.instagram}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, instagram: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                        placeholder="usuario (sem @)"
+                      />
+                      {socialData.instagram && (
+                        <p className="text-xs text-gray-500">
+                          Link: {formatInstagram(socialData.instagram)}
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -883,7 +864,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                         type="text"
                         value={socialData.linkedin}
                         onChange={(e) => setSocialData(prev => ({ ...prev, linkedin: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                         placeholder="usuario"
                       />
                       {socialData.linkedin && (
@@ -901,7 +882,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                         type="text"
                         value={socialData.tiktok}
                         onChange={(e) => setSocialData(prev => ({ ...prev, tiktok: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                         placeholder="usuario (sem @)"
                       />
                       {socialData.tiktok && (
@@ -928,7 +909,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                         type="text"
                         value={socialData.cargo}
                         onChange={(e) => setSocialData(prev => ({ ...prev, cargo: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                         placeholder="Ex: Diretor de Marketing"
                       />
                     </div>
@@ -940,7 +921,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       <select
                         value={socialData.poder_investimento}
                         onChange={(e) => setSocialData(prev => ({ ...prev, poder_investimento: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       >
                         <option value="">Selecionar...</option>
                         <option value="Baixo">Baixo</option>
@@ -966,7 +947,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="date"
                       value={socialData.data_nascimento}
                       onChange={(e) => setSocialData(prev => ({ ...prev, data_nascimento: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     />
                   </div>
                 </div>
@@ -1015,7 +996,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="text"
                       value={companyData.company_name}
                       onChange={(e) => handleCompanyInputChange('company_name', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       placeholder="Nome da empresa"
                     />
                   </div>
@@ -1046,7 +1027,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="text"
                       value={companyData.company_razao_social}
                       onChange={(e) => handleCompanyInputChange('company_razao_social', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       placeholder="Razão social da empresa"
                     />
                   </div>
@@ -1059,7 +1040,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="text"
                       value={companyData.company_nome_fantasia}
                       onChange={(e) => handleCompanyInputChange('company_nome_fantasia', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       placeholder="Nome fantasia"
                     />
                   </div>
@@ -1108,7 +1089,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     <select
                       value={companyData.company_estado}
                       onChange={(e) => handleCompanyInputChange('company_estado', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     >
                       <option value="">Selecione o estado</option>
                       {BRAZILIAN_STATES.map((state) => (
@@ -1127,7 +1108,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="text"
                       value={companyData.company_cidade}
                       onChange={(e) => handleCompanyInputChange('company_cidade', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       placeholder="Nome da cidade"
                     />
                   </div>
@@ -1140,7 +1121,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       type="text"
                       value={companyData.company_endereco}
                       onChange={(e) => handleCompanyInputChange('company_endereco', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                       placeholder="Rua, número, bairro"
                     />
                   </div>
@@ -1251,7 +1232,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   <select
                     value={addressData.estado}
                     onChange={(e) => setAddressData(prev => ({ ...prev, estado: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                   >
                     <option value="">Selecionar estado...</option>
                     {BRAZILIAN_STATES.map(state => (
@@ -1270,7 +1251,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={addressData.cidade}
                     onChange={(e) => setAddressData(prev => ({ ...prev, cidade: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome da cidade"
                   />
                 </div>
@@ -1283,7 +1264,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={addressData.bairro}
                     onChange={(e) => setAddressData(prev => ({ ...prev, bairro: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome do bairro"
                   />
                 </div>
@@ -1296,7 +1277,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={addressData.endereco}
                     onChange={(e) => setAddressData(prev => ({ ...prev, endereco: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome da rua, avenida, etc."
                   />
                 </div>
@@ -1309,7 +1290,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={addressData.numero}
                     onChange={(e) => setAddressData(prev => ({ ...prev, numero: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="123"
                   />
                 </div>
@@ -1322,7 +1303,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={addressData.complemento}
                     onChange={(e) => setAddressData(prev => ({ ...prev, complemento: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Apartamento, bloco, etc. (opcional)"
                   />
                 </div>
@@ -1346,7 +1327,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={adData.campanha}
                     onChange={(e) => setAdData(prev => ({ ...prev, campanha: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome da campanha publicitária"
                   />
                 </div>
@@ -1359,7 +1340,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={adData.conjunto_anuncio}
                     onChange={(e) => setAdData(prev => ({ ...prev, conjunto_anuncio: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome do conjunto de anúncio"
                   />
                 </div>
@@ -1372,7 +1353,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="text"
                     value={adData.anuncio}
                     onChange={(e) => setAdData(prev => ({ ...prev, anuncio: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome específico do anúncio"
                   />
                 </div>
