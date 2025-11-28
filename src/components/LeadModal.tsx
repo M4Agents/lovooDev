@@ -699,15 +699,23 @@ export const LeadModal: React.FC<LeadModalProps> = ({
 
           {/* Conteúdo da Aba - Dados do Lead */}
           {activeTab === 'lead' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
-                Informações do Lead
-              </h3>
+            <div className="space-y-6">
+              {/* CARD: Informações Básicas */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <User className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Informações Básicas</h3>
+                    <p className="text-sm text-gray-500">Dados principais do lead</p>
+                  </div>
+                </div>
             
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <User className="w-4 h-4 inline mr-1" />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <User className="w-4 h-4 text-blue-600" />
                     Nome *
                   </label>
                   <input
@@ -715,7 +723,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="Nome completo do lead"
                   />
                   
@@ -733,43 +741,43 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Mail className="w-4 h-4 inline mr-1" />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Mail className="w-4 h-4 text-blue-600" />
                     Email
                   </label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="email@exemplo.com"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Phone className="w-4 h-4 inline mr-1" />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Phone className="w-4 h-4 text-blue-600" />
                     Telefone
                   </label>
                   <input
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
                     placeholder="(11) 99999-9999"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Building className="w-4 h-4 inline mr-1" />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Building className="w-4 h-4 text-blue-600" />
                     Origem
                   </label>
                   <select
                     value={formData.origin}
                     onChange={(e) => handleInputChange('origin', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 hover:border-gray-400 bg-white"
                   >
                     <option value="manual">Manual</option>
                     <option value="landing_page">Landing Page</option>
@@ -830,30 +838,41 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     placeholder="Produto ou serviço de interesse"
                   />
                 </div>
+              </div>
+              </div>
 
-                {/* NOVOS CAMPOS - Redes Sociais */}
-                <div className="space-y-4">
-                  <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
-                    Redes Sociais
-                  </h4>
+              {/* CARD 2: Redes Sociais */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Globe className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Redes Sociais</h3>
+                    <p className="text-sm text-gray-500">Links e perfis do lead</p>
+                  </div>
+                </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Instagram
-                      </label>
-                      <input
-                        type="text"
-                        value={socialData.instagram}
-                        onChange={(e) => setSocialData(prev => ({ ...prev, instagram: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="usuario (sem @)"
-                      />
-                      {socialData.instagram && (
-                        <p className="text-xs text-gray-500">
-                          Link: {formatInstagram(socialData.instagram)}
-                        </p>
-                      )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <div className="w-5 h-5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">IG</span>
+                      </div>
+                      Instagram
+                    </label>
+                    <input
+                      type="text"
+                      value={socialData.instagram}
+                      onChange={(e) => setSocialData(prev => ({ ...prev, instagram: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                      placeholder="usuario (sem @)"
+                    />
+                    {socialData.instagram && (
+                      <p className="text-xs text-purple-600 bg-purple-50 px-3 py-2 rounded-md">
+                        🔗 {formatInstagram(socialData.instagram)}
+                      </p>
+                    )}
                     </div>
 
                     <div className="space-y-2">
