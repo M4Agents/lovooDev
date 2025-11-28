@@ -837,7 +837,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     Redes Sociais
                   </h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-4">
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-gray-700">
                         Instagram
