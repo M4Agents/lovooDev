@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
+import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername, extractLinkedInUsername, extractTikTokUsername, isValidSocialUsername } from '../utils/socialMedia';
 import { LeadTagsField } from './LeadTagsField';
 import { Tag as TagType } from '../types/tags';
 import { tagsApi } from '../services/tagsApi';
@@ -33,7 +34,32 @@ interface Lead {
   responsible_user_id?: string;
   visitor_id?: string;
   record_type?: string;  // NOVO: Tipo de registro do lead
-  // Campos da empresa
+  
+  // NOVOS CAMPOS - Redes Sociais
+  instagram?: string;
+  linkedin?: string;
+  tiktok?: string;
+  
+  // NOVOS CAMPOS - Informações Profissionais
+  cargo?: string;
+  poder_investimento?: string;
+  
+  // NOVOS CAMPOS - Dados Pessoais
+  data_nascimento?: string;
+  cep?: string;
+  estado?: string;
+  cidade?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  
+  // NOVOS CAMPOS - Dados de Anúncios
+  campanha?: string;
+  conjunto_anuncio?: string;
+  anuncio?: string;
+  
+  // Campos da empresa (existentes)
   company_name?: string;
   company_cnpj?: string;
   company_razao_social?: string;
@@ -83,7 +109,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
-  const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
+  const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'endereco' | 'anuncios'>('lead');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -94,6 +120,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     responsible_user_id: '',
     visitor_id: '',
     record_type: 'Lead'  // NOVO: Valor padrão para tipo de registro
+  });
+  
+  // NOVO: Estado para redes sociais e dados profissionais
+  const [socialData, setSocialData] = useState({
+    instagram: '',
+    linkedin: '',
+    tiktok: '',
+    cargo: '',
+    poder_investimento: '',
+    data_nascimento: ''
+  });
+  
+  // NOVO: Estado para dados de endereço
+  const [addressData, setAddressData] = useState({
+    cep: '',
+    estado: '',
+    cidade: '',
+    endereco: '',
+    numero: '',
+    bairro: '',
+    complemento: ''
+  });
+  
+  // NOVO: Estado para dados de anúncios
+  const [adData, setAdData] = useState({
+    campanha: '',
+    conjunto_anuncio: '',
+    anuncio: ''
   });
   const [companyData, setCompanyData] = useState({
     company_name: '',
@@ -146,6 +200,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           loadLeadTags(lead.id);
         }
 
+        // NOVO: Preencher dados sociais e profissionais
+        setSocialData({
+          instagram: extractInstagramUsername(lead.instagram || ''),
+          linkedin: extractLinkedInUsername(lead.linkedin || ''),
+          tiktok: extractTikTokUsername(lead.tiktok || ''),
+          cargo: lead.cargo || '',
+          poder_investimento: lead.poder_investimento || '',
+          data_nascimento: lead.data_nascimento || ''
+        });
+
+        // NOVO: Preencher dados de endereço
+        setAddressData({
+          cep: lead.cep || '',
+          estado: lead.estado || '',
+          cidade: lead.cidade || '',
+          endereco: lead.endereco || '',
+          numero: lead.numero || '',
+          bairro: lead.bairro || '',
+          complemento: lead.complemento || ''
+        });
+
+        // NOVO: Preencher dados de anúncios
+        setAdData({
+          campanha: lead.campanha || '',
+          conjunto_anuncio: lead.conjunto_anuncio || '',
+          anuncio: lead.anuncio || ''
+        });
+
         // Preencher dados da empresa
         setCompanyData({
           company_name: lead.company_name || '',
@@ -189,6 +271,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         // Limpar tags para novo lead
         setSelectedTags([]);
         
+        // NOVO: Limpar dados sociais e profissionais
+        setSocialData({
+          instagram: '',
+          linkedin: '',
+          tiktok: '',
+          cargo: '',
+          poder_investimento: '',
+          data_nascimento: ''
+        });
+        
+        // NOVO: Limpar dados de endereço
+        setAddressData({
+          cep: '',
+          estado: '',
+          cidade: '',
+          endereco: '',
+          numero: '',
+          bairro: '',
+          complemento: ''
+        });
+        
+        // NOVO: Limpar dados de anúncios
+        setAdData({
+          campanha: '',
+          conjunto_anuncio: '',
+          anuncio: ''
+        });
+        
         setCompanyData({
           company_name: '',
           company_cnpj: '',
@@ -217,6 +327,30 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       leadExists: !!lead 
     });
   }, [isOpen, lead]);
+
+  // NOVO: Função para buscar CEP
+  const handleCEPSearch = async (cep: string) => {
+    if (!isValidCEPForSearch(cep)) return;
+
+    setCepLoading(true);
+    try {
+      const result = await fetchCEPData(cep);
+      if (result.success && result.data) {
+        setAddressData(prev => ({
+          ...prev,
+          cep: maskCEP(cep),
+          estado: result.data!.uf,
+          cidade: result.data!.localidade,
+          endereco: result.data!.logradouro,
+          bairro: result.data!.bairro
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching CEP:', error);
+    } finally {
+      setCepLoading(false);
+    }
+  };
 
   const loadCustomFields = async () => {
     if (!company?.id) return;
@@ -285,7 +419,31 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         // Limpar campos UUID vazios para evitar erro de sintaxe
         responsible_user_id: formData.responsible_user_id || null,
         visitor_id: formData.visitor_id || null,
-        custom_fields: customFieldValues
+        custom_fields: customFieldValues,
+        
+        // NOVOS CAMPOS - Redes Sociais (formatadas)
+        instagram: socialData.instagram ? formatInstagram(socialData.instagram) : undefined,
+        linkedin: socialData.linkedin ? formatLinkedIn(socialData.linkedin) : undefined,
+        tiktok: socialData.tiktok ? formatTikTok(socialData.tiktok) : undefined,
+        
+        // NOVOS CAMPOS - Informações Profissionais
+        cargo: socialData.cargo || undefined,
+        poder_investimento: socialData.poder_investimento || undefined,
+        data_nascimento: socialData.data_nascimento || undefined,
+        
+        // NOVOS CAMPOS - Dados de Endereço
+        cep: addressData.cep || undefined,
+        estado: addressData.estado || undefined,
+        cidade: addressData.cidade || undefined,
+        endereco: addressData.endereco || undefined,
+        numero: addressData.numero || undefined,
+        bairro: addressData.bairro || undefined,
+        complemento: addressData.complemento || undefined,
+        
+        // NOVOS CAMPOS - Dados de Anúncios
+        campanha: adData.campanha || undefined,
+        conjunto_anuncio: adData.conjunto_anuncio || undefined,
+        anuncio: adData.anuncio || undefined
       };
       
       console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
@@ -510,7 +668,31 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 }`}
               >
                 <Building className="w-4 h-4 inline mr-2" />
-                Dados da Empresa
+                Empresa
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('endereco')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'endereco'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <MapPin className="w-4 h-4 inline mr-2" />
+                Endereço
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('anuncios')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'anuncios'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Globe className="w-4 h-4 inline mr-2" />
+                Anúncios
               </button>
             </nav>
           </div>
@@ -647,6 +829,127 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Produto ou serviço de interesse"
                   />
+                </div>
+
+                {/* NOVOS CAMPOS - Redes Sociais */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
+                    Redes Sociais
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Instagram
+                      </label>
+                      <input
+                        type="text"
+                        value={socialData.instagram}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, instagram: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="usuario (sem @)"
+                      />
+                      {socialData.instagram && (
+                        <p className="text-xs text-gray-500">
+                          Link: {formatInstagram(socialData.instagram)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        LinkedIn
+                      </label>
+                      <input
+                        type="text"
+                        value={socialData.linkedin}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, linkedin: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="usuario"
+                      />
+                      {socialData.linkedin && (
+                        <p className="text-xs text-gray-500">
+                          Link: {formatLinkedIn(socialData.linkedin)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        TikTok
+                      </label>
+                      <input
+                        type="text"
+                        value={socialData.tiktok}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, tiktok: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="usuario (sem @)"
+                      />
+                      {socialData.tiktok && (
+                        <p className="text-xs text-gray-500">
+                          Usuário: {formatTikTok(socialData.tiktok)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* NOVOS CAMPOS - Informações Profissionais */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
+                    Informações Profissionais
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Cargo
+                      </label>
+                      <input
+                        type="text"
+                        value={socialData.cargo}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, cargo: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Ex: Diretor de Marketing"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Poder de Investimento
+                      </label>
+                      <select
+                        value={socialData.poder_investimento}
+                        onChange={(e) => setSocialData(prev => ({ ...prev, poder_investimento: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Selecionar...</option>
+                        <option value="Baixo">Baixo</option>
+                        <option value="Médio">Médio</option>
+                        <option value="Alto">Alto</option>
+                        <option value="Premium">Premium</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NOVOS CAMPOS - Dados Pessoais */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
+                    Dados Pessoais
+                  </h4>
+                  
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Data de Nascimento
+                    </label>
+                    <input
+                      type="date"
+                      value={socialData.data_nascimento}
+                      onChange={(e) => setSocialData(prev => ({ ...prev, data_nascimento: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
 
                 {/* NOVO: Campo de Tags */}
@@ -887,6 +1190,183 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conteúdo da Aba - Endereço */}
+          {activeTab === 'endereco' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                Dados de Endereço
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    CEP
+                    {cepLoading && (
+                      <span className="ml-2 text-xs text-blue-600">Buscando...</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.cep}
+                    onChange={(e) => {
+                      const maskedValue = maskCEP(e.target.value);
+                      setAddressData(prev => ({ ...prev, cep: maskedValue }));
+                    }}
+                    onBlur={(e) => handleCEPSearch(e.target.value)}
+                    disabled={cepLoading}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      cepLoading ? 'bg-gray-50' : 'border-gray-300'
+                    }`}
+                    placeholder="00000-000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Estado
+                  </label>
+                  <select
+                    value={addressData.estado}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, estado: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Selecionar estado...</option>
+                    {BRAZILIAN_STATES.map(state => (
+                      <option key={state.value} value={state.value}>
+                        {state.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.cidade}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, cidade: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome da cidade"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.bairro}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, bairro: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome do bairro"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Endereço
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.endereco}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, endereco: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome da rua, avenida, etc."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.numero}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, numero: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="123"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Complemento
+                  </label>
+                  <input
+                    type="text"
+                    value={addressData.complemento}
+                    onChange={(e) => setAddressData(prev => ({ ...prev, complemento: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Apartamento, bloco, etc. (opcional)"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conteúdo da Aba - Anúncios */}
+          {activeTab === 'anuncios' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                Dados de Anúncios
+              </h3>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Campanha
+                  </label>
+                  <input
+                    type="text"
+                    value={adData.campanha}
+                    onChange={(e) => setAdData(prev => ({ ...prev, campanha: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome da campanha publicitária"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Conjunto de Anúncio
+                  </label>
+                  <input
+                    type="text"
+                    value={adData.conjunto_anuncio}
+                    onChange={(e) => setAdData(prev => ({ ...prev, conjunto_anuncio: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome do conjunto de anúncio"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Anúncio
+                  </label>
+                  <input
+                    type="text"
+                    value={adData.anuncio}
+                    onChange={(e) => setAdData(prev => ({ ...prev, anuncio: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nome específico do anúncio"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">
+                  💡 Informação sobre Anúncios
+                </h4>
+                <p className="text-sm text-blue-700">
+                  Estes campos ajudam a rastrear a origem do lead através de campanhas publicitárias. 
+                  Útil para análise de ROI e otimização de investimentos em marketing digital.
+                </p>
               </div>
             </div>
           )}

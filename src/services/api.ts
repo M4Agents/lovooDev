@@ -759,7 +759,32 @@ export const api = {
     visitor_id?: string | null;
     record_type?: string;  // NOVO: Tipo de registro
     custom_fields?: Record<string, any>;
-    // Campos da empresa
+    
+    // NOVOS CAMPOS - Redes Sociais
+    instagram?: string;
+    linkedin?: string;
+    tiktok?: string;
+    
+    // NOVOS CAMPOS - Informações Profissionais
+    cargo?: string;
+    poder_investimento?: string;
+    
+    // NOVOS CAMPOS - Dados Pessoais
+    data_nascimento?: string;
+    cep?: string;
+    estado?: string;
+    cidade?: string;
+    endereco?: string;
+    numero?: string;
+    bairro?: string;
+    complemento?: string;
+    
+    // NOVOS CAMPOS - Dados de Anúncios
+    campanha?: string;
+    conjunto_anuncio?: string;
+    anuncio?: string;
+    
+    // Campos da empresa (existentes)
     company_name?: string;
     company_cnpj?: string;
     company_razao_social?: string;
