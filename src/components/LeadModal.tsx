@@ -110,7 +110,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
-  const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'endereco' | 'anuncios'>('lead');
+  const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -671,42 +671,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 <Building className="w-4 h-4 inline mr-2" />
                 Empresa
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('endereco')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'endereco'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <MapPin className="w-4 h-4 inline mr-2" />
-                Endereço
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('redes_sociais')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'redes_sociais'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Share2 className="w-4 h-4 inline mr-2" />
-                Redes Sociais
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('anuncios')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'anuncios'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Globe className="w-4 h-4 inline mr-2" />
-                Anúncios
-              </button>
             </nav>
           </div>
 
@@ -1150,7 +1114,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Endereço */}
-          {activeTab === 'endereco' && (
+          {activeTab === 'lead' && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Dados de Endereço
@@ -1267,7 +1231,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Redes Sociais */}
-          {activeTab === 'redes_sociais' && (
+          {activeTab === 'lead' && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Redes Sociais
@@ -1332,7 +1296,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Anúncios */}
-          {activeTab === 'anuncios' && (
+          {activeTab === 'lead' && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Dados de Anúncios
