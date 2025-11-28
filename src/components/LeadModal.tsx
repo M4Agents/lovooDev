@@ -817,19 +817,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <FileText className="w-4 h-4 inline mr-1" />
-                    Interesse
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.interest}
-                    onChange={(e) => handleInputChange('interest', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                    placeholder="Produto ou serviço de interesse"
-                  />
-                </div>
 
                 {/* NOVOS CAMPOS - Redes Sociais */}
                 <div className="space-y-4">
@@ -914,21 +901,37 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Poder de Investimento
-                      </label>
-                      <select
-                        value={socialData.poder_investimento}
-                        onChange={(e) => setSocialData(prev => ({ ...prev, poder_investimento: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                      >
-                        <option value="">Selecionar...</option>
-                        <option value="Baixo">Baixo</option>
-                        <option value="Médio">Médio</option>
-                        <option value="Alto">Alto</option>
-                        <option value="Premium">Premium</option>
-                      </select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Poder de Investimento
+                        </label>
+                        <select
+                          value={socialData.poder_investimento}
+                          onChange={(e) => setSocialData(prev => ({ ...prev, poder_investimento: e.target.value }))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                        >
+                          <option value="">Selecionar...</option>
+                          <option value="Baixo">Baixo</option>
+                          <option value="Médio">Médio</option>
+                          <option value="Alto">Alto</option>
+                          <option value="Premium">Premium</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          <FileText className="w-4 h-4 inline mr-1" />
+                          Interesse
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.interest}
+                          onChange={(e) => handleInputChange('interest', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                          placeholder="Produto ou serviço de interesse"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
