@@ -38,10 +38,28 @@ export const AcceptInvite: React.FC = () => {
       // Token de convite válido
       console.log('AcceptInvite: Valid invite token found');
       
-      // Tentar extrair informações do token se possível
-      // Por enquanto, usar informações básicas
+      // Extrair informações do token e URL
+      const emailFromUrl = searchParams.get('email') || '';
+      const tokenFromUrl = searchParams.get('token') || '';
+      
+      console.log('AcceptInvite: Email from URL:', emailFromUrl);
+      console.log('AcceptInvite: Token from URL:', tokenFromUrl.substring(0, 20) + '...');
+      
+      // Tentar decodificar token para extrair informações adicionais
+      let decodedEmail = emailFromUrl;
+      try {
+        if (tokenFromUrl) {
+          const decoded = atob(tokenFromUrl);
+          console.log('AcceptInvite: Token decoded:', decoded);
+          // Token format: user_id:company_user_id:timestamp
+          // Não contém email, então usar da URL
+        }
+      } catch (e) {
+        console.log('AcceptInvite: Could not decode token, using URL email');
+      }
+      
       setInviteInfo({
-        email: searchParams.get('email') || '',
+        email: decodedEmail || 'Email não encontrado',
         role: searchParams.get('role') || '',
         company_name: searchParams.get('company') || ''
       });
@@ -154,21 +172,50 @@ export const AcceptInvite: React.FC = () => {
       console.log('AcceptInvite: Strategy 3 - Using password reset approach');
       try {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password?from=invite&email=${encodeURIComponent(email)}`
+          redirectTo: `https://app.lovoocrm.com/reset-password?from=invite&email=${encodeURIComponent(email)}`
         });
 
         if (!resetError) {
           console.log('AcceptInvite: Password reset email sent successfully');
-          setError('Um email foi enviado para ativar sua conta. Verifique sua caixa de entrada e clique no link para definir sua senha.');
+          setError('✅ Um email foi enviado para ativar sua conta! Verifique sua caixa de entrada e clique no link para definir sua senha.');
           return;
         }
       } catch (e) {
         console.log('AcceptInvite: Password reset failed');
       }
 
-      // ESTRATÉGIA 4: Fallback final - informar usuário
-      console.log('AcceptInvite: All strategies failed, providing user guidance');
-      setError('Não foi possível ativar a conta automaticamente. Entre em contato com o administrador ou tente fazer login diretamente se já possui uma senha.');
+      // ESTRATÉGIA 4: Tentar criar usuário se não existe
+      console.log('AcceptInvite: Strategy 4 - Attempting user creation');
+      try {
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `https://app.lovoocrm.com/dashboard`
+          }
+        });
+
+        if (!signUpError && signUpData.user) {
+          console.log('AcceptInvite: User created successfully');
+          setError('✅ Conta criada! Verifique seu email para confirmar a ativação.');
+          return;
+        }
+      } catch (e) {
+        console.log('AcceptInvite: User creation failed');
+      }
+
+      // ESTRATÉGIA 5: Fallback final - orientação específica
+      console.log('AcceptInvite: All strategies failed, providing specific guidance');
+      setError(`❌ Não foi possível ativar automaticamente. 
+      
+📧 Email: ${email}
+      
+✅ Opções disponíveis:
+1. Tente fazer login diretamente se já tem senha
+2. Solicite um novo convite ao administrador
+3. Use "Esqueci minha senha" na tela de login
+
+🔗 Fazer login: ${window.location.origin}/login`);
 
     } catch (err) {
       console.error('AcceptInvite: Error in handleAcceptInvite:', err);
