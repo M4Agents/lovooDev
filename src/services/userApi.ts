@@ -17,23 +17,28 @@ export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]>
   try {
     console.log('UserAPI: Fetching users for company:', companyId);
     
+    // Usar RPC para evitar problemas com RLS e joins complexos
     const { data, error } = await supabase
-      .from('company_users')
-      .select(`
-        *,
-        companies:company_id (
-          id,
-          name,
-          company_type
-        )
-      `)
-      .eq('company_id', companyId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .rpc('get_company_users_with_details', {
+        p_company_id: companyId
+      });
 
     if (error) {
       console.error('UserAPI: Error fetching company users:', error);
-      throw error;
+      // Fallback para consulta simples se RPC falhar
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('company_users')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+        
+      if (fallbackError) {
+        throw fallbackError;
+      }
+      
+      console.log('UserAPI: Using fallback query, found users:', fallbackData?.length || 0);
+      return fallbackData || [];
     }
 
     console.log('UserAPI: Found users:', data?.length || 0);
@@ -52,17 +57,10 @@ export const getManagedUsers = async (): Promise<CompanyUser[]> => {
   try {
     console.log('UserAPI: Fetching managed users');
     
-    // Buscar através de RLS - automaticamente filtra por permissões
+    // Buscar através de consulta simples - RLS filtra automaticamente
     const { data, error } = await supabase
       .from('company_users')
-      .select(`
-        *,
-        companies:company_id (
-          id,
-          name,
-          company_type
-        )
-      `)
+      .select('*')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -72,6 +70,33 @@ export const getManagedUsers = async (): Promise<CompanyUser[]> => {
     }
 
     console.log('UserAPI: Found managed users:', data?.length || 0);
+    
+    // Se não encontrou dados, pode ser problema de RLS - tentar buscar da empresa atual
+    if (!data || data.length === 0) {
+      console.log('UserAPI: No users found, trying current company approach');
+      
+      // Buscar empresa atual do usuário
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('user_id', user.id);
+          
+        if (companies && companies.length > 0) {
+          // Buscar usuários da primeira empresa encontrada
+          const { data: companyUsers } = await supabase
+            .from('company_users')
+            .select('*')
+            .eq('company_id', companies[0].id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+            
+          return companyUsers || [];
+        }
+      }
+    }
+    
     return data || [];
   } catch (error) {
     console.error('UserAPI: Error in getManagedUsers:', error);
