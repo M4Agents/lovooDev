@@ -136,7 +136,26 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           
           // Se não tem URL do convite, gerar uma para teste
           if (!inviteUrl) {
-            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
+            // Buscar email real do usuário criado/reativado
+            let emailForLink = formData.email;
+            if (result && (result as any).user_id) {
+              try {
+                const { data: userData } = await supabase
+                  .from('auth.users')
+                  .select('email')
+                  .eq('id', (result as any).user_id)
+                  .single();
+                
+                if (userData?.email) {
+                  emailForLink = userData.email;
+                  console.log('UserModal: Using real email for link:', emailForLink);
+                }
+              } catch (e) {
+                console.log('UserModal: Could not fetch real email, using form email');
+              }
+            }
+            
+            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(emailForLink)}&type=invite&email=${encodeURIComponent(emailForLink)}`;
           }
           
           setInviteData({
@@ -178,6 +197,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // Se era para enviar convite, mostrar modal de sucesso mesmo assim
         if (formData.sendInvite) {
+          // Usar email do formulário para modo compatibilidade (já é o correto)
           setInviteData({
             email: formData.email,
             inviteUrl: `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`,
