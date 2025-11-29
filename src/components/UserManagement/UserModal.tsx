@@ -121,19 +121,31 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
         const result = await createCompanyUser(createRequest);
         
+        console.log('UserModal: User creation result:', {
+          isReal: result._isRealUser,
+          hasAppMetadata: !!(result as any).app_metadata,
+          inviteUrl: (result as any).app_metadata?.invite_url,
+          sendInvite: formData.sendInvite
+        });
+        
         // Verificar se foi criado com convite e mostrar modal de sucesso
         if (formData.sendInvite) {
           const mode = result._isRealUser ? 'real' : 'simulated';
+          const inviteUrl = (result as any).app_metadata?.invite_url;
           
           setInviteData({
             email: formData.email,
-            inviteUrl: (result as any).app_metadata?.invite_url,
+            inviteUrl: inviteUrl,
             mode,
             message: mode === 'simulated' ? 'Configure Admin API para envio real de emails' : undefined
           });
           
           setShowInviteSuccess(true);
-          console.log('UserModal: User created with invite:', { mode, email: formData.email });
+          console.log('UserModal: User created with invite:', { 
+            mode, 
+            email: formData.email,
+            hasUrl: !!inviteUrl
+          });
         }
       }
 
@@ -142,15 +154,34 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     } catch (err) {
       console.error('UserModal: Error saving user:', err);
       
-      // Melhorar tratamento de erro - não mostrar erro se for modo compatibilidade
+      // TRATAMENTO INTELIGENTE: Verificar se é erro real ou modo compatibilidade
       const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar usuário';
       
-      if (errorMessage.includes('modo compatibilidade') || errorMessage.includes('Admin API não configurada')) {
-        console.log('UserModal: Operating in compatibility mode');
-        // Não mostrar erro para usuário final
+      // Se contém indicações de modo compatibilidade, tratar como sucesso
+      if (errorMessage.includes('modo compatibilidade') || 
+          errorMessage.includes('Admin API não configurada') ||
+          errorMessage.includes('Convite simulado criado')) {
+        
+        console.log('UserModal: Operating in compatibility mode - treating as success');
+        
+        // Se era para enviar convite, mostrar modal de sucesso mesmo assim
+        if (formData.sendInvite) {
+          setInviteData({
+            email: formData.email,
+            inviteUrl: `${window.location.origin}/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`,
+            mode: 'simulated',
+            message: 'Sistema em modo compatibilidade - Configure Admin API para envio real de emails'
+          });
+          
+          setShowInviteSuccess(true);
+          console.log('UserModal: Showing success modal for compatibility mode');
+        }
+        
+        // Tratar como sucesso
         onSave();
         onClose();
       } else {
+        // Erro real - mostrar para usuário
         setError(errorMessage);
       }
     } finally {

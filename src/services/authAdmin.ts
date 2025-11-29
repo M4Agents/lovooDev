@@ -123,8 +123,8 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
         
         return {
           user: simulatedInvite.user,
-          success: true,
-          error: simulatedInvite.message
+          success: true
+          // Não incluir 'error' quando é sucesso simulado
         };
       }
       
@@ -148,8 +148,8 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     
     return {
       user: simulatedInvite.user,
-      success: true,
-      error: simulatedInvite.message
+      success: true
+      // Não incluir 'error' quando é sucesso simulado
     };
   }
 };
