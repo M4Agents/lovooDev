@@ -122,33 +122,45 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         const result = await createCompanyUser(createRequest);
         
         console.log('UserModal: User creation result:', {
+          result: result,
           isReal: result._isRealUser,
           hasAppMetadata: !!(result as any).app_metadata,
           inviteUrl: (result as any).app_metadata?.invite_url,
           sendInvite: formData.sendInvite
         });
         
-        // Verificar se foi criado com convite e mostrar modal de sucesso
+        // SEMPRE mostrar modal de sucesso quando usuário é criado com convite
         if (formData.sendInvite) {
           const mode = result._isRealUser ? 'real' : 'simulated';
-          const inviteUrl = (result as any).app_metadata?.invite_url;
+          let inviteUrl = (result as any).app_metadata?.invite_url;
+          
+          // Se não tem URL do convite, gerar uma para teste
+          if (!inviteUrl) {
+            inviteUrl = `${window.location.origin}/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
+          }
           
           setInviteData({
             email: formData.email,
             inviteUrl: inviteUrl,
-            mode,
-            message: mode === 'simulated' ? 'Configure Admin API para envio real de emails' : undefined
+            mode: mode === 'real' ? 'real' : 'simulated',
+            message: mode === 'real' ? 'Convite enviado por email via Supabase Auth' : 'Configure Admin API para envio real de emails'
           });
           
           setShowInviteSuccess(true);
-          console.log('UserModal: User created with invite:', { 
+          console.log('UserModal: Showing success modal:', { 
             mode, 
             email: formData.email,
-            hasUrl: !!inviteUrl
+            hasUrl: !!inviteUrl,
+            inviteUrl: inviteUrl
           });
+          
+          // Não fechar o modal principal ainda - deixar o modal de sucesso aparecer
+          onSave();
+          return;
         }
       }
 
+      // Se não foi convite, fechar normalmente
       onSave();
       onClose();
     } catch (err) {
@@ -405,7 +417,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       {/* Modal de Sucesso do Convite */}
       <InviteSuccess
         isOpen={showInviteSuccess}
-        onClose={() => setShowInviteSuccess(false)}
+        onClose={() => {
+          setShowInviteSuccess(false);
+          onClose(); // Fechar modal principal quando modal de sucesso for fechado
+        }}
         inviteData={inviteData || { email: '', mode: 'simulated' }}
       />
     </div>

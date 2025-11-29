@@ -374,11 +374,14 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           if (inviteResult.user.id && !inviteResult.user.id.startsWith('invite_') && !inviteResult.user.id.startsWith('fallback_')) {
             finalUserId = inviteResult.user.id;
             isRealUser = true;
+            inviteData = inviteResult.user.app_metadata;
+            console.log('UserAPI: Real user created via Admin API:', inviteResult.user.id);
           } else {
             // Convite simulado - usar user_id atual temporariamente (como empresas)
             finalUserId = currentUser.id;
             isRealUser = false;
             inviteData = inviteResult.user.app_metadata;
+            console.log('UserAPI: Using current user as fallback:', currentUser.id);
           }
           
           console.log('UserAPI: User invite processed:', {
