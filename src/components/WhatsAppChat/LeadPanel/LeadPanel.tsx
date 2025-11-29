@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
+import { LeadModal } from '../../LeadModal'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -13,6 +14,135 @@ import type {
   ContactInfoForm,
   ScheduleMessageForm
 } from '../../../types/whatsapp-chat'
+
+// =====================================================
+// INTERFACE LEAD PARA COMPATIBILIDADE
+// =====================================================
+
+interface Lead {
+  id?: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  origin: string;
+  status: string;
+  interest?: string;
+  responsible_user_id?: string;
+  visitor_id?: string;
+  record_type?: string;
+  
+  // Redes Sociais
+  instagram?: string;
+  linkedin?: string;
+  tiktok?: string;
+  
+  // Informações Profissionais
+  cargo?: string;
+  poder_investimento?: string;
+  
+  // Dados Pessoais
+  data_nascimento?: string;
+  cep?: string;
+  estado?: string;
+  cidade?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+  
+  // Dados de Anúncios
+  campanha?: string;
+  conjunto_anuncio?: string;
+  anuncio?: string;
+  
+  // Campos da empresa
+  company_name?: string;
+  company_cnpj?: string;
+  company_razao_social?: string;
+  company_nome_fantasia?: string;
+  company_cep?: string;
+  company_cidade?: string;
+  company_estado?: string;
+  company_endereco?: string;
+  company_telefone?: string;
+  company_email?: string;
+  company_site?: string;
+  lead_custom_values?: Array<{
+    field_id: string;
+    value: string;
+    lead_custom_fields: {
+      field_name: string;
+      field_label: string;
+      field_type: string;
+    };
+  }>;
+}
+
+// =====================================================
+// FUNÇÃO DE CONVERSÃO CHATCONTACT -> LEAD
+// =====================================================
+
+const convertChatContactToLead = (
+  contact: ChatContact | null, 
+  phoneNumber: string,
+  conversationData?: any
+): Lead => {
+  // Mapear status do chat para status do lead
+  const statusMapping = {
+    'new': 'novo',
+    'contacted': 'contatado', 
+    'qualified': 'qualificado',
+    'proposal': 'proposta',
+    'negotiation': 'negociacao',
+    'closed': 'fechado',
+    'lost': 'perdido'
+  };
+
+  return {
+    id: contact?.id ? parseInt(contact.id) : undefined,
+    name: contact?.name || conversationData?.contact_name || '',
+    email: contact?.email || '',
+    phone: phoneNumber || contact?.phone_number || '',
+    origin: 'whatsapp',
+    status: statusMapping[contact?.lead_status as keyof typeof statusMapping] || 'novo',
+    interest: '',
+    responsible_user_id: '',
+    visitor_id: '',
+    record_type: 'Lead',
+    
+    // Campos vazios para serem preenchidos no modal
+    instagram: '',
+    linkedin: '',
+    tiktok: '',
+    cargo: '',
+    poder_investimento: '',
+    data_nascimento: '',
+    cep: '',
+    estado: '',
+    cidade: '',
+    endereco: '',
+    numero: '',
+    bairro: '',
+    complemento: '',
+    campanha: '',
+    conjunto_anuncio: '',
+    anuncio: '',
+    
+    // Dados da empresa se disponíveis
+    company_name: conversationData?.company_name || '',
+    company_cnpj: '',
+    company_razao_social: '',
+    company_nome_fantasia: '',
+    company_cep: '',
+    company_cidade: '',
+    company_estado: '',
+    company_endereco: '',
+    company_telefone: '',
+    company_email: '',
+    company_site: '',
+    lead_custom_values: []
+  };
+};
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -28,6 +158,10 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'info' | 'schedule'>('info')
   const [conversation, setConversation] = useState<any>(null)
+  
+  // Estados para o LeadModal
+  const [showLeadModal, setShowLeadModal] = useState(false)
+  const [leadForEdit, setLeadForEdit] = useState<Lead | null>(null)
 
   // =====================================================
   // BUSCAR DADOS
@@ -119,6 +253,10 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             conversation={conversation}
             companyId={companyId}
             onUpdate={fetchData}
+            onOpenLeadModal={(leadData) => {
+              setLeadForEdit(leadData)
+              setShowLeadModal(true)
+            }}
           />
         ) : (
           <ScheduleMessages
@@ -130,6 +268,23 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           />
         )}
       </div>
+
+      {/* LeadModal */}
+      {showLeadModal && (
+        <LeadModal
+          isOpen={showLeadModal}
+          onClose={() => {
+            setShowLeadModal(false)
+            setLeadForEdit(null)
+          }}
+          lead={leadForEdit}
+          onSave={() => {
+            fetchData() // Recarregar dados do chat
+            setShowLeadModal(false)
+            setLeadForEdit(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -143,13 +298,15 @@ interface ContactInfoProps {
   conversation: any
   companyId: string
   onUpdate: () => void
+  onOpenLeadModal: (leadData: Lead) => void
 }
 
 const ContactInfo: React.FC<ContactInfoProps> = ({
   contact,
   conversation,
   companyId,
-  onUpdate
+  onUpdate,
+  onOpenLeadModal
 }) => {
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<ContactInfoForm>({
@@ -265,14 +422,27 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       </div>
 
       {/* Ações */}
-      <div className="flex space-x-2">
+      <div className="flex flex-col space-y-2">
         {!editing ? (
-          <button
-            onClick={() => setEditing(true)}
-            className="flex-1 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100"
-          >
-            Editar
-          </button>
+          <>
+            <button
+              onClick={() => {
+                if (contact && conversation) {
+                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
+                  onOpenLeadModal(leadData)
+                }
+              }}
+              className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Editar Lead Completo
+            </button>
+            <button
+              onClick={() => setEditing(true)}
+              className="w-full px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              Edição Rápida
+            </button>
+          </>
         ) : (
           <>
             <button
