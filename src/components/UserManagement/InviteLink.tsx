@@ -22,8 +22,8 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
     // Gerar token baseado no usuário
     const token = btoa(`${user.user_id}:${user.id}:${Date.now()}`);
     
-    // Construir URL de convite
-    return `${window.location.origin}/accept-invite?token=${token}&type=invite&email=${encodeURIComponent(user._email || user.user_id)}&user=${user.id}`;
+    // Construir URL de convite com domínio oficial
+    return `https://app.lovoocrm.com/accept-invite?token=${token}&type=invite&email=${encodeURIComponent(user._email || user.user_id)}&user=${user.id}`;
   };
 
   const handleCopyLink = async () => {

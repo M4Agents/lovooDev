@@ -75,7 +75,7 @@ export const createAuthUser = async (request: CreateAuthUserRequest): Promise<Au
       // FALLBACK: Usar sistema de convites
       return await inviteUser({
         email: request.email,
-        redirectTo: `${window.location.origin}/accept-invite`,
+        redirectTo: `https://app.lovoocrm.com/accept-invite`,
         data: {
           role: request.userData?.role || 'seller',
           company_id: request.userData?.company_id || '',
@@ -104,7 +104,7 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     const { data, error } = await supabase.auth.admin.inviteUserByEmail(
       request.email,
       {
-        redirectTo: request.redirectTo || `${window.location.origin}/accept-invite`,
+        redirectTo: request.redirectTo || `https://app.lovoocrm.com/accept-invite`,
         data: request.data || {}
       }
     );
@@ -279,7 +279,7 @@ export const validateEmail = (email: string): boolean => {
  * Gera URL de convite personalizada
  */
 export const generateInviteUrl = (token: string, companyId: string): string => {
-  const baseUrl = window.location.origin;
+  const baseUrl = 'https://app.lovoocrm.com';
   return `${baseUrl}/accept-invite?token=${token}&company=${companyId}`;
 };
 
@@ -303,7 +303,7 @@ export const createUserComplete = async (request: CreateUserRequest): Promise<{
     // 1. Primeiro tentar criar usuário real
     const authResult = await inviteUser({
       email: request.email,
-      redirectTo: `${window.location.origin}/accept-invite`,
+      redirectTo: `https://app.lovoocrm.com/accept-invite`,
       data: {
         role: request.role,
         company_id: request.companyId,

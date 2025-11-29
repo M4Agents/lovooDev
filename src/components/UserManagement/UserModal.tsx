@@ -136,7 +136,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           
           // Se não tem URL do convite, gerar uma para teste
           if (!inviteUrl) {
-            inviteUrl = `${window.location.origin}/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
+            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
           }
           
           setInviteData({
@@ -180,7 +180,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         if (formData.sendInvite) {
           setInviteData({
             email: formData.email,
-            inviteUrl: `${window.location.origin}/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`,
+            inviteUrl: `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`,
             mode: 'simulated',
             message: 'Sistema em modo compatibilidade - Configure Admin API para envio real de emails'
           });

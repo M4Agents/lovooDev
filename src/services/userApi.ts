@@ -361,7 +361,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
         
         const inviteResult = await inviteUser({
           email: request.email,
-          redirectTo: `${window.location.origin}/accept-invite`,
+          redirectTo: `https://app.lovoocrm.com/accept-invite`,
           data: {
             role: request.role,
             company_id: request.companyId,
@@ -401,7 +401,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
         
         // Gerar dados de convite simulado para mostrar no modal
         inviteData = {
-          invite_url: `${window.location.origin}/accept-invite?token=${btoa(request.email)}&type=invite&email=${encodeURIComponent(request.email)}`
+          invite_url: `https://app.lovoocrm.com/accept-invite?token=${btoa(request.email)}&type=invite&email=${encodeURIComponent(request.email)}`
         };
       }
     } else {
