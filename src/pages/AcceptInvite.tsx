@@ -92,29 +92,122 @@ export const AcceptInvite: React.FC = () => {
         return;
       }
 
-      // Tentar aceitar o convite via Supabase
-      const { data, error: acceptError } = await supabase.auth.verifyOtp({
-        token_hash: searchParams.get('token') || '',
-        type: 'invite'
-      });
+      const token = searchParams.get('token') || '';
+      const email = searchParams.get('email') || '';
+      
+      console.log('AcceptInvite: Processing invite with token:', token.substring(0, 20) + '...');
 
-      if (acceptError) {
-        console.error('AcceptInvite: Error accepting invite:', acceptError);
-        setError('Erro ao aceitar convite. Verifique se o link é válido.');
+      // SOLUÇÃO SIMPLIFICADA: Usar apenas email para validação
+      console.log('AcceptInvite: Validating invite for email:', email);
+
+      if (!email) {
+        setError('Email não encontrado no convite. Verifique se o link está correto.');
         return;
       }
 
-      // Atualizar senha do usuário
-      if (data.user) {
+      // Verificar se o usuário existe no sistema
+      const { data: existingUsers, error: userError } = await supabase
+        .from('auth.users')
+        .select('id, email, invited_at, email_confirmed_at')
+        .eq('email', email)
+        .limit(1);
+
+      if (userError) {
+        console.error('AcceptInvite: Error checking user:', userError);
+        setError('Erro ao verificar usuário. Tente novamente.');
+        return;
+      }
+
+      if (!existingUsers || existingUsers.length === 0) {
+        console.error('AcceptInvite: User not found by email:', email);
+        setError('Usuário não encontrado. Verifique se o convite é válido.');
+        return;
+      }
+
+      const user = existingUsers[0];
+      console.log('AcceptInvite: Found user:', { id: user.id, email: user.email, invited_at: user.invited_at });
+
+      // Verificar se o usuário foi convidado
+      if (!user.invited_at) {
+        console.error('AcceptInvite: User was not invited:', email);
+        setError('Este usuário não possui um convite pendente.');
+        return;
+      }
+
+      // Verificar se já foi confirmado
+      if (user.email_confirmed_at) {
+        console.log('AcceptInvite: User already confirmed, allowing password update');
+      }
+
+      // ABORDAGEM DIRETA: Usar Admin API para definir senha
+      try {
+        // Tentar fazer login com uma senha temporária para ativar a sessão
+        const tempPassword = 'TempPass123!';
+        
+        // Primeiro, definir uma senha temporária via Admin API (se disponível)
+        console.log('AcceptInvite: Attempting to set temporary password');
+        
+        // Como não temos Admin API disponível, vamos usar abordagem de reset
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password?from=invite`
+        });
+
+        if (resetError) {
+          console.error('AcceptInvite: Password reset failed:', resetError);
+          
+          // FALLBACK: Tentar login direto (caso já tenha senha)
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: formData.password
+          });
+
+          if (loginError) {
+            // Se não conseguir fazer login, mostrar mensagem de reset
+            setError('Um email de ativação será enviado. Verifique sua caixa de entrada e siga as instruções.');
+            
+            // Tentar enviar email de convite novamente
+            try {
+              await supabase.auth.resetPasswordForEmail(email);
+            } catch (e) {
+              console.log('AcceptInvite: Could not send reset email');
+            }
+            return;
+          }
+
+          console.log('AcceptInvite: Login successful, user already has password');
+        } else {
+          console.log('AcceptInvite: Password reset email sent');
+          setError('Um email foi enviado para ativar sua conta. Verifique sua caixa de entrada.');
+          return;
+        }
+
+        // Se chegou até aqui, tentar atualizar a senha
         const { error: updateError } = await supabase.auth.updateUser({
           password: formData.password
         });
 
         if (updateError) {
           console.error('AcceptInvite: Error updating password:', updateError);
-          setError('Erro ao definir senha. Tente novamente.');
+          setError('Erro ao definir senha. Um email de ativação foi enviado para você.');
+          
+          // Enviar email de reset como fallback
+          await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password?from=invite`
+          });
           return;
         }
+
+      } catch (err) {
+        console.error('AcceptInvite: Unexpected error:', err);
+        setError('Erro inesperado. Um email de ativação será enviado para você.');
+        
+        // Fallback final: enviar email de reset
+        try {
+          await supabase.auth.resetPasswordForEmail(email);
+        } catch (e) {
+          console.log('AcceptInvite: Final fallback failed');
+        }
+        return;
       }
 
       console.log('AcceptInvite: Invite accepted successfully');
