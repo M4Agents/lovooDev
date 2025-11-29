@@ -6,9 +6,6 @@ import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
-import { UsersList } from '../components/UserManagement/UsersList';
-import { UserModal } from '../components/UserManagement/UserModal';
-import { CompanyUser } from '../types/user';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -29,10 +26,6 @@ export const Settings: React.FC = () => {
   
   // Estado para mostrar/ocultar API Key
   const [showApiKey, setShowApiKey] = useState(false);
-  
-  // Estados para gestão de usuários
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<CompanyUser | null>(null);
   
   // Estados para Webhook Avançado - MÓDULO ISOLADO
   const [webhookConfig, setWebhookConfig] = useState({
@@ -941,30 +934,6 @@ export const Settings: React.FC = () => {
     };
     setLogsFilters(defaultFilters);
     loadAdvancedLogs(defaultFilters);
-  };
-
-  // =====================================================
-  // FUNÇÕES PARA GESTÃO DE USUÁRIOS
-  // =====================================================
-
-  const handleCreateUser = () => {
-    setEditingUser(null);
-    setShowUserModal(true);
-  };
-
-  const handleEditUser = (user: CompanyUser) => {
-    setEditingUser(user);
-    setShowUserModal(true);
-  };
-
-  const handleCloseUserModal = () => {
-    setShowUserModal(false);
-    setEditingUser(null);
-  };
-
-  const handleSaveUser = () => {
-    // Modal já fecha automaticamente após salvar
-    // UsersList será recarregada automaticamente
   };
 
   return (
@@ -2002,12 +1971,28 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Usuários - NOVA INTERFACE FUNCIONAL */}
+      {/* Aba Usuários - EM DESENVOLVIMENTO */}
       {activeTab === 'usuarios' && (
-        <UsersList
-          onCreateUser={handleCreateUser}
-          onEditUser={handleEditUser}
-        />
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12">
+            <div className="text-center">
+              <div className="p-4 bg-orange-100 rounded-full w-20 h-20 mx-auto mb-6">
+                <Users className="w-12 h-12 text-orange-600 mx-auto mt-2" />
+              </div>
+              <h3 className="text-2xl font-semibold text-slate-900 mb-4">
+                🚧 Gestão de Usuários - Em Desenvolvimento
+              </h3>
+              <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                Funcionalidade para gerenciar usuários, permissões e controle de acesso ao sistema
+              </p>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 max-w-lg mx-auto">
+                <p className="text-sm text-orange-800">
+                  Em breve você poderá adicionar usuários, definir permissões e controlar o acesso às funcionalidades do sistema.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Aba Tracking Site */}
@@ -3114,14 +3099,6 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Modal de Usuários */}
-      <UserModal
-        isOpen={showUserModal}
-        onClose={handleCloseUserModal}
-        onSave={handleSaveUser}
-        user={editingUser}
-      />
 
     </div>
   );

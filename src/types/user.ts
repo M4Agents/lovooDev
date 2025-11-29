@@ -53,6 +53,11 @@ export interface CompanyUser {
     name: string;
     company_type: 'parent' | 'client';
   };
+  companies?: {
+    id: string;
+    name: string;
+    company_type: 'parent' | 'client';
+  };
   user?: {
     id: string;
     email: string;
