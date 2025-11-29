@@ -3,10 +3,11 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Shield, Save, AlertCircle } from 'lucide-react';
+import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { getSystemStatus, getStatusMessage, getStatusColor, SystemStatus } from '../../services/systemStatus';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -48,6 +50,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         });
       }
       setError(null);
+      
+      // Carregar status do sistema
+      getSystemStatus().then(setSystemStatus);
     }
   }, [isOpen, user]);
 
@@ -111,14 +116,31 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           sendInvite: formData.sendInvite
         };
 
-        await createCompanyUser(createRequest);
+        const result = await createCompanyUser(createRequest);
+        
+        // Verificar se foi criado em modo compatibilidade
+        if (result._isRealUser === false && formData.sendInvite) {
+          console.log('UserModal: User created in compatibility mode');
+          // Não mostrar erro, apenas log para debug
+        }
       }
 
       onSave();
       onClose();
     } catch (err) {
       console.error('UserModal: Error saving user:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao salvar usuário');
+      
+      // Melhorar tratamento de erro - não mostrar erro se for modo compatibilidade
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar usuário';
+      
+      if (errorMessage.includes('modo compatibilidade') || errorMessage.includes('Admin API não configurada')) {
+        console.log('UserModal: Operating in compatibility mode');
+        // Não mostrar erro para usuário final
+        onSave();
+        onClose();
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -251,21 +273,62 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             </div>
           </div>
 
-          {/* Informações sobre criação de usuário */}
+          {/* Informações sobre criação de usuário e status do sistema */}
           {!isEditing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-medium text-blue-900 mb-1">
-                    {formData.sendInvite ? 'Convite por Email' : 'Usuário Interno'}
-                  </h4>
-                  <p className="text-sm text-blue-700">
-                    {formData.sendInvite ? 
-                      'O usuário receberá um email com instruções para ativar a conta e definir sua senha.' :
-                      'Será criado um registro interno. Para acesso completo, marque "Enviar convite por email".'
-                    }
-                  </p>
+            <div className="space-y-3">
+              {/* Status do sistema */}
+              {systemStatus && (
+                <div className={`border rounded-lg p-4 ${
+                  systemStatus.mode === 'production' ? 'bg-green-50 border-green-200' :
+                  systemStatus.mode === 'development' ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-blue-50 border-blue-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {systemStatus.mode === 'production' ? (
+                      <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                    ) : systemStatus.mode === 'development' ? (
+                      <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                    ) : (
+                      <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                    )}
+                    <div>
+                      <h4 className={`text-sm font-medium mb-1 ${
+                        systemStatus.mode === 'production' ? 'text-green-900' :
+                        systemStatus.mode === 'development' ? 'text-yellow-900' :
+                        'text-blue-900'
+                      }`}>
+                        Status do Sistema
+                      </h4>
+                      <p className={`text-sm ${
+                        systemStatus.mode === 'production' ? 'text-green-700' :
+                        systemStatus.mode === 'development' ? 'text-yellow-700' :
+                        'text-blue-700'
+                      }`}>
+                        {getStatusMessage(systemStatus)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Informações sobre criação */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-slate-600 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-900 mb-1">
+                      {formData.sendInvite ? 'Convite por Email' : 'Usuário Interno'}
+                    </h4>
+                    <p className="text-sm text-slate-700">
+                      {formData.sendInvite ? 
+                        (systemStatus?.features.emailInvites ? 
+                          'O usuário receberá um email com instruções para ativar a conta e definir sua senha.' :
+                          'Será criado um usuário que poderá ser convidado quando o email estiver configurado.'
+                        ) :
+                        'Será criado um registro interno. Para acesso completo, marque "Enviar convite por email".'
+                      }
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

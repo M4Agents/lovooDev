@@ -362,8 +362,12 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
 
         if (inviteResult.success && inviteResult.user) {
           finalUserId = inviteResult.user.id;
-          isRealUser = true;
-          console.log('UserAPI: Real user invited successfully:', finalUserId);
+          isRealUser = !inviteResult.user.id.startsWith('invite_pending_') && !inviteResult.user.id.startsWith('fallback_');
+          console.log('UserAPI: User invite processed:', {
+            userId: finalUserId,
+            isReal: isRealUser,
+            mode: isRealUser ? 'real' : 'compatibility'
+          });
         } else {
           throw new Error(inviteResult.error || 'Falha ao enviar convite');
         }
@@ -401,7 +405,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     const result = {
       ...data,
       companies: {
-        id: company.id || request.companyId,
+        id: request.companyId,
         name: company.name,
         company_type: company.company_type
       },

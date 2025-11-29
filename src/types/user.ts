@@ -62,6 +62,10 @@ export interface CompanyUser {
     id: string;
     email: string;
   };
+  
+  // Propriedades auxiliares para compatibilidade
+  _isRealUser?: boolean;
+  _email?: string;
 }
 
 export interface CreateUserRequest {
