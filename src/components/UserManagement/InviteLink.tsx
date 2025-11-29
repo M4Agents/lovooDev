@@ -2,9 +2,10 @@
 // MODAL DE LINK DE CONVITE - REENVIO SEGURO
 // =====================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, ExternalLink, Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { CompanyUser } from '../../types/user';
+import { supabase } from '../../lib/supabase';
 
 interface InviteLinkProps {
   isOpen: boolean;
@@ -14,6 +15,38 @@ interface InviteLinkProps {
 
 export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user }) => {
   const [copied, setCopied] = useState(false);
+  const [realEmail, setRealEmail] = useState<string>('');
+
+  // Buscar email real do usuário quando modal abrir
+  useEffect(() => {
+    const fetchRealEmail = async () => {
+      if (!user || !isOpen) return;
+      
+      try {
+        console.log('InviteLink: Fetching real email for user_id:', user.user_id);
+        
+        // Buscar email real do auth.users
+        const { data, error } = await supabase
+          .from('auth.users')
+          .select('email')
+          .eq('id', user.user_id)
+          .single();
+
+        if (!error && data) {
+          console.log('InviteLink: Found real email:', data.email);
+          setRealEmail(data.email);
+        } else {
+          console.error('InviteLink: Error fetching email:', error);
+          setRealEmail(user._email || user.user_id);
+        }
+      } catch (err) {
+        console.error('InviteLink: Error in fetchRealEmail:', err);
+        setRealEmail(user._email || user.user_id);
+      }
+    };
+
+    fetchRealEmail();
+  }, [user, isOpen]);
 
   // Gerar link de convite para o usuário
   const generateInviteLink = (user: CompanyUser): string => {
@@ -22,8 +55,13 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
     // Gerar token baseado no usuário
     const token = btoa(`${user.user_id}:${user.id}:${Date.now()}`);
     
+    // Usar email real se disponível, senão fallback
+    const emailToUse = realEmail || user._email || user.user_id;
+    
+    console.log('InviteLink: Generating link with email:', emailToUse);
+    
     // Construir URL de convite com domínio oficial
-    return `https://app.lovoocrm.com/accept-invite?token=${token}&type=invite&email=${encodeURIComponent(user._email || user.user_id)}&user=${user.id}`;
+    return `https://app.lovoocrm.com/accept-invite?token=${token}&type=invite&email=${encodeURIComponent(emailToUse)}&user=${user.id}`;
   };
 
   const handleCopyLink = async () => {
@@ -88,7 +126,7 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-900">
-                  {user._email || user.user_id}
+                  {realEmail || user._email || user.user_id}
                 </p>
                 <p className="text-xs text-slate-600">
                   Role: {user.role} • ID: {user.id.slice(0, 8)}...
