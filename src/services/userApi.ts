@@ -407,23 +407,38 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       isRealUser = false;
     }
 
-    // Criar registro na tabela company_users
-    const { data, error } = await supabase
-      .from('company_users')
-      .insert({
-        company_id: request.companyId,
-        user_id: finalUserId,
-        role: request.role,
-        permissions: permissions,
-        is_active: true
-      })
-      .select('*')
-      .single();
+    // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
+    const { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
+      p_company_id: request.companyId,
+      p_user_id: finalUserId,
+      p_role: request.role,
+      p_permissions: permissions,
+      p_created_by: currentUser.id
+    });
 
     if (error) {
-      console.error('UserAPI: Error creating company user record:', error);
+      console.error('UserAPI: Error calling create_company_user_safe:', error);
       throw error;
     }
+
+    // Verificar se a função retornou sucesso
+    if (!functionResult?.success) {
+      console.error('UserAPI: Function returned error:', functionResult?.error);
+      throw new Error(functionResult?.error || 'Erro na criação do usuário');
+    }
+
+    // Converter resultado da função para formato esperado
+    const data = {
+      id: functionResult.id,
+      company_id: functionResult.company_id,
+      user_id: functionResult.user_id,
+      role: functionResult.role,
+      permissions: functionResult.permissions,
+      is_active: functionResult.is_active,
+      created_by: functionResult.created_by,
+      created_at: functionResult.created_at,
+      updated_at: functionResult.updated_at
+    };
 
     // Adicionar informações da empresa manualmente (para compatibilidade)
     const result = {
