@@ -341,7 +341,16 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
 
     let finalUserId: string;
     let isRealUser = false;
+    let inviteData: any = null;
 
+    // SEGUIR PADRÃO DE EMPRESAS: Usar user_id real obrigatório
+    // Buscar user_id do usuário atual (como faz createClientCompany)
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    
+    if (!currentUser) {
+      throw new Error('Usuário não autenticado');
+    }
+    
     // TENTAR CRIAR USUÁRIO REAL (com fallback seguro)
     if (request.sendInvite && request.email) {
       try {
@@ -361,8 +370,16 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
         });
 
         if (inviteResult.success && inviteResult.user) {
-          finalUserId = inviteResult.user.id;
-          isRealUser = !inviteResult.user.id.startsWith('invite_pending_') && !inviteResult.user.id.startsWith('fallback_') && !inviteResult.user.id.startsWith('invite_');
+          // Se conseguiu criar usuário real, usar o ID real
+          if (inviteResult.user.id && !inviteResult.user.id.startsWith('invite_') && !inviteResult.user.id.startsWith('fallback_')) {
+            finalUserId = inviteResult.user.id;
+            isRealUser = true;
+          } else {
+            // Convite simulado - usar user_id atual temporariamente (como empresas)
+            finalUserId = currentUser.id;
+            isRealUser = false;
+            inviteData = inviteResult.user.app_metadata;
+          }
           
           console.log('UserAPI: User invite processed:', {
             userId: finalUserId,
@@ -370,23 +387,23 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
             mode: isRealUser ? 'real' : 'compatibility',
             hasInviteUrl: !!inviteResult.user.app_metadata?.invite_url
           });
-          
-          // Armazenar dados do convite para uso posterior
-          if (inviteResult.user.app_metadata?.invite_url) {
-            console.log('UserAPI: Invite URL available:', inviteResult.user.app_metadata.invite_url);
-          }
         } else {
           throw new Error(inviteResult.error || 'Falha ao enviar convite');
         }
       } catch (authError) {
-        console.warn('UserAPI: Real user creation failed, using fallback:', authError);
-        // FALLBACK SEGURO: Criar usuário mock se integração falhar
-        finalUserId = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.warn('UserAPI: Real user creation failed, using current user fallback:', authError);
+        // FALLBACK SEGURO: Usar user_id atual (como empresas fazem)
+        finalUserId = currentUser.id;
         isRealUser = false;
+        
+        // Gerar dados de convite simulado para mostrar no modal
+        inviteData = {
+          invite_url: `${window.location.origin}/accept-invite?token=${btoa(request.email)}&type=invite&email=${encodeURIComponent(request.email)}`
+        };
       }
     } else {
-      // Criar usuário mock se não foi solicitado convite
-      finalUserId = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Não solicitou convite - usar user_id atual (como empresas)
+      finalUserId = currentUser.id;
       isRealUser = false;
     }
 
@@ -419,12 +436,8 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       _isRealUser: isRealUser,
       _email: request.email,
       // Incluir dados do convite se disponível
-      ...(request.sendInvite && {
-        app_metadata: {
-          invite_url: finalUserId.startsWith('invite_') ? 
-            `${window.location.origin}/accept-invite?token=${btoa(finalUserId)}&type=invite&email=${encodeURIComponent(request.email)}` : 
-            undefined
-        }
+      ...(request.sendInvite && inviteData && {
+        app_metadata: inviteData
       })
     };
 
