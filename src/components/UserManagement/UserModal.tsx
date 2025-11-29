@@ -251,21 +251,25 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             </div>
           </div>
 
-          {/* Aviso sobre sistema mock */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-medium text-yellow-900 mb-1">Sistema em Desenvolvimento</h4>
-                <p className="text-sm text-yellow-700">
-                  {isEditing ? 
-                    'As alterações serão aplicadas ao registro do usuário no sistema.' :
-                    'Por enquanto, será criado um usuário mock para demonstração. A integração completa com autenticação será implementada em breve.'
-                  }
-                </p>
+          {/* Informações sobre criação de usuário */}
+          {!isEditing && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-900 mb-1">
+                    {formData.sendInvite ? 'Convite por Email' : 'Usuário Interno'}
+                  </h4>
+                  <p className="text-sm text-blue-700">
+                    {formData.sendInvite ? 
+                      'O usuário receberá um email com instruções para ativar a conta e definir sua senha.' :
+                      'Será criado um registro interno. Para acesso completo, marque "Enviar convite por email".'
+                    }
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}

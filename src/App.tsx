@@ -11,6 +11,7 @@ import { Companies } from './pages/Companies';
 import { Leads } from './pages/Leads';
 import { PlansManagement } from './pages/PlansManagement';
 import Chat from './pages/Chat';
+import { AcceptInvite } from './pages/AcceptInvite';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -59,6 +60,10 @@ function AppRoutes() {
             <Login />
           </PublicRoute>
         }
+      />
+      <Route
+        path="/accept-invite"
+        element={<AcceptInvite />}
       />
       <Route
         path="/dashboard"
