@@ -1,0 +1,30 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	FOTO_CHAT.md
+	api/uazapi-webhook-final.js.backup-20251127-154509
+	api/uazapi-webhook-final.js.backup-pre-sync-20251127-160941
+	backups/
+	src.backup-lead-fields-20251128-132622/
+	src.backup-tags-20251128-115921/
+	src/components/LeadModal.backup-ui-20251128-140643.tsx
+	src/components/LeadModal.tsx.backup-20251127-164835
+	src/components/LeadModal.tsx.backup-record-type-20251128-112017
+	src/components/TagsManagementModal.tsx.backup-debug-20251128-122819
+	src/components/TagsManagementModal.tsx.backup-delete-fix-20251128-122201
+	src/components/TagsManagementModal.tsx.backup-remove-logs-20251128-124402
+	src/components/TagsManagementModal.tsx.backup-timing-fix-20251128-123350
+	src/components/WhatsAppChat/ChatArea/ChatArea.tsx.backup-20251127-164820
+	src/components/WhatsAppChat/ChatArea/ChatArea.tsx.backup-unificacao-20251127-165710
+	src/components/WhatsAppChat/ConversationSidebar/ConversationSidebar.tsx.backup-20251127-162812
+	src/components/WhatsAppChat/LeadPanel/LeadPanel.tsx.backup-20251127-164827
+	src/components/WhatsAppChat/LeadPanel/LeadPanel.tsx.backup-leadmodal-integration-20251129-064503
+	src/pages/Leads.tsx.backup-record-type-20251128-113648
+	src/services/api.ts.backup-record-type-20251128-112025
+	src/services/chat/chatApi.ts.backup-20251127-162805
+	src/services/tagsApi.ts.backup-remove-logs-20251128-124418
+	src/types/whatsapp-chat.ts.backup-20251127-162739
+
+nothing added to commit but untracked files present (use "git add" to track)

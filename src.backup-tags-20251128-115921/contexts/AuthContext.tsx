@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, Company } from '../lib/supabase';
-import { UserRole, CompanyUser, UserPermissions, LegacyUserInfo } from '../types/user';
 
 type AuthContextType = {
   user: User | null;
@@ -10,12 +9,6 @@ type AuthContextType = {
   isImpersonating: boolean;
   originalUser: User | null;
   availableCompanies: Company[];
-  // Novos campos para sistema de usuários
-  userRoles: CompanyUser[];
-  currentRole: UserRole | null;
-  userPermissions: UserPermissions | null;
-  legacyInfo: LegacyUserInfo | null;
-  // Métodos existentes
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, companyName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -23,10 +16,6 @@ type AuthContextType = {
   impersonateUser: (companyId: string) => Promise<void>;
   stopImpersonation: () => Promise<void>;
   switchCompany: (companyId: string) => void;
-  // Novos métodos
-  hasPermission: (permission: keyof UserPermissions) => boolean;
-  canImpersonateCompany: (companyId: string) => Promise<boolean>;
-  refreshUserRoles: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,12 +32,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored ? JSON.parse(stored) : null;
   });
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
-  
-  // Novos estados para sistema de usuários
-  const [userRoles, setUserRoles] = useState<CompanyUser[]>([]);
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
-  const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
-  const [legacyInfo, setLegacyInfo] = useState<LegacyUserInfo | null>(null);
 
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
@@ -189,17 +172,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Buscar empresa sempre que tiver usuário
         if (session?.user) {
           await fetchCompany(session.user.id);
-          // Carregar roles do usuário após carregar empresa
-          setTimeout(() => {
-            refreshUserRoles();
-          }, 100);
         } else {
           setCompany(null);
-          setUserRoles([]);
-          setCurrentRole(null);
-          setUserPermissions(null);
-          setLegacyInfo(null);
-        }  
+        }
       })();
     });
 
@@ -362,132 +337,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // =====================================================
-  // NOVAS FUNÇÕES PARA SISTEMA DE USUÁRIOS
-  // =====================================================
-
-  const refreshUserRoles = async () => {
-    if (!user) return;
-
-    try {
-      console.log('AuthContext: Refreshing user roles for:', user.id);
-      
-      // Buscar roles do usuário na nova estrutura
-      const { data: roles, error } = await supabase
-        .from('company_users')
-        .select(`
-          *,
-          companies:company_id (
-            id,
-            name,
-            company_type
-          )
-        `)
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-
-      if (error) {
-        console.warn('AuthContext: Error fetching user roles:', error);
-        setUserRoles([]);
-        return;
-      }
-
-      console.log('AuthContext: User roles found:', roles);
-      setUserRoles(roles || []);
-
-      // Determinar role atual baseado na empresa ativa
-      if (company && roles) {
-        const currentCompanyRole = roles.find(r => r.company_id === company.id);
-        if (currentCompanyRole) {
-          setCurrentRole(currentCompanyRole.role);
-          setUserPermissions(currentCompanyRole.permissions);
-        }
-      }
-
-      // Criar informações de compatibilidade
-      const hasLegacyRole = company?.is_super_admin || false;
-      const legacyRole = company?.is_super_admin ? 'super_admin' : 
-                        company?.company_type === 'parent' ? 'admin' : undefined;
-      
-      setLegacyInfo({
-        hasLegacyRole,
-        legacyRole,
-        newRoles: roles || [],
-        primaryRole: roles?.[0]?.role || null,
-        canImpersonate: hasLegacyRole || (roles?.some(r => r.role === 'super_admin') || false)
-      });
-
-    } catch (error) {
-      console.error('AuthContext: Error in refreshUserRoles:', error);
-      setUserRoles([]);
-      setCurrentRole(null);
-      setUserPermissions(null);
-      setLegacyInfo(null);
-    }
-  };
-
-  const hasPermission = (permission: keyof UserPermissions): boolean => {
-    // Fallback para sistema atual (compatibilidade)
-    if (company?.is_super_admin) {
-      return true; // Super admin tem todas as permissões
-    }
-
-    // Usar novo sistema de permissões se disponível
-    if (userPermissions) {
-      return userPermissions[permission] === true;
-    }
-
-    // Fallback baseado no role atual
-    if (currentRole) {
-      switch (currentRole) {
-        case 'super_admin':
-          return true;
-        case 'admin':
-          return permission !== 'financial' && permission !== 'companies';
-        case 'partner':
-          return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission);
-        case 'manager':
-          return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission) && permission !== 'edit_all_leads';
-        case 'seller':
-          return ['dashboard', 'leads', 'chat'].includes(permission);
-        default:
-          return false;
-      }
-    }
-
-    // Fallback final para sistema legado
-    return company?.company_type === 'parent' || false;
-  };
-
-  const canImpersonateCompany = async (companyId: string): Promise<boolean> => {
-    if (!user) return false;
-
-    try {
-      // Verificar sistema atual (compatibilidade)
-      if (company?.is_super_admin) {
-        return true;
-      }
-
-      // Verificar novo sistema
-      const { data, error } = await supabase
-        .rpc('can_impersonate_company', {
-          p_user_id: user.id,
-          p_target_company_id: companyId
-        });
-
-      if (error) {
-        console.warn('AuthContext: Error checking impersonation permission:', error);
-        // Fallback para sistema atual
-        return company?.is_super_admin || false;
-      }
-
-      return data || false;
-    } catch (error) {
-      console.error('AuthContext: Error in canImpersonateCompany:', error);
-      return company?.is_super_admin || false;
-    }
-  };
-
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -496,23 +345,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isImpersonating,
       originalUser,
       availableCompanies,
-      // Novos campos
-      userRoles,
-      currentRole,
-      userPermissions,
-      legacyInfo,
-      // Métodos existentes
       signIn, 
       signUp, 
       signOut, 
       refreshCompany,
       impersonateUser,
       stopImpersonation,
-      switchCompany,
-      // Novos métodos
-      hasPermission,
-      canImpersonateCompany,
-      refreshUserRoles
+      switchCompany
     }}>
       {children}
     </AuthContext.Provider>

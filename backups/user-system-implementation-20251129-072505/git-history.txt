@@ -1,0 +1,10 @@
+74345fa feat(chat): integrar LeadModal completo no painel do chat
+8256455 fix: corrigir estrutura de abas e agrupar conteúdo em 'Dados do Lead'
+2f9844f feat(ui): criar nova aba 'Redes Sociais' entre Endereço e Anúncios
+af00271 feat(ui): reorganizar layout completo das seções do lead
+567ed24 feat(ui): reorganizar layout dos campos profissionais e interesse
+370209a feat(ui): reorganizar layout das redes sociais para vertical
+ee6afaa feat(ui): alterar layout dos campos profissionais para vertical
+680e739 fix: corrigir erro de build e melhorar estilos dos inputs
+44cb71b feat(ui): melhorar interface visual do LeadModal
+7c95174 feat(leads): implementar novos campos no cadastro de leads
