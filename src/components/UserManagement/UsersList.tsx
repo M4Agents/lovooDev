@@ -3,10 +3,11 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Trash2, Shield, Crown, UserCheck, Briefcase, User } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { InviteLink } from './InviteLink';
 
 interface UsersListProps {
   onCreateUser: () => void;
@@ -18,6 +19,8 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInviteLink, setShowInviteLink] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<CompanyUser | null>(null);
 
   // Carregar usuários
   const loadUsers = async () => {
@@ -50,17 +53,23 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
 
   // Desativar usuário
   const handleDeactivateUser = async (user: CompanyUser) => {
-    if (!confirm(`Tem certeza que deseja desativar o usuário "${user.user_id}"?`)) {
+    if (!confirm(`Tem certeza que deseja desativar o usuário ${user.user_id}?`)) {
       return;
     }
 
     try {
       await deactivateUser(user.id);
       await loadUsers(); // Recarregar lista
-    } catch (err) {
-      console.error('UsersList: Error deactivating user:', err);
-      alert('Erro ao desativar usuário');
+    } catch (error) {
+      console.error('Error deactivating user:', error);
+      setError('Erro ao desativar usuário');
     }
+  };
+
+  // Mostrar link de convite
+  const handleShowInviteLink = (user: CompanyUser) => {
+    setSelectedUser(user);
+    setShowInviteLink(true);
   };
 
   // Ícone do role
@@ -259,6 +268,15 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center gap-2 justify-end">
+                        {hasPermission('create_users') && (
+                          <button
+                            onClick={() => handleShowInviteLink(user)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded transition-colors"
+                            title="Reenviar convite"
+                          >
+                            <Mail className="w-4 h-4" />
+                          </button>
+                        )}
                         {hasPermission('edit_users') && (
                           <button
                             onClick={() => onEditUser(user)}
@@ -304,6 +322,16 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
           </div>
         </div>
       )}
+
+      {/* Modal de Link de Convite */}
+      <InviteLink
+        isOpen={showInviteLink}
+        onClose={() => {
+          setShowInviteLink(false);
+          setSelectedUser(null);
+        }}
+        user={selectedUser}
+      />
     </div>
   );
 };
