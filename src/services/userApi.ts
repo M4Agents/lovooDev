@@ -170,7 +170,8 @@ export const canCreateUser = async (companyId: string): Promise<boolean> => {
  * Valida se o role é válido para o tipo de empresa
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
-  const parentRoles: UserRole[] = ['super_admin', 'admin', 'partner'];
+  // Empresas parent (super admin) podem criar qualquer tipo de usuário
+  const parentRoles: UserRole[] = ['super_admin', 'admin', 'partner', 'manager', 'seller'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
   if (companyType === 'parent') {
@@ -538,17 +539,28 @@ export const deactivateUser = async (userId: string): Promise<boolean> => {
   try {
     console.log('UserAPI: Deactivating user:', userId);
 
-    const { error } = await supabase
-      .from('company_users')
-      .update({ 
-        is_active: false,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId);
+    // Buscar user_id do usuário atual para permissões
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    
+    if (!currentUser) {
+      throw new Error('Usuário não autenticado');
+    }
+
+    // Usar função SECURITY DEFINER para desativação segura
+    const { data: functionResult, error } = await supabase.rpc('deactivate_company_user_safe', {
+      p_user_id: userId,
+      p_deactivated_by: currentUser.id
+    });
 
     if (error) {
-      console.error('UserAPI: Error deactivating user:', error);
+      console.error('UserAPI: Error calling deactivate_company_user_safe:', error);
       throw error;
+    }
+
+    // Verificar se a função retornou sucesso
+    if (!functionResult?.success) {
+      console.error('UserAPI: Function returned error:', functionResult?.error);
+      throw new Error(functionResult?.error || 'Erro na desativação do usuário');
     }
 
     console.log('UserAPI: User deactivated successfully');
