@@ -7,7 +7,8 @@ import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info } from 'luc
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
-import { getSystemStatus, getStatusMessage, getStatusColor, SystemStatus } from '../../services/systemStatus';
+import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
+import { InviteSuccess } from './InviteSuccess';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [showInviteSuccess, setShowInviteSuccess] = useState(false);
+  const [inviteData, setInviteData] = useState<any>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -118,10 +121,19 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
         const result = await createCompanyUser(createRequest);
         
-        // Verificar se foi criado em modo compatibilidade
-        if (result._isRealUser === false && formData.sendInvite) {
-          console.log('UserModal: User created in compatibility mode');
-          // Não mostrar erro, apenas log para debug
+        // Verificar se foi criado com convite e mostrar modal de sucesso
+        if (formData.sendInvite) {
+          const mode = result._isRealUser ? 'real' : 'simulated';
+          
+          setInviteData({
+            email: formData.email,
+            inviteUrl: (result as any).app_metadata?.invite_url,
+            mode,
+            message: mode === 'simulated' ? 'Configure Admin API para envio real de emails' : undefined
+          });
+          
+          setShowInviteSuccess(true);
+          console.log('UserModal: User created with invite:', { mode, email: formData.email });
         }
       }
 
@@ -358,6 +370,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           </button>
         </div>
       </div>
+
+      {/* Modal de Sucesso do Convite */}
+      <InviteSuccess
+        isOpen={showInviteSuccess}
+        onClose={() => setShowInviteSuccess(false)}
+        inviteData={inviteData || { email: '', mode: 'simulated' }}
+      />
     </div>
   );
 };
