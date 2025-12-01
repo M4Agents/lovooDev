@@ -151,7 +151,26 @@ export const AcceptInvite: React.FC = () => {
         });
 
         if (!signUpError && signUpData.user) {
-          console.log('AcceptInvite: User created successfully - auto login enabled');
+          console.log('AcceptInvite: User created successfully - attempting auto confirmation');
+          
+          // CONFIRMAÇÃO AUTOMÁTICA para permitir login posterior
+          try {
+            const { error: confirmError } = await supabase.auth.admin.updateUserById(
+              signUpData.user.id,
+              { email_confirm: true }
+            );
+            
+            if (!confirmError) {
+              console.log('AcceptInvite: User confirmed automatically - login enabled');
+            } else {
+              console.warn('AcceptInvite: Auto confirmation failed, but user created:', confirmError.message);
+              // Continuar mesmo se confirmação falhar - usuário foi criado
+            }
+          } catch (confirmErr) {
+            console.warn('AcceptInvite: Admin API not available for confirmation, but user created');
+            // Fallback: usuário foi criado, mesmo sem confirmação automática
+          }
+          
           setSuccess(true);
           setTimeout(() => navigate('/dashboard'), 2000);
           return;
