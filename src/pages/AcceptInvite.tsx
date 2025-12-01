@@ -29,10 +29,52 @@ export const AcceptInvite: React.FC = () => {
     company_name?: string;
   }>({});
 
-  // Verificar se há token de convite na URL
+  // Função para verificar status de autenticação do usuário
+  const checkUserAuthStatus = async () => {
+    try {
+      console.log('AcceptInvite: Checking user authentication status');
+      
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.log('AcceptInvite: Error getting user:', error);
+        return;
+      }
+      
+      if (user && user.email_confirmed_at) {
+        console.log('AcceptInvite: User is confirmed and logged in, redirecting to dashboard');
+        setSuccess(true);
+        setTimeout(() => navigate('/dashboard'), 2000);
+        return;
+      }
+      
+      if (user && !user.email_confirmed_at) {
+        console.log('AcceptInvite: User exists but not confirmed');
+        // Usuário existe mas não confirmado - permitir definir senha
+        const emailFromUrl = searchParams.get('email');
+        if (emailFromUrl) {
+          setInviteInfo(prev => ({ ...prev, email: emailFromUrl }));
+        }
+        return;
+      }
+      
+      console.log('AcceptInvite: No authenticated user found');
+    } catch (error) {
+      console.error('AcceptInvite: Error checking auth status:', error);
+    }
+  };
+
+  // Verificar se há token de convite na URL e processar usuário já confirmado
   useEffect(() => {
     const token = searchParams.get('token');
     const type = searchParams.get('type');
+    const confirmed = searchParams.get('confirmed');
+    
+    // NOVA LÓGICA: Verificar se usuário já foi confirmado via email
+    if (confirmed === 'true') {
+      console.log('AcceptInvite: User already confirmed via email link');
+      checkUserAuthStatus();
+    }
     
     if (type === 'invite' && token) {
       // Token de convite válido
@@ -148,7 +190,7 @@ export const AcceptInvite: React.FC = () => {
           email: email,
           password: formData.password,
           options: {
-            emailRedirectTo: `https://app.lovoocrm.com/login?confirmed=true&email=${encodeURIComponent(email)}`
+            emailRedirectTo: `https://app.lovoocrm.com/accept-invite?confirmed=true&token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
           }
         });
 
@@ -199,17 +241,31 @@ export const AcceptInvite: React.FC = () => {
           
           // FALLBACK SEGURO: Mostrar que email foi enviado via SMTP personalizado
           console.log('AcceptInvite: User created, confirmation email sent via custom SMTP');
-          setError(`✅ Conta criada com sucesso!
           
+          // Verificar se usuário veio de confirmação via email
+          const confirmed = searchParams.get('confirmed');
+          if (confirmed === 'true') {
+            setError(`✅ Conta ativada com sucesso!
+            
+🎉 Sua conta foi confirmada via email e está pronta para uso.
+
+🔗 Faça login em: ${window.location.origin}/login
+
+📧 Use o email: ${email}
+🔑 Use a senha que você acabou de definir.`);
+          } else {
+            setError(`✅ Conta criada com sucesso!
+            
 📧 Um email de confirmação foi enviado para: ${email}
 
 📬 Verifique sua caixa de entrada (e pasta de spam) e clique no link para ativar sua conta.
 
 ✉️ Email enviado de: noreply@lovoocrm.com
 
-🔗 Após confirmar pelo email, faça login em: ${window.location.origin}/login
+🔗 Após confirmar pelo email, você será redirecionado automaticamente.
 
 ⏱️ O link de confirmação é válido por 24 horas.`);
+          }
           return;
         }
       } catch (e) {
