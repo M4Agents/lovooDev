@@ -141,13 +141,15 @@ export const AcceptInvite: React.FC = () => {
         console.log('AcceptInvite: Direct login failed, trying other strategies');
       }
 
-      // ESTRATÉGIA 2: Criar usuário SEM envio de email (SOLUÇÃO PRINCIPAL)
-      console.log('AcceptInvite: Strategy 2 - Creating user without email confirmation');
+      // ESTRATÉGIA 2: Criar usuário COM email personalizado via SMTP configurado
+      console.log('AcceptInvite: Strategy 2 - Creating user with custom SMTP email');
       try {
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: email,
-          password: formData.password
-          // SEM options.emailRedirectTo - não envia email automático!
+          password: formData.password,
+          options: {
+            emailRedirectTo: `https://app.lovoocrm.com/login?confirmed=true&email=${encodeURIComponent(email)}`
+          }
         });
 
         if (!signUpError && signUpData.user) {
@@ -195,10 +197,19 @@ export const AcceptInvite: React.FC = () => {
             console.log('AcceptInvite: Login attempt failed, continuing with fallbacks');
           }
           
-          // FALLBACK SEGURO: Se tudo falhar, mostrar sucesso (usuário foi criado)
-          console.log('AcceptInvite: User created successfully via invite, showing success');
-          setSuccess(true);
-          setTimeout(() => navigate('/dashboard'), 2000);
+          // FALLBACK SEGURO: Mostrar que email foi enviado via SMTP personalizado
+          console.log('AcceptInvite: User created, confirmation email sent via custom SMTP');
+          setError(`✅ Conta criada com sucesso!
+          
+📧 Um email de confirmação foi enviado para: ${email}
+
+📬 Verifique sua caixa de entrada (e pasta de spam) e clique no link para ativar sua conta.
+
+✉️ Email enviado de: noreply@lovoocrm.com
+
+🔗 Após confirmar pelo email, faça login em: ${window.location.origin}/login
+
+⏱️ O link de confirmação é válido por 24 horas.`);
           return;
         }
       } catch (e) {
