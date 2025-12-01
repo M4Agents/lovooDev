@@ -276,11 +276,21 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                           </div>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-slate-900">
-                            {user.user_id.startsWith('mock_') ? 
-                              `Usuário Mock ${user.user_id.slice(-4)}` : 
-                              user.display_name || user.user_id
-                            }
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium text-slate-900">
+                              {user.user_id.startsWith('mock_') ? 
+                                `Usuário Mock ${user.user_id.slice(-4)}` : 
+                                user.display_name || user.user_id
+                              }
+                            </div>
+                            {/* Indicador de status */}
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              user.is_active 
+                                ? 'bg-green-100 text-green-800 border border-green-200' 
+                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            }`}>
+                              {user.is_active ? '🟢 Ativo' : '⚪ Inativo'}
+                            </span>
                           </div>
                           <div className="text-sm text-slate-500">
                             {user.email || user.user_id}
@@ -333,7 +343,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                             <button
                               onClick={() => handleDeactivateUser(user)}
                               className="text-orange-600 hover:text-orange-900 p-1 rounded transition-colors"
-                              title="Desativar usuário (reversível)"
+                              title="🔒 PASSO 1: Desativar usuário (reversível) - Necessário antes de excluir usuários ativos"
                             >
                               <UserX className="w-4 h-4" />
                             </button>
@@ -342,7 +352,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
-                              title="⚠️ EXCLUIR PERMANENTEMENTE (irreversível)"
+                              title="🗑️ PASSO 2: Excluir permanentemente (irreversível) - Só funciona com usuários inativos"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

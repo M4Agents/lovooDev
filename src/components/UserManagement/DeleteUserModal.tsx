@@ -52,7 +52,25 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
       await onConfirm(user);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao excluir usuário');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao excluir usuário';
+      
+      // Detectar erro de proteção e fornecer orientação clara
+      if (errorMessage.includes('PROTEÇÃO ATIVADA') || errorMessage.includes('ativo em')) {
+        setError(`🛡️ Usuário Protegido Contra Exclusão
+
+Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente.
+
+📋 Para excluir com segurança, siga estes passos:
+
+1️⃣ Primeiro: Clique no botão LARANJA (👤❌) para DESATIVAR o usuário
+2️⃣ Depois: Clique no botão VERMELHO (🗑️) para EXCLUIR permanentemente
+
+🔒 Esta proteção evita exclusões acidentais de usuários ativos.
+
+💡 Dica: Usuários desativados podem ser reativados, mas usuários excluídos não podem ser recuperados.`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -169,8 +187,22 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm text-red-600">{error}</p>
+                <div className={`border rounded-lg p-4 ${
+                  error.includes('🛡️ Usuário Protegido') 
+                    ? 'bg-amber-50 border-amber-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className={`text-sm ${
+                    error.includes('🛡️ Usuário Protegido')
+                      ? 'text-amber-800'
+                      : 'text-red-600'
+                  }`}>
+                    {error.split('\n').map((line, index) => (
+                      <div key={index} className={index === 0 ? 'font-semibold mb-2' : 'mb-1'}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
