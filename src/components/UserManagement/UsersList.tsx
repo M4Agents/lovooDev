@@ -3,11 +3,12 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Trash2, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, AlertTriangle } from 'lucide-react';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { InviteLink } from './InviteLink';
+import { supabase } from '../../lib/supabase';
 
 interface UsersListProps {
   onCreateUser: () => void;
@@ -51,9 +52,9 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
     loadUsers();
   }, [company?.id]);
 
-  // Desativar usuário
+  // Desativar usuário (soft delete)
   const handleDeactivateUser = async (user: CompanyUser) => {
-    if (!confirm(`Tem certeza que deseja desativar o usuário ${user.user_id}?`)) {
+    if (!confirm(`🔒 DESATIVAR USUÁRIO\n\nTem certeza que deseja desativar o usuário ${user.user_id}?\n\n• O usuário será desativado mas permanecerá no sistema\n• Pode ser reativado posteriormente\n• Não perderá dados ou histórico`)) {
       return;
     }
 
@@ -63,6 +64,46 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
     } catch (error) {
       console.error('Error deactivating user:', error);
       setError('Erro ao desativar usuário');
+    }
+  };
+
+  // Excluir usuário permanentemente (hard delete)
+  const handleDeleteUser = async (user: CompanyUser) => {
+    // Primeira confirmação
+    if (!confirm(`⚠️ EXCLUSÃO PERMANENTE\n\nATENÇÃO: Tem certeza que deseja EXCLUIR PERMANENTEMENTE o usuário ${user.user_id}?\n\n🚨 ESTA AÇÃO NÃO PODE SER DESFEITA!\n\n• O usuário será removido completamente\n• Todos os dados serão perdidos\n• Não poderá ser recuperado`)) {
+      return;
+    }
+
+    // Segunda confirmação para segurança
+    const confirmText = prompt(`🔴 CONFIRMAÇÃO FINAL\n\nPara confirmar a exclusão permanente, digite: EXCLUIR\n\n(Digite exatamente: EXCLUIR)`);
+    
+    if (confirmText !== 'EXCLUIR') {
+      alert('❌ Exclusão cancelada. Texto de confirmação incorreto.');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      // Usar nossa função segura de exclusão completa
+      const { data, error } = await supabase.rpc('safe_delete_user_complete', {
+        p_user_email: user.user_id // Assumindo que user_id é o email
+      });
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro na exclusão do usuário');
+      }
+      
+      alert(`✅ Usuário ${user.user_id} excluído permanentemente com sucesso!`);
+      await loadUsers(); // Recarregar lista
+      
+    } catch (error) {
+      console.error('Error deleting user permanently:', error);
+      setError(`Erro ao excluir usuário: ${error.message}`);
     }
   };
 
@@ -287,13 +328,25 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                           </button>
                         )}
                         {hasPermission('delete_users') && (
-                          <button
-                            onClick={() => handleDeactivateUser(user)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
-                            title="Desativar usuário"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <>
+                            {/* Botão Desativar (Soft Delete) */}
+                            <button
+                              onClick={() => handleDeactivateUser(user)}
+                              className="text-orange-600 hover:text-orange-900 p-1 rounded transition-colors"
+                              title="Desativar usuário (reversível)"
+                            >
+                              <UserX className="w-4 h-4" />
+                            </button>
+                            
+                            {/* Botão Excluir Permanentemente (Hard Delete) */}
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
+                              title="⚠️ EXCLUIR PERMANENTEMENTE (irreversível)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
