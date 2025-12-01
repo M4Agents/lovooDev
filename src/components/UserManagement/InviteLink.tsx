@@ -25,16 +25,14 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
       try {
         console.log('InviteLink: Fetching real email for user_id:', user.user_id);
         
-        // Buscar email real do auth.users
-        const { data, error } = await supabase
-          .from('auth.users')
-          .select('email')
-          .eq('id', user.user_id)
-          .single();
+        // Buscar email real usando função RPC segura
+        const { data: emailResult, error } = await supabase.rpc('get_user_email_safe', {
+          p_user_id: user.user_id
+        });
 
-        if (!error && data) {
-          console.log('InviteLink: Found real email:', data.email);
-          setRealEmail(data.email);
+        if (!error && emailResult) {
+          console.log('InviteLink: Found real email:', emailResult);
+          setRealEmail(emailResult);
         } else {
           console.error('InviteLink: Error fetching email:', error);
           setRealEmail(user._email || user.user_id);

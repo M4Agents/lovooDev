@@ -140,14 +140,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             let emailForLink = formData.email;
             if (result && (result as any).user_id) {
               try {
-                const { data: userData } = await supabase
-                  .from('auth.users')
-                  .select('email')
-                  .eq('id', (result as any).user_id)
-                  .single();
+                const { data: emailResult, error } = await supabase.rpc('get_user_email_safe', {
+                  p_user_id: (result as any).user_id
+                });
                 
-                if (userData?.email) {
-                  emailForLink = userData.email;
+                if (!error && emailResult) {
+                  emailForLink = emailResult;
                   console.log('UserModal: Using real email for link:', emailForLink);
                 }
               } catch (e) {
