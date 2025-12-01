@@ -151,9 +151,28 @@ export const AcceptInvite: React.FC = () => {
         });
 
         if (!signUpError && signUpData.user) {
-          console.log('AcceptInvite: User created successfully - attempting auto confirmation');
+          console.log('AcceptInvite: User created successfully - attempting immediate login');
           
-          // CONFIRMAÇÃO AUTOMÁTICA para permitir login posterior
+          // SOLUÇÃO 3: Tentar login imediato (não depende de Admin API)
+          try {
+            const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+              email: email,
+              password: formData.password
+            });
+            
+            if (!loginError && loginData.user) {
+              console.log('AcceptInvite: Immediate login successful - user can access system');
+              setSuccess(true);
+              setTimeout(() => navigate('/dashboard'), 2000);
+              return;
+            } else {
+              console.log('AcceptInvite: Immediate login failed, trying Admin API confirmation');
+            }
+          } catch (loginErr) {
+            console.log('AcceptInvite: Immediate login error, trying Admin API confirmation');
+          }
+          
+          // FALLBACK: CONFIRMAÇÃO AUTOMÁTICA via Admin API (lógica original mantida)
           try {
             const { error: confirmError } = await supabase.auth.admin.updateUserById(
               signUpData.user.id,
@@ -161,7 +180,7 @@ export const AcceptInvite: React.FC = () => {
             );
             
             if (!confirmError) {
-              console.log('AcceptInvite: User confirmed automatically - login enabled');
+              console.log('AcceptInvite: User confirmed automatically via Admin API - login enabled');
             } else {
               console.warn('AcceptInvite: Auto confirmation failed, but user created:', confirmError.message);
               // Continuar mesmo se confirmação falhar - usuário foi criado
