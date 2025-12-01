@@ -134,15 +134,34 @@ export const AcceptInvite: React.FC = () => {
         if (!loginError && loginData.user) {
           console.log('AcceptInvite: Direct login successful - user already activated');
           setSuccess(true);
-          setTimeout(() => navigate('/dashboard'), 3000);
+          setTimeout(() => navigate('/dashboard'), 2000);
           return;
         }
       } catch (e) {
         console.log('AcceptInvite: Direct login failed, trying other strategies');
       }
 
-      // ESTRATÉGIA 2: Tentar como convite real do Supabase
-      console.log('AcceptInvite: Strategy 2 - Attempting Supabase invite verification');
+      // ESTRATÉGIA 2: Criar usuário SEM envio de email (SOLUÇÃO PRINCIPAL)
+      console.log('AcceptInvite: Strategy 2 - Creating user without email confirmation');
+      try {
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: email,
+          password: formData.password
+          // SEM options.emailRedirectTo - não envia email automático!
+        });
+
+        if (!signUpError && signUpData.user) {
+          console.log('AcceptInvite: User created successfully - auto login enabled');
+          setSuccess(true);
+          setTimeout(() => navigate('/dashboard'), 2000);
+          return;
+        }
+      } catch (e) {
+        console.log('AcceptInvite: User creation failed, trying Supabase invite verification');
+      }
+
+      // ESTRATÉGIA 3: Tentar como convite real do Supabase (fallback)
+      console.log('AcceptInvite: Strategy 3 - Attempting Supabase invite verification');
       try {
         const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
           token_hash: token,
@@ -160,48 +179,28 @@ export const AcceptInvite: React.FC = () => {
           if (!updateError) {
             console.log('AcceptInvite: Password set successfully via Supabase invite');
             setSuccess(true);
-            setTimeout(() => navigate('/dashboard'), 3000);
+            setTimeout(() => navigate('/dashboard'), 2000);
             return;
           }
         }
       } catch (e) {
-        console.log('AcceptInvite: Supabase invite verification failed, trying reset approach');
+        console.log('AcceptInvite: Supabase invite verification failed, trying reset as last resort');
       }
 
-      // ESTRATÉGIA 3: Reset de senha (fallback mais confiável)
-      console.log('AcceptInvite: Strategy 3 - Using password reset approach');
+      // ESTRATÉGIA 4: Reset de senha (ÚLTIMO RECURSO - ainda pode enviar email)
+      console.log('AcceptInvite: Strategy 4 - Using password reset as last resort');
       try {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `https://app.lovoocrm.com/reset-password?from=invite&email=${encodeURIComponent(email)}`
         });
 
         if (!resetError) {
-          console.log('AcceptInvite: Password reset email sent successfully');
+          console.log('AcceptInvite: Password reset email sent as fallback');
           setError('✅ Um email foi enviado para ativar sua conta! Verifique sua caixa de entrada e clique no link para definir sua senha.');
           return;
         }
       } catch (e) {
         console.log('AcceptInvite: Password reset failed');
-      }
-
-      // ESTRATÉGIA 4: Tentar criar usuário se não existe
-      console.log('AcceptInvite: Strategy 4 - Attempting user creation');
-      try {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: email,
-          password: formData.password,
-          options: {
-            emailRedirectTo: `https://app.lovoocrm.com/dashboard`
-          }
-        });
-
-        if (!signUpError && signUpData.user) {
-          console.log('AcceptInvite: User created successfully');
-          setError('✅ Conta criada! Verifique seu email para confirmar a ativação.');
-          return;
-        }
-      } catch (e) {
-        console.log('AcceptInvite: User creation failed');
       }
 
       // ESTRATÉGIA 5: Fallback final - orientação específica
