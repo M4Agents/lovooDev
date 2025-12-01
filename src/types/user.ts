@@ -63,6 +63,10 @@ export interface CompanyUser {
     email: string;
   };
   
+  // Campos para exibição de nome
+  display_name?: string;  // Nome real do usuário extraído do metadata
+  email?: string;         // Email do usuário para exibição
+  
   // Propriedades auxiliares para compatibilidade
   _isRealUser?: boolean;
   _email?: string;

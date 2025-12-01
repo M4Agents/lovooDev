@@ -3,7 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
@@ -103,7 +103,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
       
     } catch (error) {
       console.error('Error deleting user permanently:', error);
-      setError(`Erro ao excluir usuário: ${error.message}`);
+      setError(`Erro ao excluir usuário: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   };
 
@@ -279,11 +279,11 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                           <div className="text-sm font-medium text-slate-900">
                             {user.user_id.startsWith('mock_') ? 
                               `Usuário Mock ${user.user_id.slice(-4)}` : 
-                              user.user_id
+                              user.display_name || user.user_id
                             }
                           </div>
                           <div className="text-sm text-slate-500">
-                            ID: {user.id.slice(0, 8)}...
+                            {user.email || user.user_id}
                           </div>
                         </div>
                       </div>

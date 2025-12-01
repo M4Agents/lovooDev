@@ -51,25 +51,35 @@ export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]>
 
 /**
  * Busca usuários que o usuário atual pode gerenciar
- * Inclui validação de permissões
+ * Inclui validação de permissões e display_name
  */
 export const getManagedUsers = async (): Promise<CompanyUser[]> => {
   try {
-    console.log('UserAPI: Fetching managed users');
+    console.log('UserAPI: Fetching managed users with display names');
     
-    // Buscar através de consulta simples - RLS filtra automaticamente
+    // Usar RPC para obter usuários com display_name
     const { data, error } = await supabase
-      .from('company_users')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .rpc('get_managed_users_with_details');
 
     if (error) {
-      console.error('UserAPI: Error fetching managed users:', error);
-      throw error;
+      console.error('UserAPI: Error fetching managed users via RPC:', error);
+      
+      // Fallback para consulta simples se RPC falhar
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('company_users')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+        
+      if (fallbackError) {
+        throw fallbackError;
+      }
+      
+      console.log('UserAPI: Using fallback query for managed users:', fallbackData?.length || 0);
+      return fallbackData || [];
     }
 
-    console.log('UserAPI: Found managed users:', data?.length || 0);
+    console.log('UserAPI: Found managed users with display names:', data?.length || 0);
     
     // Se não encontrou dados, pode ser problema de RLS - tentar buscar da empresa atual
     if (!data || data.length === 0) {
@@ -84,13 +94,11 @@ export const getManagedUsers = async (): Promise<CompanyUser[]> => {
           .eq('user_id', user.id);
           
         if (companies && companies.length > 0) {
-          // Buscar usuários da primeira empresa encontrada
+          // Usar função RPC para empresa específica
           const { data: companyUsers } = await supabase
-            .from('company_users')
-            .select('*')
-            .eq('company_id', companies[0].id)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false });
+            .rpc('get_company_users_with_details', {
+              p_company_id: companies[0].id
+            });
             
           return companyUsers || [];
         }
