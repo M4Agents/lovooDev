@@ -69,6 +69,30 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
     }
   };
 
+  // Reativar usuário
+  const handleReactivateUser = async (user: CompanyUser) => {
+    if (!confirm(`✅ REATIVAR USUÁRIO\n\nTem certeza que deseja reativar o usuário ${user.user_id}?\n\n• O usuário voltará a estar ativo no sistema\n• Poderá acessar normalmente\n• Todas as permissões serão restauradas`)) {
+      return;
+    }
+
+    try {
+      // Usar função RPC para reativar (atualizar is_active = true)
+      const { error } = await supabase
+        .from('company_users')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await loadUsers(); // Recarregar lista
+    } catch (error) {
+      console.error('Error reactivating user:', error);
+      setError('Erro ao reativar usuário');
+    }
+  };
+
   // Abrir modal de exclusão
   const handleDeleteUser = (user: CompanyUser) => {
     setSelectedUser(user);
@@ -267,7 +291,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
                 {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50">
+                  <tr key={user.id} className={`hover:bg-slate-50 ${!user.is_active ? 'opacity-75 bg-gray-50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -339,20 +363,30 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
                         )}
                         {hasPermission('delete_users') && (
                           <>
-                            {/* Botão Desativar (Soft Delete) */}
-                            <button
-                              onClick={() => handleDeactivateUser(user)}
-                              className="text-orange-600 hover:text-orange-900 p-1 rounded transition-colors"
-                              title="🔒 PASSO 1: Desativar usuário (reversível) - Necessário antes de excluir usuários ativos"
-                            >
-                              <UserX className="w-4 h-4" />
-                            </button>
+                            {/* Botão Desativar/Reativar */}
+                            {user.is_active ? (
+                              <button
+                                onClick={() => handleDeactivateUser(user)}
+                                className="text-orange-600 hover:text-orange-900 p-1 rounded transition-colors"
+                                title="🔒 PASSO 1: Desativar usuário (reversível) - Necessário antes de excluir usuários ativos"
+                              >
+                                <UserX className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleReactivateUser(user)}
+                                className="text-green-600 hover:text-green-900 p-1 rounded transition-colors"
+                                title="✅ Reativar usuário (tornar ativo novamente)"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                              </button>
+                            )}
                             
                             {/* Botão Excluir Permanentemente (Hard Delete) */}
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
-                              title="🗑️ PASSO 2: Excluir permanentemente (irreversível) - Só funciona com usuários inativos"
+                              title="🗑️ EXCLUIR PERMANENTEMENTE (irreversível) - Funciona com usuários ativos (desativa primeiro) ou inativos"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
