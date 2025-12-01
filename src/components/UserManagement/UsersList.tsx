@@ -8,6 +8,7 @@ import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { InviteLink } from './InviteLink';
+import { DeleteUserModal } from './DeleteUserModal';
 import { supabase } from '../../lib/supabase';
 
 interface UsersListProps {
@@ -21,6 +22,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInviteLink, setShowInviteLink] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<CompanyUser | null>(null);
 
   // Carregar usuários
@@ -67,27 +69,25 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
     }
   };
 
-  // Excluir usuário permanentemente (hard delete)
-  const handleDeleteUser = async (user: CompanyUser) => {
-    // Primeira confirmação
-    if (!confirm(`⚠️ EXCLUSÃO PERMANENTE\n\nATENÇÃO: Tem certeza que deseja EXCLUIR PERMANENTEMENTE o usuário ${user.user_id}?\n\n🚨 ESTA AÇÃO NÃO PODE SER DESFEITA!\n\n• O usuário será removido completamente\n• Todos os dados serão perdidos\n• Não poderá ser recuperado`)) {
-      return;
-    }
+  // Abrir modal de exclusão
+  const handleDeleteUser = (user: CompanyUser) => {
+    setSelectedUser(user);
+    setShowDeleteModal(true);
+  };
 
-    // Segunda confirmação para segurança
-    const confirmText = prompt(`🔴 CONFIRMAÇÃO FINAL\n\nPara confirmar a exclusão permanente, digite: EXCLUIR\n\n(Digite exatamente: EXCLUIR)`);
-    
-    if (confirmText !== 'EXCLUIR') {
-      alert('❌ Exclusão cancelada. Texto de confirmação incorreto.');
-      return;
-    }
-
+  // Executar exclusão via modal
+  const executeDeleteUser = async (user: CompanyUser) => {
     try {
       setError(null);
       
+      // Usar email correto para a função RPC
+      const emailToUse = user.email || user.user_id;
+      
+      console.log('Deleting user with email:', emailToUse);
+      
       // Usar nossa função segura de exclusão completa
       const { data, error } = await supabase.rpc('safe_delete_user_complete', {
-        p_user_email: user.user_id // Assumindo que user_id é o email
+        p_user_email: emailToUse
       });
       
       if (error) {
@@ -98,12 +98,12 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
         throw new Error(data?.error || 'Erro na exclusão do usuário');
       }
       
-      alert(`✅ Usuário ${user.user_id} excluído permanentemente com sucesso!`);
+      console.log('User deleted successfully:', data);
       await loadUsers(); // Recarregar lista
       
     } catch (error) {
       console.error('Error deleting user permanently:', error);
-      setError(`Erro ao excluir usuário: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      throw error; // Re-throw para o modal tratar
     }
   };
 
@@ -383,6 +383,17 @@ export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }
           setShowInviteLink(false);
           setSelectedUser(null);
         }}
+        user={selectedUser}
+      />
+      
+      {/* Modal de Exclusão Elegante */}
+      <DeleteUserModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setSelectedUser(null);
+        }}
+        onConfirm={executeDeleteUser}
         user={selectedUser}
       />
     </div>
