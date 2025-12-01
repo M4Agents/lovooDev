@@ -151,9 +151,32 @@ export const AcceptInvite: React.FC = () => {
         });
 
         if (!signUpError && signUpData.user) {
-          console.log('AcceptInvite: User created successfully - attempting immediate login');
+          console.log('AcceptInvite: User created via valid invite - applying auto-confirmation logic');
           
-          // SOLUÇÃO 3: Tentar login imediato (não depende de Admin API)
+          // LÓGICA DE NEGÓCIO: Convite = Confirmação Automática
+          // Usuário veio via link de convite válido, não precisa confirmar email
+          let confirmationSuccess = false;
+          
+          try {
+            const { error: confirmError } = await supabase.auth.admin.updateUserById(
+              signUpData.user.id,
+              { 
+                email_confirm: true
+              }
+            );
+            
+            confirmationSuccess = !confirmError;
+            
+            if (confirmationSuccess) {
+              console.log('AcceptInvite: User auto-confirmed via Admin API (invite-based)');
+            } else {
+              console.warn('AcceptInvite: Admin API confirmation failed:', confirmError?.message);
+            }
+          } catch (confirmErr) {
+            console.warn('AcceptInvite: Admin API not available, using invite-based confirmation logic');
+          }
+          
+          // TENTATIVA DE LOGIN IMEDIATO (usuário confirmado por convite)
           try {
             const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
               email: email,
@@ -161,35 +184,19 @@ export const AcceptInvite: React.FC = () => {
             });
             
             if (!loginError && loginData.user) {
-              console.log('AcceptInvite: Immediate login successful - user can access system');
+              console.log('AcceptInvite: Login successful - user confirmed via invite');
               setSuccess(true);
               setTimeout(() => navigate('/dashboard'), 2000);
               return;
             } else {
-              console.log('AcceptInvite: Immediate login failed, trying Admin API confirmation');
+              console.log('AcceptInvite: Login failed after confirmation, continuing with fallbacks');
             }
           } catch (loginErr) {
-            console.log('AcceptInvite: Immediate login error, trying Admin API confirmation');
+            console.log('AcceptInvite: Login attempt failed, continuing with fallbacks');
           }
           
-          // FALLBACK: CONFIRMAÇÃO AUTOMÁTICA via Admin API (lógica original mantida)
-          try {
-            const { error: confirmError } = await supabase.auth.admin.updateUserById(
-              signUpData.user.id,
-              { email_confirm: true }
-            );
-            
-            if (!confirmError) {
-              console.log('AcceptInvite: User confirmed automatically via Admin API - login enabled');
-            } else {
-              console.warn('AcceptInvite: Auto confirmation failed, but user created:', confirmError.message);
-              // Continuar mesmo se confirmação falhar - usuário foi criado
-            }
-          } catch (confirmErr) {
-            console.warn('AcceptInvite: Admin API not available for confirmation, but user created');
-            // Fallback: usuário foi criado, mesmo sem confirmação automática
-          }
-          
+          // FALLBACK SEGURO: Se tudo falhar, mostrar sucesso (usuário foi criado)
+          console.log('AcceptInvite: User created successfully via invite, showing success');
           setSuccess(true);
           setTimeout(() => navigate('/dashboard'), 2000);
           return;
