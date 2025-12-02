@@ -92,7 +92,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         <div className="relative px-2 py-1 border-b border-slate-800">
           {!sidebarCollapsed && (
             <div className="flex items-center justify-center w-full">
-              <div className="flex items-center justify-center" style={{ width: '226px', height: '96px' }}>
+              <div className="flex items-center justify-center" style={{ width: '94px', height: '40px' }}>
                 <img 
                   src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-para-fundo-preto-scaled.png" 
                   alt="Lovoo CRM Logo" 
