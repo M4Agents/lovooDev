@@ -8,7 +8,6 @@ import {
   LogOut,
   Menu,
   X,
-  TrendingUp,
   Activity,
   Building2,
   ChevronLeft,
@@ -93,12 +92,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         <div className="flex items-center justify-between p-4 border-b border-slate-800">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">Lovoo CRM</h1>
-                <p className="text-xs text-slate-400">Analytics Platform</p>
+              <div className="w-12 h-12 flex items-center justify-center">
+                <img 
+                  src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
+                  alt="Lovoo CRM Logo" 
+                  className="w-full h-full object-contain"
+                />
               </div>
             </div>
           )}
