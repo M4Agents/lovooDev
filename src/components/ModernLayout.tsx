@@ -89,7 +89,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Logo */}
-        <div className="relative px-4 py-2 border-b border-slate-800">
+        <div className="relative px-2 py-1 border-b border-slate-800">
           {!sidebarCollapsed && (
             <div className="flex items-center justify-center w-full">
               <div className="w-24 h-24 flex items-center justify-center">
@@ -105,7 +105,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           {/* Collapse Button - Desktop */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex absolute top-2 right-4 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="hidden lg:flex absolute top-1 right-2 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <ChevronLeft className={`w-4 h-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
           </button>
@@ -113,7 +113,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           {/* Close Button - Mobile */}
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="lg:hidden absolute top-2 right-4 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="lg:hidden absolute top-1 right-2 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
