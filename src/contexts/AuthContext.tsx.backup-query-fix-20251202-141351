@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('company_users')
         .select(`
           *,
-          companies (*)
+          companies:company_id (*)
         `)
         .eq('user_id', userId)
         .eq('is_active', true);
@@ -141,53 +141,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.log('AuthContext: Not found in NEW system or error occurred');
         console.log('AuthContext: Error details:', error);
-        console.log('AuthContext: Trying alternative NEW system approach');
+        console.log('AuthContext: Trying OLD system as fallback');
         
-        // Tentativa alternativa: buscar company_users e depois companies separadamente
-        try {
-          const { data: companyUsers, error: cuError } = await supabase
-            .from('company_users')
-            .select('company_id')
-            .eq('user_id', userId)
-            .eq('is_active', true);
-            
-          console.log('AuthContext: Alternative query - company_users result:', { data: companyUsers, error: cuError });
+        // Fallback para sistema antigo
+        const result = await supabase
+          .from('companies')
+          .select('*')
+          .eq('user_id', userId);
           
-          if (!cuError && companyUsers && companyUsers.length > 0) {
-            const companyIds = companyUsers.map(cu => cu.company_id);
-            console.log('AuthContext: Found company IDs:', companyIds);
-            
-            const { data: companies, error: companiesError } = await supabase
-              .from('companies')
-              .select('*')
-              .in('id', companyIds);
-              
-            console.log('AuthContext: Alternative query - companies result:', { data: companies, error: companiesError });
-            
-            if (!companiesError && companies && companies.length > 0) {
-              console.log('AuthContext: SUCCESS with alternative approach!');
-              data = companies;
-              error = null;
-            } else {
-              throw new Error('Companies query failed in alternative approach');
-            }
-          } else {
-            throw new Error('Company users query failed in alternative approach');
-          }
-        } catch (altError) {
-          console.log('AuthContext: Alternative approach failed, trying OLD system as final fallback');
-          console.log('AuthContext: Alternative error:', altError);
-          
-          // Fallback final para sistema antigo
-          const result = await supabase
-            .from('companies')
-            .select('*')
-            .eq('user_id', userId);
-            
-          console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-          data = result.data;
-          error = result.error;
-        }
+        console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
+        data = result.data;
+        error = result.error;
       }
 
       console.log('AuthContext: Company fetch result:', { data, error });
