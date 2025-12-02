@@ -9,6 +9,7 @@ import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaul
 import { useAuth } from '../../contexts/AuthContext';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
+import { Toggle } from '../ui/Toggle';
 import { supabase } from '../../lib/supabase';
 
 interface UserModalProps {
@@ -30,6 +31,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [activeTab, setActiveTab] = useState<'info' | 'password'>('info');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  
+  // Estados para alteração direta de senha
+  const [showDirectPasswordForm, setShowDirectPasswordForm] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [forcePasswordChange, setForcePasswordChange] = useState(true);
+  const [directPasswordLoading, setDirectPasswordLoading] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -311,6 +319,77 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       setPasswordLoading(false);
     }
   };
+
+  // Função para alterar senha diretamente
+  const handleDirectPasswordChange = async () => {
+    if (!user || !newPassword || newPassword !== confirmPassword) {
+      setError('Verifique se as senhas coincidem');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    try {
+      setDirectPasswordLoading(true);
+      setPasswordSuccess(null);
+      setError(null);
+
+      // Preparar metadata baseado no toggle
+      const metadata = {
+        password_changed_at: new Date().toISOString(),
+        password_changed_by: company?.user_id,
+        password_type: forcePasswordChange ? 'temporary' : 'permanent',
+        must_change_password: forcePasswordChange,
+        password_expires_at: forcePasswordChange 
+          ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dias
+          : null
+      };
+
+      // Alterar senha usando Admin API
+      const { error } = await supabase.auth.admin.updateUserById(user.user_id, {
+        password: newPassword,
+        app_metadata: metadata
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Feedback de sucesso
+      const successMessage = forcePasswordChange
+        ? `Senha temporária definida. ${user.display_name || user.email} deve alterar no próximo acesso.`
+        : `Senha alterada com sucesso para ${user.display_name || user.email}.`;
+
+      setPasswordSuccess(successMessage);
+      
+      // Limpar formulário
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowDirectPasswordForm(false);
+
+    } catch (err) {
+      console.error('Error changing password directly:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao alterar senha');
+    } finally {
+      setDirectPasswordLoading(false);
+    }
+  };
+
+  // Função para cancelar alteração direta
+  const handleCancelDirectPassword = () => {
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowDirectPasswordForm(false);
+    setError(null);
+  };
+
+  // Validações para o formulário de senha
+  const isPasswordValid = newPassword.length >= 6;
+  const doPasswordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
+  const canSubmitPassword = isPasswordValid && doPasswordsMatch && !directPasswordLoading;
 
   if (!isOpen) return null;
 
@@ -612,6 +691,132 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     )}
                     {passwordLoading ? 'Enviando...' : 'Enviar Email de Reset'}
                   </button>
+                </div>
+
+                {/* Alterar Senha Diretamente */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  {!showDirectPasswordForm ? (
+                    // Estado colapsado
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="text-sm font-medium text-orange-900 mb-1">
+                          Alterar Senha Diretamente
+                        </h5>
+                        <p className="text-sm text-orange-700">
+                          Definir nova senha sem enviar email
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowDirectPasswordForm(true)}
+                        className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-md transition-colors"
+                      >
+                        Definir Senha
+                      </button>
+                    </div>
+                  ) : (
+                    // Estado expandido - Formulário
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-sm font-medium text-orange-900">
+                          Definir Nova Senha
+                        </h5>
+                        <button
+                          onClick={handleCancelDirectPassword}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Campos de senha */}
+                      <div className="space-y-3">
+                        <div>
+                          <input
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Nova senha (mín. 6 caracteres)"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            disabled={directPasswordLoading}
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Confirmar nova senha"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            disabled={directPasswordLoading}
+                          />
+                        </div>
+
+                        {/* Validações visuais */}
+                        {(newPassword || confirmPassword) && (
+                          <div className="text-xs space-y-1">
+                            <div className={`${isPasswordValid ? 'text-green-600' : 'text-red-600'}`}>
+                              {isPasswordValid ? '✓' : '×'} Mínimo 6 caracteres
+                            </div>
+                            {confirmPassword && (
+                              <div className={`${doPasswordsMatch ? 'text-green-600' : 'text-red-600'}`}>
+                                {doPasswordsMatch ? '✓' : '×'} Senhas coincidem
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Toggle de controle */}
+                        <div className="bg-white border border-orange-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h6 className="text-sm font-medium text-gray-900 mb-1">
+                                Forçar alteração no próximo acesso
+                              </h6>
+                              <p className="text-xs text-gray-600">
+                                {forcePasswordChange 
+                                  ? 'Usuário será obrigado a alterar a senha no próximo login'
+                                  : 'Senha definida será permanente até próxima alteração'
+                                }
+                              </p>
+                            </div>
+                            <Toggle
+                              checked={forcePasswordChange}
+                              onChange={setForcePasswordChange}
+                              disabled={directPasswordLoading}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Botões */}
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={handleCancelDirectPassword}
+                            disabled={directPasswordLoading}
+                            className="flex-1 px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-md transition-colors disabled:opacity-50"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={handleDirectPasswordChange}
+                            disabled={!canSubmitPassword}
+                            className="flex-1 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {directPasswordLoading ? (
+                              <>
+                                <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                Alterando...
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3 h-3" />
+                                {forcePasswordChange ? 'Definir Temporária' : 'Alterar Senha'}
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Reenviar Convite */}

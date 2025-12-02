@@ -27,6 +27,8 @@ type AuthContextType = {
   hasPermission: (permission: keyof UserPermissions) => boolean;
   canImpersonateCompany: (companyId: string) => Promise<boolean>;
   refreshUserRoles: () => Promise<void>;
+  // Método para verificar alteração obrigatória de senha
+  checkPasswordRequirements: () => { requiresPasswordChange: boolean; expiresAt?: string };
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -488,6 +490,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Verificar se usuário precisa alterar senha
+  const checkPasswordRequirements = () => {
+    if (!user?.app_metadata) {
+      return { requiresPasswordChange: false };
+    }
+
+    const { must_change_password, password_expires_at } = user.app_metadata;
+
+    // Se não tem flag de alteração obrigatória, não precisa alterar
+    if (!must_change_password) {
+      return { requiresPasswordChange: false };
+    }
+
+    // Se tem expiração, verificar se ainda é válida
+    if (password_expires_at) {
+      const now = new Date();
+      const expires = new Date(password_expires_at);
+      
+      // Se expirou, precisa alterar
+      if (now > expires) {
+        return { requiresPasswordChange: true, expiresAt: password_expires_at };
+      }
+    }
+
+    // Precisa alterar senha
+    return { requiresPasswordChange: true, expiresAt: password_expires_at };
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -512,7 +542,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Novos métodos
       hasPermission,
       canImpersonateCompany,
-      refreshUserRoles
+      refreshUserRoles,
+      checkPasswordRequirements
     }}>
       {children}
     </AuthContext.Provider>

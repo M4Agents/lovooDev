@@ -14,6 +14,7 @@ import Chat from './pages/Chat';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
+import { ChangePasswordRequired } from './pages/ChangePasswordRequired';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -82,6 +83,10 @@ function AppRoutes() {
             <ResetPassword />
           </PublicRoute>
         }
+      />
+      <Route
+        path="/change-password-required"
+        element={<ChangePasswordRequired />}
       />
       <Route
         path="/dashboard"
