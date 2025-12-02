@@ -91,7 +91,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         {/* Logo */}
         <div className="relative p-4 border-b border-slate-800">
           {!sidebarCollapsed && (
-            <div className="flex flex-col items-center w-full">
+            <div className="flex items-center justify-center w-full">
               <div className="w-24 h-24 flex items-center justify-center">
                 <img 
                   src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-para-fundo-preto-scaled.png" 
@@ -99,9 +99,6 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   className="w-full h-full object-contain"
                 />
               </div>
-              <p className="text-xs text-slate-300 text-center font-medium leading-tight">
-                Leads Otimizados. Vendas Voando.
-              </p>
             </div>
           )}
           
