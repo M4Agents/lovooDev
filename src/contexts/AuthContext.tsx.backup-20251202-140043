@@ -101,8 +101,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
       console.log('AuthContext: Trying NEW system first (company_users)');
-      console.log('AuthContext: User ID:', userId);
-      
       let { data, error } = await supabase
         .from('company_users')
         .select(`
@@ -112,44 +110,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('user_id', userId)
         .eq('is_active', true);
         
-      console.log('AuthContext: NEW system query result:', { data, error, dataLength: data?.length });
-      
       if (!error && data && data.length > 0) {
         console.log('AuthContext: Found companies in NEW system:', data.length);
-        console.log('AuthContext: Raw data from NEW system:', data);
-        
-        // Verificar se os dados das empresas estão corretos
-        const companiesData = data.map((item: any) => {
-          console.log('AuthContext: Processing item:', item);
-          console.log('AuthContext: Item.companies:', item.companies);
-          return item.companies;
-        });
-        
-        console.log('AuthContext: Mapped companies data:', companiesData);
-        
-        // Filtrar dados válidos
-        const validCompanies = companiesData.filter(comp => comp && comp.id);
-        console.log('AuthContext: Valid companies after filter:', validCompanies);
-        
-        if (validCompanies.length > 0) {
-          data = validCompanies;
-        } else {
-          console.warn('AuthContext: No valid companies found in NEW system data, falling back to OLD system');
-          data = null;
-          error = { message: 'No valid companies in NEW system', details: '', hint: '', code: '' } as any;
-        }
+        data = data.map((item: any) => item.companies);
       } else {
-        console.log('AuthContext: Not found in NEW system or error occurred');
-        console.log('AuthContext: Error details:', error);
-        console.log('AuthContext: Trying OLD system as fallback');
-        
+        console.log('AuthContext: Not found in NEW system, trying OLD system');
         // Fallback para sistema antigo
         const result = await supabase
           .from('companies')
           .select('*')
           .eq('user_id', userId);
-          
-        console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
         data = result.data;
         error = result.error;
       }
