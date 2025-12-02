@@ -35,20 +35,23 @@ export const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-6 flex items-center justify-center">
-            <img 
-              src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
-              alt="Lovoo CRM Logo" 
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <p className="text-gray-600 text-lg font-medium">Leads Otimizados. Vendas Voando.</p>
-        </div>
-
         {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {/* Header integrado ao card */}
+          <div className="text-center pt-8 pb-6 px-8">
+            <div className="w-24 h-24 mx-auto mb-4 flex items-center justify-center">
+              <img 
+                src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
+                alt="Lovoo CRM Logo" 
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-1">Leads Otimizados. Vendas Voando.</h2>
+            <p className="text-sm text-gray-500">Faça login para acessar sua plataforma</p>
+          </div>
+
+          {/* Form Section */}
+          <div className="px-8 pb-8">
           {/* Toggle Buttons */}
           <div className="flex bg-gray-100 rounded-lg p-1 mb-8">
             <button
@@ -168,11 +171,12 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-            <p className="text-sm text-gray-500">
-              A inteligência que impulsiona suas vendas.
-            </p>
+            {/* Footer */}
+            <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+              <p className="text-sm text-gray-500">
+                A inteligência que impulsiona suas vendas.
+              </p>
+            </div>
           </div>
         </div>
 
