@@ -89,23 +89,26 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800">
+        <div className="relative p-4 border-b border-slate-800">
           {!sidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <div className="w-20 h-20 flex items-center justify-center">
+            <div className="flex flex-col items-center w-full">
+              <div className="w-20 h-20 flex items-center justify-center mb-2">
                 <img 
                   src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-para-fundo-preto-scaled.png" 
                   alt="Lovoo CRM Logo" 
                   className="w-full h-full object-contain"
                 />
               </div>
+              <p className="text-xs text-slate-300 text-center font-medium leading-tight">
+                Leads Otimizados. Vendas Voando.
+              </p>
             </div>
           )}
           
           {/* Collapse Button - Desktop */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="hidden lg:flex absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <ChevronLeft className={`w-4 h-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
           </button>
@@ -113,7 +116,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           {/* Close Button - Mobile */}
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="lg:hidden absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
