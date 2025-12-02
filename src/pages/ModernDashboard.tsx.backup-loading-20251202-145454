@@ -21,7 +21,7 @@ type DashboardStats = {
 };
 
 export const ModernDashboard: React.FC = () => {
-  const { user, company, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
+  const { user, company, isImpersonating, refreshCompany } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -154,21 +154,6 @@ export const ModernDashboard: React.FC = () => {
     );
   }
 
-  // Mostrar loading enquanto a empresa está sendo carregada
-  if (isLoadingCompany) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Card className="text-center max-w-md">
-          <div className="text-blue-600 mb-4 text-4xl">⏳</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando empresa...</h3>
-          <p className="text-gray-600 mb-4">Aguarde enquanto carregamos os dados da sua empresa.</p>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        </Card>
-      </div>
-    );
-  }
-
-  // Só mostrar erro se não estiver loading e não tiver empresa
   if (!company) {
     return (
       <div className="flex items-center justify-center h-64">

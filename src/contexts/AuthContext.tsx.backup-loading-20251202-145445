@@ -7,7 +7,6 @@ type AuthContextType = {
   user: User | null;
   company: Company | null;
   loading: boolean;
-  isLoadingCompany: boolean;
   isImpersonating: boolean;
   originalUser: User | null;
   availableCompanies: Company[];
@@ -38,7 +37,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLoadingCompany, setIsLoadingCompany] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(() => {
     return localStorage.getItem('lovoo_crm_impersonating') === 'true';
   });
@@ -56,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
-      setIsLoadingCompany(true); // Iniciar loading
       console.log('AuthContext: Fetching company for user:', userId, 'forceSuper:', forceSuper);
       
       // Verificar localStorage primeiro para impersonation
@@ -217,8 +214,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('AuthContext: Error fetching company:', error);
       setCompany(null);
-    } finally {
-      setIsLoadingCompany(false); // Finalizar loading sempre
     }
   };
 
@@ -613,7 +608,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user, 
       company, 
       loading, 
-      isLoadingCompany,
       isImpersonating,
       originalUser,
       availableCompanies,
