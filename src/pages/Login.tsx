@@ -37,15 +37,14 @@ export const Login: React.FC = () => {
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+          <div className="w-32 h-32 mx-auto mb-6 flex items-center justify-center">
             <img 
               src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
               alt="Lovoo CRM Logo" 
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Lovoo CRM</h1>
-          <p className="text-gray-600">Analytics Comportamental para Landing Pages</p>
+          <p className="text-gray-600 text-lg font-medium">Leads Otimizados. Vendas Voando.</p>
         </div>
 
         {/* Main Card */}
@@ -172,7 +171,7 @@ export const Login: React.FC = () => {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200 text-center">
             <p className="text-sm text-gray-500">
-              Plataforma SaaS para análise comportamental de visitantes
+              A inteligência que impulsiona suas vendas.
             </p>
           </div>
         </div>
