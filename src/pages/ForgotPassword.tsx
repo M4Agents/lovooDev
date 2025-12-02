@@ -186,7 +186,7 @@ export const ForgotPassword: React.FC = () => {
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            Plataforma SaaS para análise comportamental de visitantes
+            A inteligência que impulsiona suas vendas.
           </p>
         </div>
       </div>
