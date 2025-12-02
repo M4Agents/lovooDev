@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn, Settings, Mail, Lock, Building2 } from 'lucide-react';
 
@@ -136,6 +136,18 @@ export const Login: React.FC = () => {
                   <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0"></div>
                   {error}
                 </div>
+              </div>
+            )}
+
+            {/* Link Esqueci Minha Senha - Apenas no modo Login */}
+            {isLogin && (
+              <div className="text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                >
+                  Esqueci minha senha
+                </Link>
               </div>
             )}
 

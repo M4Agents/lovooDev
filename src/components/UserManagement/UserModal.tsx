@@ -3,12 +3,13 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info, Lock, RefreshCw, UserCheck } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
+import { supabase } from '../../lib/supabase';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -25,9 +26,15 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
   const [inviteData, setInviteData] = useState<any>(null);
   
+  // Estados para gerenciamento de senha
+  const [activeTab, setActiveTab] = useState<'info' | 'password'>('info');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  
   // Form state
   const [formData, setFormData] = useState({
     email: '',
+    displayName: '',
     role: 'seller' as UserRole,
     sendInvite: true
   });
@@ -41,6 +48,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // Modo edição
         setFormData({
           email: user.user_id.startsWith('mock_') ? '' : user.user_id,
+          displayName: user.display_name || '',
           role: user.role,
           sendInvite: false
         });
@@ -48,6 +56,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // Modo criação
         setFormData({
           email: '',
+          displayName: '',
           role: 'seller',
           sendInvite: true
         });
@@ -219,6 +228,90 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   };
 
+  // Função para resetar senha via email
+  const handleResetPassword = async () => {
+    if (!user?.email) return;
+
+    try {
+      setPasswordLoading(true);
+      setPasswordSuccess(null);
+      setError(null);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setPasswordSuccess(`Email de recuperação enviado para ${user.email}`);
+    } catch (err) {
+      console.error('Error sending reset email:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao enviar email de recuperação');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  // Função para atualizar display name
+  const handleUpdateDisplayName = async () => {
+    if (!user?.user_id || !formData.displayName.trim()) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Atualizar via Admin API
+      const { error } = await supabase.auth.admin.updateUserById(user.user_id, {
+        user_metadata: { 
+          display_name: formData.displayName.trim(),
+          name: formData.displayName.trim()
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setPasswordSuccess('Nome atualizado com sucesso');
+      onSave(); // Recarregar lista
+    } catch (err) {
+      console.error('Error updating display name:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar nome');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para reenviar convite
+  const handleResendInvite = async () => {
+    if (!user?.email) return;
+
+    try {
+      setPasswordLoading(true);
+      setPasswordSuccess(null);
+      setError(null);
+
+      // Gerar novo link de convite
+      const { error } = await supabase.auth.admin.generateLink({
+        type: 'invite',
+        email: user.email
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setPasswordSuccess(`Novo convite enviado para ${user.email}`);
+    } catch (err) {
+      console.error('Error resending invite:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao reenviar convite');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -248,6 +341,36 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           </button>
         </div>
 
+        {/* Tabs - Apenas para edição */}
+        {isEditing && (
+          <div className="border-b border-slate-200">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('info')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'info'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <User className="w-4 h-4 inline mr-2" />
+                Informações
+              </button>
+              <button
+                onClick={() => setActiveTab('password')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'password'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Lock className="w-4 h-4 inline mr-2" />
+                Senha & Acesso
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Error */}
@@ -262,6 +385,23 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               </div>
             </div>
           )}
+
+          {/* Success Message */}
+          {passwordSuccess && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-green-900 mb-1">Sucesso</h4>
+                  <p className="text-sm text-green-700">{passwordSuccess}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conteúdo baseado na aba ativa */}
+          {(!isEditing || activeTab === 'info') && (
+            <>
 
           {/* Email (apenas para criação) */}
           {!isEditing && (
@@ -405,6 +545,116 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 </div>
               </div>
             </div>
+          )}
+            </>
+          )}
+
+          {/* Aba de Senha & Acesso - Apenas para edição */}
+          {isEditing && activeTab === 'password' && (
+            <>
+              {/* Campo Display Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <User className="w-4 h-4 inline mr-2" />
+                  Nome de Exibição
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.displayName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Nome do usuário"
+                    disabled={loading}
+                  />
+                  <button
+                    onClick={handleUpdateDisplayName}
+                    disabled={loading || !formData.displayName.trim() || formData.displayName === (user?.display_name || '')}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Salvar
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Nome que aparecerá na interface do sistema
+                </p>
+              </div>
+
+              {/* Gerenciamento de Senha */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  Gerenciar Senha
+                </h4>
+
+                {/* Resetar Senha */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h5 className="text-sm font-medium text-blue-900 mb-1">
+                        Resetar Senha
+                      </h5>
+                      <p className="text-sm text-blue-700 mb-3">
+                        Enviar email para o usuário redefinir a senha
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={passwordLoading || !user?.email}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    {passwordLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {passwordLoading ? 'Enviando...' : 'Enviar Email de Reset'}
+                  </button>
+                </div>
+
+                {/* Reenviar Convite */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h5 className="text-sm font-medium text-green-900 mb-1">
+                        Reenviar Convite
+                      </h5>
+                      <p className="text-sm text-green-700 mb-3">
+                        Gerar novo link de convite para o usuário
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleResendInvite}
+                    disabled={passwordLoading || !user?.email}
+                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    {passwordLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <Mail className="w-4 h-4" />
+                    )}
+                    {passwordLoading ? 'Enviando...' : 'Reenviar Convite'}
+                  </button>
+                </div>
+
+                {/* Informações do Usuário */}
+                {user && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <h5 className="text-sm font-medium text-slate-900 mb-2">
+                      Informações da Conta
+                    </h5>
+                    <div className="space-y-2 text-sm text-slate-600">
+                      <div><strong>Email:</strong> {user.email || user.user_id}</div>
+                      <div><strong>Status:</strong> {user.is_active ? '🟢 Ativo' : '⚪ Inativo'}</div>
+                      <div><strong>Role:</strong> {user.role}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 

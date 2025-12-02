@@ -12,6 +12,8 @@ import { Leads } from './pages/Leads';
 import { PlansManagement } from './pages/PlansManagement';
 import Chat from './pages/Chat';
 import { AcceptInvite } from './pages/AcceptInvite';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -64,6 +66,22 @@ function AppRoutes() {
       <Route
         path="/accept-invite"
         element={<AcceptInvite />}
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPassword />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PublicRoute>
+            <ResetPassword />
+          </PublicRoute>
+        }
       />
       <Route
         path="/dashboard"
