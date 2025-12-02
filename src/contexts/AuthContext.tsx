@@ -103,7 +103,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext: Trying NEW system first (company_users)');
       let { data, error } = await supabase
         .from('company_users')
-        .select('companies!inner (*)')
+        .select(`
+          *,
+          companies:company_id (*)
+        `)
         .eq('user_id', userId)
         .eq('is_active', true);
         
