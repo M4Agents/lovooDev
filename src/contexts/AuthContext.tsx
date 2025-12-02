@@ -99,28 +99,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // Buscar todas as empresas do usuário para super admin
-      const { data, error } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('user_id', userId);
+      // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
+      console.log('AuthContext: Trying NEW system first (company_users)');
+      let { data, error } = await supabase
+        .from('company_users')
+        .select('companies!inner (*)')
+        .eq('user_id', userId)
+        .eq('is_active', true);
+        
+      if (!error && data && data.length > 0) {
+        console.log('AuthContext: Found companies in NEW system:', data.length);
+        data = data.map((item: any) => item.companies);
+      } else {
+        console.log('AuthContext: Not found in NEW system, trying OLD system');
+        // Fallback para sistema antigo
+        const result = await supabase
+          .from('companies')
+          .select('*')
+          .eq('user_id', userId);
+        data = result.data;
+        error = result.error;
+      }
 
       console.log('AuthContext: Company fetch result:', { data, error });
 
       if (!error && data && data.length > 0) {
         // Armazenar todas as empresas disponíveis
-        setAvailableCompanies(data);
+        setAvailableCompanies(data as any);
         
         // Priorizar empresa super admin se existir
-        const superAdminCompany = data.find(comp => comp.is_super_admin);
+        const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
         const selectedCompany = superAdminCompany || data[0];
         
-        console.log('AuthContext: Setting company:', selectedCompany);
-        console.log('AuthContext: Available companies:', data.map(c => ({ name: c.name, is_super_admin: c.is_super_admin })));
-        setCompany(selectedCompany);
+        console.log('AuthContext: Setting company:', (selectedCompany as any).name);
+        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ name: c.name, is_super_admin: c.is_super_admin })));
+        setCompany(selectedCompany as any);
         
         // Sincronizar currentCompanyId no localStorage para analytics
-        localStorage.setItem('currentCompanyId', selectedCompany.id);
+        localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
       } else {
         console.log('AuthContext: No company found or error:', error);
         setAvailableCompanies([]);
