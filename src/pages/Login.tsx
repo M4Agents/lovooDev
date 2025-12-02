@@ -39,7 +39,7 @@ export const Login: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Header integrado ao card */}
           <div className="text-center pt-8 pb-6 px-8">
-            <div className="w-48 h-48 mx-auto mb-1 flex items-center justify-center">
+            <div className="mx-auto mb-1 flex items-center justify-center" style={{ width: '226px', height: '96px' }}>
               <img 
                 src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
                 alt="Lovoo CRM Logo" 
