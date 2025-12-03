@@ -494,12 +494,57 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
 
     console.log('UserAPI: Company user created successfully in new system:', functionResult);
 
-    // SISTEMA HÍBRIDO CORRIGIDO: NÃO criar empresas duplicadas
-    // Usuários são apenas associados a empresas existentes
-    // Empresas só podem ser criadas via Menu Empresas (M4 Digital)
-    console.log('UserAPI: User successfully created in NEW system (company_users)');
-    console.log('UserAPI: No compatibility record needed - AuthContext will use NEW system');
-    console.log('UserAPI: Company creation is exclusive to M4 Digital via Companies menu');
+    // CORREÇÃO CRÍTICA: Criar registro no sistema antigo (companies) para compatibilidade
+    // Isso garante que o AuthContext encontre a empresa do usuário
+    console.log('UserAPI: Checking compatibility record creation conditions:', {
+      isRealUser,
+      finalUserId,
+      currentUserId: currentUser.id,
+      shouldCreate: isRealUser && finalUserId !== currentUser.id
+    });
+
+    if (isRealUser && finalUserId !== currentUser.id) {
+      try {
+        console.log('UserAPI: Creating compatibility record in companies table for user:', finalUserId);
+        
+        // Verificar se já existe registro para evitar duplicatas
+        const { data: existingCompany } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('user_id', finalUserId)
+          .single();
+
+        if (existingCompany) {
+          console.log('UserAPI: Compatibility record already exists:', existingCompany.id);
+        } else {
+          const { error: companyInsertError } = await supabase
+            .from('companies')
+            .insert({
+              id: crypto.randomUUID(),
+              user_id: finalUserId,
+              name: `${request.email} - ${company.name}`,
+              company_type: company.company_type,
+              parent_company_id: company.company_type === 'client' ? request.companyId : null,
+              is_super_admin: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (companyInsertError) {
+            console.error('UserAPI: CRITICAL - Could not create compatibility record:', companyInsertError);
+            // Este é crítico - usuário ficará órfão sem isso
+            throw new Error(`Falha ao criar registro de compatibilidade: ${companyInsertError.message}`);
+          } else {
+            console.log('UserAPI: Compatibility record created successfully for user:', finalUserId);
+          }
+        }
+      } catch (compatError) {
+        console.error('UserAPI: CRITICAL ERROR in compatibility record creation:', compatError);
+        throw compatError; // Falhar a criação se não conseguir criar compatibilidade
+      }
+    } else {
+      console.log('UserAPI: Skipping compatibility record creation - using fallback user or not real user');
+    }
 
     // Converter resultado da função para formato esperado
     const data = {
