@@ -3,10 +3,11 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info, Lock, RefreshCw, UserCheck, Eye, EyeOff, Settings, Sparkles } from 'lucide-react';
-import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions } from '../../types/user';
+import { X, Save, Crown, Shield, Briefcase, UserCheck, User, Tag } from 'lucide-react';
+import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { applyTemplateToPermissions } from '../../services/userTemplates';
+import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
@@ -57,6 +58,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [useAdvancedPermissions, setUseAdvancedPermissions] = useState(false);
   const [customPermissions, setCustomPermissions] = useState<Partial<UserPermissions>>({});
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  
+  // NOVO SISTEMA - Perfis unificados
+  const [availableProfiles, setAvailableProfiles] = useState<UserProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
 
   const isEditing = !!user;
 
@@ -96,8 +101,34 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       
       // Carregar status do sistema
       getSystemStatus().then(setSystemStatus);
+      
+      // NOVO: Carregar perfis disponíveis
+      if (company?.id) {
+        loadAvailableProfiles();
+      }
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, company?.id]);
+
+  // NOVA FUNÇÃO: Carregar perfis disponíveis
+  const loadAvailableProfiles = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const profiles = await getProfilesForCompanyType(company.id, company.company_type || 'client');
+      setAvailableProfiles(profiles);
+      
+      // Se não há perfil selecionado, selecionar o primeiro perfil do sistema compatível
+      if (!selectedProfile) {
+        const defaultProfile = profiles.find(p => p.isSystem && getProfileRole(p) === formData.role);
+        if (defaultProfile) {
+          setSelectedProfile(defaultProfile);
+        }
+      }
+    } catch (error) {
+      console.error('UserModal: Error loading profiles:', error);
+      setAvailableProfiles([]);
+    }
+  };
 
   // Roles disponíveis baseados no tipo de empresa
   const getAvailableRoles = (): { value: UserRole; label: string; description: string }[] => {
@@ -141,16 +172,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         return;
       }
 
-      // NOVO: Calcular permissões finais (template + customizações)
+      // NOVO: Calcular permissões finais usando perfil selecionado
       let finalPermissions = getDefaultPermissions(formData.role);
       
-      if (selectedTemplate) {
-        // Aplicar template se selecionado
+      // Prioridade 1: Usar perfil selecionado (sistema unificado)
+      if (selectedProfile) {
+        finalPermissions = selectedProfile.permissions;
+      }
+      // Fallback: Sistema antigo (template + customizações)
+      else if (selectedTemplate) {
         finalPermissions = applyTemplateToPermissions(selectedTemplate, finalPermissions);
       }
       
+      // Aplicar customizações avançadas se configuradas
       if (useAdvancedPermissions && Object.keys(customPermissions).length > 0) {
-        // Aplicar permissões customizadas se configuradas
         finalPermissions = { ...finalPermissions, ...customPermissions };
       }
 
@@ -544,34 +579,80 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             </div>
           )}
 
-          {/* Role */}
+          {/* Perfil de Acesso - SISTEMA UNIFICADO */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               <Shield className="w-4 h-4 inline mr-2" />
-              Nível de Acesso (Role)
+              Perfil de Acesso
             </label>
             <select
-              value={formData.role}
-              onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserRole }))}
+              value={selectedProfile?.id || ''}
+              onChange={(e) => {
+                const profile = availableProfiles.find(p => p.id === e.target.value);
+                setSelectedProfile(profile || null);
+                if (profile) {
+                  // Atualizar role do formulário para compatibilidade
+                  const role = getProfileRole(profile);
+                  setFormData(prev => ({ ...prev, role }));
+                }
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               disabled={loading}
             >
-              {getAvailableRoles().map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
-              ))}
+              <option value="">Selecione um perfil...</option>
+              
+              {/* Perfis do Sistema */}
+              {availableProfiles.filter(p => p.isSystem).length > 0 && (
+                <optgroup label="Perfis do Sistema">
+                  {availableProfiles
+                    .filter(p => p.isSystem)
+                    .map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))
+                  }
+                </optgroup>
+              )}
+              
+              {/* Perfis Personalizados */}
+              {availableProfiles.filter(p => !p.isSystem).length > 0 && (
+                <optgroup label="Perfis Personalizados">
+                  {availableProfiles
+                    .filter(p => !p.isSystem)
+                    .map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        📋 {profile.name}
+                      </option>
+                    ))
+                  }
+                </optgroup>
+              )}
             </select>
             
-            {/* Descrição do role selecionado */}
-            {(() => {
-              const selectedRole = getAvailableRoles().find(r => r.value === formData.role);
-              return selectedRole ? (
-                <p className="text-xs text-slate-500 mt-1">
-                  {selectedRole.description}
+            {/* Descrição do perfil selecionado */}
+            {selectedProfile && (
+              <div className="mt-2 p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-700 font-medium">
+                  {selectedProfile.name}
                 </p>
-              ) : null;
-            })()}
+                <p className="text-xs text-slate-500 mt-1">
+                  {selectedProfile.description}
+                </p>
+                {selectedProfile.tags && selectedProfile.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {selectedProfile.tags.slice(0, 3).map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Enviar convite (apenas para criação) */}

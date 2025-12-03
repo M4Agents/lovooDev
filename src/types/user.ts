@@ -170,9 +170,36 @@ export interface ImpersonationValidation {
 }
 
 // =====================================================
-// NOVOS TIPOS - SISTEMA DE TEMPLATES E MÓDULOS DINÂMICOS
+// NOVOS TIPOS - SISTEMA UNIFICADO DE PERFIS DE USUÁRIO
 // =====================================================
 
+// NOVO: Tipo unificado que substitui UserTemplate + Roles
+export interface UserProfile {
+  id: string;
+  name: string;
+  description: string;
+  permissions: UserPermissions;
+  isSystem: boolean;        // Perfil do sistema (ex-role) ou personalizado (ex-template)
+  isEditable: boolean;      // Pode ser editado pelo usuário
+  
+  // Para perfis personalizados (ex-templates)
+  companyId?: string;
+  createdBy?: string;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Para compatibilidade com sistema atual
+  baseRole?: UserRole;      // Role base (para perfis personalizados)
+  legacyRole?: UserRole;    // Role original (para perfis do sistema)
+  
+  // Metadados
+  usage_count?: number;
+  last_used?: string;
+  tags?: string[];
+  isActive?: boolean;
+}
+
+// MANTIDO: UserTemplate para compatibilidade (será deprecado gradualmente)
 export interface UserTemplate {
   id: string;
   name: string;
