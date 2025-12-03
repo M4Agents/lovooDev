@@ -639,9 +639,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setUser(session?.user ?? null);
       
-      // 🔧 CORREÇÃO: Remover chamada duplicada - onAuthStateChange já fará isso
-      // A chamada fetchCompany será feita pelo onAuthStateChange para evitar duplicação
-      console.log('🔧 AuthContext: Initial session loaded, onAuthStateChange will handle fetchCompany');
+      // Buscar empresa sempre que tiver usuário
+      if (session?.user) {
+        console.log('🔍 AuthContext: Calling fetchCompany with userId:', session.user.id);
+        fetchCompany(session.user.id);
+      }
       setLoading(false);
     });
 
