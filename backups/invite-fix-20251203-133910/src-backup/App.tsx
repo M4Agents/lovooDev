@@ -66,11 +66,7 @@ function AppRoutes() {
       />
       <Route
         path="/accept-invite"
-        element={
-          <PublicRoute>
-            <AcceptInvite />
-          </PublicRoute>
-        }
+        element={<AcceptInvite />}
       />
       <Route
         path="/forgot-password"

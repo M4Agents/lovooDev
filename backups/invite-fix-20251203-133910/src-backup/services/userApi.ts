@@ -439,37 +439,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       throw new Error(functionResult?.error || 'Erro na criação do usuário');
     }
 
-    // CORREÇÃO CRÍTICA: Criar registro no sistema antigo (companies) para compatibilidade
-    // Isso garante que o AuthContext encontre a empresa do usuário
-    if (isRealUser && finalUserId !== currentUser.id) {
-      try {
-        console.log('UserAPI: Creating compatibility record in companies table');
-        
-        const { error: companyInsertError } = await supabase
-          .from('companies')
-          .insert({
-            id: crypto.randomUUID(),
-            user_id: finalUserId,
-            name: `${request.email} - ${company.name}`,
-            company_type: company.company_type,
-            parent_company_id: company.company_type === 'client' ? request.companyId : null,
-            is_super_admin: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        if (companyInsertError) {
-          console.warn('UserAPI: Could not create compatibility record:', companyInsertError);
-          // Não falhar a criação por causa disso, apenas logar
-        } else {
-          console.log('UserAPI: Compatibility record created successfully');
-        }
-      } catch (compatError) {
-        console.warn('UserAPI: Error creating compatibility record:', compatError);
-        // Não falhar a criação por causa disso
-      }
-    }
-
     // Converter resultado da função para formato esperado
     const data = {
       id: functionResult.id,

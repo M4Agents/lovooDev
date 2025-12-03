@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn, Mail, Lock, Building2 } from 'lucide-react';
@@ -12,18 +12,6 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
-
-  // CORREÇÃO: Interceptar tokens de convite como backup
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const type = urlParams.get('type');
-    
-    if (type === 'invite' && token) {
-      console.log('Login: Invite token detected, redirecting to accept-invite');
-      navigate(`/accept-invite?${urlParams.toString()}`);
-    }
-  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
