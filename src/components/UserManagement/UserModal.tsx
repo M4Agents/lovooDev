@@ -13,6 +13,7 @@ import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/
 import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
 import { supabase } from '../../lib/supabase';
+import { canAccessCriticalPermissions, CRITICAL_PERMISSIONS } from '../../utils/permissionUtils';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -243,6 +244,28 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       // Aplicar customizações avançadas se configuradas
       if (useAdvancedPermissions && Object.keys(customPermissions).length > 0) {
         finalPermissions = { ...finalPermissions, ...customPermissions };
+      }
+
+      // NOVO: Filtrar permissões críticas baseado no contexto de segurança
+      const canAccessCritical = canAccessCriticalPermissions(
+        company?.company_type,
+        formData.role,
+        company?.is_super_admin
+      );
+
+      if (!canAccessCritical) {
+        // Remover permissões críticas se não autorizado
+        CRITICAL_PERMISSIONS.forEach(permission => {
+          if (permission in finalPermissions) {
+            delete (finalPermissions as any)[permission];
+          }
+        });
+        
+        console.log('[SECURITY] Permissões críticas removidas para:', {
+          companyType: company?.company_type,
+          userRole: formData.role,
+          removedPermissions: CRITICAL_PERMISSIONS.filter(p => p in (selectedProfile?.permissions || {}))
+        });
       }
 
       if (isEditing && user) {

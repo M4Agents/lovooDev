@@ -5,6 +5,8 @@
 import React from 'react';
 import { X, Eye, Shield, Check, X as XIcon, Crown, Briefcase, UserCheck, User, Settings } from 'lucide-react';
 import { UserProfile, UserTemplate, UserPermissions, UserRole } from '../../types/user';
+import { useAuth } from '../../contexts/AuthContext';
+import { canAccessCriticalPermissions, filterCriticalPermissions } from '../../utils/permissionUtils';
 
 interface PermissionsViewModalProps {
   isOpen: boolean;
@@ -17,10 +19,12 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
   onClose, 
   profile 
 }) => {
+  const { company } = useAuth();
+  
   if (!isOpen || !profile) return null;
 
   // Extrair permissões do perfil ou template
-  const permissions: UserPermissions = 'permissions' in profile 
+  let permissions: UserPermissions = 'permissions' in profile 
     ? profile.permissions 
     : {
         // Para templates, combinar role base + customizações
@@ -43,12 +47,29 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
         ...('customPermissions' in profile ? profile.customPermissions : {})
       };
 
-  // Obter role para exibição
+  // Obter role para filtragem e exibição
   const role: UserRole = 'legacyRole' in profile 
     ? (profile.legacyRole || 'seller')
     : 'baseRole' in profile 
     ? (profile.baseRole || 'seller')
     : 'seller';
+
+  // NOVO: Filtrar permissões críticas baseado no contexto de segurança
+  const canViewCritical = canAccessCriticalPermissions(
+    company?.company_type,
+    role,
+    company?.is_super_admin
+  );
+
+  if (!canViewCritical) {
+    // Filtrar permissões críticas para visualização
+    permissions = filterCriticalPermissions(
+      permissions,
+      company?.company_type,
+      role,
+      company?.is_super_admin
+    );
+  }
 
   // Ícone do role
   const getRoleIcon = (role: UserRole) => {
