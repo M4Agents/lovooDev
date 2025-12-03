@@ -206,8 +206,8 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       // Empresa pai: pode ver todos os perfis
       return true;
     } else {
-      // Empresa filha: NÃO pode ver super_admin e admin puro
-      return !['super_admin', 'admin'].includes(template.baseRole);
+      // Empresa filha: NÃO pode ver super_admin, admin e partner
+      return !['super_admin', 'admin', 'partner'].includes(template.baseRole);
     }
   });
 };
