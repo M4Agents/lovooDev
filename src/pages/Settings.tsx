@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList } from '../components/UserManagement/UsersList';
@@ -84,8 +84,11 @@ export const Settings: React.FC = () => {
   const [selectedPayload, setSelectedPayload] = useState<any>(null);
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
-  // Estados para abas principais - NOVA ESTRUTURA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'templates' | 'tracking' | 'empresas'>('integracoes');
+  // Estados para abas principais - ESTRUTURA REORGANIZADA
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas'>('integracoes');
+  
+  // NOVO: Estado para submenus de Usuários
+  const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
   // Detectar parâmetro tab na URL para ativar aba correta
   useEffect(() => {
@@ -1001,19 +1004,6 @@ export const Settings: React.FC = () => {
             >
               <Users className="w-4 h-4" />
               Usuários
-            </button>
-            
-            {/* Aba Templates */}
-            <button
-              onClick={() => setActiveTab('templates')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'templates'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <MessageCircle className="w-4 h-4" />
-              Templates
             </button>
             
             {/* Aba Tracking Site */}
@@ -2016,23 +2006,54 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Usuários - NOVA INTERFACE FUNCIONAL */}
+      {/* Aba Usuários - INTERFACE REORGANIZADA COM SUBMENUS */}
       {activeTab === 'usuarios' && (
-        <UsersList
-          onCreateUser={handleCreateUser}
-          onEditUser={handleEditUser}
-        />
-      )}
+        <div className="space-y-6">
+          {/* Navegação de Submenus */}
+          <div className="border-b border-slate-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setUsuariosSubTab('gestao')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  usuariosSubTab === 'gestao'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Gestão de Usuários
+              </button>
+              <button
+                onClick={() => setUsuariosSubTab('templates')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  usuariosSubTab === 'templates'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Templates de Usuário
+              </button>
+            </nav>
+          </div>
 
-      {/* Aba Templates - GESTÃO DE TEMPLATES */}
-      {activeTab === 'templates' && (
-        <TemplateManager
-          onCreateUser={(templateId) => {
-            // Abrir modal de usuário com template pré-selecionado
-            handleCreateUser();
-            // TODO: Passar templateId para o UserModal
-          }}
-        />
+          {/* Conteúdo dos Submenus */}
+          {usuariosSubTab === 'gestao' && (
+            <UsersList
+              onCreateUser={handleCreateUser}
+              onEditUser={handleEditUser}
+            />
+          )}
+
+          {usuariosSubTab === 'templates' && (
+            <TemplateManager
+              onCreateUser={(templateId) => {
+                // Mudar para submenu de gestão e abrir modal
+                setUsuariosSubTab('gestao');
+                handleCreateUser();
+                // TODO: Passar templateId para o UserModal
+              }}
+            />
+          )}
+        </div>
       )}
 
       {/* Aba Tracking Site */}
