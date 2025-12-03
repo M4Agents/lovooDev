@@ -533,80 +533,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshCompany = async () => {
-    // 🔧 VERIFICAÇÕES PREVENTIVAS PARA EVITAR EXECUÇÃO DESNECESSÁRIA
-    if (!user) {
-      console.log('🔧 AuthContext: Skipping refreshCompany - no user');
-      return;
-    }
-    
-    if (isFetchingCompany) {
-      console.log('🔧 AuthContext: Skipping refreshCompany - fetchCompany already in progress');
-      return;
-    }
-    
-    console.log('AuthContext: Manual refresh company requested:', {
-      userId: user.id,
-      hasCompany: !!company,
-      companyId: company?.id,
-      companyName: company?.name
-    });
-    
-    // Se estiver impersonating, forçar recarregamento da empresa impersonada
-    const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
-    if (isCurrentlyImpersonating) {
-      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
-      console.log('AuthContext: Refreshing impersonated company:', impersonatedCompanyId);
+    if (user) {
+      console.log('AuthContext: Manual refresh company requested');
       
-      if (impersonatedCompanyId) {
-        const { data: impersonatedCompany, error } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', impersonatedCompanyId)
-          .single();
-          
-        if (!error && impersonatedCompany) {
-          console.log('AuthContext: Refreshed impersonated company:', impersonatedCompany.name);
-          setCompany(impersonatedCompany);
-          setIsImpersonating(true);
-          
-          // Sincronizar currentCompanyId no localStorage para analytics
-          localStorage.setItem('currentCompanyId', impersonatedCompany.id);
-          
-          // Recuperar originalUser se necessário
-          if (!originalUser) {
-            const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
-            if (storedOriginalUser) {
-              setOriginalUser(JSON.parse(storedOriginalUser));
+      // Se estiver impersonating, forçar recarregamento da empresa impersonada
+      const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
+      if (isCurrentlyImpersonating) {
+        const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
+        console.log('AuthContext: Refreshing impersonated company:', impersonatedCompanyId);
+        
+        if (impersonatedCompanyId) {
+          const { data: impersonatedCompany, error } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('id', impersonatedCompanyId)
+            .single();
+            
+          if (!error && impersonatedCompany) {
+            console.log('AuthContext: Refreshed impersonated company:', impersonatedCompany.name);
+            setCompany(impersonatedCompany);
+            setIsImpersonating(true);
+            
+            // Sincronizar currentCompanyId no localStorage para analytics
+            localStorage.setItem('currentCompanyId', impersonatedCompany.id);
+            
+            // Recuperar originalUser se necessário
+            if (!originalUser) {
+              const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
+              if (storedOriginalUser) {
+                setOriginalUser(JSON.parse(storedOriginalUser));
+              }
             }
+            return;
           }
-          return;
         }
       }
-    }
-    
-    // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin em AMBOS sistemas
-    console.log('AuthContext: Refresh - checking if user is super admin');
-    
-    const { data: legacySuperAdminCheck } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_super_admin', true)
-      .single();
       
-    const { data: newSystemSuperAdminCheck } = await supabase
-      .from('company_users')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('role', 'super_admin')
-      .eq('is_active', true)
-      .single();
+      // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin em AMBOS sistemas
+      console.log('AuthContext: Refresh - checking if user is super admin');
       
-    if (legacySuperAdminCheck || newSystemSuperAdminCheck) {
-      console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
-      await fetchCompany(user.id, true); // Forçar modo super admin
-    } else {
-      await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
+      const { data: legacySuperAdminCheck } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_super_admin', true)
+        .single();
+        
+      const { data: newSystemSuperAdminCheck } = await supabase
+        .from('company_users')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('role', 'super_admin')
+        .eq('is_active', true)
+        .single();
+        
+      if (legacySuperAdminCheck || newSystemSuperAdminCheck) {
+        console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
+        await fetchCompany(user.id, true); // Forçar modo super admin
+      } else {
+        await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
+      }
     }
   };
 
