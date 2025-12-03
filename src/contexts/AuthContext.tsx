@@ -596,9 +596,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    // Fallback para sistema atual (compatibilidade)
-    if (company?.is_super_admin) {
-      return true; // Super admin tem todas as permissões
+    // CORREÇÃO CRÍTICA: Verificar múltiplas condições de super admin
+    const isSuperAdmin = company?.is_super_admin || 
+                        currentRole === 'super_admin' || 
+                        (isImpersonating && originalUser);
+    
+    if (isSuperAdmin) {
+      return true; // Super admin tem todas as permissões (mesmo impersonando)
     }
 
     // Usar novo sistema de permissões se disponível
@@ -609,9 +613,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Fallback baseado no role atual
     if (currentRole) {
       switch (currentRole) {
-        case 'super_admin':
-          return true;
         case 'admin':
+          // Admin pode gerenciar usuários, exceto financial e companies
           return permission !== 'financial' && permission !== 'companies';
         case 'partner':
           return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission);

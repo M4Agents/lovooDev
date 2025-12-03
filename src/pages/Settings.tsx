@@ -18,7 +18,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 export const Settings: React.FC = () => {
-  const { company, refreshCompany } = useAuth();
+  const { company, refreshCompany, hasPermission } = useAuth();
   const [searchParams] = useSearchParams();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
