@@ -609,27 +609,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         setUser(session?.user ?? null);
         
-        // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA ANTES DE CHAMAR fetchCompany
+        // Buscar empresa sempre que tiver usuário
         if (session?.user) {
-          if (company && company.id) {
-            console.log('🔧 AuthContext: Company already loaded, skipping onAuthStateChange fetchCompany call:', {
-              companyId: company.id,
-              companyName: company.name,
-              userId: session.user.id,
-              event: _event
-            });
-            // Apenas carregar roles se empresa já existe
-            setTimeout(() => {
-              refreshUserRoles();
-            }, 100);
-          } else {
-            console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
-            await fetchCompany(session.user.id);
-            // Carregar roles do usuário após carregar empresa
-            setTimeout(() => {
-              refreshUserRoles();
-            }, 100);
-          }
+          console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
+          await fetchCompany(session.user.id);
+          // Carregar roles do usuário após carregar empresa
+          setTimeout(() => {
+            refreshUserRoles();
+          }, 100);
         } else {
           setCompany(null);
           setUserRoles([]);
