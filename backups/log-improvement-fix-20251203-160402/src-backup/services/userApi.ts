@@ -428,7 +428,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       p_created_by: currentUser.id
     });
 
-    let { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
+    const { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
       p_company_id: request.companyId,
       p_user_id: finalUserId,
       p_role: request.role,
@@ -438,52 +438,9 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
 
     console.log('UserAPI: create_company_user_safe result:', { functionResult, error });
 
-    // TRATAMENTO INTELIGENTE DE ERRO - Verificar se usuário foi criado mesmo com erro
     if (error) {
       console.error('UserAPI: Error calling create_company_user_safe:', error);
-      
-      // Se erro relacionado a templates, verificar se usuário foi criado mesmo assim
-      if (error.message && error.message.includes('user_templates')) {
-        console.warn('UserAPI: Templates error detected, checking if user was actually created...');
-        
-        try {
-          // Verificar se usuário foi criado no banco
-          const { data: createdUser, error: checkError } = await supabase
-            .from('company_users')
-            .select('*')
-            .eq('user_id', finalUserId)
-            .eq('company_id', request.companyId)
-            .eq('is_active', true)
-            .single();
-            
-          if (!checkError && createdUser) {
-            console.log('UserAPI: User was created successfully despite templates error:', createdUser.id);
-            // Simular resposta de sucesso
-            functionResult = {
-              success: true,
-              id: createdUser.id,
-              company_id: createdUser.company_id,
-              user_id: createdUser.user_id,
-              role: createdUser.role,
-              permissions: createdUser.permissions,
-              is_active: createdUser.is_active,
-              created_by: createdUser.created_by,
-              created_at: createdUser.created_at,
-              updated_at: createdUser.updated_at
-            };
-            // Limpar erro já que usuário foi criado
-            error = null;
-          } else {
-            console.error('UserAPI: User was not created, original error is valid');
-            throw error;
-          }
-        } catch (checkError) {
-          console.error('UserAPI: Error checking if user was created:', checkError);
-          throw error; // Manter erro original
-        }
-      } else {
-        throw error; // Outros erros são válidos
-      }
+      throw error;
     }
 
     // Verificar se a função retornou sucesso

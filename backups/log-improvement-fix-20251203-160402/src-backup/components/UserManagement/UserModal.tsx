@@ -350,11 +350,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       onClose();
     } catch (err) {
       console.error('UserModal: Error saving user:', err);
-      console.log('UserModal: Full error details:', {
-        error: err,
-        message: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined
-      });
       
       // TRATAMENTO INTELIGENTE: Verificar se é erro real ou modo compatibilidade
       const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar usuário';

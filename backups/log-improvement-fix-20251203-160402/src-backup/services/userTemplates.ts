@@ -248,8 +248,7 @@ export const getCompanyTemplates = async (
       .order('name');
     
     if (error) {
-      console.warn('UserTemplates: Custom templates not available (this is normal if feature not configured):', error.message);
-      console.log('UserTemplates: Continuing with system templates only');
+      console.error('UserTemplates: Error fetching custom templates:', error);
       // Continuar mesmo com erro - retornar apenas templates do sistema
     }
     
