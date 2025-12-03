@@ -102,8 +102,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // CORREÇÃO CRÍTICA: Verificar se é super admin no sistema antigo PRIMEIRO
-      console.log('AuthContext: Checking for legacy super admin status, forceSuper:', forceSuper);
+      // CORREÇÃO CRÍTICA: Verificar se é super admin em AMBOS os sistemas
+      console.log('AuthContext: Checking for super admin status, forceSuper:', forceSuper);
+      
+      // Verificar sistema antigo
       const { data: legacySuperAdmin, error: legacyError } = await supabase
         .from('companies')
         .select('*')
@@ -113,8 +115,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
       console.log('AuthContext: Legacy super admin check:', { data: legacySuperAdmin, error: legacyError });
       
-      // Se é super admin no sistema antigo OU forceSuper está ativo, carregar TODAS as empresas
-      if ((!legacyError && legacySuperAdmin) || forceSuper) {
+      // Verificar sistema novo
+      const { data: newSystemSuperAdmin, error: newSystemError } = await supabase
+        .from('company_users')
+        .select('*, companies(*)')
+        .eq('user_id', userId)
+        .eq('role', 'super_admin')
+        .eq('is_active', true)
+        .single();
+        
+      console.log('AuthContext: New system super admin check:', { data: newSystemSuperAdmin, error: newSystemError });
+      
+      // Se é super admin em QUALQUER sistema OU forceSuper está ativo, carregar TODAS as empresas
+      if ((!legacyError && legacySuperAdmin) || (!newSystemError && newSystemSuperAdmin) || forceSuper) {
         console.log('AuthContext: User is LEGACY SUPER ADMIN - loading ALL companies');
         
         const { data: allCompanies, error: allCompaniesError } = await supabase
@@ -128,8 +141,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Armazenar todas as empresas disponíveis
           setAvailableCompanies(allCompanies);
           
-          // Selecionar a empresa super admin como principal (usar legacySuperAdmin se disponível, senão a primeira com is_super_admin)
-          const superAdminCompany = legacySuperAdmin || allCompanies.find(c => c.is_super_admin) || allCompanies[0];
+          // Selecionar a empresa super admin como principal
+          const superAdminCompany = legacySuperAdmin || 
+                                   (newSystemSuperAdmin?.companies) || 
+                                   allCompanies.find(c => c.is_super_admin) || 
+                                   allCompanies[0];
           setCompany(superAdminCompany);
           
           // Sincronizar currentCompanyId no localStorage para analytics
@@ -297,8 +313,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin
+      // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin em AMBOS sistemas
       console.log('AuthContext: Refresh - checking if user is super admin');
+      
       const { data: legacySuperAdminCheck } = await supabase
         .from('companies')
         .select('*')
@@ -306,7 +323,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('is_super_admin', true)
         .single();
         
-      if (legacySuperAdminCheck) {
+      const { data: newSystemSuperAdminCheck } = await supabase
+        .from('company_users')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('role', 'super_admin')
+        .eq('is_active', true)
+        .single();
+        
+      if (legacySuperAdminCheck || newSystemSuperAdminCheck) {
         console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
         await fetchCompany(user.id, true); // Forçar modo super admin
       } else {
