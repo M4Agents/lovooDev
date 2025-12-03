@@ -102,6 +102,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
+      // CORREÇÃO CRÍTICA: Verificar se é super admin no sistema antigo PRIMEIRO
+      console.log('AuthContext: Checking for legacy super admin status, forceSuper:', forceSuper);
+      const { data: legacySuperAdmin, error: legacyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_super_admin', true)
+        .single();
+        
+      console.log('AuthContext: Legacy super admin check:', { data: legacySuperAdmin, error: legacyError });
+      
+      // Se é super admin no sistema antigo OU forceSuper está ativo, carregar TODAS as empresas
+      if ((!legacyError && legacySuperAdmin) || forceSuper) {
+        console.log('AuthContext: User is LEGACY SUPER ADMIN - loading ALL companies');
+        
+        const { data: allCompanies, error: allCompaniesError } = await supabase
+          .from('companies')
+          .select('*')
+          .order('name');
+          
+        console.log('AuthContext: All companies loaded for super admin:', { count: allCompanies?.length, error: allCompaniesError });
+        
+        if (!allCompaniesError && allCompanies && allCompanies.length > 0) {
+          // Armazenar todas as empresas disponíveis
+          setAvailableCompanies(allCompanies);
+          
+          // Selecionar a empresa super admin como principal (usar legacySuperAdmin se disponível, senão a primeira com is_super_admin)
+          const superAdminCompany = legacySuperAdmin || allCompanies.find(c => c.is_super_admin) || allCompanies[0];
+          setCompany(superAdminCompany);
+          
+          // Sincronizar currentCompanyId no localStorage para analytics
+          localStorage.setItem('currentCompanyId', superAdminCompany.id);
+          
+          console.log('AuthContext: Super admin setup completed - Company:', superAdminCompany.name, 'Available companies:', allCompanies.length);
+          return; // Sair da função - super admin configurado com sucesso
+        }
+      }
+      
       // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
       console.log('AuthContext: Trying NEW system first (company_users)');
       console.log('AuthContext: User ID:', userId);
@@ -259,7 +297,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
+      // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin
+      console.log('AuthContext: Refresh - checking if user is super admin');
+      const { data: legacySuperAdminCheck } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_super_admin', true)
+        .single();
+        
+      if (legacySuperAdminCheck) {
+        console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
+        await fetchCompany(user.id, true); // Forçar modo super admin
+      } else {
+        await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
+      }
     }
   };
 
