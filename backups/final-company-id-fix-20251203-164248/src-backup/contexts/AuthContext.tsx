@@ -287,30 +287,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.log('AuthContext: Company fetch result:', { data, error });
-      console.log('AuthContext: Final condition check:', { 
-        errorIsNull: error === null,
-        errorIsFalsy: !error,
-        dataExists: !!data,
-        dataLength: data?.length,
-        finalCondition: (!error && data && data.length > 0)
-      });
 
       if (!error && data && data.length > 0) {
-        console.log('AuthContext: ENTERING final company selection logic');
-        
         // Armazenar todas as empresas disponíveis
         setAvailableCompanies(data as any);
         
         // Priorizar empresa super admin se existir
         const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
         const selectedCompany = superAdminCompany || data[0];
-        
-        console.log('AuthContext: Company selection details:', {
-          totalCompanies: data.length,
-          superAdminFound: !!superAdminCompany,
-          selectedCompanyId: (selectedCompany as any).id,
-          selectedCompanyName: (selectedCompany as any).name
-        });
         
         console.log('AuthContext: Setting company:', (selectedCompany as any).name);
         console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
@@ -329,14 +313,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Sincronizar currentCompanyId no localStorage para analytics
         localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
       } else {
-        console.log('AuthContext: FAILED final condition - No company found or error:', error);
-        console.log('AuthContext: Final condition failed with values:', { 
-          error, 
-          data, 
-          dataLength: data?.length,
-          errorType: typeof error,
-          dataType: typeof data
-        });
+        console.log('AuthContext: No company found or error:', error);
         
         // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
         console.log('AuthContext: Attempting orphan user recovery for:', userId);
