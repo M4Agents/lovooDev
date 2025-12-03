@@ -7,7 +7,6 @@ type AuthContextType = {
   user: User | null;
   company: Company | null;
   loading: boolean;
-  isLoadingCompany: boolean;
   isImpersonating: boolean;
   originalUser: User | null;
   availableCompanies: Company[];
@@ -38,7 +37,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLoadingCompany, setIsLoadingCompany] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(() => {
     return localStorage.getItem('lovoo_crm_impersonating') === 'true';
   });
@@ -54,103 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
   const [legacyInfo, setLegacyInfo] = useState<LegacyUserInfo | null>(null);
 
-  // 🔍 CONTADOR PARA RASTREAR CHAMADAS
-  const [fetchCompanyCallCount, setFetchCompanyCallCount] = useState(0);
-
-  // NOVA FUNÇÃO: Recuperação automática de usuários órfãos
-  const attemptOrphanUserRecovery = async (userId: string) => {
-    try {
-      console.log('🔍 AuthContext: ORPHAN RECOVERY CALLED:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        callStack: new Error().stack?.split('\n').slice(1, 4).join(' -> '),
-        timestamp: new Date().toISOString()
-      });
-      
-      // Buscar informações do usuário no auth.users
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser || authUser.id !== userId) {
-        console.log('AuthContext: Auth user mismatch, cannot recover');
-        return null;
-      }
-
-      // Buscar se existe registro em company_users (sistema novo)
-      const { data: companyUsers } = await supabase
-        .from('company_users')
-        .select('*, companies(*)')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (companyUsers && companyUsers.length > 0) {
-        console.log('AuthContext: Found company_users records, creating compatibility record');
-        const companyUser = companyUsers[0];
-        const targetCompany = companyUser.companies;
-
-        // Criar registro de compatibilidade no sistema antigo
-        try {
-          const { error: insertError } = await supabase
-            .from('companies')
-            .insert({
-              id: crypto.randomUUID(),
-              user_id: userId,
-              name: `${authUser.email} - ${targetCompany.name}`,
-              company_type: targetCompany.company_type,
-              parent_company_id: targetCompany.company_type === 'client' ? targetCompany.id : null,
-              is_super_admin: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-
-          if (!insertError) {
-            console.log('AuthContext: Compatibility record created during recovery');
-            return targetCompany;
-          }
-        } catch (insertError) {
-          console.warn('AuthContext: Could not create compatibility record during recovery:', insertError);
-        }
-
-        // Mesmo se não conseguir criar compatibilidade, retornar empresa encontrada
-        return targetCompany;
-      }
-
-      console.log('AuthContext: No recovery possible - user truly orphaned');
-      return null;
-    } catch (error) {
-      console.error('AuthContext: Error during orphan user recovery:', error);
-      return null;
-    }
-  };
-
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
-      setIsLoadingCompany(true); // Iniciar loading
-      setFetchCompanyCallCount(prev => prev + 1);
-      
-      console.log('🔍 AuthContext: fetchCompany called with:', {
-        callNumber: fetchCompanyCallCount + 1,
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        forceSuper,
-        timestamp: new Date().toISOString()
-      });
+      console.log('AuthContext: Fetching company for user:', userId, 'forceSuper:', forceSuper);
       
       // Verificar localStorage primeiro para impersonation
       const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
-      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
-      const originalUserData = localStorage.getItem('lovoo_crm_original_user');
-      
-      console.log('🔍 AuthContext: Impersonation check:', {
-        isCurrentlyImpersonating,
-        impersonatedCompanyId,
-        originalUserData,
-        forceSuper,
-        willUseImpersonation: isCurrentlyImpersonating && !forceSuper
-      });
       
       // Se está impersonating e não é para forçar super admin, buscar empresa impersonada diretamente
       if (isCurrentlyImpersonating && !forceSuper) {
+        const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
         console.log('AuthContext: Looking for impersonated company:', impersonatedCompanyId);
         
         if (impersonatedCompanyId) {
@@ -188,155 +99,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // CORREÇÃO CRÍTICA: Verificar se é super admin em AMBOS os sistemas
-      console.log('AuthContext: Checking for super admin status, forceSuper:', forceSuper);
-      
-      // Verificar sistema antigo
-      const { data: legacySuperAdmin, error: legacyError } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_super_admin', true)
-        .single();
-        
-      console.log('AuthContext: Legacy super admin check:', { data: legacySuperAdmin, error: legacyError });
-      
-      // Verificar sistema novo
-      const { data: newSystemSuperAdmin, error: newSystemError } = await supabase
-        .from('company_users')
-        .select('*, companies(*)')
-        .eq('user_id', userId)
-        .eq('role', 'super_admin')
-        .eq('is_active', true)
-        .single();
-        
-      console.log('AuthContext: New system super admin check:', { data: newSystemSuperAdmin, error: newSystemError });
-      
-      // Se é super admin em QUALQUER sistema OU forceSuper está ativo, carregar TODAS as empresas
-      if ((!legacyError && legacySuperAdmin) || (!newSystemError && newSystemSuperAdmin) || forceSuper) {
-        console.log('AuthContext: User is LEGACY SUPER ADMIN - loading ALL companies');
-        
-        const { data: allCompanies, error: allCompaniesError } = await supabase
-          .from('companies')
-          .select('*')
-          .order('name');
-          
-        console.log('AuthContext: All companies loaded for super admin:', { count: allCompanies?.length, error: allCompaniesError });
-        
-        if (!allCompaniesError && allCompanies && allCompanies.length > 0) {
-          // Armazenar todas as empresas disponíveis
-          setAvailableCompanies(allCompanies);
-          
-          // Selecionar a empresa super admin como principal
-          const superAdminCompany = legacySuperAdmin || 
-                                   (newSystemSuperAdmin?.companies) || 
-                                   allCompanies.find(c => c.is_super_admin) || 
-                                   allCompanies[0];
-          setCompany(superAdminCompany);
-          
-          // Sincronizar currentCompanyId no localStorage para analytics
-          localStorage.setItem('currentCompanyId', superAdminCompany.id);
-          
-          console.log('AuthContext: Super admin setup completed - Company:', superAdminCompany.name, 'Available companies:', allCompanies.length);
-          return; // Sair da função - super admin configurado com sucesso
-        }
-      }
-      
       // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
       console.log('AuthContext: Trying NEW system first (company_users)');
-      console.log('🔍 AuthContext: About to query with userId:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        userIdString: String(userId),
-        userIdJSON: JSON.stringify(userId)
-      });
-      
-      // CORREÇÃO: Usar abordagem mais robusta - buscar company_users primeiro
-      const { data: companyUsersData, error: companyUsersError } = await supabase
+      let { data, error } = await supabase
         .from('company_users')
-        .select('company_id, role, is_active')
+        .select(`
+          *,
+          companies:company_id (*)
+        `)
         .eq('user_id', userId)
         .eq('is_active', true);
         
-      console.log('AuthContext: NEW system company_users query:', { data: companyUsersData, error: companyUsersError });
-      
-      let { data, error }: { data: any[] | null, error: any } = { data: null, error: companyUsersError };
-      
-      if (!companyUsersError && companyUsersData && companyUsersData.length > 0) {
-        console.log('AuthContext: Found user in company_users, fetching companies...');
-        console.log('AuthContext: Company IDs from NEW system:', companyUsersData.map(cu => cu.company_id));
-        
-        // Buscar empresas correspondentes
-        const companyIds = companyUsersData.map(cu => cu.company_id);
-        const { data: companiesData, error: companiesError } = await supabase
+      if (!error && data && data.length > 0) {
+        console.log('AuthContext: Found companies in NEW system:', data.length);
+        data = data.map((item: any) => item.companies);
+      } else {
+        console.log('AuthContext: Not found in NEW system, trying OLD system');
+        // Fallback para sistema antigo
+        const result = await supabase
           .from('companies')
           .select('*')
-          .in('id', companyIds);
-          
-        console.log('AuthContext: Companies query for NEW system:', { data: companiesData, error: companiesError });
-        
-        if (!companiesError && companiesData && companiesData.length > 0) {
-          data = companiesData;
-          error = null;
-          console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
-          console.log('AuthContext: NEW system company details:', companiesData.map(c => ({ id: c.id, name: c.name })));
-          
-          // GARANTIR que está usando dados do sistema novo
-          console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
-        } else {
-          // CORREÇÃO CRÍTICA: Só definir error se realmente houver erro
-          if (companiesError) {
-            error = companiesError;
-            console.error('AuthContext: Failed to fetch companies for NEW system IDs:', companiesError);
-          } else {
-            // Dados vazios mas sem erro - manter error como null para não contaminar
-            error = null;
-            console.warn('AuthContext: NEW system returned empty data but no error - keeping error as null');
-          }
-        }
-      }
-      
-      console.log('AuthContext: NEW system final result:', { data, error, dataLength: data?.length });
-      console.log('AuthContext: Final condition check:', { 
-        errorIsNull: error === null,
-        errorIsFalsy: !error,
-        dataExists: !!data,
-        dataLength: data?.length,
-        finalCondition: (!error && data && data.length > 0)
-      });
-      
-      if (!error && data && data.length > 0) {
-        console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
-        console.log('AuthContext: NEW system companies:', data.map(c => ({ id: c.id, name: c.name })));
-        // Data já contém as empresas corretas do sistema novo - PRIORIZAR SEMPRE
-      } else {
-        console.log('AuthContext: Not found in NEW system, trying OLD system as fallback');
-        console.log('AuthContext: NEW system error details:', error);
-        console.log('AuthContext: NEW system data:', data);
-        
-        // IMPORTANTE: Só usar sistema antigo se realmente não encontrou no novo
-        if (!data || data.length === 0) {
-          console.log('AuthContext: Confirmed no data in NEW system, using OLD system fallback');
-          
-          // Fallback para sistema antigo
-          const result = await supabase
-            .from('companies')
-            .select('*')
-            .eq('user_id', userId);
-            
-          console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-          data = result.data;
-          error = result.error;
-        } else {
-          console.log('AuthContext: Actually found data in NEW system, keeping it');
-        }
+          .eq('user_id', userId);
+        data = result.data;
+        error = result.error;
       }
 
+      console.log('AuthContext: Company fetch result:', { data, error });
 
       if (!error && data && data.length > 0) {
-        console.log('AuthContext: ENTERING final company selection logic');
-        
         // Armazenar todas as empresas disponíveis
         setAvailableCompanies(data as any);
         
@@ -344,67 +134,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
         const selectedCompany = superAdminCompany || data[0];
         
-        console.log('AuthContext: Company selection details:', {
-          totalCompanies: data.length,
-          superAdminFound: !!superAdminCompany,
-          selectedCompanyId: (selectedCompany as any).id,
-          selectedCompanyName: (selectedCompany as any).name
-        });
-        
         console.log('AuthContext: Setting company:', (selectedCompany as any).name);
-        console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
-        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ id: c.id, name: c.name, is_super_admin: c.is_super_admin })));
-        
-        // CRÍTICO: Garantir que está usando empresa do sistema novo
-        if ((selectedCompany as any).id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-          console.warn('AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          console.warn('AuthContext: Company details:', selectedCompany);
-        } else {
-          console.log('AuthContext: SUCCESS - Using NEW system company ID');
-        }
-        
+        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ name: c.name, is_super_admin: c.is_super_admin })));
         setCompany(selectedCompany as any);
         
         // Sincronizar currentCompanyId no localStorage para analytics
         localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
       } else {
-        console.log('AuthContext: FAILED final condition - No company found or error:', error);
-        console.log('AuthContext: Final condition failed with values:', { 
-          error, 
-          data, 
-          dataLength: data?.length,
-          errorType: typeof error,
-          dataType: typeof data
-        });
-        
-        // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
-        console.log('🔍 AuthContext: ABOUT TO CALL ORPHAN RECOVERY:', {
-          userId,
-          reason: 'No company found in both systems',
-          currentState: {
-            user: !!user,
-            company: !!company,
-            loading,
-            isLoadingCompany
-          }
-        });
-        const recoveredCompany = await attemptOrphanUserRecovery(userId);
-        
-        if (recoveredCompany) {
-          console.log('AuthContext: Orphan user recovered successfully:', recoveredCompany.name);
-          setCompany(recoveredCompany);
-          setAvailableCompanies([recoveredCompany]);
-        } else {
-          console.log('AuthContext: Could not recover orphan user');
-          setAvailableCompanies([]);
-          setCompany(null);
-        }
+        console.log('AuthContext: No company found or error:', error);
+        setAvailableCompanies([]);
+        setCompany(null);
       }
     } catch (error) {
       console.error('AuthContext: Error fetching company:', error);
       setCompany(null);
-    } finally {
-      setIsLoadingCompany(false); // Finalizar loading sempre
     }
   };
 
@@ -445,59 +188,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin em AMBOS sistemas
-      console.log('AuthContext: Refresh - checking if user is super admin');
-      
-      const { data: legacySuperAdminCheck } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_super_admin', true)
-        .single();
-        
-      const { data: newSystemSuperAdminCheck } = await supabase
-        .from('company_users')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('role', 'super_admin')
-        .eq('is_active', true)
-        .single();
-        
-      if (legacySuperAdminCheck || newSystemSuperAdminCheck) {
-        console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
-        await fetchCompany(user.id, true); // Forçar modo super admin
-      } else {
-        await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
-      }
+      await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
     }
   };
 
   useEffect(() => {
-    // 🔍 VERIFICAR DADOS SALVOS ANTES DE CARREGAR SESSÃO
-    console.log('🔍 AuthContext: Checking stored data before session load:', {
-      localStorage_user: localStorage.getItem('lovoo_crm_user'),
-      localStorage_company: localStorage.getItem('lovoo_crm_company'),
-      localStorage_impersonating: localStorage.getItem('lovoo_crm_impersonating'),
-      localStorage_original_user: localStorage.getItem('lovoo_crm_original_user'),
-      localStorage_company_id: localStorage.getItem('currentCompanyId'),
-      sessionStorage_keys: Object.keys(sessionStorage)
-    });
-    
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('🔍 AuthContext: Initial session loaded:', {
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        userId: session?.user?.id,
-        userEmail: session?.user?.email,
-        userIdType: typeof session?.user?.id,
-        userIdLength: session?.user?.id?.length
-      });
-      
       setUser(session?.user ?? null);
       
       // Buscar empresa sempre que tiver usuário
       if (session?.user) {
-        console.log('🔍 AuthContext: Calling fetchCompany with userId:', session.user.id);
         fetchCompany(session.user.id);
       }
       setLoading(false);
@@ -505,21 +205,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        console.log('🔍 AuthContext: Auth state changed:', {
-          event: _event,
-          hasSession: !!session,
-          hasUser: !!session?.user,
-          userId: session?.user?.id,
-          userEmail: session?.user?.email,
-          userIdType: typeof session?.user?.id,
-          userIdLength: session?.user?.id?.length
-        });
-        
         setUser(session?.user ?? null);
         
         // Buscar empresa sempre que tiver usuário
         if (session?.user) {
-          console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
           await fetchCompany(session.user.id);
           // Carregar roles do usuário após carregar empresa
           setTimeout(() => {
@@ -759,13 +448,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    // CORREÇÃO CRÍTICA: Verificar múltiplas condições de super admin
-    const isSuperAdmin = company?.is_super_admin || 
-                        currentRole === 'super_admin' || 
-                        (isImpersonating && originalUser);
-    
-    if (isSuperAdmin) {
-      return true; // Super admin tem todas as permissões (mesmo impersonando)
+    // Fallback para sistema atual (compatibilidade)
+    if (company?.is_super_admin) {
+      return true; // Super admin tem todas as permissões
     }
 
     // Usar novo sistema de permissões se disponível
@@ -776,8 +461,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Fallback baseado no role atual
     if (currentRole) {
       switch (currentRole) {
+        case 'super_admin':
+          return true;
         case 'admin':
-          // Admin pode gerenciar usuários, exceto financial e companies
           return permission !== 'financial' && permission !== 'companies';
         case 'partner':
           return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission);
@@ -856,7 +542,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user, 
       company, 
       loading, 
-      isLoadingCompany,
       isImpersonating,
       originalUser,
       availableCompanies,

@@ -54,19 +54,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
   const [legacyInfo, setLegacyInfo] = useState<LegacyUserInfo | null>(null);
 
-  // 🔍 CONTADOR PARA RASTREAR CHAMADAS
-  const [fetchCompanyCallCount, setFetchCompanyCallCount] = useState(0);
-
   // NOVA FUNÇÃO: Recuperação automática de usuários órfãos
   const attemptOrphanUserRecovery = async (userId: string) => {
     try {
-      console.log('🔍 AuthContext: ORPHAN RECOVERY CALLED:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        callStack: new Error().stack?.split('\n').slice(1, 4).join(' -> '),
-        timestamp: new Date().toISOString()
-      });
+      console.log('AuthContext: Starting orphan user recovery for:', userId);
       
       // Buscar informações do usuário no auth.users
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -125,10 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
       setIsLoadingCompany(true); // Iniciar loading
-      setFetchCompanyCallCount(prev => prev + 1);
-      
       console.log('🔍 AuthContext: fetchCompany called with:', {
-        callNumber: fetchCompanyCallCount + 1,
         userId,
         userIdType: typeof userId,
         userIdLength: userId?.length,
@@ -138,19 +126,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Verificar localStorage primeiro para impersonation
       const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
-      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
-      const originalUserData = localStorage.getItem('lovoo_crm_original_user');
-      
-      console.log('🔍 AuthContext: Impersonation check:', {
-        isCurrentlyImpersonating,
-        impersonatedCompanyId,
-        originalUserData,
-        forceSuper,
-        willUseImpersonation: isCurrentlyImpersonating && !forceSuper
-      });
       
       // Se está impersonating e não é para forçar super admin, buscar empresa impersonada diretamente
       if (isCurrentlyImpersonating && !forceSuper) {
+        const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
         console.log('AuthContext: Looking for impersonated company:', impersonatedCompanyId);
         
         if (impersonatedCompanyId) {
@@ -378,16 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         
         // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
-        console.log('🔍 AuthContext: ABOUT TO CALL ORPHAN RECOVERY:', {
-          userId,
-          reason: 'No company found in both systems',
-          currentState: {
-            user: !!user,
-            company: !!company,
-            loading,
-            isLoadingCompany
-          }
-        });
+        console.log('AuthContext: Attempting orphan user recovery for:', userId);
         const recoveredCompany = await attemptOrphanUserRecovery(userId);
         
         if (recoveredCompany) {
@@ -473,16 +443,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // 🔍 VERIFICAR DADOS SALVOS ANTES DE CARREGAR SESSÃO
-    console.log('🔍 AuthContext: Checking stored data before session load:', {
-      localStorage_user: localStorage.getItem('lovoo_crm_user'),
-      localStorage_company: localStorage.getItem('lovoo_crm_company'),
-      localStorage_impersonating: localStorage.getItem('lovoo_crm_impersonating'),
-      localStorage_original_user: localStorage.getItem('lovoo_crm_original_user'),
-      localStorage_company_id: localStorage.getItem('currentCompanyId'),
-      sessionStorage_keys: Object.keys(sessionStorage)
-    });
-    
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('🔍 AuthContext: Initial session loaded:', {
         hasSession: !!session,
