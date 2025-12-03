@@ -56,9 +56,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 🔍 CONTADOR PARA RASTREAR CHAMADAS
   const [fetchCompanyCallCount, setFetchCompanyCallCount] = useState(0);
-  
-  // 🔧 FLAG PARA EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
-  const [isFetchingCompany, setIsFetchingCompany] = useState(false);
 
   // 🔧 FUNÇÃO DE LIMPEZA DE DADOS DE IMPERSONAÇÃO INVÁLIDOS
   const cleanupInvalidImpersonationData = () => {
@@ -173,14 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
-      // 🔧 EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
-      if (isFetchingCompany && !forceSuper) {
-        console.log('🔧 AuthContext: fetchCompany already in progress, skipping call');
-        return;
-      }
-      
       setIsLoadingCompany(true); // Iniciar loading
-      setIsFetchingCompany(true); // Marcar como em progresso
       setFetchCompanyCallCount(prev => prev + 1);
       
       console.log('🔍 AuthContext: fetchCompany called with:', {
@@ -189,7 +179,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userIdType: typeof userId,
         userIdLength: userId?.length,
         forceSuper,
-        isFetchingCompany,
         timestamp: new Date().toISOString()
       });
       
@@ -434,12 +423,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dataType: typeof data
         });
         
-        // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA EM OUTRA CHAMADA
-        if (company && company.id) {
-          console.log('🔧 AuthContext: Company already loaded in another call, skipping orphan recovery');
-          return;
-        }
-        
         // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
         console.log('🔍 AuthContext: ABOUT TO CALL ORPHAN RECOVERY:', {
           userId,
@@ -448,8 +431,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user: !!user,
             company: !!company,
             loading,
-            isLoadingCompany,
-            isFetchingCompany
+            isLoadingCompany
           }
         });
         const recoveredCompany = await attemptOrphanUserRecovery(userId);
@@ -469,8 +451,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCompany(null);
     } finally {
       setIsLoadingCompany(false); // Finalizar loading sempre
-      setIsFetchingCompany(false); // Liberar flag de controle
-      console.log('🔧 AuthContext: fetchCompany completed, flags cleared');
     }
   };
 
