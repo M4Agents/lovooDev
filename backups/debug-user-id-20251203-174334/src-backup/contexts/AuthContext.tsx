@@ -116,13 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
       setIsLoadingCompany(true); // Iniciar loading
-      console.log('🔍 AuthContext: fetchCompany called with:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        forceSuper,
-        timestamp: new Date().toISOString()
-      });
+      console.log('AuthContext: Fetching company for user:', userId, 'forceSuper:', forceSuper);
       
       // Verificar localStorage primeiro para impersonation
       const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
@@ -223,13 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
       console.log('AuthContext: Trying NEW system first (company_users)');
-      console.log('🔍 AuthContext: About to query with userId:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        userIdString: String(userId),
-        userIdJSON: JSON.stringify(userId)
-      });
+      console.log('AuthContext: User ID:', userId);
       
       // CORREÇÃO: Usar abordagem mais robusta - buscar company_users primeiro
       const { data: companyUsersData, error: companyUsersError } = await supabase
@@ -444,20 +432,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('🔍 AuthContext: Initial session loaded:', {
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        userId: session?.user?.id,
-        userEmail: session?.user?.email,
-        userIdType: typeof session?.user?.id,
-        userIdLength: session?.user?.id?.length
-      });
-      
       setUser(session?.user ?? null);
       
       // Buscar empresa sempre que tiver usuário
       if (session?.user) {
-        console.log('🔍 AuthContext: Calling fetchCompany with userId:', session.user.id);
         fetchCompany(session.user.id);
       }
       setLoading(false);
@@ -465,21 +443,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        console.log('🔍 AuthContext: Auth state changed:', {
-          event: _event,
-          hasSession: !!session,
-          hasUser: !!session?.user,
-          userId: session?.user?.id,
-          userEmail: session?.user?.email,
-          userIdType: typeof session?.user?.id,
-          userIdLength: session?.user?.id?.length
-        });
-        
         setUser(session?.user ?? null);
         
         // Buscar empresa sempre que tiver usuário
         if (session?.user) {
-          console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
           await fetchCompany(session.user.id);
           // Carregar roles do usuário após carregar empresa
           setTimeout(() => {
