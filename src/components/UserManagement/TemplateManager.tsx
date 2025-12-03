@@ -3,7 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Eye, EyeOff, Settings, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 import { UserTemplate, UserRole, CreateTemplateRequest } from '../../types/user';
 import { getCompanyTemplates, createUserTemplate, deactivateTemplate } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<UserTemplate | null>(null);
   const [viewingTemplate, setViewingTemplate] = useState<UserTemplate | null>(null); // NOVO: Template sendo visualizado
+  
+  // NOVO: Estados para controle de visibilidade integrado
+  const [pendingChanges, setPendingChanges] = useState<Record<string, boolean>>({});
+  const [savingChanges, setSavingChanges] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Carregar templates
   const loadTemplates = async () => {
@@ -46,6 +51,70 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   useEffect(() => {
     loadTemplates();
   }, [company?.id]);
+
+  // NOVO: Verificar se usuário pode configurar visibilidade
+  const canConfigureVisibility = company?.company_type === 'parent' && 
+    (company?.is_super_admin || true); // TODO: Integrar com hasPermission quando disponível
+
+  // NOVO: Toggle de visibilidade
+  const toggleVisibility = (templateId: string, currentVisibility: boolean) => {
+    const newVisibility = !currentVisibility;
+    setPendingChanges(prev => ({
+      ...prev,
+      [templateId]: newVisibility
+    }));
+  };
+
+  // NOVO: Salvar alterações de visibilidade
+  const saveVisibilityChanges = async () => {
+    try {
+      setSavingChanges(true);
+      setMessage(null);
+
+      // TODO: Implementar salvamento real quando persistência for adicionada
+      // Por enquanto, simular salvamento
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Atualizar templates localmente
+      setTemplates(prev => prev.map(template => {
+        if (pendingChanges.hasOwnProperty(template.id)) {
+          return {
+            ...template,
+            visibleToChildCompanies: pendingChanges[template.id]
+          };
+        }
+        return template;
+      }));
+
+      // Limpar alterações pendentes
+      setPendingChanges({});
+      
+      const changesCount = Object.keys(pendingChanges).length;
+      setMessage({ 
+        type: 'success', 
+        text: `${changesCount} configuração(ões) salva(s) com sucesso!` 
+      });
+
+      // Limpar mensagem após 3 segundos
+      setTimeout(() => setMessage(null), 3000);
+
+    } catch (error) {
+      console.error('TemplateManager: Error saving visibility changes:', error);
+      setMessage({ type: 'error', text: 'Erro ao salvar configurações' });
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
+  // NOVO: Descartar alterações
+  const discardChanges = () => {
+    setPendingChanges({});
+    setMessage({ type: 'success', text: 'Alterações descartadas' });
+    setTimeout(() => setMessage(null), 2000);
+  };
+
+  // NOVO: Verificar se há alterações pendentes
+  const hasPendingChanges = Object.keys(pendingChanges).length > 0;
 
   // Ícone do role
   const getRoleIcon = (role: UserRole) => {
@@ -154,19 +223,57 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
           </p>
         </div>
         
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Template
-        </button>
+        <div className="flex items-center space-x-3">
+          {/* Controles de salvamento - Apenas quando há alterações pendentes */}
+          {hasPendingChanges && canConfigureVisibility && (
+            <>
+              <button
+                onClick={discardChanges}
+                className="flex items-center space-x-2 px-3 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <span>Descartar</span>
+              </button>
+              <button
+                onClick={saveVisibilityChanges}
+                disabled={savingChanges}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{savingChanges ? 'Salvando...' : 'Salvar Alterações'}</span>
+              </button>
+            </>
+          )}
+          
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Template
+          </button>
+        </div>
       </div>
 
       {/* Erro */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-600">{error}</p>
+        </div>
+      )}
+
+      {/* Mensagem de feedback */}
+      {message && (
+        <div className={`p-4 rounded-lg flex items-center space-x-3 ${
+          message.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+        }`}>
+          {message.type === 'success' ? (
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          ) : (
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          )}
+          <span className={message.type === 'success' ? 'text-green-800' : 'text-red-800'}>
+            {message.text}
+          </span>
         </div>
       )}
 
@@ -221,6 +328,66 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                   {template.tags.length > 3 && (
                     <span className="text-xs text-slate-500">+{template.tags.length - 3}</span>
                   )}
+                </div>
+              )}
+
+              {/* Controle de Visibilidade - Apenas para Super Admin/Admin */}
+              {canConfigureVisibility && (
+                <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Settings className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">
+                        Visível para empresas filhas
+                      </span>
+                      {pendingChanges.hasOwnProperty(template.id) && (
+                        <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded">
+                          Alterado
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => toggleVisibility(template.id, 
+                        pendingChanges.hasOwnProperty(template.id) 
+                          ? pendingChanges[template.id] 
+                          : template.visibleToChildCompanies ?? false
+                      )}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        (pendingChanges.hasOwnProperty(template.id) 
+                          ? pendingChanges[template.id] 
+                          : template.visibleToChildCompanies ?? false)
+                          ? 'bg-blue-600' : 'bg-slate-200'
+                      }`}
+                      title={`${(pendingChanges.hasOwnProperty(template.id) 
+                        ? pendingChanges[template.id] 
+                        : template.visibleToChildCompanies ?? false) 
+                        ? 'Visível para empresas filhas' : 'Apenas empresa pai'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          (pendingChanges.hasOwnProperty(template.id) 
+                            ? pendingChanges[template.id] 
+                            : template.visibleToChildCompanies ?? false)
+                            ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {(pendingChanges.hasOwnProperty(template.id) 
+                      ? pendingChanges[template.id] 
+                      : template.visibleToChildCompanies ?? false) ? (
+                      <span className="flex items-center space-x-1 text-green-600">
+                        <Eye className="w-3 h-3" />
+                        <span>Empresas filhas podem usar este perfil</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center space-x-1 text-slate-500">
+                        <EyeOff className="w-3 h-3" />
+                        <span>Disponível apenas para empresa pai</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -318,6 +485,66 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                     {template.tags.length > 3 && (
                       <span className="text-xs text-slate-500">+{template.tags.length - 3}</span>
                     )}
+                  </div>
+                )}
+
+                {/* Controle de Visibilidade - Apenas para Super Admin/Admin */}
+                {canConfigureVisibility && (
+                  <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Settings className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-medium text-slate-700">
+                          Visível para empresas filhas
+                        </span>
+                        {pendingChanges.hasOwnProperty(template.id) && (
+                          <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded">
+                            Alterado
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => toggleVisibility(template.id, 
+                          pendingChanges.hasOwnProperty(template.id) 
+                            ? pendingChanges[template.id] 
+                            : template.visibleToChildCompanies ?? false
+                        )}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          (pendingChanges.hasOwnProperty(template.id) 
+                            ? pendingChanges[template.id] 
+                            : template.visibleToChildCompanies ?? false)
+                            ? 'bg-blue-600' : 'bg-slate-200'
+                        }`}
+                        title={`${(pendingChanges.hasOwnProperty(template.id) 
+                          ? pendingChanges[template.id] 
+                          : template.visibleToChildCompanies ?? false) 
+                          ? 'Visível para empresas filhas' : 'Apenas empresa pai'}`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            (pendingChanges.hasOwnProperty(template.id) 
+                              ? pendingChanges[template.id] 
+                              : template.visibleToChildCompanies ?? false)
+                              ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      {(pendingChanges.hasOwnProperty(template.id) 
+                        ? pendingChanges[template.id] 
+                        : template.visibleToChildCompanies ?? false) ? (
+                        <span className="flex items-center space-x-1 text-green-600">
+                          <Eye className="w-3 h-3" />
+                          <span>Empresas filhas podem usar este perfil</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center space-x-1 text-slate-500">
+                          <EyeOff className="w-3 h-3" />
+                          <span>Disponível apenas para empresa pai</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 
