@@ -232,7 +232,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (!companyUsersError && companyUsersData && companyUsersData.length > 0) {
         console.log('AuthContext: Found user in company_users, fetching companies...');
-        console.log('AuthContext: Company IDs from NEW system:', companyUsersData.map(cu => cu.company_id));
         
         // Buscar empresas correspondentes
         const companyIds = companyUsersData.map(cu => cu.company_id);
@@ -247,13 +246,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data = companiesData;
           error = null;
           console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
-          console.log('AuthContext: NEW system company details:', companiesData.map(c => ({ id: c.id, name: c.name })));
-          
-          // GARANTIR que está usando dados do sistema novo
-          console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
         } else {
           error = companiesError;
-          console.error('AuthContext: Failed to fetch companies for NEW system IDs:', companiesError);
         }
       }
       
@@ -261,29 +255,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (!error && data && data.length > 0) {
         console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
-        console.log('AuthContext: NEW system companies:', data.map(c => ({ id: c.id, name: c.name })));
-        // Data já contém as empresas corretas do sistema novo - PRIORIZAR SEMPRE
+        // Data já contém as empresas corretas, não precisa mapear
       } else {
         console.log('AuthContext: Not found in NEW system, trying OLD system as fallback');
-        console.log('AuthContext: NEW system error details:', error);
-        console.log('AuthContext: NEW system data:', data);
+        console.log('AuthContext: Error details:', error);
         
-        // IMPORTANTE: Só usar sistema antigo se realmente não encontrou no novo
-        if (!data || data.length === 0) {
-          console.log('AuthContext: Confirmed no data in NEW system, using OLD system fallback');
+        // Fallback para sistema antigo
+        const result = await supabase
+          .from('companies')
+          .select('*')
+          .eq('user_id', userId);
           
-          // Fallback para sistema antigo
-          const result = await supabase
-            .from('companies')
-            .select('*')
-            .eq('user_id', userId);
-            
-          console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-          data = result.data;
-          error = result.error;
-        } else {
-          console.log('AuthContext: Actually found data in NEW system, keeping it');
-        }
+        console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
+        data = result.data;
+        error = result.error;
       }
 
       console.log('AuthContext: Company fetch result:', { data, error });
@@ -297,17 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const selectedCompany = superAdminCompany || data[0];
         
         console.log('AuthContext: Setting company:', (selectedCompany as any).name);
-        console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
-        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ id: c.id, name: c.name, is_super_admin: c.is_super_admin })));
-        
-        // CRÍTICO: Garantir que está usando empresa do sistema novo
-        if ((selectedCompany as any).id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-          console.warn('AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          console.warn('AuthContext: Company details:', selectedCompany);
-        } else {
-          console.log('AuthContext: SUCCESS - Using NEW system company ID');
-        }
-        
+        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ name: c.name, is_super_admin: c.is_super_admin })));
         setCompany(selectedCompany as any);
         
         // Sincronizar currentCompanyId no localStorage para analytics
