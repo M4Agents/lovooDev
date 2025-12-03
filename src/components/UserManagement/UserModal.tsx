@@ -3,7 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Crown, Shield, Briefcase, UserCheck, User, Tag } from 'lucide-react';
+import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { applyTemplateToPermissions } from '../../services/userTemplates';
@@ -12,8 +12,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
-import { TemplateSelector } from './TemplateSelector';
-import { AdvancedPermissions } from './AdvancedPermissions';
 import { supabase } from '../../lib/supabase';
 
 interface UserModalProps {
@@ -53,11 +51,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     sendInvite: true
   });
 
-  // NOVOS ESTADOS - Sistema de templates e permissões avançadas
+  // ESTADOS LEGADOS - Mantidos para compatibilidade (não utilizados atualmente)
   const [selectedTemplate, setSelectedTemplate] = useState<UserTemplate | null>(null);
   const [useAdvancedPermissions, setUseAdvancedPermissions] = useState(false);
   const [customPermissions, setCustomPermissions] = useState<Partial<UserPermissions>>({});
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   
   // NOVO SISTEMA - Perfis unificados
   const [availableProfiles, setAvailableProfiles] = useState<UserProfile[]>([]);
@@ -81,7 +78,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedTemplate(null);
         setUseAdvancedPermissions(false);
         setCustomPermissions(user.permissions || {});
-        setShowTemplateSelector(false);
       } else {
         // Modo criação (MANTIDO)
         setFormData({
@@ -95,7 +91,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedTemplate(null);
         setUseAdvancedPermissions(false);
         setCustomPermissions({});
-        setShowTemplateSelector(false);
       }
       setError(null);
       
@@ -109,24 +104,34 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   }, [isOpen, user, company?.id]);
 
-  // NOVA FUNÇÃO: Carregar perfis disponíveis
+  // NOVA FUNÇÃO: Carregar perfis disponíveis (COM FALLBACK SEGURO)
   const loadAvailableProfiles = async () => {
     if (!company?.id) return;
     
     try {
+      // Verificar se as funções existem antes de usar
+      if (typeof getProfilesForCompanyType !== 'function') {
+        console.warn('UserModal: getProfilesForCompanyType not available, using fallback');
+        setAvailableProfiles([]);
+        return;
+      }
+
       const profiles = await getProfilesForCompanyType(company.id, company.company_type || 'client');
-      setAvailableProfiles(profiles);
+      setAvailableProfiles(profiles || []);
       
       // Se não há perfil selecionado, selecionar o primeiro perfil do sistema compatível
-      if (!selectedProfile) {
+      if (!selectedProfile && profiles && profiles.length > 0) {
         const defaultProfile = profiles.find(p => p.isSystem && getProfileRole(p) === formData.role);
         if (defaultProfile) {
           setSelectedProfile(defaultProfile);
         }
       }
     } catch (error) {
-      console.error('UserModal: Error loading profiles:', error);
+      console.error('UserModal: Fallback to legacy system due to error:', error);
+      // FALLBACK SEGURO: Limpar perfis e usar sistema antigo
       setAvailableProfiles([]);
+      setSelectedProfile(null);
+      // Modal continua funcionando com sistema de roles antigo
     }
   };
 
@@ -579,79 +584,118 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             </div>
           )}
 
-          {/* Perfil de Acesso - SISTEMA UNIFICADO */}
+          {/* Perfil de Acesso - SISTEMA UNIFICADO COM FALLBACK */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               <Shield className="w-4 h-4 inline mr-2" />
-              Perfil de Acesso
+              {availableProfiles.length > 0 ? 'Perfil de Acesso' : 'Nível de Acesso (Role)'}
             </label>
-            <select
-              value={selectedProfile?.id || ''}
-              onChange={(e) => {
-                const profile = availableProfiles.find(p => p.id === e.target.value);
-                setSelectedProfile(profile || null);
-                if (profile) {
-                  // Atualizar role do formulário para compatibilidade
-                  const role = getProfileRole(profile);
-                  setFormData(prev => ({ ...prev, role }));
-                }
-              }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={loading}
-            >
-              <option value="">Selecione um perfil...</option>
-              
-              {/* Perfis do Sistema */}
-              {availableProfiles.filter(p => p.isSystem).length > 0 && (
-                <optgroup label="Perfis do Sistema">
-                  {availableProfiles
-                    .filter(p => p.isSystem)
-                    .map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name}
-                      </option>
-                    ))
-                  }
-                </optgroup>
-              )}
-              
-              {/* Perfis Personalizados */}
-              {availableProfiles.filter(p => !p.isSystem).length > 0 && (
-                <optgroup label="Perfis Personalizados">
-                  {availableProfiles
-                    .filter(p => !p.isSystem)
-                    .map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        📋 {profile.name}
-                      </option>
-                    ))
-                  }
-                </optgroup>
-              )}
-            </select>
             
-            {/* Descrição do perfil selecionado */}
-            {selectedProfile && (
-              <div className="mt-2 p-3 bg-slate-50 rounded-lg">
-                <p className="text-sm text-slate-700 font-medium">
-                  {selectedProfile.name}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {selectedProfile.description}
-                </p>
-                {selectedProfile.tags && selectedProfile.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {selectedProfile.tags.slice(0, 3).map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                      >
-                        {tag}
-                      </span>
-                    ))}
+            {/* SISTEMA NOVO: Seletor de Perfis (quando disponível) */}
+            {availableProfiles.length > 0 ? (
+              <>
+                <select
+                  value={selectedProfile?.id || ''}
+                  onChange={(e) => {
+                    const profile = availableProfiles.find(p => p.id === e.target.value);
+                    setSelectedProfile(profile || null);
+                    if (profile) {
+                      // Atualizar role do formulário para compatibilidade
+                      const role = getProfileRole(profile);
+                      setFormData(prev => ({ ...prev, role }));
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={loading}
+                >
+                  <option value="">Selecione um perfil...</option>
+                  
+                  {/* Perfis do Sistema */}
+                  {availableProfiles.filter(p => p.isSystem).length > 0 && (
+                    <optgroup label="Perfis do Sistema">
+                      {availableProfiles
+                        .filter(p => p.isSystem)
+                        .map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))
+                      }
+                    </optgroup>
+                  )}
+                  
+                  {/* Perfis Personalizados */}
+                  {availableProfiles.filter(p => !p.isSystem).length > 0 && (
+                    <optgroup label="Perfis Personalizados">
+                      {availableProfiles
+                        .filter(p => !p.isSystem)
+                        .map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            📋 {profile.name}
+                          </option>
+                        ))
+                      }
+                    </optgroup>
+                  )}
+                </select>
+                
+                {/* Descrição do perfil selecionado */}
+                {selectedProfile && (
+                  <div className="mt-2 p-3 bg-slate-50 rounded-lg">
+                    <p className="text-sm text-slate-700 font-medium">
+                      {selectedProfile.name}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {selectedProfile.description}
+                    </p>
+                    {selectedProfile.tags && selectedProfile.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {selectedProfile.tags.slice(0, 3).map((tag, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
+            ) : (
+              /* FALLBACK: Seletor de Roles Antigo (quando perfis falham) */
+              <>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserRole }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={loading}
+                >
+                  {getAvailableRoles().map((role) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+                
+                {/* Descrição do role selecionado */}
+                {(() => {
+                  const selectedRole = getAvailableRoles().find(r => r.value === formData.role);
+                  return selectedRole ? (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {selectedRole.description}
+                    </p>
+                  ) : null;
+                })()}
+                
+                {/* Aviso de fallback */}
+                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-xs text-yellow-700">
+                    ⚠️ Usando sistema básico de roles. Perfis personalizados temporariamente indisponíveis.
+                  </p>
+                </div>
+              </>
             )}
           </div>
 
