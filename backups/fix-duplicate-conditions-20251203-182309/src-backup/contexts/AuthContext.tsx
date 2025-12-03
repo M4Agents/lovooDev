@@ -379,48 +379,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         finalCondition: (!error && data && data.length > 0)
       });
       
-      // 🔧 CORREÇÃO: REESTRUTURAR LÓGICA PARA EVITAR DUPLICAÇÃO
       if (!error && data && data.length > 0) {
         console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
         console.log('AuthContext: NEW system companies:', data.map(c => ({ id: c.id, name: c.name })));
-        
-        // 🔧 PROCESSAR DADOS DO SISTEMA NOVO DIRETAMENTE AQUI
-        console.log('AuthContext: ENTERING final company selection logic');
-        
-        // Armazenar todas as empresas disponíveis
-        setAvailableCompanies(data as any);
-        
-        // Priorizar empresa super admin se existir
-        const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
-        const selectedCompany = superAdminCompany || data[0];
-        
-        console.log('AuthContext: Company selection details:', {
-          totalCompanies: data.length,
-          superAdminFound: !!superAdminCompany,
-          selectedCompanyId: (selectedCompany as any).id,
-          selectedCompanyName: (selectedCompany as any).name
-        });
-        
-        console.log('AuthContext: Setting company:', (selectedCompany as any).name);
-        console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
-        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ id: c.id, name: c.name, is_super_admin: c.is_super_admin })));
-        
-        // CRÍTICO: Garantir que está usando empresa do sistema novo
-        if ((selectedCompany as any).id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-          console.warn('AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          console.warn('AuthContext: Company details:', selectedCompany);
-        } else {
-          console.log('AuthContext: SUCCESS - Using NEW system company ID');
-        }
-        
-        setCompany(selectedCompany as any);
-        
-        // Sincronizar currentCompanyId no localStorage para analytics
-        localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
-        
-        // 🔧 RETORNAR AQUI PARA EVITAR EXECUÇÃO DO ELSE
-        return;
-        
+        // Data já contém as empresas corretas do sistema novo - PRIORIZAR SEMPRE
       } else {
         console.log('AuthContext: Not found in NEW system, trying OLD system as fallback');
         console.log('AuthContext: NEW system error details:', error);
@@ -444,7 +406,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 🔧 ESTA CONDIÇÃO AGORA SÓ EXECUTA PARA SISTEMA ANTIGO
+
       if (!error && data && data.length > 0) {
         console.log('AuthContext: ENTERING final company selection logic');
         
