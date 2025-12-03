@@ -40,6 +40,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: false, // APENAS empresa pai
       created_at: now,
       updated_at: now,
       tags: ['sistema', 'super_admin', 'total', 'empresa_pai']
@@ -62,6 +63,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: false, // APENAS empresa pai
       created_at: now,
       updated_at: now,
       tags: ['sistema', 'admin', 'gestão', 'empresa_pai']
@@ -84,6 +86,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: true, // VISÍVEL para empresas filhas
       created_at: now,
       updated_at: now,
       tags: ['vendedor', 'básico', 'iniciante']
@@ -110,6 +113,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: true, // VISÍVEL para empresas filhas
       created_at: now,
       updated_at: now,
       tags: ['vendedor', 'sênior', 'experiente']
@@ -138,6 +142,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: true, // VISÍVEL para empresas filhas
       created_at: now,
       updated_at: now,
       tags: ['gerente', 'gestão', 'equipe']
@@ -167,6 +172,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: true, // VISÍVEL para empresas filhas ✅
       created_at: now,
       updated_at: now,
       tags: ['admin', 'empresa', 'controle total']
@@ -189,6 +195,7 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
+      visibleToChildCompanies: false, // APENAS empresa pai
       created_at: now,
       updated_at: now,
       tags: ['parceiro', 'limitado', 'restrito']
@@ -206,7 +213,13 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       // Empresa pai: pode ver todos os perfis
       return true;
     } else {
-      // Empresa filha: NÃO pode ver super_admin, admin e partner
+      // Empresa filha: usar configuração dinâmica de visibilidade
+      // Se não configurado, usar fallback baseado no baseRole (compatibilidade)
+      if (template.visibleToChildCompanies !== undefined) {
+        return template.visibleToChildCompanies;
+      }
+      
+      // Fallback para templates sem configuração (compatibilidade)
       return !['super_admin', 'admin', 'partner'].includes(template.baseRole);
     }
   });

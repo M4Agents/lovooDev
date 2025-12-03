@@ -213,6 +213,9 @@ export interface UserTemplate {
   created_at: string;
   updated_at: string;
   
+  // NOVO: Controle de visibilidade para empresas filhas
+  visibleToChildCompanies?: boolean; // Se deve aparecer para empresas filhas
+  
   // Metadados
   usage_count?: number;
   last_used?: string;
