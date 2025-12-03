@@ -252,26 +252,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // GARANTIR que está usando dados do sistema novo
           console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
         } else {
-          // CORREÇÃO CRÍTICA: Só definir error se realmente houver erro
-          if (companiesError) {
-            error = companiesError;
-            console.error('AuthContext: Failed to fetch companies for NEW system IDs:', companiesError);
-          } else {
-            // Dados vazios mas sem erro - manter error como null para não contaminar
-            error = null;
-            console.warn('AuthContext: NEW system returned empty data but no error - keeping error as null');
-          }
+          error = companiesError;
+          console.error('AuthContext: Failed to fetch companies for NEW system IDs:', companiesError);
         }
       }
       
       console.log('AuthContext: NEW system final result:', { data, error, dataLength: data?.length });
-      console.log('AuthContext: Final condition check:', { 
-        errorIsNull: error === null,
-        errorIsFalsy: !error,
-        dataExists: !!data,
-        dataLength: data?.length,
-        finalCondition: (!error && data && data.length > 0)
-      });
       
       if (!error && data && data.length > 0) {
         console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
@@ -300,6 +286,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      console.log('AuthContext: Company fetch result:', { data, error });
+      console.log('AuthContext: Final condition check:', { 
+        errorIsNull: error === null,
+        errorIsFalsy: !error,
+        dataExists: !!data,
+        dataLength: data?.length,
+        finalCondition: (!error && data && data.length > 0)
+      });
 
       if (!error && data && data.length > 0) {
         console.log('AuthContext: ENTERING final company selection logic');
