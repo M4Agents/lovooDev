@@ -8,6 +8,7 @@ import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModul
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList } from '../components/UserManagement/UsersList';
 import { UserModal } from '../components/UserManagement/UserModal';
+import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { CompanyUser } from '../types/user';
 
 // Ícone oficial do WhatsApp
@@ -84,7 +85,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - NOVA ESTRUTURA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'templates' | 'tracking' | 'empresas'>('integracoes');
 
   // Detectar parâmetro tab na URL para ativar aba correta
   useEffect(() => {
@@ -1000,6 +1001,19 @@ export const Settings: React.FC = () => {
             >
               <Users className="w-4 h-4" />
               Usuários
+            </button>
+            
+            {/* Aba Templates */}
+            <button
+              onClick={() => setActiveTab('templates')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'templates'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <MessageCircle className="w-4 h-4" />
+              Templates
             </button>
             
             {/* Aba Tracking Site */}
@@ -2007,6 +2021,17 @@ export const Settings: React.FC = () => {
         <UsersList
           onCreateUser={handleCreateUser}
           onEditUser={handleEditUser}
+        />
+      )}
+
+      {/* Aba Templates - GESTÃO DE TEMPLATES */}
+      {activeTab === 'templates' && (
+        <TemplateManager
+          onCreateUser={(templateId) => {
+            // Abrir modal de usuário com template pré-selecionado
+            handleCreateUser();
+            // TODO: Passar templateId para o UserModal
+          }}
         />
       )}
 
