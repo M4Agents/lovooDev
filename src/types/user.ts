@@ -10,7 +10,7 @@ export type UserRole =
   | 'seller';      // Vendedor Cliente
 
 export interface UserPermissions {
-  // Módulos principais
+  // Módulos principais (MANTIDOS - compatibilidade 100%)
   dashboard: boolean;
   leads: boolean;
   chat: boolean;
@@ -20,7 +20,7 @@ export interface UserPermissions {
   users: boolean;
   financial: boolean;
   
-  // Ações específicas
+  // Ações específicas (MANTIDAS - compatibilidade 100%)
   create_users: boolean;
   edit_users: boolean;
   delete_users: boolean;
@@ -30,10 +30,51 @@ export interface UserPermissions {
   view_financial: boolean;
   edit_financial: boolean;
   
-  // Limitações
+  // Limitações (MANTIDAS - compatibilidade 100%)
   max_companies?: number;
   max_users?: number;
   restricted_companies?: string[];
+  
+  // NOVOS MÓDULOS (opcionais - não quebram sistema atual)
+  email_marketing?: boolean;
+  sms_campaigns?: boolean;
+  automations?: boolean;
+  reports?: boolean;
+  integrations?: boolean;
+  api_access?: boolean;
+  webhooks?: boolean;
+  
+  // NOVAS AÇÕES GRANULARES (opcionais)
+  create_leads?: boolean;
+  edit_own_leads?: boolean;
+  edit_team_leads?: boolean;
+  delete_leads?: boolean;
+  export_leads?: boolean;
+  import_leads?: boolean;
+  
+  // CHAT GRANULAR (opcional)
+  chat_all_leads?: boolean;
+  chat_own_leads?: boolean;
+  chat_templates?: boolean;
+  bulk_messaging?: boolean;
+  
+  // ANALYTICS GRANULAR (opcional)
+  view_own_analytics?: boolean;
+  view_team_analytics?: boolean;
+  view_company_analytics?: boolean;
+  export_reports?: boolean;
+  
+  // CONFIGURAÇÕES GRANULARES (opcional)
+  edit_company_settings?: boolean;
+  edit_integrations?: boolean;
+  edit_webhooks?: boolean;
+  
+  // LIMITAÇÕES AVANÇADAS (opcionais)
+  max_leads_per_month?: number;
+  max_exports_per_day?: number;
+  allowed_lead_sources?: string[];
+  restricted_hours?: { start: string; end: string };
+  allowed_ip_addresses?: string[];
 }
 
 export interface CompanyUser {
@@ -126,4 +167,190 @@ export interface ImpersonationValidation {
   targetCompanyId: string;
   reason?: string;
   method: 'legacy' | 'new_system' | 'hybrid';
+}
+
+// =====================================================
+// NOVOS TIPOS - SISTEMA DE TEMPLATES E MÓDULOS DINÂMICOS
+// =====================================================
+
+export interface UserTemplate {
+  id: string;
+  name: string;
+  description: string;
+  baseRole: UserRole;
+  customPermissions: Partial<UserPermissions>;
+  companyId: string;
+  createdBy: string;
+  isActive: boolean;
+  isSystem: boolean; // Templates do sistema (não podem ser editados)
+  created_at: string;
+  updated_at: string;
+  
+  // Metadados
+  usage_count?: number;
+  last_used?: string;
+  tags?: string[];
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  description: string;
+  baseRole: UserRole;
+  customPermissions: Partial<UserPermissions>;
+  companyId: string;
+  tags?: string[];
+}
+
+export interface UpdateTemplateRequest {
+  id: string;
+  name?: string;
+  description?: string;
+  customPermissions?: Partial<UserPermissions>;
+  isActive?: boolean;
+  tags?: string[];
+}
+
+// =====================================================
+// TIPOS PARA MÓDULOS DINÂMICOS
+// =====================================================
+
+export type ModuleCategory = 'core' | 'marketing' | 'sales' | 'analytics' | 'integration' | 'automation';
+
+export interface AppModule {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  category: ModuleCategory;
+  permissions: ModulePermissionDefinition[];
+  dependencies?: string[];
+  isActive: boolean;
+  isSystem: boolean; // Módulos do sistema (não podem ser desabilitados)
+  created_at: string;
+  updated_at: string;
+  
+  // Metadados
+  icon?: string;
+  color?: string;
+  order?: number;
+}
+
+export interface ModulePermissionDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: 'access' | 'action' | 'limit';
+  dataType: 'boolean' | 'number' | 'string' | 'array';
+  defaultValue: boolean | number | string | string[];
+  requiredFor?: string[]; // Outras permissões que dependem desta
+  
+  // Validação
+  validation?: {
+    min?: number;
+    max?: number;
+    options?: string[];
+    pattern?: string;
+  };
+}
+
+export interface ModulePermissions {
+  access: boolean;
+  actions: Record<string, boolean | number | string>;
+  limits?: Record<string, number | string | boolean>;
+}
+
+export interface DynamicPermissions {
+  // Permissões por módulo
+  modules: Record<string, ModulePermissions>;
+  
+  // Permissões globais (mantém compatibilidade)
+  global: UserPermissions;
+  
+  // Metadados
+  version: string;
+  lastUpdated: string;
+  migratedFrom?: string;
+}
+
+// =====================================================
+// TIPOS PARA MIGRAÇÃO E VERSIONAMENTO
+// =====================================================
+
+export interface PermissionMigration {
+  fromVersion: string;
+  toVersion: string;
+  description: string;
+  moduleId?: string;
+  
+  apply(permissions: DynamicPermissions): Promise<DynamicPermissions>;
+  rollback?(permissions: DynamicPermissions): Promise<DynamicPermissions>;
+}
+
+export interface MigrationResult {
+  success: boolean;
+  fromVersion: string;
+  toVersion: string;
+  affectedUsers: number;
+  errors?: string[];
+  warnings?: string[];
+}
+
+// =====================================================
+// TIPOS PARA INTERFACE AVANÇADA
+// =====================================================
+
+export interface PermissionGroup {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  icon?: string;
+  color?: string;
+}
+
+export interface PermissionPreset {
+  id: string;
+  name: string;
+  description: string;
+  role: UserRole;
+  permissions: Partial<UserPermissions>;
+  isRecommended?: boolean;
+}
+
+export interface UserCreationWizardData {
+  // Etapa 1: Dados básicos
+  basicInfo: {
+    email: string;
+    displayName?: string;
+    phone?: string;
+    department?: string;
+    position?: string;
+    startDate?: string;
+  };
+  
+  // Etapa 2: Role e template
+  roleInfo: {
+    role: UserRole;
+    templateId?: string;
+    useCustomPermissions: boolean;
+  };
+  
+  // Etapa 3: Permissões personalizadas
+  customPermissions?: Partial<UserPermissions>;
+  
+  // Etapa 4: Limitações
+  limitations?: {
+    maxLeadsPerMonth?: number;
+    allowedSources?: string[];
+    restrictedHours?: { start: string; end: string };
+    expirationDate?: string;
+  };
+  
+  // Etapa 5: Convite
+  inviteSettings: {
+    sendInvite: boolean;
+    inviteMethod: 'email' | 'whatsapp' | 'link';
+    customMessage?: string;
+    requirePasswordChange: boolean;
+  };
 }

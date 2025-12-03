@@ -3,13 +3,16 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info, Lock, RefreshCw, UserCheck, Eye, EyeOff } from 'lucide-react';
-import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest } from '../../types/user';
+import { X, User, Mail, Shield, Save, AlertCircle, CheckCircle, Info, Lock, RefreshCw, UserCheck, Eye, EyeOff, Settings, Sparkles } from 'lucide-react';
+import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
+import { applyTemplateToPermissions } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
+import { TemplateSelector } from './TemplateSelector';
+import { AdvancedPermissions } from './AdvancedPermissions';
 import { supabase } from '../../lib/supabase';
 
 interface UserModalProps {
@@ -41,7 +44,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  // Form state
+  // Form state (MANTIDO - compatibilidade 100%)
   const [formData, setFormData] = useState({
     email: '',
     displayName: '',
@@ -49,27 +52,45 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     sendInvite: true
   });
 
+  // NOVOS ESTADOS - Sistema de templates e permissões avançadas
+  const [selectedTemplate, setSelectedTemplate] = useState<UserTemplate | null>(null);
+  const [useAdvancedPermissions, setUseAdvancedPermissions] = useState(false);
+  const [customPermissions, setCustomPermissions] = useState<Partial<UserPermissions>>({});
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+
   const isEditing = !!user;
 
-  // Reset form quando modal abre/fecha
+  // Reset form quando modal abre/fecha (EXPANDIDO - compatível)
   useEffect(() => {
     if (isOpen) {
       if (user) {
-        // Modo edição
+        // Modo edição (MANTIDO)
         setFormData({
           email: user.user_id.startsWith('mock_') ? '' : user.user_id,
           displayName: user.display_name || '',
           role: user.role,
           sendInvite: false
         });
+        
+        // NOVO: Resetar estados avançados para edição
+        setSelectedTemplate(null);
+        setUseAdvancedPermissions(false);
+        setCustomPermissions(user.permissions || {});
+        setShowTemplateSelector(false);
       } else {
-        // Modo criação
+        // Modo criação (MANTIDO)
         setFormData({
           email: '',
           displayName: '',
           role: 'seller',
           sendInvite: true
         });
+        
+        // NOVO: Resetar estados avançados para criação
+        setSelectedTemplate(null);
+        setUseAdvancedPermissions(false);
+        setCustomPermissions({});
+        setShowTemplateSelector(false);
       }
       setError(null);
       
@@ -120,21 +141,35 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         return;
       }
 
+      // NOVO: Calcular permissões finais (template + customizações)
+      let finalPermissions = getDefaultPermissions(formData.role);
+      
+      if (selectedTemplate) {
+        // Aplicar template se selecionado
+        finalPermissions = applyTemplateToPermissions(selectedTemplate, finalPermissions);
+      }
+      
+      if (useAdvancedPermissions && Object.keys(customPermissions).length > 0) {
+        // Aplicar permissões customizadas se configuradas
+        finalPermissions = { ...finalPermissions, ...customPermissions };
+      }
+
       if (isEditing && user) {
-        // Atualizar usuário existente
+        // Atualizar usuário existente (EXPANDIDO)
         const updateRequest: UpdateUserRequest = {
           id: user.id,
           role: formData.role,
-          permissions: getDefaultPermissions(formData.role)
+          permissions: finalPermissions // Usar permissões calculadas
         };
 
         await updateCompanyUser(updateRequest);
       } else {
-        // Criar novo usuário
+        // Criar novo usuário (EXPANDIDO)
         const createRequest: CreateUserRequest = {
           companyId: company.id,
           email: formData.email.trim(),
           role: formData.role,
+          permissions: finalPermissions, // Usar permissões calculadas
           sendInvite: formData.sendInvite
         };
 
