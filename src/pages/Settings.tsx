@@ -34,6 +34,7 @@ export const Settings: React.FC = () => {
   // Estados para gestão de usuários
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<CompanyUser | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null); // NOVO: Template pré-selecionado
   
   // Estados para Webhook Avançado - MÓDULO ISOLADO
   const [webhookConfig, setWebhookConfig] = useState({
@@ -951,8 +952,9 @@ export const Settings: React.FC = () => {
   // FUNÇÕES PARA GESTÃO DE USUÁRIOS
   // =====================================================
 
-  const handleCreateUser = () => {
+  const handleCreateUser = (templateId?: string) => {
     setEditingUser(null);
+    setSelectedTemplateId(templateId || null); // NOVO: Armazenar template selecionado
     setShowUserModal(true);
   };
 
@@ -964,6 +966,7 @@ export const Settings: React.FC = () => {
   const handleCloseUserModal = () => {
     setShowUserModal(false);
     setEditingUser(null);
+    setSelectedTemplateId(null); // NOVO: Limpar template selecionado ao fechar
   };
 
   const handleSaveUser = () => {
@@ -2046,10 +2049,9 @@ export const Settings: React.FC = () => {
           {usuariosSubTab === 'templates' && (
             <TemplateManager
               onCreateUser={(templateId) => {
-                // Mudar para submenu de gestão e abrir modal
+                // Mudar para submenu de gestão e abrir modal com template pré-selecionado
                 setUsuariosSubTab('gestao');
-                handleCreateUser();
-                // TODO: Passar templateId para o UserModal
+                handleCreateUser(templateId); // CORRIGIDO: Passar templateId
               }}
             />
           )}
@@ -3167,6 +3169,7 @@ export const Settings: React.FC = () => {
         onClose={handleCloseUserModal}
         onSave={handleSaveUser}
         user={editingUser}
+        preSelectedProfileId={selectedTemplateId || undefined} // NOVO: Passar template pré-selecionado
       />
 
     </div>

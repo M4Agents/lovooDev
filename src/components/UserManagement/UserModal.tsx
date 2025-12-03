@@ -19,9 +19,10 @@ interface UserModalProps {
   onClose: () => void;
   onSave: () => void;
   user?: CompanyUser | null;
+  preSelectedProfileId?: string; // NOVO: ID do perfil/template pré-selecionado
 }
 
-export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user }) => {
+export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, preSelectedProfileId }) => {
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +124,23 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
     }
   }, [formData.role, availableProfiles, isOpen, company?.id]);
+
+  // NOVO: Pré-seleção de perfil quando preSelectedProfileId é fornecido
+  useEffect(() => {
+    if (isOpen && preSelectedProfileId && availableProfiles.length > 0 && !user) {
+      // Buscar perfil/template pré-selecionado (apenas para criação, não edição)
+      const preSelectedProfile = availableProfiles.find(p => p.id === preSelectedProfileId);
+      
+      if (preSelectedProfile) {
+        console.log('UserModal: Pre-selecting profile:', preSelectedProfileId, '→', preSelectedProfile.name);
+        setSelectedProfile(preSelectedProfile);
+        
+        // Atualizar role do formulário baseado no perfil pré-selecionado
+        const role = getProfileRole(preSelectedProfile);
+        setFormData(prev => ({ ...prev, role }));
+      }
+    }
+  }, [preSelectedProfileId, availableProfiles, isOpen, user]);
 
   // NOVA FUNÇÃO: Carregar perfis disponíveis (COM FALLBACK SEGURO)
   const loadAvailableProfiles = async () => {

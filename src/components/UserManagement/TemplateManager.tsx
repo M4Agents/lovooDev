@@ -3,11 +3,12 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Eye } from 'lucide-react';
 import { UserTemplate, UserRole, CreateTemplateRequest } from '../../types/user';
 import { getCompanyTemplates, createUserTemplate, deactivateTemplate } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
 import { TemplateModal } from './TemplateModal';
+import { PermissionsViewModal } from './PermissionsViewModal';
 
 interface TemplateManagerProps {
   onCreateUser?: (templateId?: string) => void;
@@ -20,6 +21,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<UserTemplate | null>(null);
+  const [viewingTemplate, setViewingTemplate] = useState<UserTemplate | null>(null); // NOVO: Template sendo visualizado
 
   // Carregar templates
   const loadTemplates = async () => {
@@ -230,6 +232,13 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                   Usar Template
                 </button>
                 <button
+                  onClick={() => setViewingTemplate(template)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                  title="Visualizar permissões"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => handleDuplicateTemplate(template)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
                   title="Duplicar template"
@@ -320,6 +329,13 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                     Usar Template
                   </button>
                   <button
+                    onClick={() => setViewingTemplate(template)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                    title="Visualizar permissões"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => setEditingTemplate(template)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
                     title="Editar template"
@@ -376,6 +392,13 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
         }}
         onSave={loadTemplates}
         template={editingTemplate}
+      />
+
+      {/* Modal de Visualização de Permissões */}
+      <PermissionsViewModal
+        isOpen={!!viewingTemplate}
+        onClose={() => setViewingTemplate(null)}
+        profile={viewingTemplate}
       />
     </div>
   );
