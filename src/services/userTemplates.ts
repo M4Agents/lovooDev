@@ -16,10 +16,58 @@ import { getDefaultPermissions } from './userApi';
 // TEMPLATES DO SISTEMA (PREDEFINIDOS)
 // =====================================================
 
-export const getSystemTemplates = (): UserTemplate[] => {
+export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTemplate[] => {
   const now = new Date().toISOString();
   
-  return [
+  const allTemplates: UserTemplate[] = [
+    // PERFIS DE ALTA HIERARQUIA (EMPRESA PAI)
+    {
+      id: 'system_super_admin',
+      name: 'Super Administrador',
+      description: 'Acesso total ao sistema - todas as funcionalidades e empresas',
+      baseRole: 'super_admin',
+      customPermissions: {
+        ...getDefaultPermissions('super_admin'),
+        // Todas as permissões possíveis
+        impersonate: true,
+        companies: true,
+        users: true,
+        financial: true,
+        analytics: true,
+        settings: true
+      },
+      companyId: '',
+      createdBy: 'system',
+      isActive: true,
+      isSystem: true,
+      created_at: now,
+      updated_at: now,
+      tags: ['sistema', 'super_admin', 'total', 'empresa_pai']
+    },
+    {
+      id: 'system_admin',
+      name: 'Administrador',
+      description: 'Gerencia empresas filhas e usuários - sem acesso financeiro',
+      baseRole: 'admin',
+      customPermissions: {
+        ...getDefaultPermissions('admin'),
+        // Permissões de administração geral
+        create_users: true,
+        edit_users: true,
+        companies: true,
+        settings: true,
+        analytics: true
+      },
+      companyId: '',
+      createdBy: 'system',
+      isActive: true,
+      isSystem: true,
+      created_at: now,
+      updated_at: now,
+      tags: ['sistema', 'admin', 'gestão', 'empresa_pai']
+    },
+    
+    // PERFIS PARA VENDEDORES
     {
       id: 'system_vendedor_basico',
       name: 'Vendedor Básico',
@@ -146,6 +194,22 @@ export const getSystemTemplates = (): UserTemplate[] => {
       tags: ['parceiro', 'limitado', 'restrito']
     }
   ];
+
+  // FILTRAR POR TIPO DE EMPRESA (SEGURANÇA)
+  if (!companyType) {
+    // Se não especificado, retornar todos (compatibilidade)
+    return allTemplates;
+  }
+
+  return allTemplates.filter(template => {
+    if (companyType === 'parent') {
+      // Empresa pai: pode ver todos os perfis
+      return true;
+    } else {
+      // Empresa filha: NÃO pode ver super_admin e admin puro
+      return !['super_admin', 'admin'].includes(template.baseRole);
+    }
+  });
 };
 
 // =====================================================
@@ -155,7 +219,10 @@ export const getSystemTemplates = (): UserTemplate[] => {
 /**
  * Buscar todos os templates disponíveis para uma empresa
  */
-export const getCompanyTemplates = async (companyId: string): Promise<UserTemplate[]> => {
+export const getCompanyTemplates = async (
+  companyId: string, 
+  companyType?: 'parent' | 'client'
+): Promise<UserTemplate[]> => {
   try {
     console.log('UserTemplates: Fetching templates for company:', companyId);
     
@@ -172,8 +239,8 @@ export const getCompanyTemplates = async (companyId: string): Promise<UserTempla
       // Continuar mesmo com erro - retornar apenas templates do sistema
     }
     
-    // Combinar templates do sistema com personalizados
-    const systemTemplates = getSystemTemplates().map(template => ({
+    // Combinar templates do sistema com personalizados (COM FILTRAGEM)
+    const systemTemplates = getSystemTemplates(companyType).map(template => ({
       ...template,
       companyId
     }));
@@ -188,8 +255,8 @@ export const getCompanyTemplates = async (companyId: string): Promise<UserTempla
     
   } catch (error) {
     console.error('UserTemplates: Error in getCompanyTemplates:', error);
-    // Fallback: retornar apenas templates do sistema
-    return getSystemTemplates().map(template => ({
+    // Fallback: retornar apenas templates do sistema (COM FILTRAGEM)
+    return getSystemTemplates(companyType).map(template => ({
       ...template,
       companyId
     }));

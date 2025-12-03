@@ -31,7 +31,8 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       setLoading(true);
       setError(null);
       
-      const companyTemplates = await getCompanyTemplates(company.id);
+      // NOVO: Passar tipo de empresa para filtragem de segurança
+      const companyTemplates = await getCompanyTemplates(company.id, company.company_type);
       setTemplates(companyTemplates);
       
     } catch (err) {
