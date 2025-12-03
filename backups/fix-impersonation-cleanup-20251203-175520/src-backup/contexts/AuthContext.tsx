@@ -57,52 +57,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔍 CONTADOR PARA RASTREAR CHAMADAS
   const [fetchCompanyCallCount, setFetchCompanyCallCount] = useState(0);
 
-  // 🔧 FUNÇÃO DE LIMPEZA DE DADOS DE IMPERSONAÇÃO INVÁLIDOS
-  const cleanupInvalidImpersonationData = () => {
-    try {
-      const impersonating = localStorage.getItem('lovoo_crm_impersonating');
-      const originalUserData = localStorage.getItem('lovoo_crm_original_user');
-      
-      console.log('🔧 AuthContext: Checking impersonation data validity:', {
-        impersonating,
-        hasOriginalUser: !!originalUserData,
-        originalUserData
-      });
-
-      // Se está marcado como impersonando mas não tem dados válidos, limpar tudo
-      if (impersonating === 'true' && originalUserData) {
-        try {
-          const originalUser = JSON.parse(originalUserData);
-          
-          // Verificar se o ID do usuário original é válido (formato UUID)
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (!originalUser.id || !uuidRegex.test(originalUser.id)) {
-            console.warn('🔧 AuthContext: Invalid original user ID detected, cleaning up impersonation data');
-            localStorage.removeItem('lovoo_crm_impersonating');
-            localStorage.removeItem('lovoo_crm_original_user');
-            localStorage.removeItem('lovoo_crm_impersonated_company_id');
-            setIsImpersonating(false);
-            setOriginalUser(null);
-            return true; // Dados foram limpos
-          }
-        } catch (error) {
-          console.warn('🔧 AuthContext: Corrupted original user data, cleaning up:', error);
-          localStorage.removeItem('lovoo_crm_impersonating');
-          localStorage.removeItem('lovoo_crm_original_user');
-          localStorage.removeItem('lovoo_crm_impersonated_company_id');
-          setIsImpersonating(false);
-          setOriginalUser(null);
-          return true; // Dados foram limpos
-        }
-      }
-      
-      return false; // Nenhuma limpeza necessária
-    } catch (error) {
-      console.error('🔧 AuthContext: Error during impersonation cleanup:', error);
-      return false;
-    }
-  };
-
   // NOVA FUNÇÃO: Recuperação automática de usuários órfãos
   const attemptOrphanUserRecovery = async (userId: string) => {
     try {
@@ -528,12 +482,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage_company_id: localStorage.getItem('currentCompanyId'),
       sessionStorage_keys: Object.keys(sessionStorage)
     });
-
-    // 🔧 LIMPAR DADOS DE IMPERSONAÇÃO INVÁLIDOS ANTES DE CARREGAR SESSÃO
-    const wasCleanedUp = cleanupInvalidImpersonationData();
-    if (wasCleanedUp) {
-      console.log('🔧 AuthContext: Invalid impersonation data was cleaned up');
-    }
     
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('🔍 AuthContext: Initial session loaded:', {
@@ -657,28 +605,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    console.log('🔧 AuthContext: Starting signOut process');
-    
-    // Limpar todos os dados de impersonação
-    localStorage.removeItem('lovoo_crm_impersonating');
-    localStorage.removeItem('lovoo_crm_original_user');
-    localStorage.removeItem('lovoo_crm_impersonated_company_id');
-    localStorage.removeItem('currentCompanyId');
-    
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    
-    // Limpar estados
     setCompany(null);
     setIsImpersonating(false);
     setOriginalUser(null);
-    setAvailableCompanies([]);
-    setUserRoles([]);
-    setCurrentRole(null);
-    setUserPermissions(null);
-    setLegacyInfo(null);
-    
-    console.log('🔧 AuthContext: SignOut completed, all data cleared');
   };
 
   const impersonateUser = async (companyId: string) => {
