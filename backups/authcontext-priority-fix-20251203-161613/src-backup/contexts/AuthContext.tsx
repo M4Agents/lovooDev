@@ -219,56 +219,91 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext: Trying NEW system first (company_users)');
       console.log('AuthContext: User ID:', userId);
       
-      // CORREÇÃO: Usar abordagem mais robusta - buscar company_users primeiro
-      const { data: companyUsersData, error: companyUsersError } = await supabase
+      let { data, error } = await supabase
         .from('company_users')
-        .select('company_id, role, is_active')
+        .select(`
+          *,
+          companies (*)
+        `)
         .eq('user_id', userId)
         .eq('is_active', true);
         
-      console.log('AuthContext: NEW system company_users query:', { data: companyUsersData, error: companyUsersError });
-      
-      let { data, error }: { data: any[] | null, error: any } = { data: null, error: companyUsersError };
-      
-      if (!companyUsersError && companyUsersData && companyUsersData.length > 0) {
-        console.log('AuthContext: Found user in company_users, fetching companies...');
-        
-        // Buscar empresas correspondentes
-        const companyIds = companyUsersData.map(cu => cu.company_id);
-        const { data: companiesData, error: companiesError } = await supabase
-          .from('companies')
-          .select('*')
-          .in('id', companyIds);
-          
-        console.log('AuthContext: Companies query for NEW system:', { data: companiesData, error: companiesError });
-        
-        if (!companiesError && companiesData && companiesData.length > 0) {
-          data = companiesData;
-          error = null;
-          console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
-        } else {
-          error = companiesError;
-        }
-      }
-      
-      console.log('AuthContext: NEW system final result:', { data, error, dataLength: data?.length });
+      console.log('AuthContext: NEW system query result:', { data, error, dataLength: data?.length });
       
       if (!error && data && data.length > 0) {
-        console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
-        // Data já contém as empresas corretas, não precisa mapear
-      } else {
-        console.log('AuthContext: Not found in NEW system, trying OLD system as fallback');
-        console.log('AuthContext: Error details:', error);
+        console.log('AuthContext: Found companies in NEW system:', data.length);
+        console.log('AuthContext: Raw data from NEW system:', data);
         
-        // Fallback para sistema antigo
-        const result = await supabase
-          .from('companies')
-          .select('*')
-          .eq('user_id', userId);
+        // Verificar se os dados das empresas estão corretos
+        const companiesData = data.map((item: any) => {
+          console.log('AuthContext: Processing item:', item);
+          console.log('AuthContext: Item.companies:', item.companies);
+          return item.companies;
+        });
+        
+        console.log('AuthContext: Mapped companies data:', companiesData);
+        
+        // Filtrar dados válidos
+        const validCompanies = companiesData.filter(comp => comp && comp.id);
+        console.log('AuthContext: Valid companies after filter:', validCompanies);
+        
+        if (validCompanies.length > 0) {
+          data = validCompanies;
+        } else {
+          console.warn('AuthContext: No valid companies found in NEW system data, falling back to OLD system');
+          data = null;
+          error = { message: 'No valid companies in NEW system', details: '', hint: '', code: '' } as any;
+        }
+      } else {
+        console.log('AuthContext: Not found in NEW system or error occurred');
+        console.log('AuthContext: Error details:', error);
+        console.log('AuthContext: Trying alternative NEW system approach');
+        
+        // Tentativa alternativa: buscar company_users e depois companies separadamente
+        try {
+          const { data: companyUsers, error: cuError } = await supabase
+            .from('company_users')
+            .select('company_id')
+            .eq('user_id', userId)
+            .eq('is_active', true);
+            
+          console.log('AuthContext: Alternative query - company_users result:', { data: companyUsers, error: cuError });
           
-        console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-        data = result.data;
-        error = result.error;
+          if (!cuError && companyUsers && companyUsers.length > 0) {
+            const companyIds = companyUsers.map(cu => cu.company_id);
+            console.log('AuthContext: Found company IDs:', companyIds);
+            
+            const { data: companies, error: companiesError } = await supabase
+              .from('companies')
+              .select('*')
+              .in('id', companyIds);
+              
+            console.log('AuthContext: Alternative query - companies result:', { data: companies, error: companiesError });
+            
+            if (!companiesError && companies && companies.length > 0) {
+              console.log('AuthContext: SUCCESS with alternative approach!');
+              data = companies;
+              error = null;
+            } else {
+              throw new Error('Companies query failed in alternative approach');
+            }
+          } else {
+            throw new Error('Company users query failed in alternative approach');
+          }
+        } catch (altError) {
+          console.log('AuthContext: Alternative approach failed, trying OLD system as final fallback');
+          console.log('AuthContext: Alternative error:', altError);
+          
+          // Fallback final para sistema antigo
+          const result = await supabase
+            .from('companies')
+            .select('*')
+            .eq('user_id', userId);
+            
+          console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
+          data = result.data;
+          error = result.error;
+        }
       }
 
       console.log('AuthContext: Company fetch result:', { data, error });
