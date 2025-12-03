@@ -67,6 +67,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     if (isOpen) {
       if (user) {
         // Modo edição (MANTIDO)
+        console.log('UserModal: Editing user with role:', user.role);
         setFormData({
           email: user.user_id.startsWith('mock_') ? '' : user.user_id,
           displayName: user.display_name || '',
@@ -78,6 +79,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedTemplate(null);
         setUseAdvancedPermissions(false);
         setCustomPermissions(user.permissions || {});
+        
+        // CORREÇÃO: Resetar selectedProfile para forçar nova seleção baseada no role correto
+        setSelectedProfile(null);
       } else {
         // Modo criação (MANTIDO)
         setFormData({
@@ -104,6 +108,22 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   }, [isOpen, user, company?.id]);
 
+  // NOVO: Recarregar perfis quando role do formulário mudar
+  useEffect(() => {
+    if (isOpen && company?.id && formData.role && availableProfiles.length > 0) {
+      // Buscar perfil correto para o role atual
+      const correctProfile = availableProfiles.find(p => 
+        p.isSystem && 
+        p.legacyRole === formData.role
+      );
+      
+      if (correctProfile && (!selectedProfile || selectedProfile.legacyRole !== formData.role)) {
+        console.log('UserModal: Role changed, updating profile:', formData.role, '→', correctProfile.name);
+        setSelectedProfile(correctProfile);
+      }
+    }
+  }, [formData.role, availableProfiles, isOpen, company?.id]);
+
   // NOVA FUNÇÃO: Carregar perfis disponíveis (COM FALLBACK SEGURO)
   const loadAvailableProfiles = async () => {
     if (!company?.id) return;
@@ -119,11 +139,24 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       const profiles = await getProfilesForCompanyType(company.id, company.company_type || 'client');
       setAvailableProfiles(profiles || []);
       
-      // Se não há perfil selecionado, selecionar o primeiro perfil do sistema compatível
-      if (!selectedProfile && profiles && profiles.length > 0) {
-        const defaultProfile = profiles.find(p => p.isSystem && getProfileRole(p) === formData.role);
-        if (defaultProfile) {
-          setSelectedProfile(defaultProfile);
+      // CORREÇÃO: Sempre tentar encontrar perfil correto baseado no role atual
+      if (profiles && profiles.length > 0) {
+        // Buscar perfil do sistema que corresponde ao role do usuário
+        const correctProfile = profiles.find(p => 
+          p.isSystem && 
+          p.legacyRole === formData.role
+        );
+        
+        if (correctProfile) {
+          console.log('UserModal: Setting correct profile for role:', formData.role, '→', correctProfile.name);
+          setSelectedProfile(correctProfile);
+        } else {
+          // Fallback: buscar qualquer perfil compatível
+          const fallbackProfile = profiles.find(p => p.isSystem && getProfileRole(p) === formData.role);
+          if (fallbackProfile) {
+            console.log('UserModal: Using fallback profile for role:', formData.role, '→', fallbackProfile.name);
+            setSelectedProfile(fallbackProfile);
+          }
         }
       }
     } catch (error) {
