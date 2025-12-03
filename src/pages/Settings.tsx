@@ -9,6 +9,7 @@ import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList } from '../components/UserManagement/UsersList';
 import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
+import { ProfileVisibilityManager } from '../components/UserManagement/ProfileVisibilityManager';
 import { CompanyUser } from '../types/user';
 
 // Ícone oficial do WhatsApp
@@ -89,7 +90,7 @@ export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
-  const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
+  const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates' | 'configuracao'>('gestao');
 
   // Detectar parâmetro tab na URL para ativar aba correta
   useEffect(() => {
@@ -2035,6 +2036,21 @@ export const Settings: React.FC = () => {
               >
                 Perfis de Usuário
               </button>
+              
+              {/* Aba Configuração - Apenas para Super Admin/Admin da empresa pai */}
+              {company?.company_type === 'parent' && (hasPermission('users') || company?.is_super_admin) && (
+                <button
+                  onClick={() => setUsuariosSubTab('configuracao')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                    usuariosSubTab === 'configuracao'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <SettingsIcon className="w-4 h-4 inline mr-1" />
+                  Configuração de Perfis
+                </button>
+              )}
             </nav>
           </div>
 
@@ -2054,6 +2070,10 @@ export const Settings: React.FC = () => {
                 handleCreateUser(templateId); // CORRIGIDO: Passar templateId
               }}
             />
+          )}
+
+          {usuariosSubTab === 'configuracao' && (
+            <ProfileVisibilityManager />
           )}
         </div>
       )}
