@@ -173,16 +173,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
-      // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA COM SUCESSO
-      if (company && company.id && !forceSuper) {
-        console.log('🔧 AuthContext: Company already loaded successfully, skipping call:', {
-          companyId: company.id,
-          companyName: company.name,
-          forceSuper
-        });
-        return;
-      }
-      
       // 🔧 EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
       if (isFetchingCompany && !forceSuper) {
         console.log('🔧 AuthContext: fetchCompany already in progress, skipping call');
@@ -193,19 +183,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsFetchingCompany(true); // Marcar como em progresso
       setFetchCompanyCallCount(prev => prev + 1);
       
-      // 🔍 GERAR ID ÚNICO PARA RASTREAR ESTA CHAMADA
-      const callId = Math.random().toString(36).substr(2, 9);
-      const callerInfo = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
-      
       console.log('🔍 AuthContext: fetchCompany called with:', {
-        callId,
         callNumber: fetchCompanyCallCount + 1,
         userId,
         userIdType: typeof userId,
         userIdLength: userId?.length,
         forceSuper,
         isFetchingCompany,
-        callerInfo,
         timestamp: new Date().toISOString()
       });
       
@@ -485,12 +469,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCompany(null);
     } finally {
       setIsLoadingCompany(false); // Finalizar loading sempre
-      
-      // 🔧 DELAY NA LIMPEZA DA FLAG PARA EVITAR RACE CONDITIONS
-      setTimeout(() => {
-        setIsFetchingCompany(false); // Liberar flag de controle com delay
-        console.log('🔧 AuthContext: fetchCompany completed, flags cleared with delay');
-      }, 500); // 500ms de delay para evitar chamadas imediatas
+      setIsFetchingCompany(false); // Liberar flag de controle
+      console.log('🔧 AuthContext: fetchCompany completed, flags cleared');
     }
   };
 
