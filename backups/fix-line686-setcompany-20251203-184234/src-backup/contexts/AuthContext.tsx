@@ -683,17 +683,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }, 100);
           }
         } else {
-          // 🔧 PROTEÇÃO: NÃO SOBRESCREVER EMPRESA JÁ CARREGADA
-          if (!company || !company.id) {
-            console.log('🔧 AuthContext: No session user, clearing company state');
-            setCompany(null);
-          } else {
-            console.log('🔧 AuthContext: No session user, but company already loaded - preserving company:', {
-              companyId: company.id,
-              companyName: company.name,
-              event: _event
-            });
-          }
+          setCompany(null);
           setUserRoles([]);
           setCurrentRole(null);
           setUserPermissions(null);
