@@ -420,14 +420,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     }
 
     // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
-    console.log('UserAPI: Calling create_company_user_safe with params:', {
-      p_company_id: request.companyId,
-      p_user_id: finalUserId,
-      p_role: request.role,
-      p_permissions: permissions,
-      p_created_by: currentUser.id
-    });
-
     const { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
       p_company_id: request.companyId,
       p_user_id: finalUserId,
@@ -435,8 +427,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       p_permissions: permissions,
       p_created_by: currentUser.id
     });
-
-    console.log('UserAPI: create_company_user_safe result:', { functionResult, error });
 
     if (error) {
       console.error('UserAPI: Error calling create_company_user_safe:', error);
@@ -449,58 +439,35 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       throw new Error(functionResult?.error || 'Erro na criação do usuário');
     }
 
-    console.log('UserAPI: Company user created successfully in new system:', functionResult);
-
     // CORREÇÃO CRÍTICA: Criar registro no sistema antigo (companies) para compatibilidade
     // Isso garante que o AuthContext encontre a empresa do usuário
-    console.log('UserAPI: Checking compatibility record creation conditions:', {
-      isRealUser,
-      finalUserId,
-      currentUserId: currentUser.id,
-      shouldCreate: isRealUser && finalUserId !== currentUser.id
-    });
-
     if (isRealUser && finalUserId !== currentUser.id) {
       try {
-        console.log('UserAPI: Creating compatibility record in companies table for user:', finalUserId);
+        console.log('UserAPI: Creating compatibility record in companies table');
         
-        // Verificar se já existe registro para evitar duplicatas
-        const { data: existingCompany } = await supabase
+        const { error: companyInsertError } = await supabase
           .from('companies')
-          .select('id')
-          .eq('user_id', finalUserId)
-          .single();
+          .insert({
+            id: crypto.randomUUID(),
+            user_id: finalUserId,
+            name: `${request.email} - ${company.name}`,
+            company_type: company.company_type,
+            parent_company_id: company.company_type === 'client' ? request.companyId : null,
+            is_super_admin: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
 
-        if (existingCompany) {
-          console.log('UserAPI: Compatibility record already exists:', existingCompany.id);
+        if (companyInsertError) {
+          console.warn('UserAPI: Could not create compatibility record:', companyInsertError);
+          // Não falhar a criação por causa disso, apenas logar
         } else {
-          const { error: companyInsertError } = await supabase
-            .from('companies')
-            .insert({
-              id: crypto.randomUUID(),
-              user_id: finalUserId,
-              name: `${request.email} - ${company.name}`,
-              company_type: company.company_type,
-              parent_company_id: company.company_type === 'client' ? request.companyId : null,
-              is_super_admin: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-
-          if (companyInsertError) {
-            console.error('UserAPI: CRITICAL - Could not create compatibility record:', companyInsertError);
-            // Este é crítico - usuário ficará órfão sem isso
-            throw new Error(`Falha ao criar registro de compatibilidade: ${companyInsertError.message}`);
-          } else {
-            console.log('UserAPI: Compatibility record created successfully for user:', finalUserId);
-          }
+          console.log('UserAPI: Compatibility record created successfully');
         }
       } catch (compatError) {
-        console.error('UserAPI: CRITICAL ERROR in compatibility record creation:', compatError);
-        throw compatError; // Falhar a criação se não conseguir criar compatibilidade
+        console.warn('UserAPI: Error creating compatibility record:', compatError);
+        // Não falhar a criação por causa disso
       }
-    } else {
-      console.log('UserAPI: Skipping compatibility record creation - using fallback user or not real user');
     }
 
     // Converter resultado da função para formato esperado

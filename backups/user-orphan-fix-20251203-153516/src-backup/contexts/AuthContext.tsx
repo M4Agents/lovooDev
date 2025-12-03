@@ -54,65 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
   const [legacyInfo, setLegacyInfo] = useState<LegacyUserInfo | null>(null);
 
-  // NOVA FUNÇÃO: Recuperação automática de usuários órfãos
-  const attemptOrphanUserRecovery = async (userId: string) => {
-    try {
-      console.log('AuthContext: Starting orphan user recovery for:', userId);
-      
-      // Buscar informações do usuário no auth.users
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser || authUser.id !== userId) {
-        console.log('AuthContext: Auth user mismatch, cannot recover');
-        return null;
-      }
-
-      // Buscar se existe registro em company_users (sistema novo)
-      const { data: companyUsers } = await supabase
-        .from('company_users')
-        .select('*, companies(*)')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (companyUsers && companyUsers.length > 0) {
-        console.log('AuthContext: Found company_users records, creating compatibility record');
-        const companyUser = companyUsers[0];
-        const targetCompany = companyUser.companies;
-
-        // Criar registro de compatibilidade no sistema antigo
-        try {
-          const { error: insertError } = await supabase
-            .from('companies')
-            .insert({
-              id: crypto.randomUUID(),
-              user_id: userId,
-              name: `${authUser.email} - ${targetCompany.name}`,
-              company_type: targetCompany.company_type,
-              parent_company_id: targetCompany.company_type === 'client' ? targetCompany.id : null,
-              is_super_admin: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-
-          if (!insertError) {
-            console.log('AuthContext: Compatibility record created during recovery');
-            return targetCompany;
-          }
-        } catch (insertError) {
-          console.warn('AuthContext: Could not create compatibility record during recovery:', insertError);
-        }
-
-        // Mesmo se não conseguir criar compatibilidade, retornar empresa encontrada
-        return targetCompany;
-      }
-
-      console.log('AuthContext: No recovery possible - user truly orphaned');
-      return null;
-    } catch (error) {
-      console.error('AuthContext: Error during orphan user recovery:', error);
-      return null;
-    }
-  };
-
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     try {
       setIsLoadingCompany(true); // Iniciar loading
@@ -324,20 +265,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
       } else {
         console.log('AuthContext: No company found or error:', error);
-        
-        // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
-        console.log('AuthContext: Attempting orphan user recovery for:', userId);
-        const recoveredCompany = await attemptOrphanUserRecovery(userId);
-        
-        if (recoveredCompany) {
-          console.log('AuthContext: Orphan user recovered successfully:', recoveredCompany.name);
-          setCompany(recoveredCompany);
-          setAvailableCompanies([recoveredCompany]);
-        } else {
-          console.log('AuthContext: Could not recover orphan user');
-          setAvailableCompanies([]);
-          setCompany(null);
-        }
+        setAvailableCompanies([]);
+        setCompany(null);
       }
     } catch (error) {
       console.error('AuthContext: Error fetching company:', error);
