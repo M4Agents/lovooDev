@@ -1,15 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
-import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users } from 'lucide-react';
-import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
-import { ModernLandingPages } from './ModernLandingPages';
-import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
-import { UserModal } from '../components/UserManagement/UserModal';
-import { TemplateManager } from '../components/UserManagement/TemplateManager';
-import { CompanyUser } from '../types/user';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, MessageCircle, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -19,8 +11,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 export const Settings: React.FC = () => {
-  const { company, refreshCompany, hasPermission } = useAuth();
-  const [searchParams] = useSearchParams();
+  const { company, refreshCompany } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
@@ -30,14 +21,6 @@ export const Settings: React.FC = () => {
   
   // Estado para mostrar/ocultar API Key
   const [showApiKey, setShowApiKey] = useState(false);
-  
-  // Estados para gestão de usuários
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<CompanyUser | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null); // NOVO: Template pré-selecionado
-  
-  // Ref para UsersList - permite recarregar lista após criar usuário
-  const usersListRef = useRef<UsersListRef>(null);
   
   // Estados para Webhook Avançado - MÓDULO ISOLADO
   const [webhookConfig, setWebhookConfig] = useState({
@@ -49,14 +32,10 @@ export const Settings: React.FC = () => {
     headers: '',
     payload_fields: {
       lead: ['name', 'email', 'phone', 'status', 'origin'],
-      empresa: [] as string[],
-      analytics: [] as string[],
-      custom_fields: [] as string[] // NOVO: campos personalizados selecionados
+      empresa: [],
+      analytics: []
     }
   });
-  
-  // Estado para campos personalizados disponíveis - ISOLADO E SEGURO
-  const [availableCustomFields, setAvailableCustomFields] = useState<any[]>([]);
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookConfigs, setWebhookConfigs] = useState<any[]>([]);
@@ -66,41 +45,8 @@ export const Settings: React.FC = () => {
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null);
   
-  // ===== NOVOS ESTADOS ISOLADOS PARA LOGS AVANÇADOS =====
-  // Estados específicos para não interferir nos existentes
-  const [advancedLogs, setAdvancedLogs] = useState<any[]>([]);
-  const [loadingAdvancedLogs, setLoadingAdvancedLogs] = useState(false);
-  const [advancedLogsStats, setAdvancedLogsStats] = useState({
-    total: 0,
-    success: 0,
-    errors: 0,
-    last24h: 0
-  });
-  const [logsFilters, setLogsFilters] = useState({
-    status: '',
-    dateFrom: '',
-    dateTo: '',
-    configId: '',
-    limit: 50
-  });
-  
-  // Estado para modal de visualização do payload
-  const [selectedPayload, setSelectedPayload] = useState<any>(null);
-  const [payloadModalOpen, setPayloadModalOpen] = useState(false);
-  
-  // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas'>('integracoes');
-  
-  // NOVO: Estado para submenus de Usuários
-  const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
-
-  // Detectar parâmetro tab na URL para ativar aba correta
-  useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'tracking') {
-      setActiveTab('tracking');
-    }
-  }, [searchParams]);
+  // Estados para abas principais - NOVA ESTRUTURA
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'empresas'>('integracoes');
   const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
@@ -161,7 +107,6 @@ export const Settings: React.FC = () => {
     if (company) {
       loadWebhookLogs();
       loadWebhookConfigs(); // Carregar configurações de webhook avançado
-      loadCustomFields(); // Carregar campos personalizados - SEGURO
       
       // Carregar dados da empresa para as abas cadastrais
       setCompanyData(prev => ({
@@ -221,24 +166,6 @@ export const Settings: React.FC = () => {
       }));
     } 
   }, [company]);
-
-  // ===== NOVO useEffect ISOLADO PARA LOGS AVANÇADOS =====
-  // Carrega logs avançados apenas quando necessário
-  useEffect(() => {
-    if (company && activeTab === 'integracoes' && integracoesTab === 'webhook-avancado') {
-      console.log('🔄 Carregando dados dos logs avançados...');
-      // Carregar logs sem filtros inicialmente
-      const initialFilters = {
-        status: 'todos',
-        dateFrom: '',
-        dateTo: '',
-        configId: '',
-        limit: 50
-      };
-      loadAdvancedLogs(initialFilters);
-      loadAdvancedLogsStats();
-    }
-  }, [company, activeTab, integracoesTab]);
 
   const loadWebhookLogs = async () => {
     if (!company?.id) return;
@@ -372,7 +299,7 @@ export const Settings: React.FC = () => {
     }));
   };
 
-  const handleFieldToggle = (category: 'lead' | 'empresa' | 'analytics' | 'custom_fields', field: string) => {
+  const handleFieldToggle = (category: 'lead' | 'empresa' | 'analytics', field: string) => {
     setWebhookConfig(prev => ({
       ...prev,
       payload_fields: {
@@ -446,9 +373,8 @@ export const Settings: React.FC = () => {
         headers: '',
         payload_fields: {
           lead: ['name', 'email', 'phone', 'status', 'origin'],
-          empresa: [] as string[],
-          analytics: [] as string[],
-          custom_fields: [] as string[]
+          empresa: [],
+          analytics: []
         }
       });
       
@@ -506,9 +432,8 @@ export const Settings: React.FC = () => {
       headers: '',
       payload_fields: {
         lead: ['name', 'email', 'phone', 'status', 'origin'],
-        empresa: [] as string[],
-        analytics: [] as string[],
-        custom_fields: [] as string[]
+        empresa: [],
+        analytics: []
       }
     });
     
@@ -628,359 +553,14 @@ export const Settings: React.FC = () => {
     }
   };
 
-  // Função para carregar campos personalizados - ISOLADA E SEGURA
-  const loadCustomFields = async () => {
-    if (!company?.id) return;
-    
-    try {
-      const customFields = await api.getCustomFields(company.id);
-      setAvailableCustomFields(customFields || []);
-    } catch (error) {
-      console.error('Error loading custom fields:', error);
-      // Falha silenciosa para não quebrar o sistema
-      setAvailableCustomFields([]);
-    }
-  };
-
   const loadWebhookTriggerLogs = async () => {
     if (!company?.id) return;
     
     try {
-      // Usar query direta em vez da RPC problemática
-      const { data: configs } = await supabase
-        .from('webhook_trigger_configs')
-        .select('id, name, webhook_url')
-        .eq('company_id', company.id);
-      
-      const configIds = configs?.map(c => c.id) || [];
-      
-      if (configIds.length > 0) {
-        const { data: logs } = await supabase
-          .from('webhook_trigger_logs')
-          .select('id, config_id, response_status, response_body, error_message, created_at')
-          .in('config_id', configIds)
-          .order('created_at', { ascending: false });
-        
-        // Transformar dados para formato esperado
-        const transformedLogs = logs?.map((log: any) => {
-          const config = configs?.find(c => c.id === log.config_id);
-          return {
-            id: log.id,
-            config_id: log.config_id,
-            config_name: config?.name || 'Webhook',
-            webhook_url: config?.webhook_url || '',
-            response_status: log.response_status,
-            response_body: log.response_body,
-            error_message: log.error_message,
-            created_at: log.created_at
-          };
-        }) || [];
-        
-        setWebhookLogs(transformedLogs);
-      } else {
-        setWebhookLogs([]);
-      }
+      const logs = await api.getWebhookTriggerLogs(company.id);
+      setWebhookLogs(logs);
     } catch (error) {
       console.error('Error loading webhook logs:', error);
-      setWebhookLogs([]);
-    }
-  };
-
-  // ===== NOVAS FUNÇÕES ISOLADAS PARA LOGS AVANÇADOS =====
-  // Funções específicas para não interferir nas existentes
-  
-  const loadAdvancedLogs = async (filters = logsFilters) => {
-    if (!company?.id) return;
-    
-    setLoadingAdvancedLogs(true);
-    try {
-      console.log('🔄 Carregando logs avançados diretamente da tabela:', { companyId: company.id, filters });
-      
-      // TESTE 1: Primeiro vamos buscar logs SEM JOIN para ver se existem
-      console.log('🔍 TESTE 1: Buscando logs sem JOIN');
-      const { data: rawLogs, error: rawError } = await supabase
-        .from('webhook_trigger_logs')
-        .select('*')
-        .limit(10);
-      
-      console.log('📊 TESTE 1 - Logs brutos encontrados:', rawLogs?.length || 0);
-      console.log('📋 TESTE 1 - Primeiro log bruto:', rawLogs?.[0]);
-      if (rawError) console.error('❌ TESTE 1 - Erro:', rawError);
-      
-      // TESTE 2: Buscar configurações de webhook
-      console.log('🔍 TESTE 2: Buscando configurações de webhook');
-      const { data: configs, error: configError } = await supabase
-        .from('webhook_trigger_configs')
-        .select('*')
-        .eq('company_id', company.id);
-      
-      console.log('📊 TESTE 2 - Configurações encontradas:', configs?.length || 0);
-      console.log('📋 TESTE 2 - Primeira config:', configs?.[0]);
-      if (configError) console.error('❌ TESTE 2 - Erro:', configError);
-      
-      // TESTE 3: Buscar logs que pertencem às configurações da empresa
-      console.log('🔍 TESTE 3: Buscando logs com filtro por config_id');
-      const configIds = configs?.map(c => c.id) || [];
-      console.log('🔑 Config IDs da empresa:', configIds);
-      
-      if (configIds.length > 0) {
-        const { data: filteredLogs, error: filteredError } = await supabase
-          .from('webhook_trigger_logs')
-          .select('*')
-          .in('config_id', configIds)
-          .limit(10);
-        
-        console.log('📊 TESTE 3 - Logs filtrados encontrados:', filteredLogs?.length || 0);
-        console.log('📋 TESTE 3 - Primeiro log filtrado:', filteredLogs?.[0]);
-        if (filteredError) console.error('❌ TESTE 3 - Erro:', filteredError);
-      }
-      
-      // Construir query base (usando apenas colunas que existem)
-      let query = supabase
-        .from('webhook_trigger_logs')
-        .select(`
-          id,
-          config_id,
-          payload,
-          response_status,
-          response_body,
-          error_message,
-          created_at
-        `);
-      
-      // Aplicar filtros de data se especificados
-      if (filters.dateFrom) {
-        const dateFrom = new Date(filters.dateFrom);
-        dateFrom.setHours(0, 0, 0, 0); // Início do dia
-        console.log('📅 Filtro Data Início:', dateFrom.toISOString());
-        query = query.gte('created_at', dateFrom.toISOString());
-      }
-      
-      if (filters.dateTo) {
-        const dateTo = new Date(filters.dateTo);
-        dateTo.setHours(23, 59, 59, 999); // Final do dia
-        console.log('📅 Filtro Data Fim:', dateTo.toISOString());
-        query = query.lte('created_at', dateTo.toISOString());
-      }
-      
-      // Filtrar por logs da empresa usando config_ids
-      if (configIds.length > 0) {
-        query = query.in('config_id', configIds);
-        console.log('🔍 Filtro por config_ids aplicado:', configIds);
-      } else {
-        console.log('⚠️ Nenhuma configuração encontrada - retornando array vazio');
-        setAdvancedLogs([]);
-        return;
-      }
-      
-      // Aplicar filtro de status se especificado (baseado na nova lógica)
-      if (filters.status && filters.status !== 'todos') {
-        console.log('🔍 Filtro Status:', { status: filters.status });
-        if (filters.status === 'success') {
-          // Sucesso = response_status 2xx (200-299) e sem erros de rede
-          query = query.gte('response_status', 200).lt('response_status', 300);
-        } else if (filters.status === 'error') {
-          // Erro = response_status fora de 2xx ou com erros de rede
-          query = query.or('response_status.lt.200,response_status.gte.300,response_status.is.null');
-        }
-      }
-      
-      // Aplicar ordenação e limite
-      query = query.order('created_at', { ascending: false }).limit(filters.limit || 50);
-      
-      console.log('🔍 Query final construída com filtros aplicados');
-      
-      // Executar query
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('❌ Erro ao buscar logs:', error);
-        setAdvancedLogs([]);
-        return;
-      }
-      
-      // Transformar dados para o formato esperado
-      const transformedLogs = (data || []).map((log: any) => {
-        // Encontrar a configuração correspondente
-        const config = configs?.find(c => c.id === log.config_id);
-        
-        // Lógica melhorada para determinar sucesso
-        const isSuccess = () => {
-          // Se há erro de rede/timeout/conexão = falha real
-          if (log.error_message && 
-              (log.error_message.toLowerCase().includes('timeout') || 
-               log.error_message.toLowerCase().includes('network') ||
-               log.error_message.toLowerCase().includes('connection') ||
-               log.error_message.toLowerCase().includes('failed to fetch'))) {
-            return false;
-          }
-          
-          // Se conseguiu enviar e tem response_status = verificar se é sucesso
-          if (log.response_status !== null && log.response_status !== undefined) {
-            // Aceitar status 2xx (200-299) como sucesso
-            return log.response_status >= 200 && log.response_status < 300;
-          }
-          
-          // Se não há erro explícito de rede = provavelmente sucesso
-          return !log.error_message;
-        };
-
-        return {
-          id: log.id,
-          config_id: log.config_id,
-          webhook_name: config?.name || 'N8N - Novo Lead',
-          webhook_url: config?.webhook_url || '',
-          trigger_event: 'lead_created', // Valor fixo já que todos são lead_created
-          success: isSuccess(), // Lógica melhorada para determinar sucesso
-          payload: log.payload, // Incluir payload para funcionalidade "Ver Payload"
-          response_status: log.response_status,
-          response_body: log.response_body,
-          error_message: log.error_message,
-          created_at: log.created_at,
-          triggered_at: log.created_at // Alias para compatibilidade
-        };
-      });
-      
-      setAdvancedLogs(transformedLogs);
-      console.log('✅ Logs avançados carregados diretamente:', transformedLogs.length);
-      console.log('📋 Primeiro log:', transformedLogs[0]);
-      console.log('📋 Todos os logs:', transformedLogs);
-      console.log('📊 Estado advancedLogs atualizado:', { length: transformedLogs.length });
-    } catch (error) {
-      console.error('❌ Erro ao carregar logs avançados:', error);
-      setAdvancedLogs([]);
-    } finally {
-      setLoadingAdvancedLogs(false);
-    }
-  };
-
-  const loadAdvancedLogsStats = async () => {
-    if (!company?.id) return;
-    
-    try {
-      console.log('🔄 Carregando estatísticas dos logs...');
-      
-      // Buscar configurações da empresa
-      const { data: configs } = await supabase
-        .from('webhook_trigger_configs')
-        .select('id')
-        .eq('company_id', company.id);
-      
-      const configIds = configs?.map(c => c.id) || [];
-      
-      if (configIds.length > 0) {
-        // Buscar logs da empresa usando query direta
-        const { data: logs } = await supabase
-          .from('webhook_trigger_logs')
-          .select('response_status, error_message, created_at')
-          .in('config_id', configIds);
-        
-        // Calcular estatísticas localmente
-        const stats = {
-          total: logs?.length || 0,
-          success: logs?.filter((log: any) => {
-            if (log.response_status !== null && log.response_status !== undefined) {
-              return log.response_status >= 200 && log.response_status < 300;
-            }
-            return !log.error_message;
-          }).length || 0,
-          errors: logs?.filter((log: any) => {
-            if (log.response_status !== null && log.response_status !== undefined) {
-              return log.response_status < 200 || log.response_status >= 300;
-            }
-            return !!log.error_message;
-          }).length || 0,
-          last24h: logs?.filter((log: any) => {
-            const logDate = new Date(log.created_at);
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            return logDate >= yesterday;
-          }).length || 0
-        };
-        
-        setAdvancedLogsStats(stats);
-        console.log('✅ Estatísticas carregadas:', stats);
-      } else {
-        setAdvancedLogsStats({ total: 0, success: 0, errors: 0, last24h: 0 });
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar estatísticas:', error);
-    }
-  };
-
-  const refreshAdvancedLogs = async () => {
-    console.log('🔄 Atualizando logs avançados...');
-    await Promise.all([
-      loadAdvancedLogs(),
-      loadAdvancedLogsStats()
-    ]);
-  };
-
-  const handleLogsFilterChange = (field: string, value: string) => {
-    setLogsFilters(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  // Função para abrir modal de visualização do payload
-  const handleViewPayload = (log: any) => {
-    setSelectedPayload({
-      payload: log.payload,
-      webhookName: log.config_name || 'Webhook',
-      webhookUrl: log.webhook_url,
-      responseStatus: log.response_status,
-      executionTime: log.execution_time_ms,
-      triggeredAt: log.triggered_at
-    });
-    setPayloadModalOpen(true);
-  };
-
-  const applyLogsFilters = () => {
-    loadAdvancedLogs(logsFilters);
-  };
-
-  const clearLogsFilters = () => {
-    const defaultFilters = {
-      status: '',
-      dateFrom: '',
-      dateTo: '',
-      configId: '',
-      limit: 50
-    };
-    setLogsFilters(defaultFilters);
-    loadAdvancedLogs(defaultFilters);
-  };
-
-  // =====================================================
-  // FUNÇÕES PARA GESTÃO DE USUÁRIOS
-  // =====================================================
-
-  const handleCreateUser = (templateId?: string) => {
-    setEditingUser(null);
-    setSelectedTemplateId(templateId || null); // NOVO: Armazenar template selecionado
-    setShowUserModal(true);
-  };
-
-  const handleEditUser = (user: CompanyUser) => {
-    setEditingUser(user);
-    setShowUserModal(true);
-  };
-
-  const handleCloseUserModal = () => {
-    setShowUserModal(false);
-    setEditingUser(null);
-    setSelectedTemplateId(null); // NOVO: Limpar template selecionado ao fechar
-  };
-
-  const handleSaveUser = async () => {
-    console.log('Settings: User saved, reloading users list');
-    
-    // Recarregar lista de usuários após salvar
-    try {
-      await usersListRef.current?.loadUsers();
-      console.log('Settings: Users list reloaded successfully');
-    } catch (error) {
-      console.error('Settings: Error reloading users list:', error);
     }
   };
 
@@ -990,61 +570,79 @@ export const Settings: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
         <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
         
-        {/* Navegação Principal - ABAS SIMPLES */}
-        <div className="border-b border-gray-200 mt-8">
-          <nav className="-mb-px flex space-x-8">
-            {/* Aba Integrações */}
-            <button
-              onClick={() => setActiveTab('integracoes')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'integracoes'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <SettingsIcon className="w-4 h-4" />
-              Integrações
-            </button>
-            
-            {/* Aba Usuários */}
-            <button
-              onClick={() => setActiveTab('usuarios')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'usuarios'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Usuários
-            </button>
-            
-            {/* Aba Tracking Site */}
-            <button
-              onClick={() => setActiveTab('tracking')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'tracking'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              Tracking Site
-            </button>
-            
-            {/* Aba Dados da Empresa */}
-            <button
-              onClick={() => setActiveTab('empresas')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'empresas'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Building className="w-4 h-4" />
-              Dados da Empresa
-            </button>
-          </nav>
+        {/* Navegação Principal Moderna */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          {/* Card Integrações */}
+          <div 
+            onClick={() => setActiveTab('integracoes')}
+            className="group cursor-pointer"
+          >
+            <div className={`bg-gradient-to-br from-blue-50 to-indigo-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+              activeTab === 'integracoes' 
+                ? 'border-blue-400 shadow-lg -translate-y-1' 
+                : 'border-transparent hover:border-blue-300'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg shadow-md group-hover:shadow-lg transition-shadow ${
+                  activeTab === 'integracoes' ? 'bg-blue-600' : 'bg-blue-500'
+                }`}>
+                  <SettingsIcon className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Integrações</h3>
+                  <p className="text-sm text-slate-600">Configure suas integrações e automações</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Card Usuários - NOVO */}
+          <div 
+            onClick={() => setActiveTab('usuarios')}
+            className="group cursor-pointer"
+          >
+            <div className={`bg-gradient-to-br from-orange-50 to-red-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+              activeTab === 'usuarios' 
+                ? 'border-orange-400 shadow-lg -translate-y-1' 
+                : 'border-transparent hover:border-orange-300'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg shadow-md group-hover:shadow-lg transition-shadow ${
+                  activeTab === 'usuarios' ? 'bg-orange-600' : 'bg-orange-500'
+                }`}>
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Usuários</h3>
+                  <p className="text-sm text-slate-600">Gerencie usuários e permissões</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Card Dados da Empresa */}
+          <div 
+            onClick={() => setActiveTab('empresas')}
+            className="group cursor-pointer"
+          >
+            <div className={`bg-gradient-to-br from-emerald-50 to-green-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+              activeTab === 'empresas' 
+                ? 'border-emerald-400 shadow-lg -translate-y-1' 
+                : 'border-transparent hover:border-emerald-300'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg shadow-md group-hover:shadow-lg transition-shadow ${
+                  activeTab === 'empresas' ? 'bg-emerald-600' : 'bg-emerald-500'
+                }`}>
+                  <Building className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Dados da Empresa</h3>
+                  <p className="text-sm text-slate-600">Gerencie informações da sua empresa</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1052,90 +650,84 @@ export const Settings: React.FC = () => {
       {activeTab === 'integracoes' && (
         <div className="space-y-6">
           
-          {/* Sub-navegação das Integrações Moderna - OTIMIZADA */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* WhatsApp Card - COMPACTO */}
+          {/* Sub-navegação das Integrações Moderna */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* WhatsApp Card */}
             <div 
               onClick={() => setIntegracoesTab('whatsapp')}
               className="group cursor-pointer"
             >
-              <div className={`bg-gradient-to-br from-green-50 to-emerald-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+              <div className={`bg-gradient-to-br from-green-50 to-emerald-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
                 integracoesTab === 'whatsapp'
-                  ? 'border-green-400 shadow-md scale-[1.02]'
+                  ? 'border-green-400 shadow-xl -translate-y-2'
                   : 'border-transparent hover:border-green-400'
               }`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
                     integracoesTab === 'whatsapp' ? 'bg-green-600' : 'bg-green-500'
                   }`}>
-                    <WhatsAppIcon className="w-6 h-6 text-white" />
+                    <WhatsAppIcon className="w-8 h-8 text-white mx-auto mt-1" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">WhatsApp</h3>
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                        3 funcionalidades
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">Automações e integrações WhatsApp</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">WhatsApp</h3>
+                  <p className="text-sm text-slate-600 mb-4">Automações e integrações WhatsApp</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                      3 funcionalidades
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             
-            {/* API Card - COMPACTO */}
+            {/* API Card */}
             <div 
               onClick={() => setIntegracoesTab('webhook-simples')}
               className="group cursor-pointer"
             >
-              <div className={`bg-gradient-to-br from-blue-50 to-cyan-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+              <div className={`bg-gradient-to-br from-blue-50 to-cyan-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
                 integracoesTab === 'webhook-simples'
-                  ? 'border-blue-400 shadow-md scale-[1.02]'
+                  ? 'border-blue-400 shadow-xl -translate-y-2'
                   : 'border-transparent hover:border-blue-400'
               }`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
                     integracoesTab === 'webhook-simples' ? 'bg-blue-600' : 'bg-blue-500'
                   }`}>
-                    <Webhook className="w-6 h-6 text-white" />
+                    <Webhook className="w-8 h-8 text-white mx-auto mt-1" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">API</h3>
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                        Ativo
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">Receba dados de formulários</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">API</h3>
+                  <p className="text-sm text-slate-600 mb-4">Receba dados de formulários</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      Ativo
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             
-            {/* Webhook Avançado Card - COMPACTO */}
+            {/* Webhook Avançado Card */}
             <div 
               onClick={() => setIntegracoesTab('webhook-avancado')}
               className="group cursor-pointer"
             >
-              <div className={`bg-gradient-to-br from-purple-50 to-indigo-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+              <div className={`bg-gradient-to-br from-purple-50 to-indigo-100 border-2 rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
                 integracoesTab === 'webhook-avancado'
-                  ? 'border-purple-400 shadow-md scale-[1.02]'
+                  ? 'border-purple-400 shadow-xl -translate-y-2'
                   : 'border-transparent hover:border-purple-400'
               }`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                <div className="text-center">
+                  <div className={`p-4 rounded-full w-16 h-16 mx-auto mb-4 shadow-lg group-hover:shadow-xl transition-shadow ${
                     integracoesTab === 'webhook-avancado' ? 'bg-purple-600' : 'bg-purple-500'
                   }`}>
-                    <Zap className="w-6 h-6 text-white" />
+                    <Zap className="w-8 h-8 text-white mx-auto mt-1" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">Webhook Avançado</h3>
-                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                        Configurável
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">Envie dados automaticamente</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Webhook Avançado</h3>
+                  <p className="text-sm text-slate-600 mb-4">Envie dados automaticamente</p>
+                  <div className="flex justify-center">
+                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                      Configurável
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1223,7 +815,22 @@ export const Settings: React.FC = () => {
               
               {/* WhatsApp Life */}
               {whatsappTab === 'whatsapp-life' && (
-                <WhatsAppLifeModule />
+                <div className="text-center py-12">
+                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-green-600 mx-auto mt-2" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    🚧 WhatsApp Life - Em Desenvolvimento
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    Integração com WhatsApp pessoal/business local
+                  </p>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
+                    <p className="text-sm text-green-800">
+                      Funcionalidade em desenvolvimento. Em breve você poderá conectar seu WhatsApp local para automações avançadas.
+                    </p>
+                  </div>
+                </div>
               )}
               
               {/* Cloud API WhatsApp */}
@@ -1554,164 +1161,22 @@ export const Settings: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Seção de Campos do Payload */}
-                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-6">
-                      <div className="flex items-center gap-2.5 mb-4">
-                        <div className="p-1.5 bg-orange-100 rounded-md">
-                          <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <h3 className="text-base font-semibold text-slate-900">Configuração do Payload</h3>
-                          <p className="text-xs text-slate-600">Selecione quais campos incluir no webhook</p>
-                        </div>
-                      </div>
-
-                      <div className={`grid grid-cols-1 gap-5 ${availableCustomFields.length > 0 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-                        {/* Campos do Lead */}
-                        <div className="bg-white rounded-lg border border-slate-200 p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="p-1 bg-blue-100 rounded">
-                              <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                            </div>
-                            <h4 className="text-sm font-semibold text-slate-900">Dados do Lead</h4>
-                          </div>
-                          <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                            {[
-                              { key: 'name', label: 'Nome', desc: 'Nome completo do lead' },
-                              { key: 'email', label: 'Email', desc: 'Endereço de email' },
-                              { key: 'phone', label: 'Telefone', desc: 'Número de telefone' },
-                              { key: 'status', label: 'Status', desc: 'Status atual do lead' },
-                              { key: 'origin', label: 'Origem', desc: 'Fonte de origem do lead' },
-                              { key: 'interest', label: 'Interesse', desc: 'Interesse do lead' },
-                              { key: 'responsible_user_id', label: 'Responsável', desc: 'Usuário responsável' },
-                              { key: 'created_at', label: 'Data de Criação', desc: 'Quando o lead foi criado' },
-                              { key: 'updated_at', label: 'Última Atualização', desc: 'Última modificação' }
-                            ].map((field) => (
-                              <label key={field.key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={webhookConfig.payload_fields.lead.includes(field.key)}
-                                  onChange={() => handleFieldToggle('lead', field.key)}
-                                  className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-slate-900 group-hover:text-orange-600 transition-colors">
-                                    {field.label}
-                                  </div>
-                                  <div className="text-xs text-slate-500 leading-tight">
-                                    {field.desc}
-                                  </div>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Empresa do Lead */}
-                        <div className="bg-white rounded-lg border border-slate-200 p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="p-1 bg-emerald-100 rounded">
-                              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                              </svg>
-                            </div>
-                            <h4 className="text-sm font-semibold text-slate-900">Empresa do Lead</h4>
-                          </div>
-                          <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                            {[
-                              { key: 'company_name', label: 'Nome da Empresa', desc: 'Nome da empresa do lead' },
-                              { key: 'company_cnpj', label: 'CNPJ', desc: 'CNPJ da empresa do lead' },
-                              { key: 'company_razao_social', label: 'Razão Social', desc: 'Razão social da empresa' },
-                              { key: 'company_nome_fantasia', label: 'Nome Fantasia', desc: 'Nome fantasia da empresa' },
-                              { key: 'company_telefone', label: 'Telefone', desc: 'Telefone da empresa' },
-                              { key: 'company_email', label: 'Email', desc: 'Email da empresa' },
-                              { key: 'company_site', label: 'Site', desc: 'Website da empresa' },
-                              { key: 'company_cidade', label: 'Cidade', desc: 'Cidade da empresa' },
-                              { key: 'company_estado', label: 'Estado', desc: 'Estado da empresa' },
-                              { key: 'company_cep', label: 'CEP', desc: 'CEP da empresa' },
-                              { key: 'company_endereco', label: 'Endereço', desc: 'Endereço completo' }
-                            ].map((field) => (
-                              <label key={field.key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={webhookConfig.payload_fields.empresa.includes(field.key)}
-                                  onChange={() => handleFieldToggle('empresa', field.key)}
-                                  className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-slate-900 group-hover:text-emerald-600 transition-colors">
-                                    {field.label}
-                                  </div>
-                                  <div className="text-xs text-slate-500 leading-tight">
-                                    {field.desc}
-                                  </div>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Campos Personalizados */}
-                        {availableCustomFields.length > 0 && (
-                          <div className="bg-white rounded-lg border border-slate-200 p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="p-1 bg-purple-100 rounded">
-                                <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-                                </svg>
-                              </div>
-                              <h4 className="text-sm font-semibold text-slate-900">Campos Personalizados</h4>
-                            </div>
-                            <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                              {availableCustomFields.map((field) => (
-                                <label key={field.id} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
-                                  <input
-                                    type="checkbox"
-                                    checked={webhookConfig.payload_fields.custom_fields.includes(field.numeric_id?.toString() || field.id)}
-                                    onChange={() => handleFieldToggle('custom_fields', field.numeric_id?.toString() || field.id)}
-                                    className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-medium text-slate-900 group-hover:text-purple-600 transition-colors">
-                                      {field.numeric_id && (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">
-                                          {field.numeric_id}
-                                        </span>
-                                      )}
-                                      {field.field_label}
-                                    </div>
-                                    <div className="text-xs text-slate-500 leading-tight">
-                                      {field.field_type === 'text' && 'Campo de texto'}
-                                      {field.field_type === 'number' && 'Campo numérico'}
-                                      {field.field_type === 'date' && 'Campo de data'}
-                                      {field.field_type === 'boolean' && 'Campo sim/não'}
-                                      {field.field_type === 'select' && 'Lista de opções'}
-                                    </div>
-                                  </div>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Informação adicional */}
-                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-start gap-2">
-                          <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div>
-                            <h5 className="text-sm font-medium text-blue-900 mb-0.5">Dica de Configuração</h5>
-                            <p className="text-xs text-blue-800 leading-relaxed">
-                              Selecione apenas os campos necessários para otimizar o payload. O ID do lead é sempre incluído automaticamente.
-                            </p>
-                          </div>
-                        </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Campos do Payload
+                      </label>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        {['name', 'email', 'phone', 'status', 'origin'].map((field) => (
+                          <label key={field} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={webhookConfig.payload_fields.lead.includes(field)}
+                              onChange={() => handleFieldToggle('lead', field)}
+                              className="mr-2"
+                            />
+                            {field}
+                          </label>
+                        ))}
                       </div>
                     </div>
 
@@ -1798,200 +1263,14 @@ export const Settings: React.FC = () => {
                   )}
                 </div>
 
-                {/* Logs de Disparos - INTERFACE FUNCIONAL */}
+                {/* Logs de Disparos */}
                 <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Clock className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-900">📊 Logs de Disparos</h3>
-                        <p className="text-sm text-slate-600">Histórico de execuções dos webhooks</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={refreshAdvancedLogs}
-                      disabled={loadingAdvancedLogs}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <Clock className="w-4 h-4" />
-                      {loadingAdvancedLogs ? 'Atualizando...' : 'Atualizar'}
-                    </button>
-                  </div>
-
-                  {/* Estatísticas dos Logs */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-slate-50 rounded-lg p-4 text-center">
-                      <div className="text-2xl font-bold text-slate-900">{advancedLogsStats.total}</div>
-                      <div className="text-sm text-slate-600">Total</div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <div className="text-2xl font-bold text-green-600">{advancedLogsStats.success}</div>
-                      <div className="text-sm text-green-700">Sucessos</div>
-                    </div>
-                    <div className="bg-red-50 rounded-lg p-4 text-center">
-                      <div className="text-2xl font-bold text-red-600">{advancedLogsStats.errors}</div>
-                      <div className="text-sm text-red-700">Erros</div>
-                    </div>
-                    <div className="bg-blue-50 rounded-lg p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600">{advancedLogsStats.last24h}</div>
-                      <div className="text-sm text-blue-700">Últimas 24h</div>
-                    </div>
-                  </div>
-
-                  {/* Filtros */}
-                  <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                    <h4 className="font-medium text-slate-900 mb-3">🔍 Filtros</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                        <select
-                          value={logsFilters.status}
-                          onChange={(e) => handleLogsFilterChange('status', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                        >
-                          <option value="">Todos</option>
-                          <option value="success">Sucesso</option>
-                          <option value="error">Erro</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Data Início</label>
-                        <input
-                          type="date"
-                          value={logsFilters.dateFrom}
-                          onChange={(e) => handleLogsFilterChange('dateFrom', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Data Fim</label>
-                        <input
-                          type="date"
-                          value={logsFilters.dateTo}
-                          onChange={(e) => handleLogsFilterChange('dateTo', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                        />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <button
-                          onClick={applyLogsFilters}
-                          className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors text-sm"
-                        >
-                          Aplicar
-                        </button>
-                        <button
-                          onClick={clearLogsFilters}
-                          className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm"
-                        >
-                          Limpar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lista de Logs */}
-                  {loadingAdvancedLogs ? (
-                    <div className="text-center py-8">
-                      <Clock className="w-8 h-8 mx-auto mb-2 text-slate-400 animate-spin" />
-                      <p className="text-slate-600">Carregando logs...</p>
-                    </div>
-                  ) : advancedLogs.length === 0 ? (
-                    <div className="text-center py-8 text-slate-500">
-                      <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
-                      <p>Nenhum log de disparo encontrado</p>
-                      <p className="text-sm">Os logs aparecerão aqui quando webhooks forem disparados</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {advancedLogs.map((log, index) => (
-                        <div key={index} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h4 className="font-medium text-slate-900">{log.webhook_name || 'N8N - Novo Lead'}</h4>
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  log.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                }`}>
-                                  {log.success ? '✅ Sucesso' : '❌ Erro'}
-                                </span>
-                                {log.success === false && (
-                                  <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-700">
-                                    ⚠️ Verificar logs
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-slate-600 mb-2">{log.webhook_url}</p>
-                              <div className="flex items-center gap-4 text-xs text-slate-500">
-                                <span>Evento: {log.trigger_event || 'N/A'}</span>
-                                {log.response_status && <span>Status: {log.response_status}</span>}
-                                <span>Data: {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Data não disponível'}</span>
-                              </div>
-                            </div>
-                            
-                            {/* Botão Ver Payload */}
-                            <div className="flex-shrink-0">
-                              <button
-                                onClick={() => handleViewPayload(log)}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
-                                title="Visualizar payload enviado"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                                Ver Payload
-                              </button>
-                            </div>
-                          </div>
-                          
-                          {log.error_message && (
-                            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm">
-                              <div className="flex items-start gap-2">
-                                <span className="text-red-600 font-medium">❌ Erro:</span>
-                                <span className="text-red-700">{log.error_message}</span>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {log.response_body && (
-                            <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded text-sm">
-                              <div className="flex items-start gap-2">
-                                <span className="text-slate-600 font-medium">📄 Resposta:</span>
-                                <span className="text-slate-700 font-mono text-xs">{log.response_body}</span>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Informação de debug para logs com erro */}
-                          {log.success === false && !log.error_message && (
-                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                              <div className="flex items-start gap-2">
-                                <span className="text-blue-600 font-medium">ℹ️ Informação:</span>
-                                <div className="text-blue-700">
-                                  <p>O webhook foi disparado mas está marcado como erro no banco de dados.</p>
-                                  <p className="mt-1 text-xs">
-                                    <strong>Teste manual:</strong> O webhook responde corretamente (200 OK) quando testado diretamente.
-                                    <br />
-                                    <strong>Problema:</strong> A função RPC que registra os logs precisa ser atualizada.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Rodapé com informações */}
-                  <div className="mt-4 pt-4 border-t border-slate-200 text-center">
-                    <p className="text-xs text-slate-500">
-                      Mostrando {advancedLogs.length} log(s) • 
-                      Atualizado automaticamente • 
-                      Dados em tempo real
-                    </p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">📊 Logs de Disparos</h3>
+                  
+                  <div className="text-center py-8 text-slate-500">
+                    <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                    <p>Logs de disparos serão implementados na próxima etapa</p>
+                    <p className="text-sm">Backend funcionando - interface em desenvolvimento</p>
                   </div>
                 </div>
 
@@ -2019,60 +1298,27 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Usuários - INTERFACE REORGANIZADA COM SUBMENUS */}
+      {/* Aba Usuários - EM DESENVOLVIMENTO */}
       {activeTab === 'usuarios' && (
         <div className="space-y-6">
-          {/* Navegação de Submenus */}
-          <div className="border-b border-slate-200">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setUsuariosSubTab('gestao')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  usuariosSubTab === 'gestao'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Gestão de Usuários
-              </button>
-              <button
-                onClick={() => setUsuariosSubTab('templates')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  usuariosSubTab === 'templates'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Perfis de Usuário
-              </button>
-            </nav>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12">
+            <div className="text-center">
+              <div className="p-4 bg-orange-100 rounded-full w-20 h-20 mx-auto mb-6">
+                <Users className="w-12 h-12 text-orange-600 mx-auto mt-2" />
+              </div>
+              <h3 className="text-2xl font-semibold text-slate-900 mb-4">
+                🚧 Gestão de Usuários - Em Desenvolvimento
+              </h3>
+              <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                Funcionalidade para gerenciar usuários, permissões e controle de acesso ao sistema
+              </p>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 max-w-lg mx-auto">
+                <p className="text-sm text-orange-800">
+                  Em breve você poderá adicionar usuários, definir permissões e controlar o acesso às funcionalidades do sistema.
+                </p>
+              </div>
+            </div>
           </div>
-
-          {/* Conteúdo dos Submenus */}
-          {usuariosSubTab === 'gestao' && (
-            <UsersList
-              ref={usersListRef}
-              onCreateUser={handleCreateUser}
-              onEditUser={handleEditUser}
-            />
-          )}
-
-          {usuariosSubTab === 'templates' && (
-            <TemplateManager
-              onCreateUser={(templateId) => {
-                // Mudar para submenu de gestão e abrir modal com template pré-selecionado
-                setUsuariosSubTab('gestao');
-                handleCreateUser(templateId); // CORRIGIDO: Passar templateId
-              }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Aba Tracking Site */}
-      {activeTab === 'tracking' && (
-        <div className="space-y-6">
-          <ModernLandingPages />
         </div>
       )}
 
@@ -3092,96 +2338,6 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Modal de Visualização do Payload */}
-      {payloadModalOpen && selectedPayload && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Payload Enviado</h2>
-                <p className="text-sm text-slate-600 mt-1">{selectedPayload.webhookName}</p>
-              </div>
-              <button
-                onClick={() => setPayloadModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* Informações do Webhook */}
-              <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
-                <div>
-                  <span className="text-sm font-medium text-slate-600">URL:</span>
-                  <p className="text-sm text-slate-900 font-mono break-all">{selectedPayload.webhookUrl}</p>
-                </div>
-                <div>
-                  <span className="text-sm font-medium text-slate-600">Status:</span>
-                  <p className="text-sm text-slate-900">{selectedPayload.responseStatus || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm font-medium text-slate-600">Tempo de Execução:</span>
-                  <p className="text-sm text-slate-900">{selectedPayload.executionTime ? `${selectedPayload.executionTime}ms` : 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-sm font-medium text-slate-600">Data/Hora:</span>
-                  <p className="text-sm text-slate-900">
-                    {selectedPayload.triggeredAt ? new Date(selectedPayload.triggeredAt).toLocaleString('pt-BR') : 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Payload JSON */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-medium text-slate-900">Payload JSON</h3>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify(selectedPayload.payload, null, 2));
-                      // Você pode adicionar um toast aqui se quiser
-                    }}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
-                    title="Copiar payload"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Copiar
-                  </button>
-                </div>
-                
-                <div className="bg-slate-900 text-slate-100 rounded-lg p-4 overflow-auto">
-                  <pre className="text-sm font-mono whitespace-pre-wrap">
-                    {JSON.stringify(selectedPayload.payload, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-3 p-6 border-t border-slate-200">
-              <button
-                onClick={() => setPayloadModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Usuários */}
-      <UserModal
-        isOpen={showUserModal}
-        onClose={handleCloseUserModal}
-        onSave={handleSaveUser}
-        user={editingUser}
-        preSelectedProfileId={selectedTemplateId || undefined} // NOVO: Passar template pré-selecionado
-      />
 
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
-import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
+import { UsersList } from '../components/UserManagement/UsersList';
 import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { CompanyUser } from '../types/user';
@@ -35,9 +35,6 @@ export const Settings: React.FC = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<CompanyUser | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null); // NOVO: Template pré-selecionado
-  
-  // Ref para UsersList - permite recarregar lista após criar usuário
-  const usersListRef = useRef<UsersListRef>(null);
   
   // Estados para Webhook Avançado - MÓDULO ISOLADO
   const [webhookConfig, setWebhookConfig] = useState({
@@ -972,16 +969,9 @@ export const Settings: React.FC = () => {
     setSelectedTemplateId(null); // NOVO: Limpar template selecionado ao fechar
   };
 
-  const handleSaveUser = async () => {
-    console.log('Settings: User saved, reloading users list');
-    
-    // Recarregar lista de usuários após salvar
-    try {
-      await usersListRef.current?.loadUsers();
-      console.log('Settings: Users list reloaded successfully');
-    } catch (error) {
-      console.error('Settings: Error reloading users list:', error);
-    }
+  const handleSaveUser = () => {
+    // Modal já fecha automaticamente após salvar
+    // UsersList será recarregada automaticamente
   };
 
   return (
@@ -2051,7 +2041,6 @@ export const Settings: React.FC = () => {
           {/* Conteúdo dos Submenus */}
           {usuariosSubTab === 'gestao' && (
             <UsersList
-              ref={usersListRef}
               onCreateUser={handleCreateUser}
               onEditUser={handleEditUser}
             />

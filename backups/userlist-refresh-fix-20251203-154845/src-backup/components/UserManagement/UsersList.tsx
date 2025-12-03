@@ -2,7 +2,7 @@
 // LISTA DE USUÁRIOS - COMPONENTE SEGURO
 // =====================================================
 
-import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
@@ -16,13 +16,7 @@ interface UsersListProps {
   onEditUser: (user: CompanyUser) => void;
 }
 
-// Interface para métodos expostos via ref
-export interface UsersListRef {
-  loadUsers: () => Promise<void>;
-  refreshList: () => Promise<void>;
-}
-
-export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUser, onEditUser }, ref) => {
+export const UsersList: React.FC<UsersListProps> = ({ onCreateUser, onEditUser }) => {
   const { company, hasPermission } = useAuth();
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,12 +53,6 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
   useEffect(() => {
     loadUsers();
   }, [company?.id]);
-
-  // Expor métodos via ref para componente pai
-  useImperativeHandle(ref, () => ({
-    loadUsers,
-    refreshList: loadUsers // Alias para compatibilidade
-  }), []);
 
   // Desativar usuário (soft delete)
   const handleDeactivateUser = async (user: CompanyUser) => {
@@ -454,7 +442,4 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       />
     </div>
   );
-});
-
-// Definir displayName para debugging
-UsersList.displayName = 'UsersList';
+};
