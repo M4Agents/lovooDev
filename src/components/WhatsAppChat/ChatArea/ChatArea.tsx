@@ -754,6 +754,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
     setMessage('')
     setIsEmojiOpen(false)
+    
+    // Reset textarea height after sending message
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '40px'
+      textareaRef.current.style.overflowY = 'hidden'
+    }
   }
 
   const handleAttachClick = () => {
@@ -888,6 +894,30 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   }
 
+  // Função para auto-resize do textarea
+  const handleAutoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target
+    setMessage(textarea.value)
+    
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto'
+    
+    // Calculate new height based on content
+    const minHeight = 40 // 1 linha
+    const maxHeight = 120 // ~6 linhas (como WhatsApp)
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight)
+    
+    // Apply new height
+    textarea.style.height = `${newHeight}px`
+    
+    // Show/hide scrollbar based on content
+    if (textarea.scrollHeight > maxHeight) {
+      textarea.style.overflowY = 'auto'
+    } else {
+      textarea.style.overflowY = 'hidden'
+    }
+  }
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -955,14 +985,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
         )}
         <textarea
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={handleAutoResize}
           onKeyPress={handleKeyPress}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
           ref={textareaRef}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50"
-          style={{ minHeight: '40px', maxHeight: '120px' }}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50 overflow-hidden"
+          style={{ minHeight: '40px', maxHeight: '120px', height: '40px' }}
         />
 
         {isEmojiOpen && !disabled && (
