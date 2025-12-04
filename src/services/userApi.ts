@@ -584,19 +584,43 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
       updateData.profile_picture_url = request.profile_picture_url;
     }
 
-    const { data, error } = await supabase
-      .from('company_users')
-      .update(updateData)
-      .eq('id', request.id)
-      .select(`
-        *,
-        companies:company_id (
-          id,
-          name,
-          company_type
-        )
-      `)
-      .single();
+    // 🔧 CORREÇÃO: Para atualizações simples (apenas foto), não fazer JOIN complexo
+    const isSimpleUpdate = Object.keys(updateData).length <= 2 && updateData.profile_picture_url !== undefined;
+    
+    let data, error;
+    
+    if (isSimpleUpdate) {
+      // Atualização simples sem JOIN
+      console.log('🔧 UserAPI: Using simple update (no JOIN)');
+      const result = await supabase
+        .from('company_users')
+        .update(updateData)
+        .eq('id', request.id)
+        .select('*')
+        .single();
+      
+      data = result.data;
+      error = result.error;
+    } else {
+      // Atualização completa com JOIN
+      console.log('🔧 UserAPI: Using full update (with JOIN)');
+      const result = await supabase
+        .from('company_users')
+        .update(updateData)
+        .eq('id', request.id)
+        .select(`
+          *,
+          companies:company_id (
+            id,
+            name,
+            company_type
+          )
+        `)
+        .single();
+      
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error('UserAPI: Error updating user:', error);
