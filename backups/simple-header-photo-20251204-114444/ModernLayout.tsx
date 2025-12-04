@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeAnalytics';
-import { supabase } from '../lib/supabase';
 import {
   LayoutDashboard,
   Settings,
@@ -33,86 +32,16 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const realtimeStats = useRealtimeAnalytics(company?.id);
   
-  // 🔧 NOVO: Estado para dados do usuário (foto e nome)
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
-  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
-  
   // 🔧 NOVO: Obter dados do usuário atual para foto de perfil
   const currentUserData = userRoles?.find(role => role.company_id === company?.id);
   
-  // 🔧 NOVO: Buscar dados do usuário diretamente (solução simples)
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        console.log('🔧 SIMPLE: Buscando dados do usuário diretamente...', {
-          user: !!user,
-          userId: user?.id,
-          company: !!company,
-          companyId: company?.id
-        });
-
-        if (!user?.id || !company?.id) {
-          console.log('🔧 SIMPLE: User ou company não disponível ainda');
-          return;
-        }
-
-        // Buscar dados do usuário na empresa atual
-        const { data, error } = await supabase
-          .from('company_users')
-          .select(`
-            profile_picture_url,
-            companies:company_id (
-              id,
-              name
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('company_id', company.id)
-          .eq('is_active', true)
-          .single();
-
-        console.log('🔧 SIMPLE: Resultado da busca:', {
-          success: !error,
-          data: data,
-          error: error
-        });
-
-        if (data && !error) {
-          setUserPhoto(data.profile_picture_url);
-          
-          // Buscar display_name do auth.users
-          const { data: authUser } = await supabase.auth.getUser();
-          const displayName = authUser?.user?.user_metadata?.name || 
-                             authUser?.user?.user_metadata?.display_name ||
-                             authUser?.user?.email?.split('@')[0];
-          
-          setUserDisplayName(displayName);
-          
-          console.log('🔧 SIMPLE: Dados definidos com sucesso:', {
-            profilePictureUrl: data.profile_picture_url,
-            displayName: displayName
-          });
-        } else {
-          console.warn('🔧 SIMPLE: Erro ou dados não encontrados:', error);
-        }
-      } catch (error) {
-        console.error('🔧 SIMPLE: Erro ao buscar dados do usuário:', error);
-      }
-    };
-
-    fetchUserData();
-  }, [user?.id, company?.id]); // Executar quando user ou company mudar
-
   // 🔧 DEBUG: Logs para verificar dados do header
   console.log('🔧 ModernLayout Debug:', {
     userRoles: userRoles,
     companyId: company?.id,
     currentUserData: currentUserData,
     profilePictureUrl: currentUserData?.profile_picture_url,
-    displayName: currentUserData?.display_name,
-    // NOVOS dados da solução simples:
-    simpleUserPhoto: userPhoto,
-    simpleDisplayName: userDisplayName
+    displayName: currentUserData?.display_name
   });
 
   const handleSignOut = async () => {
@@ -312,14 +241,14 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               {/* User Menu */}
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                 <Avatar 
-                  src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || currentUserData?.display_name || user?.email || 'Usuário'}
+                  src={currentUserData?.profile_picture_url}
+                  alt={currentUserData?.display_name || user?.email || 'Usuário'}
                   size="sm"
-                  fallbackText={(userDisplayName || currentUserData?.display_name || user?.email)?.charAt(0)}
+                  fallbackText={currentUserData?.display_name?.charAt(0) || user?.email?.charAt(0)}
                 />
                 <div className="hidden sm:block text-left">
                   <p className="text-sm font-medium text-gray-900 truncate max-w-32">
-                    {userDisplayName || currentUserData?.display_name || user?.email?.split('@')[0]}
+                    {currentUserData?.display_name || user?.email?.split('@')[0]}
                   </p>
                   <p className="text-xs text-gray-500 capitalize">{company?.plan}</p>
                 </div>
