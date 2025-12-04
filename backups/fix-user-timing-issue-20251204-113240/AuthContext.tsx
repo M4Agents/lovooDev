@@ -174,10 +174,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
-    // 🔧 CAPTURAR USER_ID NO INÍCIO PARA EVITAR TIMING ISSUES
-    const capturedUserId = userId;
-    console.log('🔧 DEBUG: fetchCompany iniciado com userId capturado:', capturedUserId);
-    
     try {
       // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA COM SUCESSO
       if (company && company.id && !forceSuper) {
@@ -677,9 +673,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTimeout(() => {
         console.log('🔧 DEBUG: setTimeout executou após fetchCompany!', {
           timestamp: new Date().toISOString(),
-          capturedUserId: capturedUserId,
-          currentUserExists: !!user,
-          currentUserId: user?.id,
+          userExists: !!user,
+          userId: user?.id,
           companyExists: !!company,
           companyId: company?.id,
           companyName: company?.name
@@ -688,21 +683,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsFetchingCompany(false); // Liberar flag de controle com delay
         console.log('🔧 AuthContext: fetchCompany completed, flags cleared with delay');
         
-        // 🔧 CORREÇÃO: Usar capturedUserId em vez do estado user atual
-        if (capturedUserId) {
-          console.log('🔧 AuthContext: Usando capturedUserId, chamando refreshUserRoles', {
-            capturedUserId: capturedUserId,
-            currentUserState: user?.id || 'null'
+        // 🔧 CORREÇÃO: Chamar refreshUserRoles após empresa ser carregada
+        if (user) {
+          console.log('🔧 AuthContext: User existe, chamando refreshUserRoles', {
+            userId: user.id,
+            userEmail: user.email
           });
           
           try {
-            refreshUserRoles(capturedUserId);
-            console.log('🔧 AuthContext: refreshUserRoles chamado com sucesso usando capturedUserId');
+            refreshUserRoles();
+            console.log('🔧 AuthContext: refreshUserRoles chamado com sucesso');
           } catch (error) {
             console.error('🔧 AuthContext: ERRO ao chamar refreshUserRoles:', error);
           }
         } else {
-          console.warn('🔧 AuthContext: capturedUserId é NULL, NÃO chamando refreshUserRoles!');
+          console.warn('🔧 AuthContext: User é NULL, NÃO chamando refreshUserRoles!');
         }
       }, 500); // 500ms de delay para evitar chamadas imediatas
     }
@@ -1167,26 +1162,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // NOVAS FUNÇÕES PARA SISTEMA DE USUÁRIOS
   // =====================================================
 
-  const refreshUserRoles = async (targetUserId?: string) => {
-    // 🔧 USAR targetUserId se fornecido, senão usar user do estado
-    const effectiveUserId = targetUserId || user?.id;
-    
+  const refreshUserRoles = async () => {
     console.log('🔧 DEBUG: refreshUserRoles INICIADO!', {
       timestamp: new Date().toISOString(),
-      targetUserId: targetUserId,
-      stateUserExists: !!user,
-      stateUserId: user?.id,
-      effectiveUserId: effectiveUserId,
+      userExists: !!user,
+      userId: user?.id,
       userEmail: user?.email
     });
     
-    if (!effectiveUserId) {
-      console.warn('🔧 DEBUG: refreshUserRoles - effectiveUserId é NULL, retornando');
+    if (!user) {
+      console.warn('🔧 DEBUG: refreshUserRoles - user é NULL, retornando');
       return;
     }
 
     try {
-      console.log('🔧 DEBUG: AuthContext: Refreshing user roles for:', effectiveUserId);
+      console.log('🔧 DEBUG: AuthContext: Refreshing user roles for:', user.id);
       
       // 🔧 CORREÇÃO: Buscar roles usando RPC que inclui profile_picture_url
       let roles: any[] = [];
@@ -1197,7 +1187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: userCompanies } = await supabase
           .from('company_users')
           .select('company_id')
-          .eq('user_id', effectiveUserId)
+          .eq('user_id', user.id)
           .eq('is_active', true);
 
         console.log('🔧 DEBUG: userCompanies encontradas:', {
@@ -1224,7 +1214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (!rpcError && companyRoles) {
               // Filtrar apenas o usuário atual
-              const userRoles = companyRoles.filter((role: any) => role.user_id === effectiveUserId);
+              const userRoles = companyRoles.filter((role: any) => role.user_id === user.id);
               console.log('🔧 DEBUG: userRoles filtrados:', {
                 companyId: companyData.company_id,
                 userRolesCount: userRoles.length,
@@ -1247,7 +1237,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               company_type
             )
           `)
-          .eq('user_id', effectiveUserId)
+          .eq('user_id', user.id)
           .eq('is_active', true);
         
         roles = fallbackRoles || [];
