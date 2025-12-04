@@ -447,7 +447,7 @@ export const api = {
             financial: false,
             edit_users: true,
             create_users: true,
-            delete_users: true, // 🔧 CORREÇÃO: Admin de empresa filha deve poder excluir usuários
+            delete_users: false,
             edit_all_leads: true,
             edit_financial: false,
             view_all_leads: true,

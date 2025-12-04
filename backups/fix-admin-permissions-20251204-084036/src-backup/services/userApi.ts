@@ -225,7 +225,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         financial: false,
         create_users: true,
         edit_users: true,
-        delete_users: true, // 🔧 CORREÇÃO: Admin deve poder excluir usuários da sua empresa
+        delete_users: false,
         impersonate: false,
         view_all_leads: true,
         edit_all_leads: true,
