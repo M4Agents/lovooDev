@@ -33,44 +33,85 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const realtimeStats = useRealtimeAnalytics(company?.id);
   
-  // Estado para dados do usuário (foto e nome)
+  // 🔧 NOVO: Estado para dados do usuário (foto e nome)
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
   
-  // Obter dados do usuário atual para foto de perfil (fallback)
+  // 🔧 NOVO: Obter dados do usuário atual para foto de perfil
   const currentUserData = userRoles?.find(role => role.company_id === company?.id);
   
-  // Buscar dados do usuário diretamente para o header
+  // 🔧 NOVO: Buscar dados do usuário diretamente (solução simples)
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        console.log('🔧 SIMPLE: Buscando dados do usuário diretamente...', {
+          user: !!user,
+          userId: user?.id,
+          company: !!company,
+          companyId: company?.id
+        });
+
         if (!user?.id || !company?.id) {
+          console.log('🔧 SIMPLE: User ou company não disponível ainda');
           return;
         }
 
-        // Usar RPC que funciona na lista de usuários
+        // 🔧 CORREÇÃO: Usar RPC que já funciona na lista de usuários
         const { data: companyUsers, error } = await supabase
           .rpc('get_company_users_with_details', {
             p_company_id: company.id
           });
 
+        console.log('🔧 SIMPLE: Resultado da RPC:', {
+          success: !error,
+          usersCount: companyUsers?.length || 0,
+          error: error
+        });
+
         if (companyUsers && !error) {
           // Filtrar apenas o usuário atual
           const userData = companyUsers.find((u: any) => u.user_id === user.id);
+          
+          console.log('🔧 SIMPLE: Dados do usuário filtrados:', {
+            found: !!userData,
+            profilePictureUrl: userData?.profile_picture_url,
+            displayName: userData?.display_name,
+            role: userData?.role
+          });
 
           if (userData) {
             setUserPhoto(userData.profile_picture_url);
             setUserDisplayName(userData.display_name);
+            
+            console.log('🔧 SIMPLE: Dados definidos com sucesso via RPC:', {
+              profilePictureUrl: userData.profile_picture_url,
+              displayName: userData.display_name
+            });
+          } else {
+            console.warn('🔧 SIMPLE: Usuário não encontrado nos dados da RPC');
           }
+        } else {
+          console.warn('🔧 SIMPLE: Erro na RPC ou dados não encontrados:', error);
         }
       } catch (error) {
-        console.error('Erro ao buscar dados do usuário:', error);
+        console.error('🔧 SIMPLE: Erro ao buscar dados do usuário:', error);
       }
     };
 
     fetchUserData();
-  }, [user?.id, company?.id]);
+  }, [user?.id, company?.id]); // Executar quando user ou company mudar
 
+  // 🔧 DEBUG: Logs para verificar dados do header
+  console.log('🔧 ModernLayout Debug:', {
+    userRoles: userRoles,
+    companyId: company?.id,
+    currentUserData: currentUserData,
+    profilePictureUrl: currentUserData?.profile_picture_url,
+    displayName: currentUserData?.display_name,
+    // NOVOS dados da solução simples:
+    simpleUserPhoto: userPhoto,
+    simpleDisplayName: userDisplayName
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -281,6 +322,19 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   <p className="text-xs text-gray-500 capitalize">{company?.plan}</p>
                 </div>
               </div>
+              
+              {/* 🔧 DEBUG: Botão temporário para refresh */}
+              <button 
+                onClick={() => {
+                  console.log('🔧 Forcing refresh of user roles...');
+                  // Acessar refreshUserRoles do contexto se disponível
+                  window.location.reload();
+                }}
+                className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded"
+                title="Debug: Refresh User Data"
+              >
+                🔄
+              </button>
             </div>
           </div>
         </header>
