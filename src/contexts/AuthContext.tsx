@@ -1200,6 +1200,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.log('AuthContext: User roles found:', roles);
+      console.log('🔧 AuthContext Debug - Profile Picture URLs:', 
+        roles?.map(r => ({ 
+          company_id: r.company_id, 
+          profile_picture_url: r.profile_picture_url,
+          display_name: r.display_name 
+        }))
+      );
       setUserRoles(roles || []);
 
       // Determinar role atual baseado na empresa ativa

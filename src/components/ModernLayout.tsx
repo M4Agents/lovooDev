@@ -34,6 +34,15 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   
   // 🔧 NOVO: Obter dados do usuário atual para foto de perfil
   const currentUserData = userRoles?.find(role => role.company_id === company?.id);
+  
+  // 🔧 DEBUG: Logs para verificar dados do header
+  console.log('🔧 ModernLayout Debug:', {
+    userRoles: userRoles,
+    companyId: company?.id,
+    currentUserData: currentUserData,
+    profilePictureUrl: currentUserData?.profile_picture_url,
+    displayName: currentUserData?.display_name
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -244,6 +253,19 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   <p className="text-xs text-gray-500 capitalize">{company?.plan}</p>
                 </div>
               </div>
+              
+              {/* 🔧 DEBUG: Botão temporário para refresh */}
+              <button 
+                onClick={() => {
+                  console.log('🔧 Forcing refresh of user roles...');
+                  // Acessar refreshUserRoles do contexto se disponível
+                  window.location.reload();
+                }}
+                className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded"
+                title="Debug: Refresh User Data"
+              >
+                🔄
+              </button>
             </div>
           </div>
         </header>
