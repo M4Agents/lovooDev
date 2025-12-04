@@ -373,42 +373,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         
         if (!companiesError && companiesData && companiesData.length > 0) {
-          console.log('🔧 AuthContext: SUCCESS - Found companies in NEW system, PROCESSING IMMEDIATELY');
-          console.log('🔧 AuthContext: NEW system companies found:', companiesData.map(c => ({ id: c.id, name: c.name })));
+          data = companiesData;
+          error = null;
+          console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
+          console.log('AuthContext: NEW system company details:', companiesData.map(c => ({ id: c.id, name: c.name })));
           
-          // 🔧 PROCESSAR IMEDIATAMENTE - NÃO ESPERAR CONDIÇÃO POSTERIOR
-          setAvailableCompanies(companiesData as any);
-          
-          // Priorizar empresa super admin se existir
-          const superAdminCompany = (companiesData as any).find((comp: any) => comp.is_super_admin);
-          const selectedCompany = superAdminCompany || companiesData[0];
-          
-          console.log('🔧 AuthContext: IMMEDIATE SUCCESS (NEW system) - Setting company:', selectedCompany.name);
-          console.log('🔧 AuthContext: Selected company details:', {
-            id: selectedCompany.id,
-            name: selectedCompany.name,
-            is_super_admin: selectedCompany.is_super_admin,
-            company_type: selectedCompany.company_type
-          });
-          
-          setCompany(selectedCompany as any);
-          localStorage.setItem('currentCompanyId', selectedCompany.id);
-          
-          // CRÍTICO: Verificar se é empresa do sistema antigo
-          if (selectedCompany.id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-            console.warn('🔧 AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          } else {
-            console.log('🔧 AuthContext: SUCCESS - Using NEW system company ID');
-          }
-          
-          return; // SAIR IMEDIATAMENTE - NÃO FAZER FALLBACK
-          
-          // CÓDIGO ANTIGO (REMOVIDO):
-          // data = companiesData;
-          // error = null;
-          // console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
-          // console.log('AuthContext: NEW system company details:', companiesData.map(c => ({ id: c.id, name: c.name })));
-          // console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
+          // GARANTIR que está usando dados do sistema novo
+          console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
         } else {
           // CORREÇÃO CRÍTICA: Só definir error se realmente houver erro
           if (companiesError) {
