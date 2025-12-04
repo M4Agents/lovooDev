@@ -83,8 +83,7 @@ export const Companies: React.FC = () => {
     domain: '',
     plan: 'basic' as 'basic' | 'pro' | 'enterprise',
     adminEmail: '',
-    adminPassword: '',
-    sendInviteEmail: true // 🔧 NOVO: Enviar convite por email (padrão: true)
+    adminPassword: ''
   });
   
   // Estados para abas cadastrais quando não é super admin
@@ -344,7 +343,7 @@ export const Companies: React.FC = () => {
         // Não fechar o modal ainda - mostrar as credenciais
       }
       
-      setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '', sendInviteEmail: true });
+      setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '' });
       setEditingCompany(null);
       loadCompanies();
     } catch (error) {
@@ -1352,32 +1351,6 @@ export const Companies: React.FC = () => {
                       minLength={6}
                     />
                   </div>
-
-                  {/* 🔧 NOVO: Opção de envio automático de convite */}
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <input
-                      type="checkbox"
-                      id="sendInviteEmail"
-                      checked={formData.sendInviteEmail}
-                      onChange={(e) => setFormData({ ...formData, sendInviteEmail: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <label htmlFor="sendInviteEmail" className="text-sm font-medium text-blue-800">
-                      📧 Enviar convite por email automaticamente
-                    </label>
-                  </div>
-                  
-                  {formData.sendInviteEmail && (
-                    <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
-                      ✅ <strong>Convite automático:</strong> O cliente receberá um email com link para definir sua senha e acessar o sistema.
-                    </div>
-                  )}
-                  
-                  {!formData.sendInviteEmail && (
-                    <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                      ⚠️ <strong>Processo manual:</strong> As credenciais serão exibidas para você copiar e enviar manualmente ao cliente.
-                    </div>
-                  )}
                 </>
               )}
 
@@ -1387,7 +1360,7 @@ export const Companies: React.FC = () => {
                   onClick={() => {
                     setShowModal(false);
                     setEditingCompany(null);
-                    setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '', sendInviteEmail: true });
+                    setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '' });
                   }}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
                 >
@@ -2505,40 +2478,6 @@ export const Companies: React.FC = () => {
             {createdCompany ? (
               <div>
                 <h2 className="text-xl font-bold text-green-600 mb-4">✅ Empresa Criada com Sucesso!</h2>
-                
-                {/* 🔧 NOVO: Feedback do modo de convite */}
-                {createdCompany.inviteMode === 'automatic' && createdCompany.inviteSuccess && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <h3 className="font-semibold text-blue-800 mb-2">📧 Convite Enviado Automaticamente!</h3>
-                    <p className="text-sm text-blue-700 mb-2">
-                      ✅ O cliente <strong>{createdCompany.adminCredentials.email}</strong> recebeu um email com link para definir sua senha e acessar o sistema.
-                    </p>
-                    {createdCompany.inviteUrl && (
-                      <div className="text-xs text-blue-600 bg-blue-100 p-2 rounded mt-2">
-                        <strong>Link do convite:</strong> <code className="break-all">{createdCompany.inviteUrl}</code>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {createdCompany.inviteMode === 'automatic' && !createdCompany.inviteSuccess && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                    <h3 className="font-semibold text-amber-800 mb-2">⚠️ Falha no Envio Automático</h3>
-                    <p className="text-sm text-amber-700 mb-2">
-                      Não foi possível enviar o convite automaticamente. Use as credenciais abaixo para envio manual.
-                    </p>
-                  </div>
-                )}
-                
-                {createdCompany.inviteMode === 'manual' && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
-                    <h3 className="font-semibold text-slate-800 mb-2">📋 Modo Manual Selecionado</h3>
-                    <p className="text-sm text-slate-700 mb-2">
-                      Use as credenciais abaixo para enviar manualmente ao cliente.
-                    </p>
-                  </div>
-                )}
-
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                   <h3 className="font-semibold text-green-800 mb-2">Credenciais do Administrador:</h3>
                   <div className="space-y-2 text-sm">
@@ -2556,23 +2495,12 @@ export const Companies: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-sm text-blue-800">
                     <strong>Próximos passos:</strong><br />
-                    {createdCompany.inviteMode === 'automatic' && createdCompany.inviteSuccess ? (
-                      <>
-                        1. ✅ Convite já foi enviado por email<br />
-                        2. Cliente receberá link para definir senha<br />
-                        3. Após definir senha, cliente terá acesso completo
-                      </>
-                    ) : (
-                      <>
-                        1. Compartilhe essas credenciais com o administrador da empresa<br />
-                        2. O administrador deve fazer login em: <span className="font-mono">{window.location.origin}</span><br />
-                        3. No registro, usar o nome da empresa: <strong>{createdCompany.name}</strong>
-                      </>
-                    )}
+                    1. Compartilhe essas credenciais com o administrador da empresa<br />
+                    2. O administrador deve fazer login em: <span className="font-mono">{window.location.origin}</span><br />
+                    3. No registro, usar o nome da empresa: <strong>{createdCompany.name}</strong>
                   </p>
                 </div>
                 <button
@@ -2670,7 +2598,7 @@ export const Companies: React.FC = () => {
                   onClick={() => {
                     setShowModal(false);
                     setEditingCompany(null);
-                    setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '', sendInviteEmail: true });
+                    setFormData({ name: '', domain: '', plan: 'basic', adminEmail: '', adminPassword: '' });
                   }}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
                 >

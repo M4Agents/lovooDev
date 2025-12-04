@@ -352,10 +352,9 @@ export const api = {
     plan: 'basic' | 'pro' | 'enterprise';
     adminEmail: string;
     adminPassword: string;
-    sendInviteEmail?: boolean; // 🔧 NOVO: Opção de envio automático
   }) {
-    console.log('🔧 API: Creating client company with UNIFIED SYSTEM approach:', data);
-    console.log('🔧 API: Parent company ID:', parentCompanyId);
+    console.log('API: Creating client company with data:', data);
+    console.log('API: Parent company ID:', parentCompanyId);
     
     // Buscar o user_id do super admin (empresa pai)
     const { data: parentCompany } = await supabase
@@ -364,11 +363,7 @@ export const api = {
       .eq('id', parentCompanyId)
       .single();
 
-    if (!parentCompany?.user_id) {
-      throw new Error('Super admin user_id not found');
-    }
-
-    // 🔧 SISTEMA UNIFICADO: Criar empresa SEM user_id inicial (cliente se tornará dono)
+    // Create the company associando temporariamente ao super admin para gerenciamento
     const { data: company, error: companyError } = await supabase
       .from('companies')
       .insert({
@@ -378,116 +373,26 @@ export const api = {
         parent_company_id: parentCompanyId,
         company_type: 'client',
         is_super_admin: false,
-        user_id: null, // 🔧 SEM dono inicial - cliente se tornará dono ao se registrar
+        user_id: parentCompany?.user_id || null, // Associar ao super admin temporariamente
         status: 'active'
       })
       .select()
       .single();
 
-    console.log('🔧 API: Company created without initial user_id:', { company, companyError });
+    console.log('API: Insert result:', { company, companyError });
     if (companyError) throw companyError;
 
-    // 🔧 SISTEMA UNIFICADO: Associar super admin via company_users (sistema NOVO)
-    const { error: associationError } = await supabase
-      .from('company_users')
-      .insert({
-        company_id: company.id,
-        user_id: parentCompany.user_id,
-        role: 'super_admin',
-        permissions: {
-          chat: true,
-          leads: true,
-          users: true,
-          settings: true,
-          analytics: true,
-          dashboard: true,
-          financial: true,
-          edit_users: true,
-          create_users: true,
-          delete_users: true,
-          edit_all_leads: true,
-          edit_financial: true,
-          view_all_leads: true,
-          view_financial: true
-        },
-        created_by: parentCompany.user_id,
-        is_active: true
-      });
-
-    if (associationError) {
-      console.error('🔧 API: Error associating super admin:', associationError);
-      // Tentar limpar empresa criada
-      await supabase.from('companies').delete().eq('id', company.id);
-      throw new Error('Erro ao associar super admin à empresa: ' + associationError.message);
-    }
-
-    console.log('🔧 API: Super admin associated via company_users (UNIFIED SYSTEM)');
-
-    // 🔧 SISTEMA DE CONVITES: Enviar email automático se solicitado
-    let inviteResult = null;
-    if (data.sendInviteEmail) {
-      try {
-        console.log('🔧 API: Sending automatic invite email to:', data.adminEmail);
-        
-        // Usar mesmo sistema de convites dos usuários
-        const { createCompanyUser } = await import('./userApi');
-        
-        inviteResult = await createCompanyUser({
-          companyId: company.id,
-          email: data.adminEmail,
-          role: 'admin',
-          sendInvite: true,
-          permissions: {
-            chat: true,
-            leads: true,
-            users: true,
-            settings: true,
-            analytics: true,
-            dashboard: true,
-            financial: false,
-            edit_users: true,
-            create_users: true,
-            delete_users: false,
-            edit_all_leads: true,
-            edit_financial: false,
-            view_all_leads: true,
-            view_financial: false
-          }
-        });
-        
-        console.log('🔧 API: Invite sent successfully:', inviteResult);
-      } catch (inviteError) {
-        console.error('🔧 API: Failed to send invite, falling back to manual credentials:', inviteError);
-        // Não falhar a criação da empresa, apenas não enviar o convite
-      }
-    }
-
-    // 🔧 SISTEMA UNIFICADO: Retorno baseado no modo selecionado
-    const result = { 
+    // Store the admin credentials temporarily (in a real app, you'd send an invitation email)
+    // Company is now associated with super admin for management purposes
+    return { 
       ...company, 
       adminCredentials: {
         email: data.adminEmail,
         password: data.adminPassword,
         companyId: company.id
       },
-      managementNote: '🔧 SISTEMA UNIFICADO: Empresa criada sem dono inicial. Super admin acessa via company_users. Cliente se tornará dono ao se registrar.',
-      unifiedSystemNote: 'Super admin mantém acesso total via company_users. Cliente se tornará user_id ao fazer primeiro login.',
-      inviteMode: data.sendInviteEmail ? 'automatic' : 'manual',
-      inviteResult: inviteResult
+      managementNote: 'Empresa associada ao super admin para gerenciamento. O cliente deve se registrar para obter acesso próprio.'
     };
-
-    if (data.sendInviteEmail && inviteResult) {
-      result.inviteSuccess = true;
-      result.inviteUrl = inviteResult.app_metadata?.invite_url;
-      result.inviteNote = 'Convite enviado automaticamente por email. Cliente receberá link para definir senha.';
-    } else if (data.sendInviteEmail) {
-      result.inviteSuccess = false;
-      result.inviteNote = 'Falha no envio automático. Use as credenciais abaixo para envio manual.';
-    } else {
-      result.inviteNote = 'Modo manual selecionado. Use as credenciais abaixo para enviar ao cliente.';
-    }
-
-    return result;
   },
 
   async updateClientCompany(companyId: string, updates: Partial<{
@@ -852,34 +757,8 @@ export const api = {
     interest?: string;
     responsible_user_id?: string | null;
     visitor_id?: string | null;
-    record_type?: string;  // NOVO: Tipo de registro
     custom_fields?: Record<string, any>;
-    
-    // NOVOS CAMPOS - Redes Sociais
-    instagram?: string;
-    linkedin?: string;
-    tiktok?: string;
-    
-    // NOVOS CAMPOS - Informações Profissionais
-    cargo?: string;
-    poder_investimento?: string;
-    
-    // NOVOS CAMPOS - Dados Pessoais
-    data_nascimento?: string;
-    cep?: string;
-    estado?: string;
-    cidade?: string;
-    endereco?: string;
-    numero?: string;
-    bairro?: string;
-    complemento?: string;
-    
-    // NOVOS CAMPOS - Dados de Anúncios
-    campanha?: string;
-    conjunto_anuncio?: string;
-    anuncio?: string;
-    
-    // Campos da empresa (existentes)
+    // Campos da empresa
     company_name?: string;
     company_cnpj?: string;
     company_razao_social?: string;
@@ -1023,7 +902,6 @@ export const api = {
     interest?: string;
     responsible_user_id?: string | null;
     visitor_id?: string | null;
-    record_type?: string;  // NOVO: Tipo de registro
     custom_fields?: Record<string, any>;
     // Campo obrigatório para updates
     company_id?: string;

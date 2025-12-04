@@ -352,7 +352,6 @@ export const api = {
     plan: 'basic' | 'pro' | 'enterprise';
     adminEmail: string;
     adminPassword: string;
-    sendInviteEmail?: boolean; // 🔧 NOVO: Opção de envio automático
   }) {
     console.log('🔧 API: Creating client company with UNIFIED SYSTEM approach:', data);
     console.log('🔧 API: Parent company ID:', parentCompanyId);
@@ -423,47 +422,8 @@ export const api = {
 
     console.log('🔧 API: Super admin associated via company_users (UNIFIED SYSTEM)');
 
-    // 🔧 SISTEMA DE CONVITES: Enviar email automático se solicitado
-    let inviteResult = null;
-    if (data.sendInviteEmail) {
-      try {
-        console.log('🔧 API: Sending automatic invite email to:', data.adminEmail);
-        
-        // Usar mesmo sistema de convites dos usuários
-        const { createCompanyUser } = await import('./userApi');
-        
-        inviteResult = await createCompanyUser({
-          companyId: company.id,
-          email: data.adminEmail,
-          role: 'admin',
-          sendInvite: true,
-          permissions: {
-            chat: true,
-            leads: true,
-            users: true,
-            settings: true,
-            analytics: true,
-            dashboard: true,
-            financial: false,
-            edit_users: true,
-            create_users: true,
-            delete_users: false,
-            edit_all_leads: true,
-            edit_financial: false,
-            view_all_leads: true,
-            view_financial: false
-          }
-        });
-        
-        console.log('🔧 API: Invite sent successfully:', inviteResult);
-      } catch (inviteError) {
-        console.error('🔧 API: Failed to send invite, falling back to manual credentials:', inviteError);
-        // Não falhar a criação da empresa, apenas não enviar o convite
-      }
-    }
-
-    // 🔧 SISTEMA UNIFICADO: Retorno baseado no modo selecionado
-    const result = { 
+    // 🔧 SISTEMA UNIFICADO: Credenciais para cliente se tornar dono
+    return { 
       ...company, 
       adminCredentials: {
         email: data.adminEmail,
@@ -471,23 +431,8 @@ export const api = {
         companyId: company.id
       },
       managementNote: '🔧 SISTEMA UNIFICADO: Empresa criada sem dono inicial. Super admin acessa via company_users. Cliente se tornará dono ao se registrar.',
-      unifiedSystemNote: 'Super admin mantém acesso total via company_users. Cliente se tornará user_id ao fazer primeiro login.',
-      inviteMode: data.sendInviteEmail ? 'automatic' : 'manual',
-      inviteResult: inviteResult
+      unifiedSystemNote: 'Super admin mantém acesso total via company_users. Cliente se tornará user_id ao fazer primeiro login.'
     };
-
-    if (data.sendInviteEmail && inviteResult) {
-      result.inviteSuccess = true;
-      result.inviteUrl = inviteResult.app_metadata?.invite_url;
-      result.inviteNote = 'Convite enviado automaticamente por email. Cliente receberá link para definir senha.';
-    } else if (data.sendInviteEmail) {
-      result.inviteSuccess = false;
-      result.inviteNote = 'Falha no envio automático. Use as credenciais abaixo para envio manual.';
-    } else {
-      result.inviteNote = 'Modo manual selecionado. Use as credenciais abaixo para enviar ao cliente.';
-    }
-
-    return result;
   },
 
   async updateClientCompany(companyId: string, updates: Partial<{
