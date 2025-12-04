@@ -334,17 +334,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('user_id', userId)
         .eq('is_active', true);
         
-      console.log('🔍 AuthContext: NEW system company_users query:', { 
-        data: companyUsersData, 
-        error: companyUsersError,
-        userId: userId,
-        queryDetails: {
-          hasData: !!companyUsersData,
-          dataLength: companyUsersData?.length,
-          hasError: !!companyUsersError,
-          errorMessage: companyUsersError?.message
-        }
-      });
+      console.log('AuthContext: NEW system company_users query:', { data: companyUsersData, error: companyUsersError });
       
       let { data, error }: { data: any[] | null, error: any } = { data: null, error: companyUsersError };
       
@@ -359,18 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select('*')
           .in('id', companyIds);
           
-        console.log('🔍 AuthContext: Companies query for NEW system:', { 
-          data: companiesData, 
-          error: companiesError,
-          companyIds: companyIds,
-          queryDetails: {
-            hasData: !!companiesData,
-            dataLength: companiesData?.length,
-            hasError: !!companiesError,
-            errorMessage: companiesError?.message,
-            companiesFound: companiesData?.map(c => ({ id: c.id, name: c.name, status: c.status }))
-          }
-        });
+        console.log('AuthContext: Companies query for NEW system:', { data: companiesData, error: companiesError });
         
         if (!companiesError && companiesData && companiesData.length > 0) {
           data = companiesData;
@@ -507,6 +486,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error, 
           data, 
           dataLength: data?.length,
+          errorType: typeof error,
+          dataType: typeof data
+        });
+        
+        // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA EM OUTRA CHAMADA
+        if (company && company.id) {
+          console.log('🔧 AuthContext: Company already loaded in another call, skipping orphan recovery');
+          return;
+        }
+        
+        // NOVA FUNCIONALIDADE: Tentar recuperar usuários órfãos
+        console.log('🔍 AuthContext: ABOUT TO CALL ORPHAN RECOVERY:', {
+          userId,
+          reason: 'No company found in both systems',
           currentState: {
             user: !!user,
             company: !!company,
@@ -515,48 +508,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isFetchingCompany
           }
         });
-        
-        // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA EM OUTRA CHAMADA
-        if (company && company.id) {
-          console.log('🔧 AuthContext: Company already loaded in another call, skipping orphan recovery');
-          console.log('🔧 AuthContext: Current company details:', {
-            id: company.id,
-            name: company.name,
-            loadedAt: new Date().toISOString()
-          });
-          return;
-        }
-        
-        // 🔧 PROTEÇÃO ADICIONAL: Verificar se dados foram encontrados mas condição falhou
-        if (companyUsersData && companyUsersData.length > 0) {
-          console.log('🔧 AuthContext: CRITICAL - Found company_users data but final condition failed!');
-          console.log('🔧 AuthContext: This indicates a logic bug in the condition check');
-          console.log('🔧 AuthContext: company_users data:', companyUsersData);
-          console.log('🔧 AuthContext: Final data variable:', data);
-          console.log('🔧 AuthContext: Final error variable:', error);
-          
-          // FORÇAR uso dos dados encontrados
-          if (companyUsersData.length > 0) {
-            console.log('🔧 AuthContext: FORCING company load with found data');
-            
-            // Buscar empresa novamente com dados encontrados
-            const companyId = companyUsersData[0].company_id;
-            const { data: forceCompanyData, error: forceCompanyError } = await supabase
-              .from('companies')
-              .select('*')
-              .eq('id', companyId)
-              .single();
-              
-            if (!forceCompanyError && forceCompanyData) {
-              console.log('🔧 AuthContext: FORCE LOAD SUCCESS - Setting company:', forceCompanyData.name);
-              setCompany(forceCompanyData);
-              setAvailableCompanies([forceCompanyData]);
-              localStorage.setItem('currentCompanyId', forceCompanyData.id);
-              return;
-            }
-          }
-        }
-        
         const recoveredCompany = await attemptOrphanUserRecovery(userId);
         
         if (recoveredCompany) {
