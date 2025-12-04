@@ -584,20 +584,20 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
       updateData.profile_picture_url = request.profile_picture_url;
     }
 
-    // 🔧 CORREÇÃO: Para atualizações simples (apenas foto), não fazer JOIN complexo
-    const isSimpleUpdate = Object.keys(updateData).length <= 2 && updateData.profile_picture_url !== undefined;
+    // 🔧 CORREÇÃO: Para atualizações simples (apenas foto), usar função SECURITY DEFINER
+    const isSimplePhotoUpdate = Object.keys(updateData).length <= 2 && 
+                               updateData.profile_picture_url !== undefined &&
+                               !updateData.role && !updateData.permissions;
     
     let data, error;
     
-    if (isSimpleUpdate) {
-      // Atualização simples sem JOIN
-      console.log('🔧 UserAPI: Using simple update (no JOIN)');
-      const result = await supabase
-        .from('company_users')
-        .update(updateData)
-        .eq('id', request.id)
-        .select('*')
-        .single();
+    if (isSimplePhotoUpdate) {
+      // Usar função SECURITY DEFINER para atualização de foto (bypassa RLS)
+      console.log('🔧 UserAPI: Using SECURITY DEFINER function for photo update');
+      const result = await supabase.rpc('update_user_profile_picture_simple', {
+        p_user_record_id: request.id,
+        p_profile_picture_url: updateData.profile_picture_url
+      });
       
       data = result.data;
       error = result.error;
