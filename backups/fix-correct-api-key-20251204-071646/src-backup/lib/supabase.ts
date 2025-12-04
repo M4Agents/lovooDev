@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 🔧 CORREÇÃO: FORÇAR PROJETO M4_DIGITAL COM CHAVE API CORRETA
+// 🔧 CORREÇÃO: FORÇAR PROJETO M4_DIGITAL - IGNORAR VARIÁVEIS DE AMBIENTE INCORRETAS
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTY2NDg1MDMsImV4cCI6MjAzMjIyNDUwM30.f1qVXhFaOCIaOZQlhEGQNBMOGvQIyJHGKGCzJUqCKYNJFI';
 
 // Debug: Log configurações - FORÇADO PARA M4_DIGITAL
 console.log('🔧 [Supabase] FORCED M4_Digital URL:', supabaseUrl);
