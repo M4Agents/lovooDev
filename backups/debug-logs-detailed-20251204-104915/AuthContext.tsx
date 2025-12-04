@@ -671,33 +671,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // 🔧 DELAY NA LIMPEZA DA FLAG PARA EVITAR RACE CONDITIONS
       setTimeout(() => {
-        console.log('🔧 DEBUG: setTimeout executou após fetchCompany!', {
-          timestamp: new Date().toISOString(),
-          userExists: !!user,
-          userId: user?.id,
-          companyExists: !!company,
-          companyId: company?.id,
-          companyName: company?.name
-        });
-        
         setIsFetchingCompany(false); // Liberar flag de controle com delay
         console.log('🔧 AuthContext: fetchCompany completed, flags cleared with delay');
         
         // 🔧 CORREÇÃO: Chamar refreshUserRoles após empresa ser carregada
         if (user) {
-          console.log('🔧 AuthContext: User existe, chamando refreshUserRoles', {
-            userId: user.id,
-            userEmail: user.email
-          });
-          
-          try {
-            refreshUserRoles();
-            console.log('🔧 AuthContext: refreshUserRoles chamado com sucesso');
-          } catch (error) {
-            console.error('🔧 AuthContext: ERRO ao chamar refreshUserRoles:', error);
-          }
-        } else {
-          console.warn('🔧 AuthContext: User é NULL, NÃO chamando refreshUserRoles!');
+          console.log('🔧 AuthContext: Calling refreshUserRoles after fetchCompany completion');
+          refreshUserRoles();
         }
       }, 500); // 500ms de delay para evitar chamadas imediatas
     }
@@ -1163,20 +1143,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // =====================================================
 
   const refreshUserRoles = async () => {
-    console.log('🔧 DEBUG: refreshUserRoles INICIADO!', {
-      timestamp: new Date().toISOString(),
-      userExists: !!user,
-      userId: user?.id,
-      userEmail: user?.email
-    });
-    
-    if (!user) {
-      console.warn('🔧 DEBUG: refreshUserRoles - user é NULL, retornando');
-      return;
-    }
+    if (!user) return;
 
     try {
-      console.log('🔧 DEBUG: AuthContext: Refreshing user roles for:', user.id);
+      console.log('AuthContext: Refreshing user roles for:', user.id);
       
       // 🔧 CORREÇÃO: Buscar roles usando RPC que inclui profile_picture_url
       let roles: any[] = [];
@@ -1190,36 +1160,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('user_id', user.id)
           .eq('is_active', true);
 
-        console.log('🔧 DEBUG: userCompanies encontradas:', {
-          count: userCompanies?.length || 0,
-          companies: userCompanies?.map(c => c.company_id)
-        });
-
         if (userCompanies && userCompanies.length > 0) {
           // Para cada empresa, buscar dados completos usando RPC
           for (const companyData of userCompanies) {
-            console.log('🔧 DEBUG: Chamando RPC para company:', companyData.company_id);
-            
             const { data: companyRoles, error: rpcError } = await supabase
               .rpc('get_company_users_with_details', {
                 p_company_id: companyData.company_id
               });
             
-            console.log('🔧 DEBUG: RPC resultado:', {
-              companyId: companyData.company_id,
-              success: !rpcError,
-              rolesCount: companyRoles?.length || 0,
-              error: rpcError
-            });
-            
             if (!rpcError && companyRoles) {
               // Filtrar apenas o usuário atual
               const userRoles = companyRoles.filter((role: any) => role.user_id === user.id);
-              console.log('🔧 DEBUG: userRoles filtrados:', {
-                companyId: companyData.company_id,
-                userRolesCount: userRoles.length,
-                profilePictureUrls: userRoles.map(r => r.profile_picture_url)
-              });
               roles.push(...userRoles);
             }
           }
@@ -1250,23 +1201,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      console.log('🔧 DEBUG: AuthContext: User roles found:', {
-        rolesCount: roles?.length || 0,
-        roles: roles
-      });
-      
-      console.log('🔧 DEBUG: Profile Picture URLs detalhadas:', 
+      console.log('AuthContext: User roles found:', roles);
+      console.log('🔧 AuthContext Debug - Profile Picture URLs:', 
         roles?.map(r => ({ 
           company_id: r.company_id, 
           profile_picture_url: r.profile_picture_url,
-          display_name: r.display_name,
-          role: r.role
+          display_name: r.display_name 
         }))
       );
-      
-      console.log('🔧 DEBUG: Chamando setUserRoles com:', roles?.length || 0, 'roles');
       setUserRoles(roles || []);
-      console.log('🔧 DEBUG: setUserRoles executado com sucesso');
 
       // Determinar role atual baseado na empresa ativa
       if (company && roles) {
