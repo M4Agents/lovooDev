@@ -1146,52 +1146,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext: Refreshing user roles for:', user.id);
       
-      // 🔧 CORREÇÃO: Buscar roles usando RPC que inclui profile_picture_url
-      let roles: any[] = [];
-      let error = null;
-      
-      try {
-        // Primeiro, buscar todas as empresas onde o usuário tem acesso
-        const { data: userCompanies } = await supabase
-          .from('company_users')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .eq('is_active', true);
-
-        if (userCompanies && userCompanies.length > 0) {
-          // Para cada empresa, buscar dados completos usando RPC
-          for (const companyData of userCompanies) {
-            const { data: companyRoles, error: rpcError } = await supabase
-              .rpc('get_company_users_with_details', {
-                p_company_id: companyData.company_id
-              });
-            
-            if (!rpcError && companyRoles) {
-              // Filtrar apenas o usuário atual
-              const userRoles = companyRoles.filter((role: any) => role.user_id === user.id);
-              roles.push(...userRoles);
-            }
-          }
-        }
-      } catch (rpcError) {
-        console.warn('AuthContext: RPC failed, using fallback query:', rpcError);
-        // Fallback para query direta se RPC falhar
-        const { data: fallbackRoles, error: fallbackError } = await supabase
-          .from('company_users')
-          .select(`
-            *,
-            companies:company_id (
-              id,
-              name,
-              company_type
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('is_active', true);
-        
-        roles = fallbackRoles || [];
-        error = fallbackError;
-      }
+      // Buscar roles do usuário na nova estrutura
+      const { data: roles, error } = await supabase
+        .from('company_users')
+        .select(`
+          *,
+          companies:company_id (
+            id,
+            name,
+            company_type
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
       if (error) {
         console.warn('AuthContext: Error fetching user roles:', error);
