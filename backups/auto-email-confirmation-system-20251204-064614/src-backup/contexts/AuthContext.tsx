@@ -30,8 +30,6 @@ type AuthContextType = {
   refreshUserRoles: () => Promise<void>;
   // Método para verificar alteração obrigatória de senha
   checkPasswordRequirements: () => { requiresPasswordChange: boolean; expiresAt?: string };
-  // 🔧 NOVO: Método para reenvio de email de confirmação
-  resendConfirmationEmail: (email: string) => Promise<{ success: boolean }>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -715,104 +713,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      // 🔧 SISTEMA DE CONFIRMAÇÃO AUTOMÁTICA PARA USUÁRIOS RECRIADOS
-      if (error?.message?.includes('Email not confirmed')) {
-        console.log('🔧 AuthContext: Email not confirmed, attempting auto-confirmation for recreated user');
-        
-        // Verificar se é um usuário conhecido que foi recriado por admin
-        const knownUsers = [
-          'crmlovoo@gmail.com',
-          // Adicionar outros emails de usuários que podem ser recriados por admin
-        ];
-        
-        if (knownUsers.includes(email.toLowerCase())) {
-          console.log('🔧 AuthContext: Known user detected, attempting auto-confirmation');
-          
-          try {
-            // Tentar fazer signup para obter dados do usuário
-            const { data: signupData, error: signupError } = await supabase.auth.signUp({
-              email,
-              password,
-              options: {
-                emailRedirectTo: `${window.location.origin}/dashboard`
-              }
-            });
-            
-            if (signupData?.user && !signupError) {
-              console.log('🔧 AuthContext: User data obtained, confirming email automatically');
-              
-              // Marcar como confirmado usando update user metadata
-              const { error: updateError } = await supabase.auth.updateUser({
-                data: { email_confirmed: true }
-              });
-              
-              if (!updateError) {
-                console.log('✅ AuthContext: Email auto-confirmed successfully, retrying login');
-                
-                // Tentar login novamente após confirmação
-                const { error: retryError } = await supabase.auth.signInWithPassword({ email, password });
-                if (!retryError) {
-                  console.log('✅ AuthContext: Login successful after auto-confirmation');
-                  return;
-                }
-              }
-            }
-          } catch (autoConfirmError) {
-            console.warn('⚠️ AuthContext: Auto-confirmation failed:', autoConfirmError);
-          }
-        }
-        
-        // Se auto-confirmação falhou, lançar erro original com instruções
-        throw new Error(`Email não confirmado. Por favor, verifique sua caixa de entrada e clique no link de confirmação. Se você não recebeu o email, entre em contato com o administrador.`);
-      }
-      
-      if (error) throw error;
-    } catch (err) {
-      throw err;
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, companyName: string) => {
-    const { data, error } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`
-      }
-    });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
 
     if (data.user) {
-      // 🔧 SISTEMA DE CONFIRMAÇÃO AUTOMÁTICA PARA NOVOS USUÁRIOS
-      console.log('🔧 AuthContext: New user created, checking if auto-confirmation is needed');
-      
-      // Verificar se é um usuário que deve ser auto-confirmado (criado por admin)
-      const shouldAutoConfirm = [
-        'crmlovoo@gmail.com',
-        // Adicionar outros emails que devem ser auto-confirmados
-      ].includes(email.toLowerCase());
-      
-      if (shouldAutoConfirm) {
-        console.log('🔧 AuthContext: Auto-confirming user created by admin');
-        
-        try {
-          // Marcar como confirmado usando update user metadata
-          const { error: updateError } = await supabase.auth.updateUser({
-            data: { email_confirmed: true }
-          });
-          
-          if (!updateError) {
-            console.log('✅ AuthContext: User auto-confirmed successfully during signup');
-          } else {
-            console.warn('⚠️ AuthContext: Failed to auto-confirm user:', updateError);
-          }
-        } catch (confirmError) {
-          console.warn('⚠️ AuthContext: Auto-confirmation error during signup:', confirmError);
-        }
-      }
       // Verificar se é o primeiro registro da M4 Digital
       if (companyName === 'M4 Digital') {
         // Atualizar a empresa M4 Digital existente com o user_id
@@ -857,32 +766,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       await fetchCompany(data.user.id);
-    }
-  };
-
-  // 🔧 FUNÇÃO AUXILIAR PARA REENVIO DE EMAIL DE CONFIRMAÇÃO
-  const resendConfirmationEmail = async (email: string) => {
-    try {
-      console.log('🔧 AuthContext: Resending confirmation email for:', email);
-      
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`
-        }
-      });
-      
-      if (error) {
-        console.error('❌ AuthContext: Failed to resend confirmation email:', error);
-        throw error;
-      }
-      
-      console.log('✅ AuthContext: Confirmation email resent successfully');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ AuthContext: Error resending confirmation email:', error);
-      throw error;
     }
   };
 
@@ -1176,9 +1059,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hasPermission,
       canImpersonateCompany,
       refreshUserRoles,
-      checkPasswordRequirements,
-      // 🔧 NOVO: Função de reenvio de confirmação
-      resendConfirmationEmail
+      checkPasswordRequirements
     }}>
       {children}
     </AuthContext.Provider>

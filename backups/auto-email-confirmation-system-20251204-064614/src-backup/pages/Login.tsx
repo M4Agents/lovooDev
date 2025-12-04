@@ -10,8 +10,7 @@ export const Login: React.FC = () => {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showResendButton, setShowResendButton] = useState(false);
-  const { signIn, signUp, resendConfirmationEmail } = useAuth();
+  const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
   // CORREÇÃO: Interceptar tokens de convite como backup
@@ -39,36 +38,7 @@ export const Login: React.FC = () => {
       }
       navigate('/dashboard');
     } catch (err: any) {
-      const errorMessage = err.message || 'An error occurred';
-      setError(errorMessage);
-      
-      // 🔧 MOSTRAR BOTÃO DE REENVIO SE FOR ERRO DE EMAIL NÃO CONFIRMADO
-      if (errorMessage.includes('Email não confirmado') || errorMessage.includes('Email not confirmed')) {
-        setShowResendButton(true);
-      } else {
-        setShowResendButton(false);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🔧 FUNÇÃO PARA REENVIAR EMAIL DE CONFIRMAÇÃO
-  const handleResendConfirmation = async () => {
-    if (!email) {
-      setError('Por favor, digite seu email primeiro.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await resendConfirmationEmail(email);
-      setError('');
-      setShowResendButton(false);
-      // Mostrar mensagem de sucesso
-      setError('✅ Email de confirmação reenviado! Verifique sua caixa de entrada.');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao reenviar email de confirmação');
+      setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -179,31 +149,11 @@ export const Login: React.FC = () => {
             </div>
 
             {error && (
-              <div className={`border rounded-lg p-4 text-sm ${
-                error.includes('✅') 
-                  ? 'bg-green-50 border-green-200 text-green-700' 
-                  : 'bg-red-50 border-red-200 text-red-700'
-              }`}>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    error.includes('✅') ? 'bg-green-500' : 'bg-red-500'
-                  }`}></div>
+                  <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0"></div>
                   {error}
                 </div>
-                
-                {/* 🔧 BOTÃO DE REENVIO DE CONFIRMAÇÃO */}
-                {showResendButton && (
-                  <div className="mt-3 pt-3 border-t border-red-200">
-                    <button
-                      type="button"
-                      onClick={handleResendConfirmation}
-                      disabled={loading}
-                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm"
-                    >
-                      {loading ? 'Reenviando...' : '📧 Reenviar Email de Confirmação'}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
 
