@@ -460,31 +460,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .eq('user_id', userId);
             
           console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-          
-          // 🔧 PROTEÇÃO IMEDIATA: Se OLD system encontrou dados, forçar carregamento
-          if (!result.error && result.data && result.data.length > 0) {
-            console.log('🔧 AuthContext: OLD system found data - FORCING immediate load to avoid condition bug');
-            console.log('🔧 AuthContext: OLD system companies found:', result.data.map(c => ({ id: c.id, name: c.name })));
-            
-            // FORÇAR carregamento imediato
-            setAvailableCompanies(result.data as any);
-            
-            // Priorizar empresa super admin se existir
-            const superAdminCompany = (result.data as any).find((comp: any) => comp.is_super_admin);
-            const selectedCompany = superAdminCompany || result.data[0];
-            
-            console.log('🔧 AuthContext: IMMEDIATE FORCE LOAD SUCCESS (OLD system) - Setting company:', selectedCompany.name);
-            console.log('🔧 AuthContext: Selected company details:', {
-              id: selectedCompany.id,
-              name: selectedCompany.name,
-              is_super_admin: selectedCompany.is_super_admin
-            });
-            
-            setCompany(selectedCompany as any);
-            localStorage.setItem('currentCompanyId', selectedCompany.id);
-            return; // SAIR IMEDIATAMENTE
-          }
-          
           data = result.data;
           error = result.error;
         } else {
@@ -493,17 +468,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 🔧 ESTA CONDIÇÃO AGORA SÓ EXECUTA PARA SISTEMA ANTIGO
-      console.log('🔍 AuthContext: About to check final condition for OLD system:', {
-        error: error,
-        data: data,
-        dataLength: data?.length,
-        dataType: typeof data,
-        isArray: Array.isArray(data),
-        conditionResult: (!error && data && data.length > 0)
-      });
-      
       if (!error && data && data.length > 0) {
-        console.log('AuthContext: ENTERING final company selection logic (OLD system SUCCESS)');
+        console.log('AuthContext: ENTERING final company selection logic');
         
         // Armazenar todas as empresas disponíveis
         setAvailableCompanies(data as any);
