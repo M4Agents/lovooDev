@@ -115,7 +115,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       if (error) {
         console.error('🔧 Upload Error Details:', {
           message: error.message,
-          statusCode: error.statusCode,
           error: error
         });
         throw error;
@@ -370,6 +369,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           permissions: finalPermissions, // Usar permissões calculadas
           profile_picture_url: profilePictureUrl // 🔧 NOVO: Incluir URL da foto
         };
+
+        console.log('🔧 UserModal: Updating user with request:', {
+          userId: user.id,
+          userIdField: user.user_id,
+          profilePictureUrl: profilePictureUrl,
+          updateRequest: updateRequest
+        });
 
         await updateCompanyUser(updateRequest);
       } else {

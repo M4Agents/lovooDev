@@ -548,7 +548,11 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
  */
 export const updateCompanyUser = async (request: UpdateUserRequest): Promise<CompanyUser> => {
   try {
-    console.log('UserAPI: Updating user:', request);
+    console.log('🔧 UserAPI: Updating user with detailed info:', {
+      requestId: request.id,
+      profilePictureUrl: request.profile_picture_url,
+      fullRequest: request
+    });
 
     const updateData: any = {
       updated_at: new Date().toISOString()
