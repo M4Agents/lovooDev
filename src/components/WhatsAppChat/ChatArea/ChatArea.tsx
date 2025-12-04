@@ -669,7 +669,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               <img
                 src={message.media_url}
                 alt={message.content || 'Imagem'}
-                className="max-w-full rounded-md"
+                className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => window.open(message.media_url, '_blank')}
               />
             </div>
           )}
