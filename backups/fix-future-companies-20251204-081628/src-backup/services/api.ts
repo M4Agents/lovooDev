@@ -353,8 +353,8 @@ export const api = {
     adminEmail: string;
     adminPassword: string;
   }) {
-    console.log('🔧 API: Creating client company with UNIFIED SYSTEM approach:', data);
-    console.log('🔧 API: Parent company ID:', parentCompanyId);
+    console.log('API: Creating client company with data:', data);
+    console.log('API: Parent company ID:', parentCompanyId);
     
     // Buscar o user_id do super admin (empresa pai)
     const { data: parentCompany } = await supabase
@@ -363,11 +363,7 @@ export const api = {
       .eq('id', parentCompanyId)
       .single();
 
-    if (!parentCompany?.user_id) {
-      throw new Error('Super admin user_id not found');
-    }
-
-    // 🔧 SISTEMA UNIFICADO: Criar empresa SEM user_id inicial (cliente se tornará dono)
+    // Create the company associando temporariamente ao super admin para gerenciamento
     const { data: company, error: companyError } = await supabase
       .from('companies')
       .insert({
@@ -377,52 +373,17 @@ export const api = {
         parent_company_id: parentCompanyId,
         company_type: 'client',
         is_super_admin: false,
-        user_id: null, // 🔧 SEM dono inicial - cliente se tornará dono ao se registrar
+        user_id: parentCompany?.user_id || null, // Associar ao super admin temporariamente
         status: 'active'
       })
       .select()
       .single();
 
-    console.log('🔧 API: Company created without initial user_id:', { company, companyError });
+    console.log('API: Insert result:', { company, companyError });
     if (companyError) throw companyError;
 
-    // 🔧 SISTEMA UNIFICADO: Associar super admin via company_users (sistema NOVO)
-    const { error: associationError } = await supabase
-      .from('company_users')
-      .insert({
-        company_id: company.id,
-        user_id: parentCompany.user_id,
-        role: 'super_admin',
-        permissions: {
-          chat: true,
-          leads: true,
-          users: true,
-          settings: true,
-          analytics: true,
-          dashboard: true,
-          financial: true,
-          edit_users: true,
-          create_users: true,
-          delete_users: true,
-          edit_all_leads: true,
-          edit_financial: true,
-          view_all_leads: true,
-          view_financial: true
-        },
-        created_by: parentCompany.user_id,
-        is_active: true
-      });
-
-    if (associationError) {
-      console.error('🔧 API: Error associating super admin:', associationError);
-      // Tentar limpar empresa criada
-      await supabase.from('companies').delete().eq('id', company.id);
-      throw new Error('Erro ao associar super admin à empresa: ' + associationError.message);
-    }
-
-    console.log('🔧 API: Super admin associated via company_users (UNIFIED SYSTEM)');
-
-    // 🔧 SISTEMA UNIFICADO: Credenciais para cliente se tornar dono
+    // Store the admin credentials temporarily (in a real app, you'd send an invitation email)
+    // Company is now associated with super admin for management purposes
     return { 
       ...company, 
       adminCredentials: {
@@ -430,8 +391,7 @@ export const api = {
         password: data.adminPassword,
         companyId: company.id
       },
-      managementNote: '🔧 SISTEMA UNIFICADO: Empresa criada sem dono inicial. Super admin acessa via company_users. Cliente se tornará dono ao se registrar.',
-      unifiedSystemNote: 'Super admin mantém acesso total via company_users. Cliente se tornará user_id ao fazer primeiro login.'
+      managementNote: 'Empresa associada ao super admin para gerenciamento. O cliente deve se registrar para obter acesso próprio.'
     };
   },
 
