@@ -69,10 +69,34 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   // 🔧 NOVO: Função para upload de foto de perfil
   const uploadProfilePicture = async (file: File, userId: string): Promise<string | null> => {
     try {
+      console.log('🔧 Upload Debug: Starting upload process', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        userId: userId
+      });
+
+      // Verificar autenticação antes do upload
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      console.log('🔧 Upload Debug: Auth check', {
+        isAuthenticated: !!authUser,
+        authUserId: authUser?.id,
+        authError: authError
+      });
+
+      if (!authUser) {
+        throw new Error('Usuário não autenticado para upload');
+      }
+
       // Gerar nome único para o arquivo
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}-${Date.now()}.${fileExt}`;
       const filePath = `profile-pictures/${fileName}`;
+
+      console.log('🔧 Upload Debug: File path generated', {
+        fileName: fileName,
+        filePath: filePath
+      });
 
       // Upload para Supabase Storage
       const { data, error } = await supabase.storage
@@ -82,8 +106,18 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           upsert: true
         });
 
+      console.log('🔧 Upload Debug: Upload result', {
+        success: !error,
+        data: data,
+        error: error
+      });
+
       if (error) {
-        console.error('Upload error:', error);
+        console.error('🔧 Upload Error Details:', {
+          message: error.message,
+          statusCode: error.statusCode,
+          error: error
+        });
         throw error;
       }
 
@@ -92,9 +126,17 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         .from('user-profiles')
         .getPublicUrl(filePath);
 
+      console.log('🔧 Upload Debug: Public URL generated', {
+        publicUrl: publicUrl
+      });
+
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading profile picture:', error);
+      console.error('🔧 Upload Error: Complete error details:', {
+        error: error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return null;
     }
   };
@@ -309,9 +351,15 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // 🔧 NOVO: Upload da foto de perfil se selecionada
         let profilePictureUrl = user.profile_picture_url;
         if (formData.profilePicture) {
+          console.log('🔧 UserModal: Starting profile picture upload for existing user');
           const uploadedUrl = await uploadProfilePicture(formData.profilePicture, user.user_id);
           if (uploadedUrl) {
             profilePictureUrl = uploadedUrl;
+            console.log('🔧 UserModal: Profile picture uploaded successfully:', uploadedUrl);
+          } else {
+            console.warn('🔧 UserModal: Profile picture upload failed, keeping existing URL');
+            // Não falhar a operação se o upload da foto falhar
+            // setError('Falha no upload da foto, mas usuário foi salvo');
           }
         }
 
@@ -338,14 +386,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // 🔧 NOVO: Upload da foto de perfil após criação do usuário
         if (formData.profilePicture && result.user_id) {
+          console.log('🔧 UserModal: Starting profile picture upload for new user');
           const uploadedUrl = await uploadProfilePicture(formData.profilePicture, result.user_id);
           if (uploadedUrl) {
+            console.log('🔧 UserModal: Profile picture uploaded, updating user record');
             // Atualizar o usuário com a URL da foto
             const updateRequest: UpdateUserRequest = {
               id: result.id,
               profile_picture_url: uploadedUrl
             };
             await updateCompanyUser(updateRequest);
+            console.log('🔧 UserModal: User record updated with profile picture URL');
+          } else {
+            console.warn('🔧 UserModal: Profile picture upload failed for new user, continuing without photo');
+            // Não falhar a criação do usuário se o upload da foto falhar
           }
         }
         
