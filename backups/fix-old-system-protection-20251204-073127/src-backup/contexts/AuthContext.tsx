@@ -529,7 +529,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // 🔧 PROTEÇÃO ADICIONAL: Verificar se dados foram encontrados mas condição falhou
         if (companyUsersData && companyUsersData.length > 0) {
-          console.log('🔧 AuthContext: CRITICAL - Found company_users data (NEW system) but final condition failed!');
+          console.log('🔧 AuthContext: CRITICAL - Found company_users data but final condition failed!');
           console.log('🔧 AuthContext: This indicates a logic bug in the condition check');
           console.log('🔧 AuthContext: company_users data:', companyUsersData);
           console.log('🔧 AuthContext: Final data variable:', data);
@@ -537,7 +537,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // FORÇAR uso dos dados encontrados
           if (companyUsersData.length > 0) {
-            console.log('🔧 AuthContext: FORCING company load with NEW system data');
+            console.log('🔧 AuthContext: FORCING company load with found data');
             
             // Buscar empresa novamente com dados encontrados
             const companyId = companyUsersData[0].company_id;
@@ -548,44 +548,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .single();
               
             if (!forceCompanyError && forceCompanyData) {
-              console.log('🔧 AuthContext: FORCE LOAD SUCCESS (NEW system) - Setting company:', forceCompanyData.name);
+              console.log('🔧 AuthContext: FORCE LOAD SUCCESS - Setting company:', forceCompanyData.name);
               setCompany(forceCompanyData);
               setAvailableCompanies([forceCompanyData]);
               localStorage.setItem('currentCompanyId', forceCompanyData.id);
               return;
             }
           }
-        }
-        
-        // 🔧 PROTEÇÃO PARA SISTEMA ANTIGO: Verificar se dados do OLD system existem mas condição falhou
-        if (data && Array.isArray(data) && data.length > 0) {
-          console.log('🔧 AuthContext: CRITICAL - Found OLD system data but final condition failed!');
-          console.log('🔧 AuthContext: This indicates the final condition logic has a bug');
-          console.log('🔧 AuthContext: OLD system data found:', data.length, 'companies');
-          console.log('🔧 AuthContext: OLD system companies:', data.map(c => ({ id: c.id, name: c.name })));
-          console.log('🔧 AuthContext: Final error variable:', error);
-          console.log('🔧 AuthContext: Final condition check: (!error && data && data.length > 0) =', (!error && data && data.length > 0));
-          
-          // FORÇAR uso dos dados do sistema antigo
-          console.log('🔧 AuthContext: FORCING company load with OLD system data');
-          
-          // Usar lógica similar à do sistema novo
-          setAvailableCompanies(data as any);
-          
-          // Priorizar empresa super admin se existir
-          const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
-          const selectedCompany = superAdminCompany || data[0];
-          
-          console.log('🔧 AuthContext: FORCE LOAD SUCCESS (OLD system) - Setting company:', selectedCompany.name);
-          console.log('🔧 AuthContext: Selected company details:', {
-            id: selectedCompany.id,
-            name: selectedCompany.name,
-            is_super_admin: selectedCompany.is_super_admin
-          });
-          
-          setCompany(selectedCompany as any);
-          localStorage.setItem('currentCompanyId', selectedCompany.id);
-          return;
         }
         
         const recoveredCompany = await attemptOrphanUserRecovery(userId);
