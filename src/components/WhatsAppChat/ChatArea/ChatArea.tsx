@@ -688,7 +688,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {message.content && !isAudioMessage && (
-            <p className="text-sm">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           )}
           
           {isOwn && (
