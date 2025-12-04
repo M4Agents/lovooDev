@@ -88,9 +88,6 @@ export interface CompanyUser {
   created_at: string;
   updated_at: string;
   
-  // 🔧 NOVO: Campo para foto de perfil
-  profile_picture_url?: string | null;
-  
   // Dados relacionados (joins)
   company?: {
     id: string;
@@ -129,7 +126,6 @@ export interface UpdateUserRequest {
   role?: UserRole;
   permissions?: Partial<UserPermissions>;
   is_active?: boolean;
-  profile_picture_url?: string | null; // 🔧 NOVO: Campo para foto de perfil
 }
 
 export interface UserInvitation {

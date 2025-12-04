@@ -18,22 +18,18 @@ import {
   Crown,
   MessageCircle
 } from 'lucide-react';
-import { Avatar } from './Avatar';
 
 type ModernLayoutProps = {
   children: React.ReactNode;
 };
 
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
-  const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles } = useAuth();
+  const { user, company, signOut, isImpersonating, originalUser, stopImpersonation } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const realtimeStats = useRealtimeAnalytics(company?.id);
-  
-  // 🔧 NOVO: Obter dados do usuário atual para foto de perfil
-  const currentUserData = userRoles?.find(role => role.company_id === company?.id);
 
   const handleSignOut = async () => {
     await signOut();
@@ -231,15 +227,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
               {/* User Menu */}
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
-                <Avatar 
-                  src={currentUserData?.profile_picture_url}
-                  alt={currentUserData?.display_name || user?.email || 'Usuário'}
-                  size="sm"
-                  fallbackText={currentUserData?.display_name?.charAt(0) || user?.email?.charAt(0)}
-                />
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-blue-600" />
+                </div>
                 <div className="hidden sm:block text-left">
                   <p className="text-sm font-medium text-gray-900 truncate max-w-32">
-                    {currentUserData?.display_name || user?.email?.split('@')[0]}
+                    {user?.email?.split('@')[0]}
                   </p>
                   <p className="text-xs text-gray-500 capitalize">{company?.plan}</p>
                 </div>

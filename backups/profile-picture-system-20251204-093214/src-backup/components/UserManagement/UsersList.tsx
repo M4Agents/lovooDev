@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
-import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
@@ -308,12 +307,9 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <Avatar 
-                            src={user.profile_picture_url}
-                            alt={user.display_name || user.email || 'Usuário'}
-                            size="md"
-                            fallbackText={user.display_name?.charAt(0) || user.email?.charAt(0)}
-                          />
+                          <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center">
+                            <User className="w-5 h-5 text-slate-500" />
+                          </div>
                         </div>
                         <div className="ml-4">
                           <div className="flex items-center gap-2">

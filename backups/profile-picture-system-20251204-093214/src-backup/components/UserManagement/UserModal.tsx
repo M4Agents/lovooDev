@@ -3,7 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload } from 'lucide-react';
+import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
 import { applyTemplateToPermissions } from '../../services/userTemplates';
@@ -14,7 +14,6 @@ import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
 import { supabase } from '../../lib/supabase';
 import { canAccessCriticalPermissions, CRITICAL_PERMISSIONS } from '../../utils/permissionUtils';
-import { Avatar } from '../Avatar';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -51,8 +50,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     email: '',
     displayName: '',
     role: 'seller' as UserRole,
-    sendInvite: true,
-    profilePicture: null as File | null // 🔧 NOVO: Campo para foto de perfil
+    sendInvite: true
   });
 
   // ESTADOS LEGADOS - Mantidos para compatibilidade (não utilizados atualmente)
@@ -66,39 +64,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
   const isEditing = !!user;
 
-  // 🔧 NOVO: Função para upload de foto de perfil
-  const uploadProfilePicture = async (file: File, userId: string): Promise<string | null> => {
-    try {
-      // Gerar nome único para o arquivo
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `profile-pictures/${fileName}`;
-
-      // Upload para Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('user-profiles')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (error) {
-        console.error('Upload error:', error);
-        throw error;
-      }
-
-      // Obter URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('user-profiles')
-        .getPublicUrl(filePath);
-
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading profile picture:', error);
-      return null;
-    }
-  };
-
   // Reset form quando modal abre/fecha (EXPANDIDO - compatível)
   useEffect(() => {
     if (isOpen) {
@@ -109,8 +74,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           email: user.user_id.startsWith('mock_') ? '' : user.user_id,
           displayName: user.display_name || '',
           role: user.role,
-          sendInvite: false,
-          profilePicture: null // 🔧 NOVO: Reset foto no modo edição
+          sendInvite: false
         });
         
         // NOVO: Resetar estados avançados para edição
@@ -126,8 +90,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           email: '',
           displayName: '',
           role: 'seller',
-          sendInvite: true,
-          profilePicture: null // 🔧 NOVO: Reset foto no modo criação
+          sendInvite: true
         });
         
         // NOVO: Resetar estados avançados para criação
@@ -306,21 +269,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
 
       if (isEditing && user) {
-        // 🔧 NOVO: Upload da foto de perfil se selecionada
-        let profilePictureUrl = user.profile_picture_url;
-        if (formData.profilePicture) {
-          const uploadedUrl = await uploadProfilePicture(formData.profilePicture, user.user_id);
-          if (uploadedUrl) {
-            profilePictureUrl = uploadedUrl;
-          }
-        }
-
         // Atualizar usuário existente (EXPANDIDO)
         const updateRequest: UpdateUserRequest = {
           id: user.id,
           role: formData.role,
-          permissions: finalPermissions, // Usar permissões calculadas
-          profile_picture_url: profilePictureUrl // 🔧 NOVO: Incluir URL da foto
+          permissions: finalPermissions // Usar permissões calculadas
         };
 
         await updateCompanyUser(updateRequest);
@@ -335,19 +288,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         };
 
         const result = await createCompanyUser(createRequest);
-        
-        // 🔧 NOVO: Upload da foto de perfil após criação do usuário
-        if (formData.profilePicture && result.user_id) {
-          const uploadedUrl = await uploadProfilePicture(formData.profilePicture, result.user_id);
-          if (uploadedUrl) {
-            // Atualizar o usuário com a URL da foto
-            const updateRequest: UpdateUserRequest = {
-              id: result.id,
-              profile_picture_url: uploadedUrl
-            };
-            await updateCompanyUser(updateRequest);
-          }
-        }
         
         console.log('UserModal: User creation result:', {
           result: result,
@@ -722,70 +662,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               </p>
             </div>
           )}
-
-          {/* Foto de Perfil */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              <Camera className="w-4 h-4 inline mr-2" />
-              Foto de Perfil
-            </label>
-            <div className="flex items-center gap-4">
-              {/* Preview da foto */}
-              <Avatar 
-                src={formData.profilePicture ? URL.createObjectURL(formData.profilePicture) : (user?.profile_picture_url || null)}
-                alt={formData.displayName || formData.email || 'Usuário'}
-                size="lg"
-                fallbackText={formData.displayName?.charAt(0) || formData.email?.charAt(0)}
-              />
-              
-              {/* Upload button */}
-              <div className="flex-1">
-                <input
-                  type="file"
-                  id="profile-picture"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      // Validar tamanho (máx 2MB)
-                      if (file.size > 2 * 1024 * 1024) {
-                        setError('A imagem deve ter no máximo 2MB');
-                        return;
-                      }
-                      // Validar formato
-                      if (!file.type.startsWith('image/')) {
-                        setError('Apenas arquivos de imagem são permitidos');
-                        return;
-                      }
-                      setFormData(prev => ({ ...prev, profilePicture: file }));
-                      setError(null);
-                    }
-                  }}
-                  className="hidden"
-                  disabled={loading}
-                />
-                <label
-                  htmlFor="profile-picture"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
-                >
-                  <Upload className="w-4 h-4" />
-                  {formData.profilePicture ? 'Alterar Foto' : 'Escolher Foto'}
-                </label>
-                {formData.profilePicture && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, profilePicture: null }))}
-                    className="ml-2 text-sm text-red-600 hover:text-red-700"
-                  >
-                    Remover
-                  </button>
-                )}
-                <p className="text-xs text-slate-500 mt-1">
-                  Formatos aceitos: JPG, PNG, GIF. Máximo 2MB.
-                </p>
-              </div>
-            </div>
-          </div>
 
           {/* Perfil de Acesso - SISTEMA UNIFICADO COM FALLBACK */}
           <div>

@@ -575,11 +575,6 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
       updateData.is_active = request.is_active;
     }
 
-    // 🔧 NOVO: Suporte para atualização de foto de perfil
-    if (request.profile_picture_url !== undefined) {
-      updateData.profile_picture_url = request.profile_picture_url;
-    }
-
     const { data, error } = await supabase
       .from('company_users')
       .update(updateData)
