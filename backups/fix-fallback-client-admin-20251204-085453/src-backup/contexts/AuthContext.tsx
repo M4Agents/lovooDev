@@ -1274,19 +1274,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Fallback final para sistema legado
-    // 🔧 CORREÇÃO: Permitir gestão de usuários para admins de empresas filhas
-    const isParentCompany = company?.company_type === 'parent';
-    const isClientAdminWithUserPermissions = company?.company_type === 'client' && 
-                                           ['users', 'create_users', 'edit_users', 'delete_users'].includes(permission);
-    
-    const legacyResult = isParentCompany || isClientAdminWithUserPermissions;
-    console.log('🔍 hasPermission: Using legacy fallback:', {
-      company_type: company?.company_type,
-      permission,
-      isParentCompany,
-      isClientAdminWithUserPermissions,
-      result: legacyResult
-    });
+    const legacyResult = company?.company_type === 'parent' || false;
+    console.log('🔍 hasPermission: Using legacy fallback:', legacyResult);
     return legacyResult;
   };
 
