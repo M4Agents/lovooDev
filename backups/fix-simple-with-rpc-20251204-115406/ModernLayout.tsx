@@ -56,42 +56,44 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           return;
         }
 
-        // 🔧 CORREÇÃO: Usar RPC que já funciona na lista de usuários
-        const { data: companyUsers, error } = await supabase
-          .rpc('get_company_users_with_details', {
-            p_company_id: company.id
-          });
+        // Buscar dados do usuário na empresa atual
+        const { data, error } = await supabase
+          .from('company_users')
+          .select(`
+            profile_picture_url,
+            companies:company_id (
+              id,
+              name
+            )
+          `)
+          .eq('user_id', user.id)
+          .eq('company_id', company.id)
+          .eq('is_active', true)
+          .single();
 
-        console.log('🔧 SIMPLE: Resultado da RPC:', {
+        console.log('🔧 SIMPLE: Resultado da busca:', {
           success: !error,
-          usersCount: companyUsers?.length || 0,
+          data: data,
           error: error
         });
 
-        if (companyUsers && !error) {
-          // Filtrar apenas o usuário atual
-          const userData = companyUsers.find((u: any) => u.user_id === user.id);
+        if (data && !error) {
+          setUserPhoto(data.profile_picture_url);
           
-          console.log('🔧 SIMPLE: Dados do usuário filtrados:', {
-            found: !!userData,
-            profilePictureUrl: userData?.profile_picture_url,
-            displayName: userData?.display_name,
-            role: userData?.role
+          // Buscar display_name do auth.users
+          const { data: authUser } = await supabase.auth.getUser();
+          const displayName = authUser?.user?.user_metadata?.name || 
+                             authUser?.user?.user_metadata?.display_name ||
+                             authUser?.user?.email?.split('@')[0];
+          
+          setUserDisplayName(displayName);
+          
+          console.log('🔧 SIMPLE: Dados definidos com sucesso:', {
+            profilePictureUrl: data.profile_picture_url,
+            displayName: displayName
           });
-
-          if (userData) {
-            setUserPhoto(userData.profile_picture_url);
-            setUserDisplayName(userData.display_name);
-            
-            console.log('🔧 SIMPLE: Dados definidos com sucesso via RPC:', {
-              profilePictureUrl: userData.profile_picture_url,
-              displayName: userData.display_name
-            });
-          } else {
-            console.warn('🔧 SIMPLE: Usuário não encontrado nos dados da RPC');
-          }
         } else {
-          console.warn('🔧 SIMPLE: Erro na RPC ou dados não encontrados:', error);
+          console.warn('🔧 SIMPLE: Erro ou dados não encontrados:', error);
         }
       } catch (error) {
         console.error('🔧 SIMPLE: Erro ao buscar dados do usuário:', error);
