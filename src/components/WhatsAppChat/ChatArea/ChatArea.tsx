@@ -688,7 +688,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.content && !isAudioMessage && (
+          {message.content && !isAudioMessage && message.message_type !== 'image' && (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           )}
           
