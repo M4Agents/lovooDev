@@ -370,14 +370,21 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           profile_picture_url: profilePictureUrl // 🔧 NOVO: Incluir URL da foto
         };
 
-        console.log('🔧 UserModal: Updating user with request:', {
-          userId: user.id,
-          userIdField: user.user_id,
-          profilePictureUrl: profilePictureUrl,
-          updateRequest: updateRequest
-        });
+        // 🔧 CORREÇÃO: Se apenas atualizando foto, enviar request simplificado
+        if (formData.profilePicture && formData.role === user.role) {
+          // Apenas atualização de foto - request simplificado
+          const photoOnlyRequest: UpdateUserRequest = {
+            id: user.id,
+            profile_picture_url: profilePictureUrl
+          };
+          console.log('🔧 UserModal: Photo-only update request:', photoOnlyRequest);
+          await updateCompanyUser(photoOnlyRequest);
+        } else {
+          // Atualização completa
+          console.log('🔧 UserModal: Full update request:', updateRequest);
+          await updateCompanyUser(updateRequest);
+        }
 
-        await updateCompanyUser(updateRequest);
       } else {
         // Criar novo usuário (EXPANDIDO)
         const createRequest: CreateUserRequest = {
