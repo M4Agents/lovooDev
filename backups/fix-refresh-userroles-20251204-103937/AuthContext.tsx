@@ -673,12 +673,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTimeout(() => {
         setIsFetchingCompany(false); // Liberar flag de controle com delay
         console.log('🔧 AuthContext: fetchCompany completed, flags cleared with delay');
-        
-        // 🔧 CORREÇÃO: Chamar refreshUserRoles após empresa ser carregada
-        if (user) {
-          console.log('🔧 AuthContext: Calling refreshUserRoles after fetchCompany completion');
-          refreshUserRoles();
-        }
       }, 500); // 500ms de delay para evitar chamadas imediatas
     }
   };
@@ -819,13 +813,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               userId: session.user.id,
               event: _event
             });
-            // Roles serão carregados automaticamente após fetchCompany
-            console.log('🔧 AuthContext: Company already loaded, roles will be refreshed automatically');
+            // Apenas carregar roles se empresa já existe
+            setTimeout(() => {
+              refreshUserRoles();
+            }, 100);
           } else {
             console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
             await fetchCompany(session.user.id);
-            // Roles serão carregados automaticamente após fetchCompany
-            console.log('🔧 AuthContext: fetchCompany called, roles will be refreshed automatically');
+            // Carregar roles do usuário após carregar empresa
+            setTimeout(() => {
+              refreshUserRoles();
+            }, 100);
           }
         } else {
           // 🔧 PROTEÇÃO: NÃO SOBRESCREVER EMPRESA JÁ CARREGADA
