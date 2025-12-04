@@ -1171,24 +1171,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Determinar role atual baseado na empresa ativa
       if (company && roles) {
-        console.log('🔍 AuthContext: Looking for role in company:', {
-          company_id: company.id,
-          company_name: company.name,
-          available_roles: roles.map(r => ({ company_id: r.company_id, role: r.role }))
-        });
-        
         const currentCompanyRole = roles.find(r => r.company_id === company.id);
         if (currentCompanyRole) {
-          console.log('🔍 AuthContext: Found role for current company:', {
-            role: currentCompanyRole.role,
-            permissions: currentCompanyRole.permissions
-          });
           setCurrentRole(currentCompanyRole.role);
           setUserPermissions(currentCompanyRole.permissions);
-        } else {
-          console.warn('🔍 AuthContext: No role found for current company!');
-          setCurrentRole(null);
-          setUserPermissions(null);
         }
       }
 
@@ -1215,52 +1201,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    // 🔍 DEBUG: Log detalhado para investigar problema
-    console.log('🔍 hasPermission DEBUG:', {
-      permission,
-      user_id: user?.id,
-      company_id: company?.id,
-      company_name: company?.name,
-      company_type: company?.company_type,
-      is_super_admin: company?.is_super_admin,
-      currentRole,
-      userPermissions,
-      isImpersonating,
-      originalUser: !!originalUser
-    });
-
     // CORREÇÃO CRÍTICA: Verificar múltiplas condições de super admin
     const isSuperAdmin = company?.is_super_admin || 
                         currentRole === 'super_admin' || 
                         (isImpersonating && originalUser);
     
-    console.log('🔍 hasPermission isSuperAdmin check:', isSuperAdmin);
-    
     if (isSuperAdmin) {
-      console.log('🔍 hasPermission: Super admin - returning true');
       return true; // Super admin tem todas as permissões (mesmo impersonando)
     }
 
     // Usar novo sistema de permissões se disponível
     if (userPermissions) {
-      const result = userPermissions[permission] === true;
-      console.log('🔍 hasPermission: Using userPermissions:', {
-        permission,
-        value: userPermissions[permission],
-        result
-      });
-      return result;
+      return userPermissions[permission] === true;
     }
 
     // Fallback baseado no role atual
     if (currentRole) {
-      console.log('🔍 hasPermission: Using currentRole fallback:', currentRole);
       switch (currentRole) {
         case 'admin':
           // Admin pode gerenciar usuários, exceto financial e companies
-          const adminResult = permission !== 'financial' && permission !== 'companies';
-          console.log('🔍 hasPermission: Admin fallback result:', adminResult);
-          return adminResult;
+          return permission !== 'financial' && permission !== 'companies';
         case 'partner':
           return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission);
         case 'manager':
@@ -1268,15 +1228,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         case 'seller':
           return ['dashboard', 'leads', 'chat'].includes(permission);
         default:
-          console.log('🔍 hasPermission: Unknown role, returning false');
           return false;
       }
     }
 
     // Fallback final para sistema legado
-    const legacyResult = company?.company_type === 'parent' || false;
-    console.log('🔍 hasPermission: Using legacy fallback:', legacyResult);
-    return legacyResult;
+    return company?.company_type === 'parent' || false;
   };
 
   const canImpersonateCompany = async (companyId: string): Promise<boolean> => {
