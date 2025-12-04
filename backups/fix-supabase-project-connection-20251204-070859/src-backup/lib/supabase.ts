@@ -1,22 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 🔧 CORREÇÃO: FORÇAR PROJETO M4_DIGITAL - IGNORAR VARIÁVEIS DE AMBIENTE INCORRETAS
-const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTY2NDg1MDMsImV4cCI6MjAzMjIyNDUwM30.f1qVXhFaOCIaOZQlhEGQNBMOGvQIyJHGKGCzJUqCKYNJFI';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTY2NDg1MDMsImV4cCI6MjAzMjIyNDUwM30.f1qVXhFaOCIaOZQlhEGQNBMOGvQIyJHGKGCzJUqCKYNJFI';
 
-// Debug: Log configurações - FORÇADO PARA M4_DIGITAL
-console.log('🔧 [Supabase] FORCED M4_Digital URL:', supabaseUrl);
-console.log('🔧 [Supabase] FORCED M4_Digital Key (first 20 chars):', supabaseAnonKey.substring(0, 20) + '...');
-console.log('🔧 [Supabase] Environment URL override ignored:', import.meta.env.VITE_SUPABASE_URL);
-console.log('🔧 [Supabase] Environment KEY override ignored:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Not present');
+// Debug: Log configurações
+console.log('[Supabase] URL:', supabaseUrl);
+console.log('[Supabase] Key (first 20 chars):', supabaseAnonKey.substring(0, 20) + '...');
 
 // Criar cliente com valores padrão se as variáveis não estiverem configuradas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// 🔧 FUNÇÃO ATUALIZADA: Supabase sempre configurado para M4_Digital
+// Função para verificar se o Supabase está configurado
 export const isSupabaseConfigured = () => {
-  // Sempre retorna true pois estamos forçando configuração M4_Digital
-  return true;
+  return import.meta.env.VITE_SUPABASE_URL && 
+         import.meta.env.VITE_SUPABASE_ANON_KEY &&
+         import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co';
 };
 
 export type Company = {
