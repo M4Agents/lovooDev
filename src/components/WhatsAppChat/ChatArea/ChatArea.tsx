@@ -45,6 +45,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   } | null>(null)
   const [captionMessage, setCaptionMessage] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
   
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
@@ -650,6 +651,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }
 
   // =====================================================
+  // REPRODUÇÃO INLINE DE VÍDEOS
+  // =====================================================
+  
+  // Função para expandir/contrair vídeo no chat
+  const toggleVideoExpansion = (messageId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    event.preventDefault()
+    
+    if (expandedVideoId === messageId) {
+      // Contrair vídeo
+      setExpandedVideoId(null)
+    } else {
+      // Expandir vídeo (e contrair outros)
+      setExpandedVideoId(messageId)
+    }
+  }
+
+  // =====================================================
   // LOADING STATE
   // =====================================================
 
@@ -847,6 +866,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               key={message.id}
               message={message}
               isOwn={message.direction === 'outbound'}
+              expandedVideoId={expandedVideoId}
+              onToggleVideoExpansion={toggleVideoExpansion}
               showTimestamp={
                 index === 0 ||
                 (messages[index - 1] && (() => {
@@ -891,12 +912,16 @@ interface MessageBubbleProps {
   message: ChatMessage
   isOwn: boolean
   showTimestamp?: boolean
+  expandedVideoId: string | null
+  onToggleVideoExpansion: (messageId: string, event: React.MouseEvent) => void
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   isOwn,
-  showTimestamp
+  showTimestamp,
+  expandedVideoId,
+  onToggleVideoExpansion
 }) => {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
@@ -997,21 +1022,43 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {message.media_url && message.message_type === 'video' && (
-            <div className="mb-1 relative max-w-xs">
+            <div className={`mb-1 relative transition-all duration-300 ${
+              expandedVideoId === message.id ? 'max-w-md' : 'max-w-xs'
+            }`}>
               <video 
                 src={message.media_url}
-                className="w-full h-auto rounded-md cursor-pointer"
+                className="w-full h-auto rounded-md"
                 preload="metadata"
-                style={{ maxHeight: '200px' }}
-                onClick={() => window.open(message.media_url, '_blank')}
+                controls={expandedVideoId === message.id}
+                muted={expandedVideoId !== message.id}
+                style={{ 
+                  maxHeight: expandedVideoId === message.id ? '300px' : '200px' 
+                }}
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-black bg-opacity-50 rounded-full p-3">
-                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
-                  </svg>
+              
+              {expandedVideoId !== message.id ? (
+                // Overlay de play quando não expandido
+                <div 
+                  className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                  onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                >
+                  <div className="bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-opacity">
+                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                    </svg>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                // Botão para contrair quando expandido
+                <button
+                  onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                  className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70 z-10"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                  </svg>
+                </button>
+              )}
             </div>
           )}
 
