@@ -133,7 +133,20 @@ async function processUazapiMessage(params) {
     }
     
     const messageType = (message.messageType || '').toLowerCase();
-    if (messageType !== 'conversation' && messageType !== 'extendedtextmessage') {
+    const supportedTypes = [
+      'conversation', 
+      'extendedtextmessage', 
+      'videomessage', 
+      'video',
+      'imagemessage', 
+      'image',
+      'documentmessage', 
+      'document',
+      'audiomessage', 
+      'audio'
+    ];
+    
+    if (!supportedTypes.includes(messageType)) {
       return { success: false, error: 'Tipo de mensagem não suportado: ' + messageType };
     }
     
@@ -253,8 +266,18 @@ async function processUazapiMessage(params) {
       return { success: true, message_id: existingMessage.id, note: 'Mensagem duplicada ignorada' };
     }
     
-    // 8. Salvar mensagem
-    const finalMessageType = (messageType === 'conversation' || messageType === 'extendedtextmessage') ? 'text' : 'text';
+    // 8. Processar mídia se necessário
+    let mediaUrl = null;
+    const finalMessageType = getMessageType(messageType);
+    
+    if (finalMessageType !== 'text') {
+      console.log('🎥 Processando mídia para tipo:', finalMessageType);
+      mediaUrl = await processMediaMessage(message, supabase);
+      console.log('📎 URL da mídia processada:', mediaUrl);
+    }
+    
+    // 9. Salvar mensagem
+    const messageContent = messageText || (mediaUrl ? `${finalMessageType.toUpperCase()} recebido` : '');
     
     const { data: savedMessage, error: messageError } = await supabase
       .from('chat_messages')
@@ -263,8 +286,9 @@ async function processUazapiMessage(params) {
         company_id: company.id,
         instance_id: instance.id,
         uazapi_message_id: messageId,
-        content: messageText,
+        content: messageContent,
         message_type: finalMessageType,
+        media_url: mediaUrl,
         direction: 'inbound',
         status: 'delivered',
         timestamp: new Date(timestamp).toISOString(),
@@ -293,6 +317,136 @@ async function processUazapiMessage(params) {
     console.error('Exception in processUazapiMessage:', error);
     return { success: false, error: error.message };
   }
+}
+
+// Função para processar mídia (vídeos, imagens, documentos, áudios)
+async function processMediaMessage(message, supabase) {
+  const mediaUrl = message.media?.url || message.url;
+  if (!mediaUrl) return null;
+
+  try {
+    console.log('📥 Processando mídia:', mediaUrl);
+    
+    // Download da mídia externa
+    const response = await fetch(mediaUrl);
+    if (!response.ok) {
+      console.error('Falha ao baixar mídia:', response.status, response.statusText);
+      return mediaUrl; // Fallback para URL original
+    }
+    
+    const mediaBuffer = await response.arrayBuffer();
+    console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
+    
+    // Determinar extensão baseada no tipo
+    const extension = getFileExtension(message.messageType, message.media?.mimetype);
+    const fileName = `${message.messageType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
+    
+    console.log('📁 Fazendo upload para Supabase Storage:', fileName);
+    
+    // Upload para Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, mediaBuffer, {
+        contentType: message.media?.mimetype || getContentType(extension)
+      });
+    
+    if (error) {
+      console.error('Erro no upload para Supabase:', error);
+      return mediaUrl; // Fallback para URL original
+    }
+    
+    // Retornar URL pública
+    const { data: publicUrl } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+    
+    console.log('✅ Upload concluído, URL pública:', publicUrl.publicUrl);
+    return publicUrl.publicUrl;
+    
+  } catch (error) {
+    console.error('Erro ao processar mídia:', error);
+    return mediaUrl; // Fallback para URL original
+  }
+}
+
+// Função para mapear tipos de mensagem
+function getMessageType(messageType) {
+  const typeMap = {
+    'conversation': 'text',
+    'extendedtextmessage': 'text',
+    'videomessage': 'video',
+    'video': 'video',
+    'imagemessage': 'image',
+    'image': 'image',
+    'documentmessage': 'document',
+    'document': 'document',
+    'audiomessage': 'audio',
+    'audio': 'audio'
+  };
+  
+  return typeMap[messageType.toLowerCase()] || 'text';
+}
+
+// Função para determinar extensão do arquivo
+function getFileExtension(messageType, mimetype) {
+  // Primeiro, tentar pelo mimetype
+  if (mimetype) {
+    const mimeMap = {
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/ogg': 'ogg',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'audio/mp3': 'mp3',
+      'audio/ogg': 'ogg',
+      'audio/wav': 'wav',
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
+    };
+    
+    if (mimeMap[mimetype]) {
+      return mimeMap[mimetype];
+    }
+  }
+  
+  // Fallback pelo tipo de mensagem
+  const typeMap = {
+    'videomessage': 'mp4',
+    'video': 'mp4',
+    'imagemessage': 'jpg',
+    'image': 'jpg',
+    'audiomessage': 'ogg',
+    'audio': 'ogg',
+    'documentmessage': 'pdf',
+    'document': 'pdf'
+  };
+  
+  return typeMap[messageType.toLowerCase()] || 'bin';
+}
+
+// Função para determinar content type
+function getContentType(extension) {
+  const contentTypeMap = {
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'ogg': 'video/ogg',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'mp3': 'audio/mp3',
+    'wav': 'audio/wav',
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  };
+  
+  return contentTypeMap[extension] || 'application/octet-stream';
 }
 
 function extractPhoneFromSender(sender) {
