@@ -846,11 +846,31 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     });
     
     // Download da mídia externa (WhatsApp CDN)
+    console.log('🌐 INICIANDO DOWNLOAD:', originalUrl);
+    console.log('🔗 URL COMPLETA:', originalUrl);
+    
     const response = await fetch(originalUrl);
+    
+    console.log('📡 RESPOSTA RECEBIDA:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries()),
+      url: response.url
+    });
+    
     if (!response.ok) {
-      console.error('❌ Falha ao baixar mídia:', response.status, response.statusText);
+      console.error('❌ FALHA NO DOWNLOAD - DETALHES:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        url: response.url,
+        originalUrl: originalUrl
+      });
       return originalUrl; // Fallback para URL original
     }
+    
+    console.log('✅ DOWNLOAD SUCESSO - Processando buffer...');
     
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
@@ -862,16 +882,32 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
     
     // Upload para Supabase Storage
+    console.log('☁️ INICIANDO UPLOAD SUPABASE:', {
+      fileName: fileName,
+      bufferSize: mediaBuffer.byteLength,
+      contentType: getContentTypeRobust(rawMediaType),
+      bucket: 'chat-media'
+    });
+    
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
         contentType: getContentTypeRobust(rawMediaType)
       });
     
+    console.log('📤 RESULTADO UPLOAD:', { data, error });
+    
     if (error) {
-      console.error('❌ Erro no upload para Supabase:', error);
+      console.error('❌ ERRO DETALHADO NO UPLOAD:', {
+        error: error,
+        fileName: fileName,
+        bufferSize: mediaBuffer.byteLength,
+        contentType: getContentTypeRobust(rawMediaType)
+      });
       return originalUrl; // Fallback para URL original
     }
+    
+    console.log('✅ UPLOAD SUCESSO - Gerando URL pública...');
     
     // Retornar URL pública estável
     const { data: publicUrl } = supabase.storage
@@ -882,7 +918,13 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     return publicUrl.publicUrl;
     
   } catch (error) {
-    console.error('❌ EXCEPTION no processamento de mídia:', error);
+    console.error('❌ EXCEPTION DETALHADA no processamento de mídia:', {
+      error: error,
+      message: error.message,
+      stack: error.stack,
+      originalUrl: originalUrl,
+      rawMediaType: rawMediaType
+    });
     return originalUrl; // Fallback para URL original
   }
 }
