@@ -34,6 +34,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Estado para Drag & Drop (movido para componente principal)
   const [isDragOver, setIsDragOver] = useState(false)
   
+  // Estados para Modal de Preview (como WhatsApp Web)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{
+    file: File,
+    url: string,
+    name: string,
+    size: number,
+    type: string
+  } | null>(null)
+  const [captionMessage, setCaptionMessage] = useState('')
+  
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
     if (conversationId) {
@@ -445,6 +456,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [conversationId])
 
+  // Fechar modal com ESC
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showPreviewModal) {
+        closePreviewModal()
+      }
+    }
+
+    if (showPreviewModal) {
+      document.addEventListener('keydown', handleEscKey)
+      return () => {
+        document.removeEventListener('keydown', handleEscKey)
+      }
+    }
+  }, [showPreviewModal])
+
   // =====================================================
   // DRAG & DROP - IMPLEMENTAÇÃO SEGURA (COMPONENTE PRINCIPAL)
   // =====================================================
@@ -491,34 +518,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }
   
-  // Processar arquivo arrastado (reutiliza lógica existente 100%)
-  const processDroppedFile = async (file: File) => {
-    // Validar arquivo primeiro
-    const validation = validateDroppedFile(file)
-    if (!validation.valid) {
-      alert(validation.error)
-      return
-    }
-    
-    try {
-      // Usar chatApi diretamente para upload
-      const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
-      
-      const mimeType = file.type || ''
-      const isImage = mimeType.startsWith('image/')
-      
-      // Enviar mensagem usando a função existente
-      handleSendMessage({
-        content: file.name || '[arquivo]',
-        message_type: isImage ? 'image' : 'document',
-        media_url: mediaUrl
-      })
-    } catch (error) {
-      console.error('Erro ao processar arquivo arrastado:', error)
-      alert('Erro ao enviar arquivo. Tente novamente.')
-    }
-  }
-  
   // Event handlers para drag & drop (melhorados)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -556,12 +555,91 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       const files = Array.from(e.dataTransfer.files)
       
-      // Processar arquivos um por vez (evitar sobrecarga)
-      for (const file of files) {
-        await processDroppedFile(file)
+      // Abrir modal para o primeiro arquivo (como WhatsApp Web)
+      if (files.length > 0) {
+        openPreviewModal(files[0])
       }
     } catch (error) {
       console.error('Erro no drop de arquivos:', error)
+    }
+  }
+
+  // =====================================================
+  // MODAL DE PREVIEW - COMO WHATSAPP WEB
+  // =====================================================
+  
+  // Função para formatar tamanho do arquivo
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+  
+  // Fechar modal de preview
+  const closePreviewModal = () => {
+    setShowPreviewModal(false)
+    setCaptionMessage('')
+    if (previewFile?.url) {
+      URL.revokeObjectURL(previewFile.url) // Limpar memória
+    }
+    setPreviewFile(null)
+  }
+  
+  // Enviar arquivo com legenda
+  const handleSendWithCaption = async () => {
+    if (!previewFile) return
+    
+    try {
+      // Upload do arquivo usando a API existente
+      const mediaUrl = await chatApi.uploadMedia(previewFile.file, companyId, conversationId)
+      
+      const mimeType = previewFile.type || ''
+      const isImage = mimeType.startsWith('image/')
+      
+      // Enviar mensagem com legenda usando função existente
+      handleSendMessage({
+        content: captionMessage.trim() || previewFile.name,
+        message_type: isImage ? 'image' : 'document',
+        media_url: mediaUrl
+      })
+      
+      // Fechar modal
+      closePreviewModal()
+    } catch (error) {
+      console.error('Erro ao enviar arquivo com legenda:', error)
+      alert('Erro ao enviar arquivo. Tente novamente.')
+    }
+  }
+  
+  // Modificar processDroppedFile para abrir modal ao invés de enviar diretamente
+  const openPreviewModal = (file: File) => {
+    // Validar arquivo primeiro
+    const validation = validateDroppedFile(file)
+    if (!validation.valid) {
+      alert(validation.error)
+      return
+    }
+    
+    try {
+      // Criar URL para preview
+      const fileUrl = URL.createObjectURL(file)
+      
+      // Configurar preview
+      setPreviewFile({
+        file,
+        url: fileUrl,
+        name: file.name,
+        size: file.size,
+        type: file.type
+      })
+      
+      // Abrir modal
+      setShowPreviewModal(true)
+    } catch (error) {
+      console.error('Erro ao abrir preview:', error)
+      alert('Erro ao processar arquivo.')
     }
   }
 
@@ -649,6 +727,78 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <div className="text-green-500 text-sm mt-3">
               Imagens até 5MB • Vídeos até 25MB • Documentos até 10MB
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Preview - Como WhatsApp Web */}
+      {showPreviewModal && previewFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[10000]">
+          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+            
+            {/* Header com botão fechar */}
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-semibold">Enviar arquivo</h3>
+              <button 
+                onClick={closePreviewModal}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Preview da imagem/arquivo */}
+            <div className="flex-1 p-4 flex items-center justify-center bg-gray-50 min-h-[300px]">
+              {previewFile.type.startsWith('image/') ? (
+                <img 
+                  src={previewFile.url} 
+                  alt="Preview" 
+                  className="max-w-full max-h-96 object-contain rounded shadow-lg"
+                />
+              ) : previewFile.type.startsWith('video/') ? (
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🎥</div>
+                  <p className="text-gray-700 font-medium">{previewFile.name}</p>
+                  <p className="text-sm text-gray-500 mt-1">{formatFileSize(previewFile.size)}</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="text-6xl mb-4">📄</div>
+                  <p className="text-gray-700 font-medium">{previewFile.name}</p>
+                  <p className="text-sm text-gray-500 mt-1">{formatFileSize(previewFile.size)}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Campo de mensagem e botão enviar */}
+            <div className="p-4 border-t bg-white">
+              <div className="flex items-end space-x-3">
+                <div className="flex-1">
+                  <textarea
+                    value={captionMessage}
+                    onChange={(e) => setCaptionMessage(e.target.value)}
+                    placeholder="Digite uma mensagem"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    rows={3}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendWithCaption()
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleSendWithCaption}
+                  className="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
           </div>
         </div>
       )}
