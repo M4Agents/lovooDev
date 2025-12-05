@@ -669,6 +669,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }
 
   // =====================================================
+  // DETECÇÃO INTELIGENTE DE TIPOS DE MÍDIA
+  // =====================================================
+  
+  // Detectar vídeo por URL (para vídeos recebidos que podem ter tipo incorreto)
+  const isVideoUrl = (url: string): boolean => {
+    if (!url) return false
+    return /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)(?:$|[?#])/i.test(url)
+  }
+
+  // Detectar imagem por URL
+  const isImageUrl = (url: string): boolean => {
+    if (!url) return false
+    return /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff|ico|heic|heif)(?:$|[?#])/i.test(url)
+  }
+
+  // Normalizar tipo de mensagem (unificar enviados e recebidos)
+  const getActualMessageType = (message: ChatMessage): string => {
+    // Priorizar tipo definido corretamente
+    if (message.message_type === 'video' || message.message_type === 'image') {
+      return message.message_type
+    }
+    
+    // Detectar por URL se necessário (principalmente para mensagens recebidas)
+    if (message.media_url) {
+      if (isVideoUrl(message.media_url)) return 'video'
+      if (isImageUrl(message.media_url)) return 'image'
+    }
+    
+    return message.message_type
+  }
+
+  // =====================================================
   // LOADING STATE
   // =====================================================
 
@@ -868,6 +900,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               isOwn={message.direction === 'outbound'}
               expandedVideoId={expandedVideoId}
               onToggleVideoExpansion={toggleVideoExpansion}
+              getActualMessageType={getActualMessageType}
               showTimestamp={
                 index === 0 ||
                 (messages[index - 1] && (() => {
@@ -914,6 +947,7 @@ interface MessageBubbleProps {
   showTimestamp?: boolean
   expandedVideoId: string | null
   onToggleVideoExpansion: (messageId: string, event: React.MouseEvent) => void
+  getActualMessageType: (message: ChatMessage) => string
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -921,7 +955,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   isOwn,
   showTimestamp,
   expandedVideoId,
-  onToggleVideoExpansion
+  onToggleVideoExpansion,
+  getActualMessageType
 }) => {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
@@ -929,6 +964,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       minute: '2-digit' 
     })
   }
+
+  // Detectar tipo real da mensagem (unificar enviados e recebidos)
+  const actualMessageType = getActualMessageType(message)
 
   const getStatusIcon = (status: ChatMessage['status']) => {
     switch (status) {
@@ -1010,7 +1048,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && message.message_type === 'image' && (
+          {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
               <img
                 src={message.media_url}
@@ -1021,7 +1059,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && message.message_type === 'video' && (
+          {message.media_url && actualMessageType === 'video' && (
             <div className={`mb-1 relative transition-all duration-300 ${
               expandedVideoId === message.id ? 'max-w-md' : 'max-w-xs'
             }`}>
@@ -1062,7 +1100,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && !isAudioMessage && message.message_type !== 'image' && message.message_type !== 'video' && (
+          {message.media_url && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
             <div className="mb-1">
               <a
                 href={message.media_url}
@@ -1075,7 +1113,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.content && !isAudioMessage && message.message_type !== 'image' && message.message_type !== 'video' && (
+          {message.content && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           )}
           
