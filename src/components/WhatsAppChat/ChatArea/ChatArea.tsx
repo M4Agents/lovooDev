@@ -46,6 +46,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [captionMessage, setCaptionMessage] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
+  const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set())
   
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
@@ -700,6 +701,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return message.message_type
   }
 
+  // Função para obter URL segura de vídeo
+  const getSafeVideoUrl = (url: string): string | null => {
+    if (!url) return null
+    
+    try {
+      // Validar se é uma URL válida
+      new URL(url)
+      return url
+    } catch (error) {
+      console.error('URL de vídeo inválida:', url, error)
+      return null
+    }
+  }
+
+  // Função para tratar erro de vídeo
+  const handleVideoError = (messageId: string, error: any) => {
+    console.error('Erro ao carregar vídeo:', messageId, error)
+    setVideoErrors(prev => new Set(prev).add(messageId))
+  }
+
+  // Função para resetar erro de vídeo (quando tentar novamente)
+  const resetVideoError = (messageId: string) => {
+    setVideoErrors(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(messageId)
+      return newSet
+    })
+  }
+
   // =====================================================
   // LOADING STATE
   // =====================================================
@@ -901,6 +931,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               expandedVideoId={expandedVideoId}
               onToggleVideoExpansion={toggleVideoExpansion}
               getActualMessageType={getActualMessageType}
+              videoErrors={videoErrors}
+              getSafeVideoUrl={getSafeVideoUrl}
+              onVideoError={handleVideoError}
+              onResetVideoError={resetVideoError}
               showTimestamp={
                 index === 0 ||
                 (messages[index - 1] && (() => {
@@ -948,6 +982,10 @@ interface MessageBubbleProps {
   expandedVideoId: string | null
   onToggleVideoExpansion: (messageId: string, event: React.MouseEvent) => void
   getActualMessageType: (message: ChatMessage) => string
+  videoErrors: Set<string>
+  getSafeVideoUrl: (url: string) => string | null
+  onVideoError: (messageId: string, error: any) => void
+  onResetVideoError: (messageId: string) => void
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -956,7 +994,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   showTimestamp,
   expandedVideoId,
   onToggleVideoExpansion,
-  getActualMessageType
+  getActualMessageType,
+  videoErrors,
+  getSafeVideoUrl,
+  onVideoError,
+  onResetVideoError
 }) => {
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
@@ -1063,39 +1105,61 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className={`mb-1 relative transition-all duration-300 ${
               expandedVideoId === message.id ? 'max-w-md' : 'max-w-xs'
             }`}>
-              <video 
-                src={message.media_url}
-                className="w-full h-auto rounded-md"
-                preload="metadata"
-                controls={expandedVideoId === message.id}
-                muted={expandedVideoId !== message.id}
-                style={{ 
-                  maxHeight: expandedVideoId === message.id ? '300px' : '200px' 
-                }}
-              />
-              
-              {expandedVideoId !== message.id ? (
-                // Overlay de play quando não expandido
-                <div 
-                  className="absolute inset-0 flex items-center justify-center cursor-pointer"
-                  onClick={(e) => onToggleVideoExpansion(message.id, e)}
-                >
-                  <div className="bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-opacity">
-                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
-                    </svg>
-                  </div>
-                </div>
+              {!videoErrors.has(message.id) ? (
+                <>
+                  <video 
+                    src={getSafeVideoUrl(message.media_url) || message.media_url}
+                    className="w-full h-auto rounded-md"
+                    preload="metadata"
+                    controls={expandedVideoId === message.id}
+                    muted={expandedVideoId !== message.id}
+                    crossOrigin="anonymous"
+                    style={{ 
+                      maxHeight: expandedVideoId === message.id ? '300px' : '200px' 
+                    }}
+                    onError={(e) => onVideoError(message.id, e)}
+                    onLoadedMetadata={() => onResetVideoError(message.id)}
+                  />
+                  
+                  {expandedVideoId !== message.id ? (
+                    // Overlay de play quando não expandido
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                      onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                    >
+                      <div className="bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-opacity">
+                        <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                        </svg>
+                      </div>
+                    </div>
+                  ) : (
+                    // Botão para contrair quando expandido
+                    <button
+                      onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                      className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70 z-10"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                      </svg>
+                    </button>
+                  )}
+                </>
               ) : (
-                // Botão para contrair quando expandido
-                <button
-                  onClick={(e) => onToggleVideoExpansion(message.id, e)}
-                  className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70 z-10"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                // Placeholder para vídeos com erro
+                <div className="w-full h-48 bg-gray-100 rounded-md flex flex-col items-center justify-center border-2 border-dashed border-gray-300">
+                  <svg className="w-12 h-12 text-gray-400 mb-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11V6m0 8l.01-8M8 8l4-4 4 4"/>
                   </svg>
-                </button>
+                  <p className="text-sm text-gray-500 mb-2">Vídeo indisponível</p>
+                  <button
+                    onClick={() => onResetVideoError(message.id)}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
               )}
             </div>
           )}
