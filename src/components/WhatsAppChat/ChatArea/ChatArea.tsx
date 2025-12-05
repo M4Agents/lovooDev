@@ -844,6 +844,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div className="border-t border-gray-200 bg-white p-4">
         <MessageInput
           onSendMessage={handleSendMessage}
+          onPreviewFile={openPreviewModal}
           disabled={sending}
           placeholder="Digite sua mensagem..."
           companyId={companyId}
@@ -1010,6 +1011,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 interface MessageInputProps {
   onSendMessage: (message: SendMessageForm) => void
+  onPreviewFile: (file: File) => void
   disabled?: boolean
   placeholder?: string
   companyId: string
@@ -1018,6 +1020,7 @@ interface MessageInputProps {
 
 const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
+  onPreviewFile,
   disabled,
   placeholder = 'Digite sua mensagem...',
   companyId,
@@ -1066,7 +1069,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
     try {
       // Usar modal de preview ao invés de enviar diretamente
-      openPreviewModal(file)
+      onPreviewFile(file)
     } catch (error) {
       console.error('Erro ao processar arquivo:', error)
     } finally {
