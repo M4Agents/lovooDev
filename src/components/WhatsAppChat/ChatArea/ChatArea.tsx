@@ -600,11 +600,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       
       const mimeType = previewFile.type || ''
       const isImage = mimeType.startsWith('image/')
+      const isVideo = mimeType.startsWith('video/')
       
       // Enviar mensagem com legenda usando função existente
       handleSendMessage({
         content: captionMessage.trim() || previewFile.name,
-        message_type: isImage ? 'image' : 'document',
+        message_type: isVideo ? 'video' : (isImage ? 'image' : 'document'),
         media_url: mediaUrl
       })
       
@@ -995,7 +996,26 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.media_url && !isAudioMessage && message.message_type !== 'image' && (
+          {message.media_url && message.message_type === 'video' && (
+            <div className="mb-1 relative max-w-xs">
+              <video 
+                src={message.media_url}
+                className="w-full h-auto rounded-md cursor-pointer"
+                preload="metadata"
+                style={{ maxHeight: '200px' }}
+                onClick={() => window.open(message.media_url, '_blank')}
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-black bg-opacity-50 rounded-full p-3">
+                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {message.media_url && !isAudioMessage && message.message_type !== 'image' && message.message_type !== 'video' && (
             <div className="mb-1">
               <a
                 href={message.media_url}
@@ -1008,7 +1028,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.content && !isAudioMessage && message.message_type !== 'image' && (
+          {message.content && !isAudioMessage && message.message_type !== 'image' && message.message_type !== 'video' && (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           )}
           

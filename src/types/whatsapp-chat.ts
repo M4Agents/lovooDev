@@ -119,7 +119,7 @@ export interface ContactFilter {
 
 export interface SendMessageForm {
   content: string
-  message_type: 'text' | 'image' | 'document' | 'audio'
+  message_type: 'text' | 'image' | 'document' | 'audio' | 'video'
   media_file?: File
   media_url?: string
 }
