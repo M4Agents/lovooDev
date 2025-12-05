@@ -1,12 +1,12 @@
-// Webhook Uazapi - Compatível com formato oficial da Uazapi
+// Webhook Uazapi - BASEADO 100% NO WEBHOOK ANTIGO FUNCIONAL
 // Endpoint: /api/webhook/uazapi/[company_id]
-// Baseado no webhook antigo funcional + processamento robusto de mídia
+// CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK UAZAPI NOVO - FORMATO COMPATÍVEL');
+  console.log('🚀 WEBHOOK UAZAPI NOVO - BASEADO NO ANTIGO FUNCIONAL');
   console.log('Timestamp:', new Date().toISOString());
 
-  // CORS headers (mesmo padrão do antigo)
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -58,9 +58,9 @@ async function processMessage(payload) {
       }
     );
     
-    console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO');
+    console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO BASEADO NO ANTIGO');
     
-    // Validações (mesmo padrão do antigo)
+    // Validações
     if (payload.EventType !== 'messages') {
       return { success: false, error: 'Event type inválido' };
     }
@@ -71,11 +71,15 @@ async function processMessage(payload) {
     
     const message = payload.message;
 
-    // Filtros (mesmo padrão do antigo)
+    // =====================================================
+    // Direção / origem da mensagem (espelho do WhatsApp)
+    // =====================================================
+
     const isFromMe = !!message.fromMe;
     const isFromApi = !!message.wasSentByApi;
     const isDeviceSent = !!message.deviceSent;
 
+    // Manter comportamento de ignorar grupos
     if (message.isGroup) {
       return { success: false, error: 'Mensagem de grupo filtrada' };
     }
@@ -104,7 +108,6 @@ async function processMessage(payload) {
       source = 'device';
     }
 
-    // Detecção de tipos (mesmo padrão do antigo)
     const rawMessageType = (message.messageType || '').toLowerCase();
     const rawType = (message.type || '').toLowerCase();
     const rawMediaType = (message.mediaType || '').toLowerCase();
@@ -120,10 +123,13 @@ async function processMessage(payload) {
       return { success: false, error: 'Tipo não suportado' };
     }
     
-    // Extrair dados (mesmo padrão do antigo)
+    // Extrair dados
+    // Para inbound, priorizar sender_pn (número de quem está falando com a empresa)
+    // Para outbound (painel/celular), priorizar chatid/wa_chatid/phone (número do lead)
     let rawPhone;
 
     if (direction === 'outbound') {
+      // Outbound: usar sempre o número do chat/contato (lead), nunca o número do owner/sender
       rawPhone =
         message.chatid ||
         payload.chat?.wa_chatid ||
@@ -131,6 +137,7 @@ async function processMessage(payload) {
         message.sender_pn ||
         message.sender;
     } else {
+      // Inbound: manter comportamento atual, priorizando quem enviou a mensagem
       rawPhone =
         message.sender_pn ||
         message.chatid ||
@@ -139,10 +146,13 @@ async function processMessage(payload) {
         message.sender;
     }
 
+    // Remover qualquer sufixo @... (ex: 5511992195126@s.whatsapp.net)
+    // e caracteres não numéricos (ex: +55 11 99219-5126)
     const phoneNumber = rawPhone
       .replace(/@.*$/, '')
       .replace(/\D/g, '');
 
+    // Nome temporário - será corrigido após buscar company
     const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
 
     let messageText = message.text || '';
@@ -155,18 +165,19 @@ async function processMessage(payload) {
     if (isMediaMessage && message.content && typeof message.content === 'object') {
       const originalUrl = message.content.URL || message.content.url || null;
       if (originalUrl) {
-        // NOSSA LÓGICA NOVA: Processar mídia com download/upload
-        mediaUrl = await processMediaMessage(message, supabase, originalUrl, rawMediaType);
+        // NOSSA LÓGICA ROBUSTA: Download + Upload para Supabase Storage
+        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
+      } else {
+        mediaUrl = null;
       }
     }
-    
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
     console.log('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
-    // Buscar instância (mesmo padrão do antigo)
+    // Buscar instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
       .select('id, company_id, companies(id, name, api_key)')
@@ -181,7 +192,10 @@ async function processMessage(payload) {
     const company = instance.companies;
     console.log('🏢 EMPRESA:', company.name);
     
-    // Buscar nome do lead (mesmo padrão do antigo)
+    // =====================================================
+    // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
+    // =====================================================
+    // Agora que temos company, buscar nome correto do lead
     const { data: existingLead } = await supabase
       .from('leads')
       .select('name')
@@ -190,7 +204,9 @@ async function processMessage(payload) {
       .is('deleted_at', null)
       .single();
 
-    const senderName = existingLead?.name || tempSenderName;
+    // Fallback robusto: cadastro → API → chat → genérico
+    const senderName = existingLead?.name || 
+                       tempSenderName;
     
     console.log('👤 NOME RESOLVIDO:', { 
       leadName: existingLead?.name, 
@@ -198,7 +214,7 @@ async function processMessage(payload) {
       finalName: senderName 
     });
     
-    // Buscar/criar contato (mesmo padrão do antigo)
+    // Buscar/criar contato
     let contactId;
     const { data: existingContact } = await supabase
       .from('chat_contacts')
@@ -207,12 +223,14 @@ async function processMessage(payload) {
       .eq('company_id', company.id)
       .single();
     
+    // Determinar se é contato novo ou existente
     const isNewContact = !existingContact;
     
     if (existingContact) {
       contactId = existingContact.id;
       console.log('👤 CONTATO EXISTENTE:', contactId);
     } else {
+      // USAR NOME CORRETO DA COLUNA
       const { data: newContact, error: contactError } = await supabase
         .from('chat_contacts')
         .insert({
@@ -235,8 +253,36 @@ async function processMessage(payload) {
       contactId = newContact.id;
       console.log('👤 NOVO CONTATO:', contactId);
     }
+
+    // =====================================================
+    // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
+    // =====================================================
+    // Verificar se precisa sincronizar foto (otimização de performance)
+    try {
+      const needsSync = await shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact);
+      
+      if (needsSync) {
+        console.log('📸 Sincronizando foto do contato:', phoneNumber);
+        // Sincronizar foto de perfil do contato via Uazapi em background
+        syncContactProfilePictureFromUazapi({
+          supabase,
+          baseUrl: payload.BaseUrl,
+          token: payload.token,
+          instanceName,
+          companyId: company.id,
+          phoneNumber,
+        }).catch((syncError) => {
+          console.error('⚠️ Erro ao sincronizar foto do contato (async):', syncError);
+        });
+      } else {
+        console.log('⏭️ Pulando sincronização de foto (não necessária):', phoneNumber);
+      }
+    } catch (syncInitError) {
+      console.error('⚠️ Erro ao verificar/iniciar sync de foto do contato:', syncInitError);
+      // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
+    }
     
-    // Buscar/criar conversa (mesmo padrão do antigo)
+    // Buscar/criar conversa
     let conversationId;
     const { data: existingConversation } = await supabase
       .from('chat_conversations')
@@ -249,7 +295,7 @@ async function processMessage(payload) {
       conversationId = existingConversation.id;
       console.log('💬 CONVERSA EXISTENTE:', conversationId);
       
-      // Atualizar conversa
+      // Atualizar contact_name se estiver vazio
       await supabase
         .from('chat_conversations')
         .update({
@@ -284,7 +330,7 @@ async function processMessage(payload) {
       console.log('💬 NOVA CONVERSA:', conversationId);
     }
     
-    // Verificar duplicata (mesmo padrão do antigo)
+    // Verificar duplicata
     const { data: existingMessage } = await supabase
       .from('chat_messages')
       .select('id')
@@ -300,7 +346,7 @@ async function processMessage(payload) {
       };
     }
     
-    // Salvar mensagem (mesmo padrão do antigo + nossa URL processada)
+    // Salvar mensagem
     const messageTypeForDb = isMediaMessage
       ? (rawMediaType === 'image'
           ? 'image'
@@ -322,7 +368,7 @@ async function processMessage(payload) {
         uazapi_message_id: messageId,
         content: messageText,
         message_type: messageTypeForDb,
-        media_url: mediaUrl, // URL processada por nossa função
+        media_url: mediaUrl,
         direction,
         status: 'delivered',
         timestamp: new Date(timestamp).toISOString(),
@@ -336,12 +382,103 @@ async function processMessage(payload) {
     }
 
     console.log('✅ MENSAGEM SALVA:', savedMessage.id);
+
+    // Download automático da mídia inbound via Uazapi (message/download)
+    if (isMediaMessage && mediaUrl) {
+      try {
+        await downloadAndStoreMedia({
+          supabase,
+          baseUrl: payload.BaseUrl,
+          token: payload.token,
+          chatMessageId: savedMessage.id,
+          messageId,
+        });
+      } catch (mediaError) {
+        console.error('⚠️ Erro ao processar mídia inbound (message/download):', mediaError);
+        // Não falha o webhook
+      }
+    }
+    
+    // 🎯 CRIAR LEAD AUTOMATICAMENTE (PADRÃO API DE LEADS) APENAS PARA MENSAGENS INBOUND
+    let leadId = null;
+    if (direction === 'inbound') {
+      try {
+        console.log('🔍 VERIFICANDO SE LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA...');
+        console.log('📍 Empresa da instância:', company.id, '-', company.name);
+
+        // Normalizar telefone para busca mais eficiente
+        const phoneVariations = [
+          phoneNumber,                    // 5511999198369
+          `+55${phoneNumber}`,           // +555511999198369
+          phoneNumber.substring(2),       // 11999198369
+          `+55${phoneNumber.substring(2)}` // +5511999198369
+        ];
+        
+        console.log('📞 Variações de telefone para busca:', phoneVariations);
+        
+        // Verificar se já existe lead APENAS na empresa da instância (isolamento total)
+        const { data: existingLead } = await supabase
+          .from('leads')
+          .select('id, phone, name')
+          .eq('company_id', company.id)  // ISOLAMENTO: apenas na empresa da instância
+          .in('phone', phoneVariations)
+          .is('deleted_at', null)        // IGNORAR leads deletados (soft delete)
+          .limit(1)
+          .single();
+        
+        if (existingLead) {
+          leadId = existingLead.id;
+          console.log('👤 LEAD JÁ EXISTE NA EMPRESA DA INSTÂNCIA:', leadId);
+          console.log('📋 Dados do lead encontrado:', existingLead);
+        } else {
+          console.log('🚫 NENHUM LEAD ENCONTRADO NA EMPRESA DA INSTÂNCIA');
+          console.log('📍 Criando novo lead na empresa:', company.name);
+          console.log('🆕 CRIANDO NOVO LEAD (RPC API)...');
+          
+          // USAR EXATAMENTE O MESMO RPC DA API DE LEADS QUE FUNCIONA
+          const leadData = {
+            api_key: company.api_key, // Usar api_key real da empresa
+            name: senderName || 'Lead WhatsApp',
+            email: null,
+            phone: phoneNumber,
+            interest: null,
+            company_name: null,
+            company_cnpj: null,
+            company_email: null,
+            visitor_id: null
+          };
+          
+          // Usar RPC que bypassa trigger e captura exceções
+          const { data: rpcResult, error: leadError } = await supabase
+            .rpc('public_create_lead_webhook', { 
+              lead_data: {
+                ...leadData,
+                company_id: company.id // Adicionar company_id para o RPC
+              }
+            });
+          
+          if (leadError) {
+            console.error('⚠️ ERRO AO CRIAR LEAD (RPC):', leadError.message);
+            // NÃO FALHA - apenas loga o erro
+          } else if (rpcResult && rpcResult.success) {
+            leadId = rpcResult.lead_id;
+            console.log('🎉 NOVO LEAD CRIADO (RPC API):', leadId);
+          } else {
+            console.error('⚠️ RPC RETORNOU ERRO:', rpcResult?.error || 'Erro desconhecido');
+          }
+        }
+      } catch (leadException) {
+        console.error('⚠️ EXCEPTION AO PROCESSAR LEAD:', leadException.message);
+        // NÃO FALHA - sistema continua funcionando
+      }
+    }
     
     return { 
       success: true, 
       message_id: savedMessage.id,
       contact_id: contactId,
-      conversation_id: conversationId
+      conversation_id: conversationId,
+      lead_id: leadId
     };
     
   } catch (error) {
@@ -350,26 +487,303 @@ async function processMessage(payload) {
   }
 }
 
-// Função para processar mídia (vídeos, imagens, documentos, áudios)
-async function processMediaMessage(message, supabase, originalUrl, mediaType) {
-  if (!originalUrl) return null;
+// ... (rest of the code remains the same)
 
+async function downloadAndStoreMedia({
+  supabase,
+  baseUrl,
+  token,
+  chatMessageId,
+  messageId,
+}) {
   try {
-    console.log('📥 Processando mídia:', mediaType, originalUrl);
+    console.log(' Solicitando download de mídia via Uazapi /message/download...', { baseUrl, messageId });
+
+    const url = `${baseUrl.replace(/\/$/, '')}/message/download`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token,
+      },
+      body: JSON.stringify({
+        id: messageId,
+        return_base64: false,
+        generate_mp3: false,
+        return_link: true,
+        transcribe: false,
+        download_quoted: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(' Falha ao chamar /message/download na Uazapi:', response.status, response.statusText);
+      return;
+    }
+
+    const data = await response.json();
+    const publicUrl = data.fileURL || data.fileUrl || data.url;
+    if (!publicUrl) {
+      console.error(' Resposta de /message/download sem fileURL:', data);
+      return;
+    }
+
+    console.log(' URL de mídia retornada pela Uazapi:', publicUrl);
+
+    const { error: updateError } = await supabase
+      .from('chat_messages')
+      .update({ media_url: publicUrl })
+  } catch (error) {
+    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    return null;
+  }
+}
+
+// =====================================================
+// FUNÇÃO PARA VERIFICAÇÃO INTELIGENTE DE SINCRONIZAÇÃO
+// =====================================================
+// Implementada em: 2025-11-27 - Otimização de performance e escalabilidade
+// Backup criado: uazapi-webhook-final.js.backup-pre-sync-YYYYMMDD-HHMMSS
+async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = false) {
+  try {
+    console.log('[shouldSyncPhoto] Verificando necessidade de sincronização:', {
+      companyId,
+      phoneNumber,
+      isNewContact
+    });
+
+    // 1. CONTATO NOVO: sempre sincronizar
+    if (isNewContact) {
+      console.log('[shouldSyncPhoto] Contato novo - sincronizar');
+      return true;
+    }
+
+    // 2. BUSCAR DADOS ATUAIS DO CONTATO (query otimizada)
+    const { data: contact, error } = await supabase
+      .from('chat_contacts')
+      .select('profile_picture_url, updated_at')
+      .eq('company_id', companyId)
+      .eq('phone_number', phoneNumber)
+      .single();
+
+    if (error || !contact) {
+      console.log('[shouldSyncPhoto] Contato não encontrado ou erro na query - sincronizar por segurança');
+      return true;
+    }
+
+    const currentUrl = contact.profile_picture_url;
+    const lastUpdate = new Date(contact.updated_at);
+
+    // 3. SEM FOTO: sincronizar para tentar obter
+    if (!currentUrl) {
+      console.log('[shouldSyncPhoto] Sem foto - sincronizar');
+      return true;
+    }
+
+    // 4. URL TEMPORÁRIA: sincronizar para migrar para Storage
+    if (currentUrl.includes('pps.whatsapp.net')) {
+      console.log('[shouldSyncPhoto] URL temporária detectada - migrar para Storage');
+      return true;
+    }
+
+    // 5. VERIFICAR SE JÁ SINCRONIZOU HOJE
+    const today = new Date().toDateString();
+    const lastUpdateDate = lastUpdate.toDateString();
     
-    // Download da mídia externa
+    if (today === lastUpdateDate) {
+      console.log('[shouldSyncPhoto] Já sincronizado hoje (' + lastUpdateDate + ') - pular');
+      return false;
+    }
+
+    // 6. PRIMEIRA INTERAÇÃO DO DIA: sincronizar
+    console.log('[shouldSyncPhoto] Primeira interação do dia (última: ' + lastUpdateDate + ') - sincronizar');
+    return true;
+
+  } catch (error) {
+    console.error('[shouldSyncPhoto] EXCEPTION na verificação:', error);
+    // Em caso de erro, sincronizar por segurança (não quebrar sistema)
+    return true;
+  }
+}
+
+// =====================================================
+// FUNÇÃO PARA DOWNLOAD E ARMAZENAMENTO NO SUPABASE STORAGE
+// =====================================================
+// Implementada em: 2025-11-27 - Corrigir sistema de fotos
+// Backup criado: uazapi-webhook-final.js.backup-YYYYMMDD-HHMMSS
+async function downloadAndStoreContactAvatar({
+  supabase,
+  profileUrl,
+  companyId,
+  phoneNumber,
+}) {
+  try {
+    console.log('[downloadAndStoreContactAvatar] Iniciando download da foto:', {
+      profileUrl: profileUrl?.substring(0, 80) + '...',
+      companyId,
+      phoneNumber
+    });
+
+    // Validar parâmetros obrigatórios
+    if (!profileUrl || !companyId || !phoneNumber) {
+      console.log('[downloadAndStoreContactAvatar] Parâmetros insuficientes, abortando');
+      return null;
+    }
+
+    // 1. Fazer download da imagem da URL temporária
+    const response = await fetch(profileUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LovooCRM/1.0)',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('[downloadAndStoreContactAvatar] Falha no download:', response.status, response.statusText);
+      return null;
+    }
+
+    // 2. Converter para buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = new Uint8Array(arrayBuffer);
+
+    console.log('[downloadAndStoreContactAvatar] Download concluído, tamanho:', buffer.length, 'bytes');
+
+    // 3. Definir nome do arquivo no Storage
+    // Formato: avatars/{companyId}/{phoneNumber}_{timestamp}.jpg
+    const timestamp = Date.now();
+    const fileName = `avatars/${companyId}/${phoneNumber}_${timestamp}.jpg`;
+
+    console.log('[downloadAndStoreContactAvatar] Fazendo upload para Storage:', fileName);
+
+    // 4. Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, buffer, {
+        contentType: 'image/jpeg',
+        upsert: false, // Não sobrescrever, criar novo arquivo sempre
+      });
+
+    if (uploadError) {
+      console.error('[downloadAndStoreContactAvatar] Erro no upload:', uploadError);
+      return null;
+    }
+
+    console.log('[downloadAndStoreContactAvatar] Upload concluído:', uploadData?.path);
+
+    // 5. Obter URL pública estável
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    console.log('[downloadAndStoreContactAvatar] URL estável gerada:', publicUrl?.substring(0, 80) + '...');
+
+    return publicUrl;
+
+  } catch (error) {
+    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    return null;
+  }
+}
+
+// Sincronizar foto de perfil do contato usando Uazapi v2
+async function syncContactProfilePictureFromUazapi({
+  supabase,
+  baseUrl,
+  token,
+  instanceName,
+  companyId,
+  phoneNumber,
+}) {
+  try {
+    if (!token || !instanceName || !companyId || !phoneNumber) {
+      console.log('[syncContactProfilePictureFromUazapi] Dados insuficientes para sincronizar foto, abortando.');
+      return;
+    }
+
+    // Usar endpoint oficial da Uazapi para buscar nome e imagem do contato
+    const url = `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceName}`;
+
+    console.log('[syncContactProfilePictureFromUazapi] Chamando Uazapi para foto do contato...', {
+      url,
+      phoneNumber,
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Conforme documentação: usar header apikey
+        apikey: token,
+      },
+      body: JSON.stringify({ phone: phoneNumber }),
+    });
+
+    if (!response.ok) {
+      console.error('[syncContactProfilePictureFromUazapi] Falha HTTP ao buscar foto do contato:', response.status, response.statusText);
+      return;
+    }
+
+    const data = await response.json();
+    const profileUrl = data?.data?.profilePictureUrl;
+
+    if (!data?.success || !profileUrl) {
+      console.log('[syncContactProfilePictureFromUazapi] Resposta sem profilePictureUrl util:', data);
+      return;
+    }
+
+    console.log('[syncContactProfilePictureFromUazapi] URL de foto obtida da Uazapi:', profileUrl.substring(0, 80) + '...');
+
+    // Baixar avatar da Uazapi e armazenar em Storage proprio para obter URL estavel
+    const stableAvatarUrl = await downloadAndStoreContactAvatar({
+      supabase,
+      profileUrl,
+      companyId,
+      phoneNumber,
+    });
+
+    const finalUrl = stableAvatarUrl || profileUrl;
+
+    const { error: updateError } = await supabase
+      .from('chat_contacts')
+      .update({ profile_picture_url: finalUrl, updated_at: new Date().toISOString() })
+      .eq('company_id', companyId)
+      .eq('phone_number', phoneNumber);
+
+    if (updateError) {
+      console.error('[syncContactProfilePictureFromUazapi] Erro ao atualizar profile_picture_url em chat_contacts:', updateError);
+      return;
+    }
+
+    console.log('[syncContactProfilePictureFromUazapi] profile_picture_url sincronizada com sucesso para', phoneNumber);
+  } catch (error) {
+    console.error('[syncContactProfilePictureFromUazapi] EXCEPTION:', error);
+  }
+}
+
+// =====================================================
+// FUNÇÃO ROBUSTA PARA PROCESSAMENTO DE MÍDIA
+// =====================================================
+// Implementada em: 2025-12-05 - Correção definitiva de vídeos recebidos
+// Download automático de URLs externas + Upload para Supabase Storage
+async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
+  try {
+    console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
+    
+    // Download da mídia externa (WhatsApp CDN)
     const response = await fetch(originalUrl);
     if (!response.ok) {
-      console.error('Falha ao baixar mídia:', response.status, response.statusText);
+      console.error('❌ Falha ao baixar mídia:', response.status, response.statusText);
       return originalUrl; // Fallback para URL original
     }
     
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // Determinar extensão baseada no tipo
-    const extension = getFileExtension(mediaType);
-    const fileName = `${mediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
+    // Determinar extensão baseada no tipo de mídia
+    const extension = getFileExtensionRobust(rawMediaType);
+    const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
     
@@ -377,46 +791,48 @@ async function processMediaMessage(message, supabase, originalUrl, mediaType) {
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: getContentType(mediaType)
+        contentType: getContentTypeRobust(rawMediaType)
       });
     
     if (error) {
-      console.error('Erro no upload para Supabase:', error);
+      console.error('❌ Erro no upload para Supabase:', error);
       return originalUrl; // Fallback para URL original
     }
     
-    // Retornar URL pública
+    // Retornar URL pública estável
     const { data: publicUrl } = supabase.storage
       .from('chat-media')
       .getPublicUrl(fileName);
     
-    console.log('✅ Upload concluído, URL pública:', publicUrl.publicUrl);
+    console.log('✅ PROCESSAMENTO CONCLUÍDO - URL INTERNA:', publicUrl.publicUrl.substring(0, 80) + '...');
     return publicUrl.publicUrl;
     
   } catch (error) {
-    console.error('Erro ao processar mídia:', error);
+    console.error('❌ EXCEPTION no processamento de mídia:', error);
     return originalUrl; // Fallback para URL original
   }
 }
 
-// Função para determinar extensão do arquivo
-function getFileExtension(mediaType) {
+// Função para determinar extensão do arquivo baseada no tipo de mídia
+function getFileExtensionRobust(mediaType) {
   const typeMap = {
     'video': 'mp4',
-    'image': 'jpg',
+    'image': 'jpg', 
     'audio': 'ogg',
+    'ptt': 'ogg',
     'document': 'pdf'
   };
   
   return typeMap[mediaType] || 'bin';
 }
 
-// Função para determinar content type
-function getContentType(mediaType) {
+// Função para determinar content type baseado no tipo de mídia
+function getContentTypeRobust(mediaType) {
   const typeMap = {
     'video': 'video/mp4',
     'image': 'image/jpeg',
-    'audio': 'audio/ogg',
+    'audio': 'audio/ogg', 
+    'ptt': 'audio/ogg',
     'document': 'application/pdf'
   };
   
