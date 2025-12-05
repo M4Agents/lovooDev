@@ -1065,19 +1065,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (!file) return
 
     try {
-      const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
-
-      const mimeType = file.type || ''
-      const isImage = mimeType.startsWith('image/')
-
-      onSendMessage({
-        content: file.name || '[arquivo]',
-        message_type: isImage ? 'image' : 'document',
-        media_url: mediaUrl
-      })
+      // Usar modal de preview ao invés de enviar diretamente
+      openPreviewModal(file)
     } catch (error) {
-      console.error('Erro ao anexar arquivo:', error)
+      console.error('Erro ao processar arquivo:', error)
     } finally {
+      // Limpar input para permitir selecionar o mesmo arquivo novamente
       e.target.value = ''
     }
   }
