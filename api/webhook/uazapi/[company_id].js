@@ -3,8 +3,8 @@
 // CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK UAZAPI NOVO - BASEADO NO ANTIGO FUNCIONAL');
-  console.log('Timestamp:', new Date().toISOString());
+  console.error('🚀 WEBHOOK UAZAPI EXECUTANDO - LOGS FORÇADOS');
+  console.error('⏰ TIMESTAMP:', new Date().toISOString());
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,7 +23,8 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('📥 PAYLOAD RECEBIDO:', req.body);
+    console.error('📥 PAYLOAD RECEBIDO:', JSON.stringify(req.body, null, 2));
+    console.error('📨 MESSAGE COMPLETO:', JSON.stringify(req.body?.message, null, 2));
     
     const result = await processMessage(req.body);
     
@@ -112,12 +113,32 @@ async function processMessage(payload) {
     const rawType = (message.type || '').toLowerCase();
     const rawMediaType = (message.mediaType || '').toLowerCase();
 
+    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA
+    console.error('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
+    console.error('📊 VARIÁVEIS BÁSICAS:', {
+      rawType: rawType,
+      rawMediaType: rawMediaType,
+      rawMessageType: rawMessageType
+    });
+
     const isTextMessage =
       rawMessageType === 'conversation' ||
       rawMessageType === 'extendedtextmessage';
 
-    const isMediaMessage =
-      rawType === 'media' && !!rawMediaType;
+    // DETECÇÃO ROBUSTA DE MÍDIA - MÚLTIPLOS FORMATOS
+    const condition1 = (rawType === 'media' && !!rawMediaType);
+    const condition2 = (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage');
+    const condition3 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    
+    console.error('🎯 CONDIÇÕES DE DETECÇÃO:', {
+      'condition1 (rawType === media && rawMediaType)': condition1,
+      'condition2 (messageType includes message)': condition2,
+      'condition3 (message.content object with URL)': condition3
+    });
+    
+    const isMediaMessage = condition1 || condition2 || condition3;
+    
+    console.error('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
 
     if (!isTextMessage && !isMediaMessage) {
       return { success: false, error: 'Tipo não suportado' };
@@ -162,20 +183,29 @@ async function processMessage(payload) {
       messageText = message.content;
     }
 
-    if (isMediaMessage && message.content && typeof message.content === 'object') {
-      const originalUrl = message.content.URL || message.content.url || null;
+    if (isMediaMessage) {
+      console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
+      
+      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) || null;
+      
+      console.error('🔗 URL DE MÍDIA ENCONTRADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
+      
       if (originalUrl) {
-        // NOSSA LÓGICA ROBUSTA: Download + Upload para Supabase Storage
+        console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
         mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
+        console.error('✅ RESULTADO PROCESSAMENTO:', mediaUrl ? 'SUCESSO' : 'FALHOU');
       } else {
+        console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA');
         mediaUrl = null;
       }
+    } else {
+      console.error('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
-    console.log('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
+    console.error('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
