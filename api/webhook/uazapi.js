@@ -1,9 +1,11 @@
-// Webhook Uazapi - REDIRECT PARA NOSSO CÓDIGO COMPLETO
+// Webhook Uazapi - ENDPOINT CORRETO PARA CONFIGURAÇÃO REAL
 // Endpoint: /api/webhook/uazapi
-// SOLUÇÃO: Redirecionar para nosso código com processamento de mídia
+// SOLUÇÃO: Usar nosso código completo com processamento de mídia
 
-// Import do nosso webhook completo
-import handler from '../uazapi-webhook-final.js';
-
-// Re-exportar como default
-export default handler;
+export default async function handler(req, res) {
+  // Import dinâmico para evitar problemas de path
+  const { default: mainHandler } = await import('../uazapi-webhook-final.js');
+  
+  // Executar nosso handler principal
+  return mainHandler(req, res);
+}
