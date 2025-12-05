@@ -757,9 +757,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 />
               ) : previewFile.type.startsWith('video/') ? (
                 <div className="text-center">
-                  <div className="text-6xl mb-4">🎥</div>
-                  <p className="text-gray-700 font-medium">{previewFile.name}</p>
-                  <p className="text-sm text-gray-500 mt-1">{formatFileSize(previewFile.size)}</p>
+                  <video 
+                    src={previewFile.url}
+                    controls
+                    className="max-w-full max-h-96 rounded shadow-lg bg-black"
+                    preload="metadata"
+                    style={{ maxHeight: '400px' }}
+                  >
+                    <p>Seu navegador não suporta reprodução de vídeo.</p>
+                  </video>
+                  <div className="mt-3">
+                    <p className="text-gray-700 font-medium">{previewFile.name}</p>
+                    <p className="text-sm text-gray-500">{formatFileSize(previewFile.size)}</p>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center">
