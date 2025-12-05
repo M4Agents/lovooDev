@@ -3,8 +3,10 @@
 // SOLUÇÃO DEFINITIVA PARA PROBLEMA DE CACHE DO VERCEL
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK UAZAPI ANTIGO - AGORA COM PROCESSAMENTO ROBUSTO DE MÍDIA');
-  console.log('Timestamp:', new Date().toISOString());
+  console.error('🚀 WEBHOOK EXECUTANDO - LOGS FORÇADOS COM ERROR');
+  console.error('⏰ TIMESTAMP:', new Date().toISOString());
+  console.error('🔧 MÉTODO:', req.method);
+  console.error('📡 USER-AGENT:', req.headers['user-agent']);
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -133,15 +135,15 @@ async function processMessage(payload) {
       rawMessageType === 'conversation' ||
       rawMessageType === 'extendedtextmessage';
 
-    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA
-    console.log('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
-    console.log('📊 VARIÁVEIS BÁSICAS:', {
+    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA - FORÇADOS COM ERROR
+    console.error('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
+    console.error('📊 VARIÁVEIS BÁSICAS:', {
       rawType: rawType,
       rawMediaType: rawMediaType,
       rawMessageType: rawMessageType
     });
     
-    console.log('📋 CONTENT ANALYSIS:', {
+    console.error('📋 CONTENT ANALYSIS:', {
       hasContent: !!message.content,
       contentType: typeof message.content,
       contentKeys: message.content ? Object.keys(message.content) : null,
@@ -149,7 +151,7 @@ async function processMessage(payload) {
       hasUrl: message.content && message.content.url
     });
     
-    console.log('🎥 MEDIA ANALYSIS:', {
+    console.error('🎥 MEDIA ANALYSIS:', {
       hasMedia: !!message.media,
       mediaType: typeof message.media,
       mediaKeys: message.media ? Object.keys(message.media) : null,
@@ -162,7 +164,7 @@ async function processMessage(payload) {
     const condition3 = (message.media && message.media.url);
     const condition4 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
     
-    console.log('🎯 CONDIÇÕES INDIVIDUAIS:', {
+    console.error('🎯 CONDIÇÕES INDIVIDUAIS:', {
       'condition1 (rawType === media && rawMediaType)': condition1,
       'condition2 (messageType includes message)': condition2,
       'condition3 (message.media.url exists)': condition3,
@@ -171,17 +173,19 @@ async function processMessage(payload) {
     
     const isMediaMessage = condition1 || condition2 || condition3 || condition4;
 
-    console.log('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
+    console.error('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
     
     // LOG ESPECÍFICO PARA MÍDIA
     if (isMediaMessage) {
-      console.log('🎥 MÍDIA DETECTADA! Analisando estrutura...');
-      console.log('📋 CONDIÇÕES DE DETECÇÃO:', {
+      console.error('🎥 MÍDIA DETECTADA! Analisando estrutura...');
+      console.error('📋 CONDIÇÕES DE DETECÇÃO:', {
         'rawType === media && rawMediaType': (rawType === 'media' && !!rawMediaType),
         'messageType includes message': (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage'),
         'message.media exists': !!(message.media && message.media.url),
         'message.content object with URL': !!(message.content && typeof message.content === 'object' && (message.content.URL || message.content.url))
       });
+    } else {
+      console.error('⚠️ MÍDIA NÃO DETECTADA - VERIFICANDO CONDIÇÕES');
     }
 
     if (!isTextMessage && !isMediaMessage) {
@@ -229,16 +233,16 @@ async function processMessage(payload) {
     }
 
     if (isMediaMessage) {
-      console.log('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
+      console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
       
       // LOGS DETALHADOS DA LOCALIZAÇÃO DA URL
-      console.log('🔍 BUSCANDO URL DE MÍDIA...');
+      console.error('🔍 BUSCANDO URL DE MÍDIA...');
       
       const urlFromContent = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
       const urlFromMedia = (message.media && message.media.url);
       const urlFromMessage = message.url;
       
-      console.log('📋 ANÁLISE DE URLs:', {
+      console.error('📋 ANÁLISE DE URLs:', {
         'message.content.URL': message.content && message.content.URL,
         'message.content.url': message.content && message.content.url,
         'message.media.url': message.media && message.media.url,
@@ -251,7 +255,7 @@ async function processMessage(payload) {
       // Localizar URL da mídia de forma robusta
       const originalUrl = urlFromContent || urlFromMedia || urlFromMessage || null;
       
-      console.log('🔗 URL FINAL SELECIONADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL ENCONTRADA');
+      console.error('🔗 URL FINAL SELECIONADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL ENCONTRADA');
       
       if (originalUrl) {
         // Determinar tipo de mídia de forma robusta
@@ -260,21 +264,21 @@ async function processMessage(payload) {
                         rawMessageType.includes('image') ? 'image' : 
                         rawMessageType.includes('audio') ? 'audio' : 'unknown');
         
-        console.log('🎯 TIPO DE MÍDIA DETERMINADO:', mediaType);
-        console.log('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
+        console.error('🎯 TIPO DE MÍDIA DETERMINADO:', mediaType);
+        console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
         
         mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, mediaType);
         
-        console.log('✅ RESULTADO DO PROCESSAMENTO:', {
+        console.error('✅ RESULTADO DO PROCESSAMENTO:', {
           success: !!mediaUrl,
           originalUrl: originalUrl.substring(0, 80) + '...',
           processedUrl: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU'
         });
       } else {
-        console.log('❌ NENHUMA URL DE MÍDIA ENCONTRADA - PULANDO PROCESSAMENTO');
+        console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA - PULANDO PROCESSAMENTO');
       }
     } else {
-      console.log('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
+      console.error('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
