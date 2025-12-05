@@ -133,12 +133,43 @@ async function processMessage(payload) {
       rawMessageType === 'conversation' ||
       rawMessageType === 'extendedtextmessage';
 
-    // Detecção robusta de mídia - múltiplos formatos
-    const isMediaMessage =
-      (rawType === 'media' && !!rawMediaType) ||                           // Formato original
-      (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage') || // Formato alternativo
-      (message.media && message.media.url) ||                              // Estrutura alternativa
-      (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)); // Verificação direta
+    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA
+    console.log('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
+    console.log('📊 VARIÁVEIS BÁSICAS:', {
+      rawType: rawType,
+      rawMediaType: rawMediaType,
+      rawMessageType: rawMessageType
+    });
+    
+    console.log('📋 CONTENT ANALYSIS:', {
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      contentKeys: message.content ? Object.keys(message.content) : null,
+      hasURL: message.content && message.content.URL,
+      hasUrl: message.content && message.content.url
+    });
+    
+    console.log('🎥 MEDIA ANALYSIS:', {
+      hasMedia: !!message.media,
+      mediaType: typeof message.media,
+      mediaKeys: message.media ? Object.keys(message.media) : null,
+      hasMediaUrl: message.media && message.media.url
+    });
+
+    // Detecção robusta de mídia - múltiplos formatos com logs individuais
+    const condition1 = (rawType === 'media' && !!rawMediaType);
+    const condition2 = (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage');
+    const condition3 = (message.media && message.media.url);
+    const condition4 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    
+    console.log('🎯 CONDIÇÕES INDIVIDUAIS:', {
+      'condition1 (rawType === media && rawMediaType)': condition1,
+      'condition2 (messageType includes message)': condition2,
+      'condition3 (message.media.url exists)': condition3,
+      'condition4 (message.content object with URL)': condition4
+    });
+    
+    const isMediaMessage = condition1 || condition2 || condition3 || condition4;
 
     console.log('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
     
@@ -198,45 +229,52 @@ async function processMessage(payload) {
     }
 
     if (isMediaMessage) {
-      // Buscar URL em múltiplos locais possíveis
-      const originalUrl = 
-        (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) ||  // Formato original
-        (message.media && message.media.url) ||                                                                      // Formato alternativo
-        message.url ||                                                                                               // Formato direto
-        null;
-      console.log('🎥 PROCESSAMENTO DE MÍDIA:', {
-        isMediaMessage,
-        hasContent: !!message.content,
-        contentType: typeof message.content,
-        originalUrl: originalUrl ? originalUrl.substring(0, 80) + '...' : null,
-        rawMediaType
+      console.log('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
+      
+      // LOGS DETALHADOS DA LOCALIZAÇÃO DA URL
+      console.log('🔍 BUSCANDO URL DE MÍDIA...');
+      
+      const urlFromContent = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+      const urlFromMedia = (message.media && message.media.url);
+      const urlFromMessage = message.url;
+      
+      console.log('📋 ANÁLISE DE URLs:', {
+        'message.content.URL': message.content && message.content.URL,
+        'message.content.url': message.content && message.content.url,
+        'message.media.url': message.media && message.media.url,
+        'message.url': message.url,
+        'urlFromContent': urlFromContent,
+        'urlFromMedia': urlFromMedia,
+        'urlFromMessage': urlFromMessage
       });
       
+      // Localizar URL da mídia de forma robusta
+      const originalUrl = urlFromContent || urlFromMedia || urlFromMessage || null;
+      
+      console.log('🔗 URL FINAL SELECIONADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL ENCONTRADA');
+      
       if (originalUrl) {
-        console.log('🚀 INICIANDO PROCESSAMENTO ROBUSTO...');
-        
         // Determinar tipo de mídia de forma robusta
-        const mediaType = rawMediaType || 
-                         (rawMessageType.includes('video') ? 'video' : 
-                          rawMessageType.includes('image') ? 'image' :
-                          rawMessageType.includes('audio') ? 'audio' :
-                          rawMessageType.includes('document') ? 'document' : 'unknown');
+        let mediaType = rawMediaType || 
+                       (rawMessageType.includes('video') ? 'video' : 
+                        rawMessageType.includes('image') ? 'image' : 
+                        rawMessageType.includes('audio') ? 'audio' : 'unknown');
         
-        console.log('📋 TIPO DE MÍDIA DETECTADO:', mediaType);
+        console.log('🎯 TIPO DE MÍDIA DETERMINADO:', mediaType);
+        console.log('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
         
-        // PROCESSAMENTO ROBUSTO: Download + Upload para Supabase Storage
         mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, mediaType);
-        console.log('✅ PROCESSAMENTO CONCLUÍDO:', mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU');
+        
+        console.log('✅ RESULTADO DO PROCESSAMENTO:', {
+          success: !!mediaUrl,
+          originalUrl: originalUrl.substring(0, 80) + '...',
+          processedUrl: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU'
+        });
       } else {
-        console.log('❌ URL ORIGINAL NÃO ENCONTRADA');
-        mediaUrl = null;
+        console.log('❌ NENHUMA URL DE MÍDIA ENCONTRADA - PULANDO PROCESSAMENTO');
       }
     } else {
-      console.log('⏭️ PULANDO PROCESSAMENTO DE MÍDIA:', {
-        isMediaMessage,
-        hasContent: !!message.content,
-        contentType: typeof message.content
-      });
+      console.log('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
