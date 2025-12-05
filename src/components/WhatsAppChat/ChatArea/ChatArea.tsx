@@ -742,6 +742,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const shouldSendRef = useRef(true)
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
+  
+  // Estados para Drag & Drop (implementação segura)
+  const [isDragOver, setIsDragOver] = useState(false)
+  
+  // Limites de arquivo (seguros e testados)
+  const FILE_LIMITS = {
+    image: 5 * 1024 * 1024,    // 5MB
+    video: 25 * 1024 * 1024,   // 25MB  
+    document: 10 * 1024 * 1024, // 10MB
+    audio: 15 * 1024 * 1024     // 15MB
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -926,6 +937,116 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   }
 
+  // =====================================================
+  // DRAG & DROP - IMPLEMENTAÇÃO SEGURA
+  // =====================================================
+  
+  // Função para determinar tipo de arquivo
+  const getFileType = (file: File): keyof typeof FILE_LIMITS => {
+    const mimeType = file.type.toLowerCase()
+    
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType.startsWith('video/')) return 'video'
+    if (mimeType.startsWith('audio/')) return 'audio'
+    return 'document'
+  }
+  
+  // Validação segura de arquivo
+  const validateDroppedFile = (file: File): { valid: boolean; error?: string } => {
+    try {
+      // Verificar se é realmente um arquivo
+      if (!file || !file.name) {
+        return { valid: false, error: 'Arquivo inválido' }
+      }
+      
+      // Verificar tamanho
+      const fileType = getFileType(file)
+      const limit = FILE_LIMITS[fileType]
+      
+      if (file.size > limit) {
+        const limitMB = Math.round(limit / (1024 * 1024))
+        return { valid: false, error: `Arquivo muito grande. Limite: ${limitMB}MB` }
+      }
+      
+      return { valid: true }
+    } catch (error) {
+      console.error('Erro na validação do arquivo:', error)
+      return { valid: false, error: 'Erro ao validar arquivo' }
+    }
+  }
+  
+  // Processar arquivo arrastado (reutiliza lógica existente 100%)
+  const processDroppedFile = async (file: File) => {
+    if (disabled) return
+    
+    // Validar arquivo primeiro
+    const validation = validateDroppedFile(file)
+    if (!validation.valid) {
+      alert(validation.error)
+      return
+    }
+    
+    try {
+      // Simular evento de input para reutilizar handleFileChange 100%
+      const mockEvent = {
+        target: { 
+          files: [file],
+          value: '' // Para o reset no finally
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      
+      // Usar função existente (ZERO modificação na lógica)
+      await handleFileChange(mockEvent)
+    } catch (error) {
+      console.error('Erro ao processar arquivo arrastado:', error)
+      alert('Erro ao enviar arquivo. Tente novamente.')
+    }
+  }
+  
+  // Event handlers para drag & drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Verificar se tem arquivos sendo arrastados
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true)
+    }
+  }
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Só remover se realmente saiu da área
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOver(false)
+    }
+  }
+  
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    
+    if (disabled) return
+    
+    try {
+      const files = Array.from(e.dataTransfer.files)
+      
+      // Processar arquivos um por vez (evitar sobrecarga)
+      for (const file of files) {
+        await processDroppedFile(file)
+      }
+    } catch (error) {
+      console.error('Erro no drop de arquivos:', error)
+    }
+  }
+
   // Fechar painel de emoji se clicar fora
   useEffect(() => {
     if (!isEmojiOpen) return
@@ -945,7 +1066,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }, [isEmojiOpen])
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-end space-x-3 relative">
+    <form 
+      onSubmit={handleSubmit} 
+      className={`flex items-end space-x-3 relative ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="flex-1">
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
@@ -1007,6 +1134,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
               locale="pt"
               theme="light"
             />
+          </div>
+        )}
+        
+        {/* Overlay de Drag & Drop */}
+        {isDragOver && (
+          <div className="absolute inset-0 bg-blue-50 bg-opacity-90 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center z-50">
+            <div className="text-center">
+              <div className="text-4xl mb-2">📎</div>
+              <div className="text-blue-600 font-medium">Solte o arquivo aqui para enviar</div>
+              <div className="text-blue-500 text-sm mt-1">Imagens, vídeos, documentos e áudios</div>
+            </div>
           </div>
         )}
       </div>
