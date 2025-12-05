@@ -24,6 +24,7 @@ export default async function handler(req, res) {
   
   try {
     console.log('📥 PAYLOAD RECEBIDO:', req.body);
+    console.log('🔍 PAYLOAD DETALHADO:', JSON.stringify(req.body, null, 2));
     
     const result = await processMessage(req.body);
     
@@ -112,14 +113,31 @@ async function processMessage(payload) {
     const rawType = (message.type || '').toLowerCase();
     const rawMediaType = (message.mediaType || '').toLowerCase();
 
+    console.log('🔍 DETECÇÃO DE TIPOS:', {
+      rawMessageType,
+      rawType,
+      rawMediaType,
+      messageKeys: Object.keys(message),
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      hasMedia: !!message.media
+    });
+
     const isTextMessage =
       rawMessageType === 'conversation' ||
       rawMessageType === 'extendedtextmessage';
 
+    // Detecção robusta de mídia - múltiplos formatos
     const isMediaMessage =
-      rawType === 'media' && !!rawMediaType;
+      (rawType === 'media' && !!rawMediaType) ||                           // Formato original
+      (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage') || // Formato alternativo
+      (message.media && message.media.url) ||                              // Estrutura alternativa
+      (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)); // Verificação direta
+
+    console.log('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
 
     if (!isTextMessage && !isMediaMessage) {
+      console.log('❌ TIPO NÃO SUPORTADO:', { rawMessageType, rawType, rawMediaType });
       return { success: false, error: 'Tipo não suportado' };
     }
     
@@ -162,14 +180,46 @@ async function processMessage(payload) {
       messageText = message.content;
     }
 
-    if (isMediaMessage && message.content && typeof message.content === 'object') {
-      const originalUrl = message.content.URL || message.content.url || null;
+    if (isMediaMessage) {
+      // Buscar URL em múltiplos locais possíveis
+      const originalUrl = 
+        (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) ||  // Formato original
+        (message.media && message.media.url) ||                                                                      // Formato alternativo
+        message.url ||                                                                                               // Formato direto
+        null;
+      console.log('🎥 PROCESSAMENTO DE MÍDIA:', {
+        isMediaMessage,
+        hasContent: !!message.content,
+        contentType: typeof message.content,
+        originalUrl: originalUrl ? originalUrl.substring(0, 80) + '...' : null,
+        rawMediaType
+      });
+      
       if (originalUrl) {
+        console.log('🚀 INICIANDO PROCESSAMENTO ROBUSTO...');
+        
+        // Determinar tipo de mídia de forma robusta
+        const mediaType = rawMediaType || 
+                         (rawMessageType.includes('video') ? 'video' : 
+                          rawMessageType.includes('image') ? 'image' :
+                          rawMessageType.includes('audio') ? 'audio' :
+                          rawMessageType.includes('document') ? 'document' : 'unknown');
+        
+        console.log('📋 TIPO DE MÍDIA DETECTADO:', mediaType);
+        
         // PROCESSAMENTO ROBUSTO: Download + Upload para Supabase Storage
-        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
+        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, mediaType);
+        console.log('✅ PROCESSAMENTO CONCLUÍDO:', mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU');
       } else {
+        console.log('❌ URL ORIGINAL NÃO ENCONTRADA');
         mediaUrl = null;
       }
+    } else {
+      console.log('⏭️ PULANDO PROCESSAMENTO DE MÍDIA:', {
+        isMediaMessage,
+        hasContent: !!message.content,
+        contentType: typeof message.content
+      });
     }
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
