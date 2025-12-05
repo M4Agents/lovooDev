@@ -1,188 +1,204 @@
-// Webhook Uazapi para Recebimento Automático de Mensagens WhatsApp
+// Webhook Uazapi - Compatível com formato oficial da Uazapi
 // Endpoint: /api/webhook/uazapi/[company_id]
-// Método: POST com payload real da Uazapi
-// Padrão baseado no webhook/lead/[api_key] que funciona 100%
+// Baseado no webhook antigo funcional + processamento robusto de mídia
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK UAZAPI INICIADO - PADRÃO API LEADS');
+  console.log('🚀 WEBHOOK UAZAPI NOVO - FORMATO COMPATÍVEL');
   console.log('Timestamp:', new Date().toISOString());
-  console.log('Method:', req.method);
-  console.log('Headers:', req.headers);
 
-  // Set CORS headers (mesmo padrão do webhook-lead)
+  // CORS headers (mesmo padrão do antigo)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   
   if (req.method === 'OPTIONS') {
-    console.log('OPTIONS request - retornando 200');
     res.status(200).end();
     return;
   }
   
   if (req.method !== 'POST') {
-    console.log('Method not allowed:', req.method);
-    res.status(405).json({ 
-      success: false, 
-      error: 'Método não permitido. Use POST.' 
-    });
+    res.status(405).json({ success: false, error: 'Use POST' });
     return;
   }
   
   try {
-    const { company_id } = req.query;
+    console.log('📥 PAYLOAD RECEBIDO:', req.body);
     
-    if (!company_id) {
-      console.error('Uazapi webhook: Missing company_id');
-      res.status(400).json({ 
-        success: false, 
-        error: 'Company ID é obrigatório na URL' 
-      });
-      return;
-    }
-    
-    console.log('📥 PAYLOAD UAZAPI RECEBIDO:', req.body);
-    console.log('📊 PAYLOAD DETALHADO:');
-    console.log('- Tipo do payload:', typeof req.body);
-    console.log('- Keys do payload:', Object.keys(req.body || {}));
-    console.log('- Company ID:', company_id);
-    
-    // Processar mensagem da Uazapi
-    const result = await processUazapiMessage({
-      company_id,
-      payload: req.body,
-      user_agent: req.headers['user-agent'] || 'Uazapi-Webhook/1.0',
-      ip_address: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-      timestamp: new Date().toISOString()
-    });
+    const result = await processMessage(req.body);
     
     if (result.success) {
-      console.log('SUCCESS: Mensagem Uazapi processada:', result.message_id);
+      console.log('✅ SUCESSO:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
-        message: 'Mensagem processada com sucesso!'
+        message: 'Mensagem processada!'
       });
     } else {
-      console.error('ERROR: Falha ao processar mensagem Uazapi:', result.error);
-      res.status(400).json({ 
-        success: false, 
-        error: result.error 
-      });
+      console.log('⚠️ FILTRADO:', result.error);
+      res.status(200).json({ success: false, error: result.error });
     }
     
   } catch (error) {
-    console.error('ERROR: Exception in Uazapi webhook:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Erro interno do servidor' 
-    });
+    console.error('❌ ERRO:', error);
+    res.status(200).json({ success: false, error: error.message });
   }
 }
 
-async function processUazapiMessage(params) {
+async function processMessage(payload) {
   try {
-    // Use the Supabase client (mesmo padrão do webhook-lead)
     const { createClient } = await import('@supabase/supabase-js');
     
-    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    // Usando chave anon (mesmo padrão do webhook-lead)
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+    const supabase = createClient(
+      'https://etzdsywunlpbgxkphuil.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
+      {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: { headers: { 'cache-control': 'no-cache' } }
+      }
+    );
     
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO');
     
-    console.log('🔑 USANDO CHAVE ANON (MESMO PADRÃO WEBHOOK LEAD)');
-    console.log('Processando webhook para Company ID:', params.company_id);
-    
-    // 1. Validar company_id e obter empresa (mesmo padrão do webhook-lead)
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('id, name')
-      .eq('id', params.company_id)
-      .single();
-    
-    if (companyError || !company) {
-      console.error('Invalid company_id:', params.company_id);
-      return { success: false, error: 'Company ID inválido' };
+    // Validações (mesmo padrão do antigo)
+    if (payload.EventType !== 'messages') {
+      return { success: false, error: 'Event type inválido' };
     }
     
-    console.log('Company ID validado para empresa:', company.name);
+    if (!payload.message) {
+      return { success: false, error: 'Mensagem não encontrada' };
+    }
     
-    // 2. Extrair dados do payload real da Uazapi
-    const payload = params.payload;
-    const eventType = payload.EventType;
     const message = payload.message;
-    
-    // Validações básicas
-    if (eventType !== 'messages') {
-      return { success: false, error: 'Event type não suportado: ' + eventType };
+
+    // Filtros (mesmo padrão do antigo)
+    const isFromMe = !!message.fromMe;
+    const isFromApi = !!message.wasSentByApi;
+    const isDeviceSent = !!message.deviceSent;
+
+    if (message.isGroup) {
+      return { success: false, error: 'Mensagem de grupo filtrada' };
+    }
+
+    let direction = 'inbound';
+    let source = 'device';
+
+    // Cliente -> empresa (mensagem recebida)
+    if (!isFromMe && !isFromApi) {
+      direction = 'inbound';
+      source = 'device';
+    }
+    // Empresa -> cliente (enviado pelo painel / API)
+    else if (isFromMe && isFromApi && !isDeviceSent) {
+      direction = 'outbound';
+      source = 'panel';
+    }
+    // Empresa -> cliente (enviado do celular / WhatsApp Web)
+    else if (isFromMe && isDeviceSent) {
+      direction = 'outbound';
+      source = 'device';
+    }
+    // Fallback seguro para outros casos fromMe
+    else if (isFromMe) {
+      direction = 'outbound';
+      source = 'device';
+    }
+
+    // Detecção de tipos (mesmo padrão do antigo)
+    const rawMessageType = (message.messageType || '').toLowerCase();
+    const rawType = (message.type || '').toLowerCase();
+    const rawMediaType = (message.mediaType || '').toLowerCase();
+
+    const isTextMessage =
+      rawMessageType === 'conversation' ||
+      rawMessageType === 'extendedtextmessage';
+
+    const isMediaMessage =
+      rawType === 'media' && !!rawMediaType;
+
+    if (!isTextMessage && !isMediaMessage) {
+      return { success: false, error: 'Tipo não suportado' };
     }
     
-    if (!message) {
-      return { success: false, error: 'Mensagem não encontrada no payload' };
+    // Extrair dados (mesmo padrão do antigo)
+    let rawPhone;
+
+    if (direction === 'outbound') {
+      rawPhone =
+        message.chatid ||
+        payload.chat?.wa_chatid ||
+        payload.chat?.phone ||
+        message.sender_pn ||
+        message.sender;
+    } else {
+      rawPhone =
+        message.sender_pn ||
+        message.chatid ||
+        payload.chat?.wa_chatid ||
+        payload.chat?.phone ||
+        message.sender;
+    }
+
+    const phoneNumber = rawPhone
+      .replace(/@.*$/, '')
+      .replace(/\D/g, '');
+
+    const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
+
+    let messageText = message.text || '';
+    let mediaUrl = null;
+
+    if (!messageText && typeof message.content === 'string') {
+      messageText = message.content;
+    }
+
+    if (isMediaMessage && message.content && typeof message.content === 'object') {
+      const originalUrl = message.content.URL || message.content.url || null;
+      if (originalUrl) {
+        // NOSSA LÓGICA NOVA: Processar mídia com download/upload
+        mediaUrl = await processMediaMessage(message, supabase, originalUrl, rawMediaType);
+      }
     }
     
-    // Filtros (mesmo padrão da função SQL)
-    if (message.fromMe === true || message.wasSentByApi === true) {
-      return { success: false, error: 'Mensagem enviada pela API - ignorada para evitar loops' };
-    }
-    
-    if (message.isGroup === true) {
-      return { success: false, error: 'Mensagens de grupo ignoradas por enquanto' };
-    }
-    
-    const messageType = (message.messageType || '').toLowerCase();
-    const supportedTypes = [
-      'conversation', 
-      'extendedtextmessage', 
-      'videomessage', 
-      'video',
-      'imagemessage', 
-      'image',
-      'documentmessage', 
-      'document',
-      'audiomessage', 
-      'audio'
-    ];
-    
-    if (!supportedTypes.includes(messageType)) {
-      return { success: false, error: 'Tipo de mensagem não suportado: ' + messageType };
-    }
-    
-    // 3. Extrair dados da mensagem
-    const phoneNumber = extractPhoneFromSender(message.sender);
-    const senderName = message.senderName || `Contato ${phoneNumber}`;
-    const messageText = message.text || message.content || '';
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
+    const instanceName = payload.instanceName;
     
-    if (!phoneNumber || phoneNumber.length < 10) {
-      return { success: false, error: 'Número de telefone inválido: ' + phoneNumber };
-    }
+    console.log('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
-    console.log('Dados extraídos:', {
-      phoneNumber,
-      senderName,
-      messageText,
-      messageId,
-      timestamp
-    });
-    
-    // 4. Buscar instância WhatsApp (mesmo padrão das tabelas existentes)
+    // Buscar instância (mesmo padrão do antigo)
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id')
-      .eq('company_id', company.id)
+      .select('id, company_id, companies(id, name, api_key)')
+      .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
     
     if (instanceError || !instance) {
-      console.error('Instância WhatsApp não encontrada para company:', company.id);
-      return { success: false, error: 'Instância WhatsApp não encontrada' };
+      return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    // 5. Buscar ou criar contato (mesmo padrão das tabelas chat)
+    const company = instance.companies;
+    console.log('🏢 EMPRESA:', company.name);
+    
+    // Buscar nome do lead (mesmo padrão do antigo)
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('name')
+      .eq('phone', phoneNumber)
+      .eq('company_id', company.id)
+      .is('deleted_at', null)
+      .single();
+
+    const senderName = existingLead?.name || tempSenderName;
+    
+    console.log('👤 NOME RESOLVIDO:', { 
+      leadName: existingLead?.name, 
+      tempName: tempSenderName, 
+      finalName: senderName 
+    });
+    
+    // Buscar/criar contato (mesmo padrão do antigo)
     let contactId;
     const { data: existingContact } = await supabase
       .from('chat_contacts')
@@ -191,11 +207,12 @@ async function processUazapiMessage(params) {
       .eq('company_id', company.id)
       .single();
     
+    const isNewContact = !existingContact;
+    
     if (existingContact) {
       contactId = existingContact.id;
-      console.log('Contato existente encontrado:', contactId);
+      console.log('👤 CONTATO EXISTENTE:', contactId);
     } else {
-      // Criar novo contato
       const { data: newContact, error: contactError } = await supabase
         .from('chat_contacts')
         .insert({
@@ -203,6 +220,7 @@ async function processUazapiMessage(params) {
           name: senderName,
           company_id: company.id,
           lead_source: 'whatsapp_webhook',
+          profile_picture_url: payload.chat?.imagePreview || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -210,15 +228,15 @@ async function processUazapiMessage(params) {
         .single();
       
       if (contactError) {
-        console.error('Erro ao criar contato:', contactError);
+        console.error('❌ ERRO CONTATO:', contactError);
         return { success: false, error: contactError.message };
       }
       
       contactId = newContact.id;
-      console.log('Novo contato criado:', contactId);
+      console.log('👤 NOVO CONTATO:', contactId);
     }
     
-    // 6. Buscar ou criar conversa
+    // Buscar/criar conversa (mesmo padrão do antigo)
     let conversationId;
     const { data: existingConversation } = await supabase
       .from('chat_conversations')
@@ -229,16 +247,29 @@ async function processUazapiMessage(params) {
     
     if (existingConversation) {
       conversationId = existingConversation.id;
-      console.log('Conversa existente encontrada:', conversationId);
+      console.log('💬 CONVERSA EXISTENTE:', conversationId);
+      
+      // Atualizar conversa
+      await supabase
+        .from('chat_conversations')
+        .update({
+          contact_name: senderName,
+          last_message_at: new Date(timestamp).toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .is('contact_name', null);
+        
     } else {
-      // Criar nova conversa
       const { data: newConversation, error: conversationError } = await supabase
         .from('chat_conversations')
         .insert({
           contact_phone: phoneNumber,
+          contact_name: senderName,
           company_id: company.id,
           instance_id: instance.id,
           status: 'active',
+          last_message_at: new Date(timestamp).toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -246,15 +277,14 @@ async function processUazapiMessage(params) {
         .single();
       
       if (conversationError) {
-        console.error('Erro ao criar conversa:', conversationError);
         return { success: false, error: conversationError.message };
       }
       
       conversationId = newConversation.id;
-      console.log('Nova conversa criada:', conversationId);
+      console.log('💬 NOVA CONVERSA:', conversationId);
     }
     
-    // 7. Verificar se mensagem já existe (evitar duplicatas)
+    // Verificar duplicata (mesmo padrão do antigo)
     const { data: existingMessage } = await supabase
       .from('chat_messages')
       .select('id')
@@ -262,23 +292,27 @@ async function processUazapiMessage(params) {
       .single();
     
     if (existingMessage) {
-      console.log('Mensagem já existe, ignorando duplicata:', messageId);
-      return { success: true, message_id: existingMessage.id, note: 'Mensagem duplicada ignorada' };
+      console.log('📝 DUPLICATA IGNORADA');
+      return { 
+        success: true, 
+        message_id: existingMessage.id,
+        note: 'Duplicata ignorada'
+      };
     }
     
-    // 8. Processar mídia se necessário
-    let mediaUrl = null;
-    const finalMessageType = getMessageType(messageType);
-    
-    if (finalMessageType !== 'text') {
-      console.log('🎥 Processando mídia para tipo:', finalMessageType);
-      mediaUrl = await processMediaMessage(message, supabase);
-      console.log('📎 URL da mídia processada:', mediaUrl);
-    }
-    
-    // 9. Salvar mensagem
-    const messageContent = messageText || (mediaUrl ? `${finalMessageType.toUpperCase()} recebido` : '');
-    
+    // Salvar mensagem (mesmo padrão do antigo + nossa URL processada)
+    const messageTypeForDb = isMediaMessage
+      ? (rawMediaType === 'image'
+          ? 'image'
+          : rawMediaType === 'document'
+            ? 'document'
+            : (rawMediaType === 'audio' || rawMediaType === 'ptt')
+              ? 'audio'
+              : rawMediaType === 'video'
+                ? 'video'
+                : 'document')
+      : 'text';
+
     const { data: savedMessage, error: messageError } = await supabase
       .from('chat_messages')
       .insert({
@@ -286,10 +320,10 @@ async function processUazapiMessage(params) {
         company_id: company.id,
         instance_id: instance.id,
         uazapi_message_id: messageId,
-        content: messageContent,
-        message_type: finalMessageType,
-        media_url: mediaUrl,
-        direction: 'inbound',
+        content: messageText,
+        message_type: messageTypeForDb,
+        media_url: mediaUrl, // URL processada por nossa função
+        direction,
         status: 'delivered',
         timestamp: new Date(timestamp).toISOString(),
         created_at: new Date().toISOString()
@@ -298,48 +332,44 @@ async function processUazapiMessage(params) {
       .single();
     
     if (messageError) {
-      console.error('Erro ao salvar mensagem:', messageError);
       return { success: false, error: messageError.message };
     }
-    
-    console.log('Mensagem salva com sucesso:', savedMessage.id);
+
+    console.log('✅ MENSAGEM SALVA:', savedMessage.id);
     
     return { 
       success: true, 
       message_id: savedMessage.id,
       contact_id: contactId,
-      conversation_id: conversationId,
-      phone_number: phoneNumber,
-      sender_name: senderName
+      conversation_id: conversationId
     };
     
   } catch (error) {
-    console.error('Exception in processUazapiMessage:', error);
+    console.error('❌ EXCEPTION:', error);
     return { success: false, error: error.message };
   }
 }
 
 // Função para processar mídia (vídeos, imagens, documentos, áudios)
-async function processMediaMessage(message, supabase) {
-  const mediaUrl = message.media?.url || message.url;
-  if (!mediaUrl) return null;
+async function processMediaMessage(message, supabase, originalUrl, mediaType) {
+  if (!originalUrl) return null;
 
   try {
-    console.log('📥 Processando mídia:', mediaUrl);
+    console.log('📥 Processando mídia:', mediaType, originalUrl);
     
     // Download da mídia externa
-    const response = await fetch(mediaUrl);
+    const response = await fetch(originalUrl);
     if (!response.ok) {
       console.error('Falha ao baixar mídia:', response.status, response.statusText);
-      return mediaUrl; // Fallback para URL original
+      return originalUrl; // Fallback para URL original
     }
     
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
     
     // Determinar extensão baseada no tipo
-    const extension = getFileExtension(message.messageType, message.media?.mimetype);
-    const fileName = `${message.messageType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
+    const extension = getFileExtension(mediaType);
+    const fileName = `${mediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
     
@@ -347,12 +377,12 @@ async function processMediaMessage(message, supabase) {
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: message.media?.mimetype || getContentType(extension)
+        contentType: getContentType(mediaType)
       });
     
     if (error) {
       console.error('Erro no upload para Supabase:', error);
-      return mediaUrl; // Fallback para URL original
+      return originalUrl; // Fallback para URL original
     }
     
     // Retornar URL pública
@@ -365,100 +395,30 @@ async function processMediaMessage(message, supabase) {
     
   } catch (error) {
     console.error('Erro ao processar mídia:', error);
-    return mediaUrl; // Fallback para URL original
+    return originalUrl; // Fallback para URL original
   }
-}
-
-// Função para mapear tipos de mensagem
-function getMessageType(messageType) {
-  const typeMap = {
-    'conversation': 'text',
-    'extendedtextmessage': 'text',
-    'videomessage': 'video',
-    'video': 'video',
-    'imagemessage': 'image',
-    'image': 'image',
-    'documentmessage': 'document',
-    'document': 'document',
-    'audiomessage': 'audio',
-    'audio': 'audio'
-  };
-  
-  return typeMap[messageType.toLowerCase()] || 'text';
 }
 
 // Função para determinar extensão do arquivo
-function getFileExtension(messageType, mimetype) {
-  // Primeiro, tentar pelo mimetype
-  if (mimetype) {
-    const mimeMap = {
-      'video/mp4': 'mp4',
-      'video/webm': 'webm',
-      'video/ogg': 'ogg',
-      'image/jpeg': 'jpg',
-      'image/jpg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'audio/mp3': 'mp3',
-      'audio/ogg': 'ogg',
-      'audio/wav': 'wav',
-      'application/pdf': 'pdf',
-      'application/msword': 'doc',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
-    };
-    
-    if (mimeMap[mimetype]) {
-      return mimeMap[mimetype];
-    }
-  }
-  
-  // Fallback pelo tipo de mensagem
+function getFileExtension(mediaType) {
   const typeMap = {
-    'videomessage': 'mp4',
     'video': 'mp4',
-    'imagemessage': 'jpg',
     'image': 'jpg',
-    'audiomessage': 'ogg',
     'audio': 'ogg',
-    'documentmessage': 'pdf',
     'document': 'pdf'
   };
   
-  return typeMap[messageType.toLowerCase()] || 'bin';
+  return typeMap[mediaType] || 'bin';
 }
 
 // Função para determinar content type
-function getContentType(extension) {
-  const contentTypeMap = {
-    'mp4': 'video/mp4',
-    'webm': 'video/webm',
-    'ogg': 'video/ogg',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'webp': 'image/webp',
-    'mp3': 'audio/mp3',
-    'wav': 'audio/wav',
-    'pdf': 'application/pdf',
-    'doc': 'application/msword',
-    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+function getContentType(mediaType) {
+  const typeMap = {
+    'video': 'video/mp4',
+    'image': 'image/jpeg',
+    'audio': 'audio/ogg',
+    'document': 'application/pdf'
   };
   
-  return contentTypeMap[extension] || 'application/octet-stream';
-}
-
-function extractPhoneFromSender(sender) {
-  if (!sender) return null;
-  
-  // Remover @s.whatsapp.net, @lid, etc.
-  const phone = sender.replace(/@.*$/, '');
-  
-  // Validar se é um número válido
-  if (phone && phone.length >= 10) {
-    return phone;
-  }
-  
-  return null;
+  return typeMap[mediaType] || 'application/octet-stream';
 }
