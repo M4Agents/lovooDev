@@ -44,6 +44,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     type: string
   } | null>(null)
   const [captionMessage, setCaptionMessage] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
   
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
@@ -589,7 +590,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   
   // Enviar arquivo com legenda
   const handleSendWithCaption = async () => {
-    if (!previewFile) return
+    if (!previewFile || isUploading) return // Prevenir múltiplos cliques
+    
+    setIsUploading(true) // Ativar loading
     
     try {
       // Upload do arquivo usando a API existente
@@ -605,11 +608,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         media_url: mediaUrl
       })
       
-      // Fechar modal
+      // Fechar modal após sucesso
       closePreviewModal()
     } catch (error) {
       console.error('Erro ao enviar arquivo com legenda:', error)
       alert('Erro ao enviar arquivo. Tente novamente.')
+    } finally {
+      setIsUploading(false) // Desativar loading
     }
   }
   
@@ -788,10 +793,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     value={captionMessage}
                     onChange={(e) => setCaptionMessage(e.target.value)}
                     placeholder="Digite uma mensagem"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    disabled={isUploading}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                      isUploading ? 'bg-gray-100 cursor-not-allowed' : ''
+                    }`}
                     rows={3}
                     onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                      if (e.key === 'Enter' && !e.shiftKey && !isUploading) {
                         e.preventDefault()
                         handleSendWithCaption()
                       }
@@ -800,11 +808,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 </div>
                 <button
                   onClick={handleSendWithCaption}
-                  className="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full transition-colors"
+                  disabled={isUploading}
+                  className={`p-3 rounded-full transition-colors ${
+                    isUploading 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-500 hover:bg-green-600 text-white'
+                  }`}
                 >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                  </svg>
+                  {isUploading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
