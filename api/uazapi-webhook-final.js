@@ -113,6 +113,12 @@ async function processMessage(payload) {
     const rawType = (message.type || '').toLowerCase();
     const rawMediaType = (message.mediaType || '').toLowerCase();
 
+    // LOGS DETALHADOS PARA CAPTURAR ESTRUTURA REAL
+    console.log('🔍 PAYLOAD REAL COMPLETO:', JSON.stringify(payload, null, 2));
+    console.log('📨 MESSAGE REAL COMPLETO:', JSON.stringify(message, null, 2));
+    console.log('🔍 CONTENT DETALHADO:', message.content);
+    console.log('🎥 MEDIA DETALHADO:', message.media);
+
     console.log('🔍 DETECÇÃO DE TIPOS:', {
       rawMessageType,
       rawType,
@@ -135,6 +141,17 @@ async function processMessage(payload) {
       (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)); // Verificação direta
 
     console.log('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
+    
+    // LOG ESPECÍFICO PARA MÍDIA
+    if (isMediaMessage) {
+      console.log('🎥 MÍDIA DETECTADA! Analisando estrutura...');
+      console.log('📋 CONDIÇÕES DE DETECÇÃO:', {
+        'rawType === media && rawMediaType': (rawType === 'media' && !!rawMediaType),
+        'messageType includes message': (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage'),
+        'message.media exists': !!(message.media && message.media.url),
+        'message.content object with URL': !!(message.content && typeof message.content === 'object' && (message.content.URL || message.content.url))
+      });
+    }
 
     if (!isTextMessage && !isMediaMessage) {
       console.log('❌ TIPO NÃO SUPORTADO:', { rawMessageType, rawType, rawMediaType });
@@ -819,7 +836,14 @@ async function syncContactProfilePictureFromUazapi({
 // Adicionada ao webhook antigo funcional para processar URLs externas
 async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
   try {
+    console.log('🚀 FUNÇÃO PROCESSAMENTO EXECUTADA!');
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
+    console.log('📊 PARÂMETROS RECEBIDOS:', { 
+      hasMessage: !!message, 
+      hasSupabase: !!supabase, 
+      originalUrl: originalUrl?.substring(0, 100),
+      rawMediaType 
+    });
     
     // Download da mídia externa (WhatsApp CDN)
     const response = await fetch(originalUrl);
