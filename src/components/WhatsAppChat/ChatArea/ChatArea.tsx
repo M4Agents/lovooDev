@@ -193,6 +193,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         } else {
           console.log('❌ DEBUG: NOVA MENSAGEM NÃO ENCONTRADA no frontend!')
         }
+
+        // DEBUG: Verificar se mensagem está sendo renderizada
+        console.log('🎯 DEBUG: TOTAL DE MENSAGENS PARA RENDERIZAR:', sortedMessages.length)
+        console.log('🎯 DEBUG: IDs DAS MENSAGENS:', sortedMessages.map(m => m.id))
         return sortedMessages
       })
       
@@ -1134,6 +1138,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onVideoError,
   onResetVideoError
 }) => {
+  // DEBUG: Log quando MessageBubble é renderizado
+  console.log('🎨 DEBUG: MessageBubble renderizando:', {
+    id: message.id,
+    type: message.message_type,
+    hasMedia: !!message.media_url,
+    direction: message.direction
+  })
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
       hour: '2-digit', 
