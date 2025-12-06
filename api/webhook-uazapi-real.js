@@ -3,6 +3,9 @@
 // Método: POST com payload real da Uazapi (formato N8N)
 // BASEADO NO PADRÃO /api/webhook/lead/[api_key].js QUE FUNCIONA 100%
 
+// Importar função de processamento robusto de mídia
+import { processMediaMessageRobust } from './uazapi-webhook-final.js';
+
 export default async function handler(req, res) {
   console.error('🚀 WEBHOOK UAZAPI REAL v2.0 - LOGS FORÇADOS');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
@@ -187,8 +190,7 @@ async function processUazapiRealMessage(params) {
       console.error('🔗 URL DE MÍDIA ENCONTRADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
       
       if (originalUrl) {
-        console.error('🚀 PROCESSANDO URL DE MÍDIA...');
-        mediaUrl = originalUrl; // Por enquanto, manter URL original
+        console.error('🚀 PROCESSANDO URL DE MÍDIA COM FUNÇÃO ROBUSTA...');
         
         // Determinar tipo de mídia para o banco
         if (rawMediaType === 'image' || messageType.includes('image')) {
@@ -201,7 +203,26 @@ async function processUazapiRealMessage(params) {
           messageTypeForDb = 'document';
         }
         
-        console.error('✅ MÍDIA PROCESSADA:', { mediaUrl: mediaUrl.substring(0, 80) + '...', messageTypeForDb });
+        // Usar função robusta para processar mídia (preserva formato original)
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          );
+          
+          console.error('🎨 CHAMANDO PROCESSAMENTO ROBUSTO PARA:', rawMediaType.toUpperCase());
+          mediaUrl = await processMediaMessageRobust(originalUrl, rawMediaType, supabase);
+          console.error('✅ MÍDIA PROCESSADA COM SUCESSO:', { 
+            originalUrl: originalUrl.substring(0, 60) + '...', 
+            processedUrl: mediaUrl.substring(0, 60) + '...',
+            messageTypeForDb 
+          });
+        } catch (error) {
+          console.error('❌ ERRO NO PROCESSAMENTO ROBUSTO:', error);
+          mediaUrl = originalUrl; // Fallback para URL original
+          console.error('🔄 USANDO URL ORIGINAL COMO FALLBACK');
+        }
       } else {
         console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA');
       }

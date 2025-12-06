@@ -876,12 +876,11 @@ async function syncContactProfilePictureFromUazapi({
 // =====================================================
 // Implementada em: 2025-12-05 - Correção definitiva de vídeos recebidos
 // Adicionada ao webhook antigo funcional para processar URLs externas
-async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
+export async function processMediaMessageRobust(originalUrl, rawMediaType, supabase) {
   try {
     console.log('🚀 FUNÇÃO PROCESSAMENTO EXECUTADA!');
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
     console.log('📊 PARÂMETROS RECEBIDOS:', { 
-      hasMessage: !!message, 
       hasSupabase: !!supabase, 
       originalUrl: originalUrl?.substring(0, 100),
       rawMediaType 
