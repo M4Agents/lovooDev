@@ -267,11 +267,11 @@ async function processMessage(payload) {
         console.error('🎯 TIPO DE MÍDIA DETERMINADO:', mediaType);
         console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
         
-        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, mediaType);
+        mediaUrl = await processMediaMessageRobust(originalUrl, mediaType, supabase);
         
         console.error('✅ RESULTADO DO PROCESSAMENTO:', {
           success: !!mediaUrl,
-          originalUrl: originalUrl.substring(0, 80) + '...',
+          originalUrl: originalUrl ? originalUrl.substring(0, 80) + '...' : 'N/A',
           processedUrl: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU'
         });
       } else {
