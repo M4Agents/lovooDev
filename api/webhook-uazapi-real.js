@@ -4,10 +4,10 @@
 // BASEADO NO PADRÃO /api/webhook/lead/[api_key].js QUE FUNCIONA 100%
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK UAZAPI REAL INICIADO - PADRÃO API LEADS');
-  console.log('Timestamp:', new Date().toISOString());
-  console.log('Method:', req.method);
-  console.log('Headers:', req.headers);
+  console.error('🚀 WEBHOOK UAZAPI REAL v2.0 - LOGS FORÇADOS');
+  console.error('⏰ TIMESTAMP:', new Date().toISOString());
+  console.error('🔧 METHOD:', req.method);
+  console.error('📡 USER-AGENT:', req.headers['user-agent']);
 
   // Set CORS headers (EXATO do webhook-lead que funciona)
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,10 +31,11 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('📥 PAYLOAD UAZAPI RECEBIDO (FORMATO N8N):', req.body);
-    console.log('📊 PAYLOAD DETALHADO:');
-    console.log('- Tipo do payload:', typeof req.body);
-    console.log('- Keys do payload:', Object.keys(req.body || {}));
+    console.error('📥 PAYLOAD UAZAPI RECEBIDO:', JSON.stringify(req.body, null, 2));
+    console.error('📊 PAYLOAD DETALHADO:');
+    console.error('- Tipo do payload:', typeof req.body);
+    console.error('- Keys do payload:', Object.keys(req.body || {}));
+    console.error('📨 MESSAGE COMPLETO:', JSON.stringify(req.body?.message, null, 2));
     
     // Processar mensagem da Uazapi (formato real do N8N)
     const result = await processUazapiRealMessage({
@@ -135,16 +136,78 @@ async function processUazapiRealMessage(params) {
     }
     
     const messageType = (message.messageType || '').toLowerCase();
-    if (messageType !== 'conversation' && messageType !== 'extendedtextmessage') {
+    const rawType = (message.type || '').toLowerCase();
+    const rawMediaType = (message.mediaType || '').toLowerCase();
+    
+    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA
+    console.error('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
+    console.error('📊 VARIÁVEIS BÁSICAS:', {
+      messageType: messageType,
+      rawType: rawType,
+      rawMediaType: rawMediaType
+    });
+    
+    const isTextMessage = (messageType === 'conversation' || messageType === 'extendedtextmessage');
+    
+    // DETECÇÃO ROBUSTA DE MÍDIA - MÚLTIPLOS FORMATOS
+    const condition1 = (rawType === 'media' && !!rawMediaType);
+    const condition2 = (messageType.includes('message') && messageType !== 'conversation' && messageType !== 'extendedtextmessage');
+    const condition3 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    
+    console.error('🎯 CONDIÇÕES DE DETECÇÃO:', {
+      'condition1 (rawType === media && rawMediaType)': condition1,
+      'condition2 (messageType includes message)': condition2,
+      'condition3 (message.content object with URL)': condition3
+    });
+    
+    const isMediaMessage = condition1 || condition2 || condition3;
+    
+    console.error('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
+    
+    if (!isTextMessage && !isMediaMessage) {
       return { success: false, error: 'Tipo de mensagem não suportado: ' + messageType };
     }
     
     // Extrair dados da mensagem
     const phoneNumber = extractPhoneFromSender(message.sender);
     const senderName = message.senderName || chat?.name || `Contato ${phoneNumber}`;
-    const messageText = message.text || message.content || '';
+    let messageText = message.text || message.content || '';
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
+    
+    // PROCESSAMENTO DE MÍDIA
+    let mediaUrl = null;
+    let messageTypeForDb = 'text';
+    
+    if (isMediaMessage) {
+      console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { messageType, rawType, rawMediaType });
+      
+      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) || null;
+      
+      console.error('🔗 URL DE MÍDIA ENCONTRADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
+      
+      if (originalUrl) {
+        console.error('🚀 PROCESSANDO URL DE MÍDIA...');
+        mediaUrl = originalUrl; // Por enquanto, manter URL original
+        
+        // Determinar tipo de mídia para o banco
+        if (rawMediaType === 'image' || messageType.includes('image')) {
+          messageTypeForDb = 'image';
+        } else if (rawMediaType === 'video' || messageType.includes('video')) {
+          messageTypeForDb = 'video';
+        } else if (rawMediaType === 'audio' || messageType.includes('audio')) {
+          messageTypeForDb = 'audio';
+        } else {
+          messageTypeForDb = 'document';
+        }
+        
+        console.error('✅ MÍDIA PROCESSADA:', { mediaUrl: mediaUrl.substring(0, 80) + '...', messageTypeForDb });
+      } else {
+        console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA');
+      }
+    } else {
+      console.error('⚠️ MENSAGEM NÃO É MÍDIA - PROCESSAMENTO TEXTO');
+    }
     
     if (!phoneNumber || phoneNumber.length < 10) {
       return { success: false, error: 'Número de telefone inválido: ' + phoneNumber };
@@ -300,7 +363,8 @@ async function processUazapiRealMessage(params) {
         instance_id: instance.id,
         uazapi_message_id: messageId,
         content: messageText,
-        message_type: 'text',
+        message_type: messageTypeForDb,
+        media_url: mediaUrl,
         direction: 'inbound',
         status: 'delivered',
         sender_name: senderName,
