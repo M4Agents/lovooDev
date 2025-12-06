@@ -212,6 +212,7 @@ async function processUazapiRealMessage(params) {
           );
           
           console.error('🎨 CHAMANDO PROCESSAMENTO ROBUSTO PARA:', rawMediaType.toUpperCase());
+          console.error('🔗 PARÂMETROS ENVIADOS:', { originalUrl: typeof originalUrl, rawMediaType, hasSupabase: !!supabase });
           mediaUrl = await processMediaMessageRobust(originalUrl, rawMediaType, supabase);
           console.error('✅ MÍDIA PROCESSADA COM SUCESSO:', { 
             originalUrl: originalUrl ? originalUrl.substring(0, 60) + '...' : 'N/A', 
