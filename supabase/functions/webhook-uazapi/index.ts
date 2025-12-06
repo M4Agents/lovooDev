@@ -76,15 +76,22 @@ serve(async (req) => {
       )
     }
 
-    // Log do webhook recebido
-    console.log('Webhook received:', {
+    // LOGS DETALHADOS DO WEBHOOK RECEBIDO
+    console.log('🚀 EDGE FUNCTION WEBHOOK UAZAPI v2.0 - LOGS DETALHADOS')
+    console.log('⏰ TIMESTAMP:', new Date().toISOString())
+    console.log('📥 PAYLOAD COMPLETO:', JSON.stringify(payload, null, 2))
+    console.log('📊 PAYLOAD ANALYSIS:', {
       event: payload.event,
       instance_id: payload.instance_id,
-      timestamp: new Date().toISOString()
+      hasMessage: !!payload.message,
+      messageType: payload.message?.messageType,
+      mediaType: payload.message?.mediaType,
+      type: payload.message?.type
     })
 
-    // Processar webhook via RPC com formato real
-    const { data, error } = await supabase.rpc('process_uazapi_webhook_real', {
+    // Processar webhook via RPC
+    console.log('🔄 CHAMANDO FUNÇÃO SQL: process_uazapi_webhook')
+    const { data, error } = await supabase.rpc('process_uazapi_webhook', {
       p_payload: payload
     })
 
@@ -102,8 +109,14 @@ serve(async (req) => {
       )
     }
 
-    // Log do resultado
-    console.log('Webhook processed:', data)
+    // LOGS DETALHADOS DO RESULTADO
+    console.log('✅ WEBHOOK PROCESSADO COM SUCESSO:', {
+      success: data.success,
+      message_id: data.message_id,
+      contact_id: data.contact_id,
+      conversation_id: data.conversation_id,
+      processed_at: new Date().toISOString()
+    })
 
     // Resposta de sucesso
     return new Response(
