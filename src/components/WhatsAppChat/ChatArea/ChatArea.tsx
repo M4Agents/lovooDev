@@ -177,6 +177,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             shouldRender: targetMessage.media_url && getActualMessageType(targetMessage) === 'image'
           })
         }
+
+        // DEBUG: Log específico para a mensagem mais recente (17:02:33)
+        const recentMessage = messagesData?.find(m => m.id === 'fe87dcd9-f6b4-4e32-bfd7-05bf54764c7a')
+        if (recentMessage) {
+          console.log('🔥 DEBUG: MENSAGEM MAIS RECENTE ENCONTRADA:', {
+            id: recentMessage.id,
+            message_type: recentMessage.message_type,
+            media_url: recentMessage.media_url,
+            actualType: getActualMessageType(recentMessage),
+            direction: recentMessage.direction,
+            shouldRender: recentMessage.media_url && getActualMessageType(recentMessage) === 'image',
+            timestamp: recentMessage.timestamp
+          })
+        } else {
+          console.log('❌ DEBUG: MENSAGEM MAIS RECENTE NÃO ENCONTRADA no frontend!')
+        }
         return sortedMessages
       })
       
