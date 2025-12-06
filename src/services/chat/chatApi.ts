@@ -114,7 +114,8 @@ export class ChatApi {
     conversationId: string,
     companyId: string,
     limit: number = 0, // 0 = sem limite por padrão
-    offset: number = 0
+    offset: number = 0,
+    reverseOrder: boolean = false // NOVO: ordenação reversa
   ): Promise<ChatMessage[]> {
     try {
       // Se limit for 0, usar um número muito alto para "sem limite"
@@ -126,6 +127,7 @@ export class ChatApi {
         limit: limit,
         effectiveLimit: effectiveLimit,
         offset,
+        reverseOrder,
         timestamp: new Date().toISOString()
       })
 
@@ -133,7 +135,8 @@ export class ChatApi {
         p_conversation_id: conversationId,
         p_company_id: companyId,
         p_limit: effectiveLimit,
-        p_offset: offset
+        p_offset: offset,
+        p_reverse_order: reverseOrder
       })
 
       console.log('📊 DEBUG: RPC chat_get_messages resultado', {
@@ -170,6 +173,86 @@ export class ChatApi {
       return mappedMessages
     } catch (error) {
       console.error('❌ DEBUG: Erro geral em getMessages:', error)
+      throw error
+    }
+  }
+
+  // =====================================================
+  // MÉTODOS DE PAGINAÇÃO PARA CHAT MODERNO
+  // =====================================================
+
+  static async getRecentMessages(
+    conversationId: string,
+    companyId: string,
+    limit: number = 30
+  ): Promise<ChatMessage[]> {
+    console.log('🔄 DEBUG: Carregando mensagens recentes', {
+      conversationId,
+      companyId,
+      limit,
+      timestamp: new Date().toISOString()
+    })
+
+    // Buscar mensagens mais recentes (ordenação reversa)
+    const messages = await this.getMessages(conversationId, companyId, limit, 0, true)
+    
+    // Reverter ordem para exibir cronologicamente (mais antigas no topo)
+    const sortedMessages = messages.reverse()
+    
+    console.log('✅ DEBUG: Mensagens recentes carregadas', {
+      total: sortedMessages.length,
+      primeiraMensagem: sortedMessages[0]?.timestamp,
+      ultimaMensagem: sortedMessages[sortedMessages.length - 1]?.timestamp
+    })
+
+    return sortedMessages
+  }
+
+  static async getOlderMessages(
+    conversationId: string,
+    companyId: string,
+    beforeTimestamp: Date,
+    limit: number = 20
+  ): Promise<ChatMessage[]> {
+    console.log('⬆️ DEBUG: Carregando mensagens antigas', {
+      conversationId,
+      companyId,
+      beforeTimestamp,
+      limit,
+      timestamp: new Date().toISOString()
+    })
+
+    try {
+      // Buscar mensagens anteriores ao timestamp fornecido
+      const { data, error } = await supabase.rpc('chat_get_messages_before_timestamp', {
+        p_conversation_id: conversationId,
+        p_company_id: companyId,
+        p_before_timestamp: beforeTimestamp.toISOString(),
+        p_limit: limit
+      })
+
+      if (error) {
+        console.error('❌ DEBUG: Erro na RPC chat_get_messages_before_timestamp:', error)
+        throw error
+      }
+
+      if (!data.success) {
+        console.error('❌ DEBUG: RPC retornou erro:', data.error)
+        throw new Error(data.error || 'Erro ao buscar mensagens antigas')
+      }
+
+      const rawMessages = data.data || []
+      const mappedMessages = rawMessages.map(this.mapMessage)
+      
+      console.log('✅ DEBUG: Mensagens antigas carregadas', {
+        total: mappedMessages.length,
+        primeiraMensagem: mappedMessages[0]?.timestamp,
+        ultimaMensagem: mappedMessages[mappedMessages.length - 1]?.timestamp
+      })
+
+      return mappedMessages
+    } catch (error) {
+      console.error('❌ DEBUG: Erro ao carregar mensagens antigas:', error)
       throw error
     }
   }

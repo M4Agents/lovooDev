@@ -9,7 +9,7 @@ import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../../config/chatFeatures'
 import { useConversationRealtime } from '../../../hooks/chat/useChatRealtime'
-import type { ChatMessage, SendMessageForm, ChatAreaProps } from '../../../types/whatsapp-chat'
+import type { ChatMessage, SendMessageForm, ChatAreaProps, ChatConversation } from '../../../types/whatsapp-chat'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -25,8 +25,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(true)
   const [sending, setSending] = useState(false)
-  const [conversation, setConversation] = useState<any>(null)
+  const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
@@ -71,13 +73,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
-      console.log('🔍 DEBUG: Iniciando fetchMessages', {
+      console.log('🔍 DEBUG: Iniciando fetchMessages (NOVO SISTEMA DE PAGINAÇÃO)', {
         conversationId,
         companyId,
         timestamp: new Date().toISOString()
       })
       
-      const messagesData = await chatApi.getMessages(conversationId, companyId, 0) // 0 = sem limite
+      // NOVO: Carregar apenas mensagens recentes (últimas 30)
+      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 30)
       
       console.log('📊 DEBUG: Dados retornados da API:', {
         total: messagesData?.length || 0,
@@ -158,6 +161,60 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }
 
   // =====================================================
+  // CARREGAR MENSAGENS ANTIGAS (SCROLL INFINITO)
+  // =====================================================
+
+  const loadOlderMessages = async () => {
+    if (loadingOlder || !hasMoreMessages || messages.length === 0) {
+      return
+    }
+
+    try {
+      setLoadingOlder(true)
+      console.log('⬆️ DEBUG: Carregando mensagens antigas', {
+        conversationId,
+        companyId,
+        currentMessages: messages.length,
+        oldestMessage: messages[0]?.timestamp
+      })
+
+      // Pegar timestamp da mensagem mais antiga
+      const oldestTimestamp = new Date(messages[0].timestamp)
+      
+      // Carregar mensagens anteriores
+      const olderMessages = await chatApi.getOlderMessages(
+        conversationId, 
+        companyId, 
+        oldestTimestamp, 
+        20
+      )
+
+      if (olderMessages.length === 0) {
+        setHasMoreMessages(false)
+        console.log('📭 DEBUG: Não há mais mensagens antigas')
+        return
+      }
+
+      // Adicionar mensagens antigas no início da lista
+      setMessages(prev => {
+        const newMessages = [...olderMessages, ...prev]
+        console.log('✅ DEBUG: Mensagens antigas adicionadas', {
+          antigas: olderMessages.length,
+          total: newMessages.length,
+          primeiraAntiga: olderMessages[0]?.timestamp,
+          ultimaAntiga: olderMessages[olderMessages.length - 1]?.timestamp
+        })
+        return newMessages
+      })
+
+    } catch (error) {
+      console.error('❌ DEBUG: Erro ao carregar mensagens antigas:', error)
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  // =====================================================
   // BUSCAR DADOS DA CONVERSA
   // =====================================================
 
@@ -168,7 +225,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       console.log('🔍 DEBUG ChatArea.fetchConversation - total conversas:', conversations.length)
       const conv = conversations.find(c => c.id === conversationId)
       console.log('🔍 DEBUG ChatArea.fetchConversation - conversa encontrada:', conv)
-      setConversation(conv)
+      setConversation(conv || null)
 
       // Carregar foto do contato a partir das informações detalhadas do contato
       if (conv) {
