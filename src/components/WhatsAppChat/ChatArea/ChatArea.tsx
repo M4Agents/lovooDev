@@ -79,8 +79,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         timestamp: new Date().toISOString()
       })
       
-      // NOVO: Carregar apenas mensagens recentes (últimas 30)
-      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 30)
+      // NOVO: Carregar mensagens recentes (aumentado para 50 para garantir mídia recente)
+      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
       
       console.log('📊 DEBUG: Dados retornados da API:', {
         total: messagesData?.length || 0,
@@ -379,11 +379,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     if (!conversationId || !companyId) return
 
-    console.log('🔄 DEBUG: Iniciando polling backup para mensagens recebidas')
+    console.log('🔄 DEBUG: Iniciando polling backup para mensagens recebidas (OTIMIZADO)')
     
     const pollInterval = setInterval(async () => {
       try {
-        const messagesData = await chatApi.getMessages(conversationId, companyId, 0)
+        // Usar nova API de mensagens recentes para detectar novas mensagens
+        const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 10)
         
         setMessages(prev => {
           // Verificar se há mensagens novas
@@ -392,9 +393,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           ) || []
           
           if (newMessages.length > 0) {
-            console.log('🆕 DEBUG: Polling detectou novas mensagens:', {
+            console.log('🆕 DEBUG: Polling detectou novas mensagens (MÍDIA INCLUÍDA):', {
               novas: newMessages.length,
-              ids: newMessages.map(m => m.id)
+              ids: newMessages.map(m => m.id),
+              comMidia: newMessages.filter(m => m.media_url).length
             })
             
             // Combinar e ordenar
@@ -865,6 +867,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 Atribuída
               </span>
             )}
+            
+            {/* Botão de Reload para Mensagens */}
+            <button 
+              onClick={fetchMessages}
+              disabled={loading}
+              className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+              title="Recarregar mensagens"
+            >
+              <svg 
+                className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
             
             <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
