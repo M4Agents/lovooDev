@@ -3,8 +3,9 @@
 // CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
 
 export default async function handler(req, res) {
-  console.error('🚀 WEBHOOK UAZAPI EXECUTANDO - LOGS FORÇADOS');
+  console.error('🚀 WEBHOOK UAZAPI v2.0 - CACHE BUST ATIVO');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
+  console.error('🔄 CACHE BUST ID:', '20251206-074647');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,11 +30,13 @@ export default async function handler(req, res) {
     const result = await processMessage(req.body);
     
     if (result.success) {
-      console.log('✅ SUCESSO:', result.message_id);
+      console.error('✅ SUCESSO COM CACHE BUST:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
-        message: 'Mensagem processada!'
+        message: 'WEBHOOK ATUALIZADO - CACHE INVALIDADO!',
+        timestamp: new Date().toISOString(),
+        version: 'v2.0-cache-bust'
       });
     } else {
       console.log('⚠️ FILTRADO:', result.error);
