@@ -501,6 +501,7 @@ async function processMessage(payload) {
           token: payload.token,
           chatMessageId: savedMessage.id,
           messageId,
+          mediaType: rawMediaType, // Passar tipo de mídia correto
         });
       } catch (mediaError) {
         console.error('⚠️ Erro ao processar mídia inbound (message/download):', mediaError);
@@ -604,6 +605,7 @@ async function downloadAndStoreMedia({
   token,
   chatMessageId,
   messageId,
+  mediaType = 'image', // Tipo de mídia (image, video, audio, document)
 }) {
   try {
     console.log(' Solicitando download de mídia via Uazapi /message/download...', { baseUrl, messageId });
@@ -641,8 +643,8 @@ async function downloadAndStoreMedia({
     console.log(' URL de mídia retornada pela Uazapi:', publicUrl);
 
     // Usar função robusta para processar a mídia descriptografada
-    console.log('🔄 PROCESSANDO MÍDIA DESCRIPTOGRAFADA COM FUNÇÃO ROBUSTA...');
-    const processedUrl = await processMediaMessageRobust(null, 'image', supabase, publicUrl);
+    console.log('🔄 PROCESSANDO MÍDIA DESCRIPTOGRAFADA COM FUNÇÃO ROBUSTA...', { mediaType });
+    const processedUrl = await processMediaMessageRobust(null, mediaType, supabase, publicUrl);
     
     if (processedUrl && processedUrl !== publicUrl) {
       console.log('✅ MÍDIA PROCESSADA E SALVA NO SUPABASE STORAGE:', processedUrl);
@@ -1022,6 +1024,23 @@ function getFileExtensionRobust(mediaType, originalUrl = null) {
     }
   }
   
+  // Para vídeos, tentar detectar formato real da URL original
+  if (mediaType === 'video' && originalUrl) {
+    // Primeiro: tentar detectar extensão na URL
+    const urlMatch = originalUrl.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv|m4v)(\?|$|&)/i);
+    if (urlMatch) {
+      let ext = urlMatch[1].toLowerCase();
+      console.log(`🎬 FORMATO VÍDEO DETECTADO: ${ext.toUpperCase()} da URL: ${originalUrl.substring(0, 60)}...`);
+      return ext;
+    }
+    
+    // Segundo: para WhatsApp, assumir MP4 como padrão (melhor compatibilidade)
+    if (originalUrl.includes('whatsapp.net') || originalUrl.includes('mmg.whatsapp.net')) {
+      console.log(`🎬 WHATSAPP VÍDEO DETECTADO - USANDO MP4: ${originalUrl.substring(0, 60)}...`);
+      return 'mp4';
+    }
+  }
+  
   // Fallback para tipos genéricos
   const typeMap = {
     'video': 'mp4',
@@ -1053,6 +1072,26 @@ function getContentTypeRobust(mediaType, fileExtension = null) {
     const contentType = imageTypes[fileExtension.toLowerCase()];
     if (contentType) {
       console.log(`🎨 CONTENT-TYPE DETECTADO: ${contentType} para extensão: ${fileExtension}`);
+      return contentType;
+    }
+  }
+  
+  // Para vídeos, usar content-type baseado na extensão real
+  if (mediaType === 'video' && fileExtension) {
+    const videoTypes = {
+      'mp4': 'video/mp4',
+      'avi': 'video/avi',
+      'mov': 'video/quicktime',
+      'wmv': 'video/x-ms-wmv',
+      'flv': 'video/x-flv',
+      'webm': 'video/webm',
+      'mkv': 'video/x-matroska',
+      'm4v': 'video/mp4'
+    };
+    
+    const contentType = videoTypes[fileExtension.toLowerCase()];
+    if (contentType) {
+      console.log(`🎬 CONTENT-TYPE VÍDEO DETECTADO: ${contentType} para extensão: ${fileExtension}`);
       return contentType;
     }
   }
