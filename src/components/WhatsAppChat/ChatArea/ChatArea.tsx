@@ -149,6 +149,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           }))
         })  
         
+        // DEBUG: Log específico para mensagens com mídia
+        const mediaMessagesData = messagesData?.filter(m => m.media_url) || []
+        if (mediaMessagesData.length > 0) {
+          console.log('🎯 DEBUG: Mensagens com mídia encontradas:', {
+            total: mediaMessagesData.length,
+            detalhes: mediaMessagesData.map(m => ({
+              id: m.id,
+              type: m.message_type,
+              media_url: m.media_url?.substring(0, 60) + '...',
+              actualType: getActualMessageType(m),
+              direction: m.direction,
+              timestamp: m.timestamp
+            }))
+          })  
+        }
+
+        // DEBUG: Log específico para a mensagem da imagem PNG→JPG
+        const targetMessage = messagesData?.find(m => m.media_url?.includes('image_1765038581356_gji3uv3gk'))
+        if (targetMessage) {
+          console.log('🎯 DEBUG: MENSAGEM ALVO ENCONTRADA:', {
+            id: targetMessage.id,
+            message_type: targetMessage.message_type,
+            media_url: targetMessage.media_url,
+            actualType: getActualMessageType(targetMessage),
+            direction: targetMessage.direction,
+            shouldRender: targetMessage.media_url && getActualMessageType(targetMessage) === 'image'
+          })
+        }
         return sortedMessages
       })
       
@@ -1180,6 +1208,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
+          {/* DEBUG: Log detalhado para imagens */}
+          {message.media_url && (
+            console.log('🖼️ DEBUG IMAGEM:', {
+              messageId: message.id,
+              media_url: message.media_url,
+              message_type: message.message_type,
+              actualMessageType: actualMessageType,
+              shouldRenderImage: message.media_url && actualMessageType === 'image',
+              direction: message.direction,
+              timestamp: message.timestamp
+            })
+          )}
+
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
               <img
@@ -1187,6 +1228,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 alt={message.content || 'Imagem'}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(message.media_url, '_blank')}
+                onLoad={() => console.log('✅ IMAGEM CARREGADA:', message.media_url)}
+                onError={(e) => console.error('❌ ERRO AO CARREGAR IMAGEM:', message.media_url, e)}
               />
             </div>
           )}
