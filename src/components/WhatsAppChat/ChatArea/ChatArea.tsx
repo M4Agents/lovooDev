@@ -128,9 +128,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             content: m.content?.substring(0, 30),
             direction: m.direction,
             status: m.status,
+            message_type: m.message_type,
+            media_url: m.media_url ? m.media_url.substring(0, 50) + '...' : null,
             source: bankMessages.find(b => b.id === m.id) ? 'BANCO' : 'TEMP'
           }))
         })
+        
+        // DEBUG ESPECÍFICO PARA MÍDIA
+        const mediaMessages = sortedMessages.filter(m => m.media_url)
+        console.log('🖼️ DEBUG: Mensagens de mídia encontradas:', {
+          total: mediaMessages.length,
+          tipos: mediaMessages.map(m => ({
+            id: m.id,
+            type: m.message_type,
+            media_url: m.media_url?.substring(0, 60) + '...',
+            actualType: getActualMessageType(m)
+          }))
+        })  
         
         return sortedMessages
       })
