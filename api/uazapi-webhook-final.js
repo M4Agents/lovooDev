@@ -975,6 +975,7 @@ export async function processMediaMessageRobust(originalUrl, rawMediaType, supab
 function getFileExtensionRobust(mediaType, originalUrl = null) {
   // Para imagens, tentar detectar formato real da URL original
   if (mediaType === 'image' && originalUrl) {
+    // Primeiro: tentar detectar extensão na URL
     const urlMatch = originalUrl.match(/\.(png|jpg|jpeg|webp|gif|bmp|tiff)(\?|$|&)/i);
     if (urlMatch) {
       let ext = urlMatch[1].toLowerCase();
@@ -982,6 +983,12 @@ function getFileExtensionRobust(mediaType, originalUrl = null) {
       if (ext === 'jpeg') ext = 'jpg';
       console.log(`🎨 FORMATO ORIGINAL DETECTADO: ${ext.toUpperCase()} da URL: ${originalUrl.substring(0, 60)}...`);
       return ext;
+    }
+    
+    // Segundo: para WhatsApp, assumir PNG como padrão (melhor qualidade)
+    if (originalUrl.includes('whatsapp.net') || originalUrl.includes('mmg.whatsapp.net')) {
+      console.log(`🎨 WHATSAPP DETECTADO - USANDO PNG: ${originalUrl.substring(0, 60)}...`);
+      return 'png';
     }
   }
   
