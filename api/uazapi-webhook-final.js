@@ -917,24 +917,25 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // Determinar extensão baseada no tipo de mídia
-    const extension = getFileExtensionRobust(rawMediaType);
+    // Determinar extensão baseada no tipo de mídia e URL original
+    const extension = getFileExtensionRobust(rawMediaType, originalUrl);
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
     
     // Upload para Supabase Storage
+    const contentType = getContentTypeRobust(rawMediaType, extension);
     console.log('☁️ INICIANDO UPLOAD SUPABASE:', {
       fileName: fileName,
       bufferSize: mediaBuffer.byteLength,
-      contentType: getContentTypeRobust(rawMediaType),
+      contentType: contentType,
       bucket: 'chat-media'
     });
     
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: getContentTypeRobust(rawMediaType)
+        contentType: contentType
       });
     
     console.log('📤 RESULTADO UPLOAD:', { data, error });
@@ -944,7 +945,7 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
         error: error,
         fileName: fileName,
         bufferSize: mediaBuffer.byteLength,
-        contentType: getContentTypeRobust(rawMediaType)
+        contentType: contentType
       });
       return originalUrl; // Fallback para URL original
     }
@@ -972,27 +973,64 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
 }
 
 // Função para determinar extensão do arquivo baseada no tipo de mídia
-function getFileExtensionRobust(mediaType) {
+function getFileExtensionRobust(mediaType, originalUrl = null) {
+  // Para imagens, tentar detectar formato real da URL original
+  if (mediaType === 'image' && originalUrl) {
+    const urlMatch = originalUrl.match(/\.(png|jpg|jpeg|webp|gif|bmp|tiff)(\?|$|&)/i);
+    if (urlMatch) {
+      let ext = urlMatch[1].toLowerCase();
+      // Normalizar jpeg para jpg
+      if (ext === 'jpeg') ext = 'jpg';
+      console.log(`🎨 FORMATO ORIGINAL DETECTADO: ${ext.toUpperCase()} da URL: ${originalUrl.substring(0, 60)}...`);
+      return ext;
+    }
+  }
+  
+  // Fallback para tipos genéricos
   const typeMap = {
     'video': 'mp4',
-    'image': 'jpg', 
+    'image': 'jpg', // Só se não conseguir detectar formato
     'audio': 'ogg',
     'ptt': 'ogg',
     'document': 'pdf'
   };
   
-  return typeMap[mediaType] || 'bin';
+  const extension = typeMap[mediaType] || 'bin';
+  console.log(`📁 FORMATO FALLBACK: ${extension.toUpperCase()} para tipo: ${mediaType}`);
+  return extension;
 }
 
 // Função para determinar content type baseado no tipo de mídia
-function getContentTypeRobust(mediaType) {
+function getContentTypeRobust(mediaType, fileExtension = null) {
+  // Para imagens, usar content-type baseado na extensão real
+  if (mediaType === 'image' && fileExtension) {
+    const imageTypes = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'webp': 'image/webp',
+      'gif': 'image/gif',
+      'bmp': 'image/bmp',
+      'tiff': 'image/tiff'
+    };
+    
+    const contentType = imageTypes[fileExtension.toLowerCase()];
+    if (contentType) {
+      console.log(`🎨 CONTENT-TYPE DETECTADO: ${contentType} para extensão: ${fileExtension}`);
+      return contentType;
+    }
+  }
+  
+  // Fallback para tipos genéricos
   const typeMap = {
     'video': 'video/mp4',
-    'image': 'image/jpeg',
+    'image': 'image/jpeg', // Só se não conseguir detectar
     'audio': 'audio/ogg', 
     'ptt': 'audio/ogg',
     'document': 'application/pdf'
   };
   
-  return typeMap[mediaType] || 'application/octet-stream';
+  const contentType = typeMap[mediaType] || 'application/octet-stream';
+  console.log(`📁 CONTENT-TYPE FALLBACK: ${contentType} para tipo: ${mediaType}`);
+  return contentType;
 }
