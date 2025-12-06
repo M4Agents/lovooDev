@@ -640,11 +640,39 @@ async function downloadAndStoreMedia({
 
     console.log(' URL de mídia retornada pela Uazapi:', publicUrl);
 
-    const { error: updateError } = await supabase
-      .from('chat_messages')
-      .update({ media_url: publicUrl })
+    // Usar função robusta para processar a mídia descriptografada
+    console.log('🔄 PROCESSANDO MÍDIA DESCRIPTOGRAFADA COM FUNÇÃO ROBUSTA...');
+    const processedUrl = await processMediaMessageRobust(null, 'image', supabase, publicUrl);
+    
+    if (processedUrl && processedUrl !== publicUrl) {
+      console.log('✅ MÍDIA PROCESSADA E SALVA NO SUPABASE STORAGE:', processedUrl);
+      
+      // Atualizar mensagem com URL do Supabase Storage
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ media_url: processedUrl })
+        .eq('id', chatMessageId);
+        
+      if (updateError) {
+        console.error('❌ ERRO AO ATUALIZAR MENSAGEM:', updateError);
+      } else {
+        console.log('✅ MENSAGEM ATUALIZADA COM URL DO SUPABASE STORAGE');
+      }
+    } else {
+      console.log('⚠️ USANDO URL DA UAZAPI DIRETAMENTE');
+      
+      // Fallback: usar URL da Uazapi diretamente
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ media_url: publicUrl })
+        .eq('id', chatMessageId);
+        
+      if (updateError) {
+        console.error('❌ ERRO AO ATUALIZAR MENSAGEM:', updateError);
+      }
+    }
   } catch (error) {
-    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    console.error('[downloadAndStoreMedia] EXCEPTION:', error);
     return null;
   }
 }
@@ -876,21 +904,23 @@ async function syncContactProfilePictureFromUazapi({
 // =====================================================
 // Implementada em: 2025-12-05 - Correção definitiva de vídeos recebidos
 // Adicionada ao webhook antigo funcional para processar URLs externas
-export async function processMediaMessageRobust(originalUrl, rawMediaType, supabase) {
+export async function processMediaMessageRobust(originalUrl, rawMediaType, supabase, uazapiUrl = null) {
   try {
     console.log('🚀 FUNÇÃO PROCESSAMENTO EXECUTADA!');
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
     console.log('📊 PARÂMETROS RECEBIDOS:', { 
       hasSupabase: !!supabase, 
       originalUrl: originalUrl?.substring(0, 100),
-      rawMediaType 
+      rawMediaType,
+      uazapiUrl: uazapiUrl?.substring(0, 100)
     });
     
-    // Download da mídia externa (WhatsApp CDN)
-    console.log('🌐 INICIANDO DOWNLOAD:', originalUrl);
-    console.log('🔗 URL COMPLETA:', originalUrl);
+    // Usar URL da Uazapi se disponível (descriptografada), senão usar URL original
+    const downloadUrl = uazapiUrl || originalUrl;
+    console.log('🌐 INICIANDO DOWNLOAD:', downloadUrl);
+    console.log('🔗 URL COMPLETA:', downloadUrl);
     
-    const response = await fetch(originalUrl);
+    const response = await fetch(downloadUrl);
     
     console.log('📡 RESPOSTA RECEBIDA:', {
       status: response.status,
