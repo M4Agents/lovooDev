@@ -178,10 +178,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           })
         }
 
-        // DEBUG: Log específico para a mensagem mais recente (17:10:53)
-        const recentMessage = messagesData?.find(m => m.id === '243f0d30-22be-4655-9011-bd8bc01b1206')
+        // DEBUG: Log específico para a mensagem mais recente (17:36:06)
+        const recentMessage = messagesData?.find(m => m.id === '97b48a67-cbf9-4091-b012-55ea77d0a281')
         if (recentMessage) {
-          console.log('🔥 DEBUG: NOVA MENSAGEM PNG ENCONTRADA:', {
+          console.log('🔥 DEBUG: NOVA MENSAGEM ENCONTRADA:', {
             id: recentMessage.id,
             message_type: recentMessage.message_type,
             media_url: recentMessage.media_url,
@@ -191,7 +191,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             timestamp: recentMessage.timestamp
           })
         } else {
-          console.log('❌ DEBUG: NOVA MENSAGEM PNG NÃO ENCONTRADA no frontend!')
+          console.log('❌ DEBUG: NOVA MENSAGEM NÃO ENCONTRADA no frontend!')
         }
         return sortedMessages
       })
