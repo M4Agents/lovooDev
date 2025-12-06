@@ -178,20 +178,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           })
         }
 
-        // DEBUG: Log específico para a mensagem mais recente (17:36:06)
-        const recentMessage = messagesData?.find(m => m.id === '97b48a67-cbf9-4091-b012-55ea77d0a281')
+        // DEBUG: Log específico para a mensagem PNG corrigida (17:56:47)
+        const recentMessage = messagesData?.find(m => m.id === 'd8cdb4d0-1b08-4c12-abea-58420ae4bd63')
         if (recentMessage) {
-          console.log('🔥 DEBUG: NOVA MENSAGEM ENCONTRADA:', {
+          console.log('🎉 DEBUG: MENSAGEM PNG CORRIGIDA ENCONTRADA:', {
             id: recentMessage.id,
             message_type: recentMessage.message_type,
             media_url: recentMessage.media_url,
             actualType: getActualMessageType(recentMessage),
             direction: recentMessage.direction,
             shouldRender: recentMessage.media_url && getActualMessageType(recentMessage) === 'image',
-            timestamp: recentMessage.timestamp
+            timestamp: recentMessage.timestamp,
+            isPNG: recentMessage.media_url?.includes('.png')
           })
         } else {
-          console.log('❌ DEBUG: NOVA MENSAGEM NÃO ENCONTRADA no frontend!')
+          console.log('❌ DEBUG: MENSAGEM PNG CORRIGIDA NÃO ENCONTRADA no frontend!')
         }
 
         // DEBUG: Verificar se mensagem está sendo renderizada
