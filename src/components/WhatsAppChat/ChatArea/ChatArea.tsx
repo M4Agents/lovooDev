@@ -244,7 +244,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         // Elemento visível encontrado
         if (messageDate) {
           const formattedDate = formatDateSeparator(messageDate);
-          console.log('📅 Indicador de data ativo:', formattedDate);
+          // Indicador de data ativo
           setCurrentVisibleDate(formattedDate);
           setShowDateIndicator(true);
           return;
@@ -265,13 +265,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     
     // Só executar detecção se não estiver no final
     if (!isAtBottom) {
-      console.log('📜 Scroll: detectando data visível');
+      // Detectando data visível durante scroll
       
       // Detectar data visível durante scroll
       try {
         detectVisibleDate();
       } catch (error) {
-        console.error('❌ Erro na detecção de data');
+        // Erro na detecção de data
       }
     } else {
       // Esconder indicador se estiver no final
