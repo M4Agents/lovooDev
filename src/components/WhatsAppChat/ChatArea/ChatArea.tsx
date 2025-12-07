@@ -246,11 +246,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Função para detectar data visível durante scroll
   const detectVisibleDate = () => {
     const container = messagesContainerRef.current;
-    if (!container || messages.length === 0) return;
+    if (!container || messages.length === 0) {
+      console.log('🔍 DEBUG: Container ou mensagens não disponíveis', { container: !!container, messagesLength: messages.length });
+      return;
+    }
 
     // Encontrar primeira mensagem visível no topo do viewport
     const containerRect = container.getBoundingClientRect();
     const messageElements = container.querySelectorAll('[data-message-date]');
+    
+    console.log('🔍 DEBUG: Detectando data visível', {
+      containerRect: { top: containerRect.top, height: containerRect.height },
+      messageElementsFound: messageElements.length
+    });
     
     for (const element of messageElements) {
       const rect = element.getBoundingClientRect();
@@ -260,12 +268,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const messageDate = element.getAttribute('data-message-date');
         if (messageDate) {
           const formattedDate = formatDateSeparator(messageDate);
+          console.log('📅 DEBUG: Data detectada', { messageDate, formattedDate });
           setCurrentVisibleDate(formattedDate);
           setShowDateIndicator(true);
           return;
         }
       }
     }
+    
+    console.log('🔍 DEBUG: Nenhuma mensagem visível encontrada no topo');
   };
 
   // Função para detectar se usuário está no final do chat
@@ -276,11 +287,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
     setIsUserAtBottom(isAtBottom);
     
+    console.log('📜 DEBUG: Scroll detectado', { scrollTop, isAtBottom, showDateIndicator });
+    
     // Detectar data visível durante scroll
     detectVisibleDate();
     
     // Esconder indicador se estiver no final
     if (isAtBottom) {
+      console.log('📜 DEBUG: Escondendo indicador (usuário no final)');
       setShowDateIndicator(false);
     }
   };
