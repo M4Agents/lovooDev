@@ -28,6 +28,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [hasMoreMessages, setHasMoreMessages] = useState(true)
   const [sending, setSending] = useState(false)
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
@@ -213,8 +214,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
-  // Função loadOlderMessages mantida para o botão "Carregar Mais"
+  // Função para detectar se usuário está no final do chat
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    
+    // Considera "no final" se está a menos de 50px do fim
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
+    setIsUserAtBottom(isAtBottom);
+  };
 
+  // Função loadOlderMessages mantida para o botão "Carregar Mais"
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMoreMessages || messages.length === 0) {
       return
@@ -421,10 +430,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [conversationId, companyId])
 
-  // Auto-scroll para última mensagem
+  // Auto-scroll inteligente: só quando usuário está no final
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (isUserAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, isUserAtBottom])
 
   // 🔧 BACKUP: Polling para mensagens recebidas (fallback do realtime)
   useEffect(() => {
@@ -1054,7 +1065,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Mensagens */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]">
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]"
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
