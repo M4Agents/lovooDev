@@ -1,9 +1,10 @@
-# 📖 DOCUMENTAÇÃO TÉCNICA - SISTEMA DE INTEGRAÇÕES M4TRACK V1.1
+# 📖 DOCUMENTAÇÃO TÉCNICA - SISTEMA DE INTEGRAÇÕES M4TRACK V1.2
 
-## 🎯 VERSÃO FUNCIONAL COMPLETA - NOVEMBRO 2024 (ATUALIZADA)
+## 🎯 VERSÃO FUNCIONAL COMPLETA - DEZEMBRO 2024 (ATUALIZADA)
 
 ### 📋 STATUS GERAL
 **VERSÃO ESTÁVEL E FUNCIONAL** - Todas as funcionalidades de integrações implementadas, testadas e em produção.
+**ATUALIZAÇÃO 06/12/2025:** Sistema de Chat WhatsApp com preview de mídia 100% operacional.
 **ATUALIZAÇÃO 11/11/2025:** Sistema de Webhook Avançado com campos personalizados 100% operacional.
 
 ---
@@ -53,7 +54,34 @@ curl -X POST https://api.m4track.com/webhook/leads/[company_id] \
 
 #### **Status**: ✅ 100% FUNCIONAL
 
-### 3. 📤 WEBHOOK AVANÇADO (Enviar Dados)
+### 3. 💬 SISTEMA DE CHAT WHATSAPP
+
+#### **Funcionalidade Principal:**
+Sistema completo de chat WhatsApp integrado com Uazapi, incluindo recebimento de mensagens, criação automática de leads e preview de mídia (imagens e vídeos).
+
+#### **Características Técnicas:**
+- **Webhook Uazapi**: Recebimento automático de mensagens WhatsApp
+- **Criação de leads**: Automática para novos contatos
+- **Preview de mídia**: Imagens (PNG, JPG, WebP) e vídeos (MP4, WebM)
+- **Descriptografia**: URLs de mídia do WhatsApp descriptografadas via Uazapi
+- **Supabase Storage**: Armazenamento seguro de arquivos de mídia
+- **Chat em tempo real**: Interface responsiva para conversas
+
+#### **Processamento de Mídia:**
+- **Detecção automática**: Identificação de tipo de mídia (image, video, audio)
+- **Descriptografia Uazapi**: API `/message/download` para URLs válidas
+- **Formato preservado**: PNG mantido como PNG, MP4 como MP4
+- **Content-Type correto**: `image/png`, `video/mp4`, etc.
+- **Fallback inteligente**: WhatsApp URLs assumem PNG/MP4 por padrão
+
+#### **Arquivos Principais:**
+- `api/uazapi-webhook-final.js` - Webhook principal
+- `api/webhook/uazapi/[company_id].js` - Webhook por empresa
+- `src/components/WhatsAppChat/ChatArea/ChatArea.tsx` - Interface do chat
+
+#### **Status**: ✅ 100% FUNCIONAL
+
+### 4. 📤 WEBHOOK AVANÇADO (Enviar Dados)
 
 #### **Funcionalidade Principal:**
 Enviar dados automaticamente para sistemas externos quando eventos específicos ocorrem.
@@ -92,7 +120,7 @@ Enviar dados automaticamente para sistemas externos quando eventos específicos 
 
 #### **Status**: ✅ 100% FUNCIONAL
 
-### 4. 📖 DOCUMENTAÇÃO TÉCNICA INTEGRADA
+### 5. 📖 DOCUMENTAÇÃO TÉCNICA INTEGRADA
 
 #### **Modal Profissional:**
 Acessível via botão "Ver Documentação Completa" no Webhook Avançado.
@@ -133,9 +161,98 @@ Acessível via botão "Ver Documentação Completa" no Webhook Avançado.
 
 ---
 
-## ✅ FUNCIONALIDADES COMPLETADAS (ATUALIZAÇÃO 11/11/2025)
+## ✅ FUNCIONALIDADES COMPLETADAS (ATUALIZAÇÃO 06/12/2025)
 
-### 1. 📊 LOGS DO WEBHOOK AVANÇADO
+### 1. 💬 SISTEMA DE CHAT WHATSAPP COM PREVIEW DE MÍDIA
+
+#### **Status Atual:**
+- **Backend**: ✅ Funcionando (webhook Uazapi + processamento de mídia)
+- **Frontend**: ✅ Interface de chat completa
+- **Preview de Mídia**: ✅ Imagens e vídeos funcionando
+- **Prioridade**: ✅ CONCLUÍDA
+
+#### **Problemas Resolvidos:**
+- ✅ **Imagens corrompidas**: URLs do WhatsApp descriptografadas via Uazapi
+- ✅ **Formato preservado**: PNG mantido como PNG (não convertido para JPG)
+- ✅ **Vídeos indisponíveis**: Processamento correto de vídeos MP4
+- ✅ **Content-Type incorreto**: Mapeamento específico por extensão
+- ✅ **Hardcode de tipos**: Detecção dinâmica de mediaType (image, video, audio)
+- ✅ **Supabase Storage**: Upload com formato e content-type corretos
+
+#### **Funcionalidades Implementadas:**
+- ✅ Webhook Uazapi recebendo mensagens WhatsApp
+- ✅ Criação automática de leads para novos contatos
+- ✅ Descriptografia de mídia via API `/message/download`
+- ✅ Processamento robusto com função `processMediaMessageRobust`
+- ✅ Detecção inteligente de formatos (PNG, JPG, MP4, WebM, etc.)
+- ✅ Upload para Supabase Storage com content-type correto
+- ✅ Preview de imagens funcionando no chat
+- ✅ Preview de vídeos funcionando no chat
+- ✅ Interface responsiva e moderna
+- ✅ Logs de debug para troubleshooting
+
+#### **Arquivos Modificados:**
+- `api/uazapi-webhook-final.js`: Função robusta de processamento
+- `api/webhook/uazapi/[company_id].js`: Webhook por empresa
+- `src/components/WhatsAppChat/ChatArea/ChatArea.tsx`: Interface do chat
+
+#### **Correções Técnicas Detalhadas:**
+
+**1. Problema: Imagens corrompidas (PNG → JPG)**
+```javascript
+// ❌ ANTES: Hardcode que convertia tudo para JPG
+const extension = 'jpg'; // Sempre JPG
+
+// ✅ DEPOIS: Detecção inteligente de formato
+function getFileExtensionRobust(mediaType, originalUrl) {
+  if (mediaType === 'image' && originalUrl) {
+    // Detectar extensão na URL
+    const urlMatch = originalUrl.match(/\.(png|jpg|jpeg|webp|gif)(\?|$|&)/i);
+    if (urlMatch) return urlMatch[1].toLowerCase();
+    
+    // Para WhatsApp, assumir PNG (melhor qualidade)
+    if (originalUrl.includes('whatsapp.net')) return 'png';
+  }
+}
+```
+
+**2. Problema: Vídeos "indisponíveis"**
+```javascript
+// ❌ ANTES: Hardcode para 'image'
+const processedUrl = await processMediaMessageRobust(null, 'image', supabase, publicUrl);
+
+// ✅ DEPOIS: Tipo dinâmico
+const processedUrl = await processMediaMessageRobust(null, mediaType, supabase, publicUrl);
+```
+
+**3. Problema: URLs criptografadas do WhatsApp**
+```javascript
+// ❌ ANTES: Download direto da URL criptografada
+const response = await fetch(whatsappUrl); // Imagem corrompida
+
+// ✅ DEPOIS: Descriptografia via Uazapi
+const uazapiResponse = await fetch('/message/download', { id: messageId });
+const descriptografedUrl = uazapiResponse.fileURL;
+const response = await fetch(descriptografedUrl); // Imagem válida
+```
+
+**4. Problema: Content-Type incorreto**
+```javascript
+// ❌ ANTES: Content-type genérico
+contentType: 'image/jpeg' // Sempre JPEG
+
+// ✅ DEPOIS: Content-type específico
+function getContentTypeRobust(mediaType, extension) {
+  const types = {
+    'png': 'image/png',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm'
+  };
+  return types[extension] || 'application/octet-stream';
+}
+```
+
+### 2. 📊 LOGS DO WEBHOOK AVANÇADO
 
 #### **Status Atual:**
 - **Backend**: ✅ Funcionando (triggers e funções SQL implementadas)
@@ -154,7 +271,7 @@ Acessível via botão "Ver Documentação Completa" no Webhook Avançado.
 - ✅ Interface limpa sem erros de console
 - ✅ Query direta para máxima performance
 
-### 2. 🔧 CAMPOS PERSONALIZADOS
+### 3. 🔧 CAMPOS PERSONALIZADOS
 
 #### **Status Atual:**
 - **Criação**: ✅ Sistema completo de campos personalizados
@@ -267,6 +384,8 @@ Todas as novas implementações devem ser totalmente isoladas para não comprome
 
 ### ✅ Funcionalidades: 100% Operacionais
 - API para Leads: Funcionando ✅
+- Sistema de Chat WhatsApp: Funcionando ✅
+- Preview de Mídia (Imagens/Vídeos): Funcionando ✅
 - Webhook Avançado: Funcionando ✅
 - Logs de Webhook: Funcionando ✅
 - Campos Personalizados: Funcionando ✅
@@ -292,6 +411,9 @@ Todas as novas implementações devem ser totalmente isoladas para não comprome
 - Campos personalizados: Enviados corretamente ✅
 - Logs: Registrados e visualizados ✅
 - Performance: Otimizada ✅
+- Uazapi WhatsApp: Integração completa ✅
+- Supabase Storage: Mídia armazenada corretamente ✅
+- Preview de Mídia: Funcionando em produção ✅
 
 ---
 
@@ -299,8 +421,16 @@ Todas as novas implementações devem ser totalmente isoladas para não comprome
 
 ### 🎯 PRÓXIMOS PASSOS RECOMENDADOS
 
-#### **Fase 1 - ✅ CONCLUÍDA (11/11/2025):**
-1. **✅ Logs do Webhook Avançado Implementados**
+#### **Fase 1 - ✅ CONCLUÍDA (06/12/2025):**
+1. **✅ Sistema de Chat WhatsApp com Preview de Mídia**
+   - ✅ Webhook Uazapi integrado
+   - ✅ Descriptografia de mídia do WhatsApp
+   - ✅ Preview de imagens (PNG, JPG, WebP)
+   - ✅ Preview de vídeos (MP4, WebM)
+   - ✅ Supabase Storage para arquivos
+   - ✅ Interface de chat responsiva
+
+2. **✅ Logs do Webhook Avançado Implementados (11/11/2025)**
    - ✅ Interface de visualização completa
    - ✅ Filtros e busca funcionais
    - ✅ Detalhes de disparos com modal
@@ -382,8 +512,8 @@ Todas as novas implementações devem ser totalmente isoladas para não comprome
 ---
 
 **Documento gerado em:** Novembro 2024  
-**Última atualização:** 11 de Novembro de 2025  
-**Versão:** 1.1  
+**Última atualização:** 06 de Dezembro de 2025  
+**Versão:** 1.2  
 **Status:** Completamente Funcional e Estável  
 **Próxima revisão:** Conforme necessidade de novas integrações
 
@@ -395,6 +525,7 @@ Todas as novas implementações devem ser totalmente isoladas para não comprome
 O sistema de integrações M4Track está **completamente funcional** com todas as funcionalidades principais implementadas e testadas:
 
 - **📥 API para Leads**: Recepção de dados externa ✅
+- **💬 Chat WhatsApp**: Sistema completo com preview de mídia ✅
 - **📤 Webhook Avançado**: Envio automático de dados ✅  
 - **🔧 Campos Personalizados**: Suporte completo ✅
 - **📊 Logs Completos**: Visualização e monitoramento ✅
