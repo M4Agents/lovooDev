@@ -246,8 +246,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Função para detectar data visível durante scroll
   const detectVisibleDate = () => {
     const container = messagesContainerRef.current;
-    if (!container || messages.length === 0) {
-      console.log('🔍 DEBUG: Container ou mensagens não disponíveis', { container: !!container, messagesLength: messages.length });
+    console.log('🔍 DEBUG: Verificando container e mensagens', { 
+      container: !!container, 
+      messagesLength: messages.length,
+      containerRef: messagesContainerRef.current ? 'exists' : 'null'
+    });
+    
+    if (!container) {
+      console.log('❌ DEBUG: Container não disponível');
+      return;
+    }
+    
+    if (messages.length === 0) {
+      console.log('❌ DEBUG: Nenhuma mensagem disponível');
       return;
     }
 
@@ -305,10 +316,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     } else {
       // Se não está no final, deveria mostrar indicador
       console.log('📜 DEBUG: Não está no final, deveria mostrar indicador');
-      // TESTE: Forçar indicador para aparecer
-      setCurrentVisibleDate('TESTE');
-      setShowDateIndicator(true);
-      console.log('🧪 DEBUG: Forçando indicador de teste');
     }
   };
 
