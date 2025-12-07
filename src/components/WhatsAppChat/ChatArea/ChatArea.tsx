@@ -274,12 +274,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     for (const element of messageElements) {
       const rect = element.getBoundingClientRect();
       
+      console.log('🔍 DEBUG: Verificando elemento', {
+        rectTop: rect.top,
+        containerTop: containerRect.top,
+        isVisible: rect.top >= containerRect.top && rect.top <= containerRect.top + 100
+      });
+      
       // Se a mensagem está visível no topo do container (com margem de 100px)
       if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
         const messageDate = element.getAttribute('data-message-date');
+        console.log('📅 DEBUG: Elemento visível encontrado', { messageDate });
         if (messageDate) {
           const formattedDate = formatDateSeparator(messageDate);
-          console.log('📅 DEBUG: Data detectada', { messageDate, formattedDate });
+          console.log('✅ DEBUG: Definindo indicador', { messageDate, formattedDate });
           setCurrentVisibleDate(formattedDate);
           setShowDateIndicator(true);
           return;
