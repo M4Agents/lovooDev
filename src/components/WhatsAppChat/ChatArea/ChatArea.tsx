@@ -63,6 +63,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [conversationId])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   // 🚨 EMERGÊNCIA: Persistência desabilitada temporariamente
   // useEffect para cache desabilitado até resolver tela branca
@@ -229,6 +230,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return
     }
 
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
     try {
       setLoadingOlder(true)
       console.log('⬆️ DEBUG: Carregando mensagens antigas', {
@@ -237,6 +241,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         currentMessages: messages.length,
         oldestMessage: messages[0]?.timestamp
       })
+
+      // Salvar posição atual ANTES de carregar
+      const scrollHeight = container.scrollHeight;
+      const scrollTop = container.scrollTop;
+      
+      console.log('📍 DEBUG: Posição antes de carregar', {
+        scrollHeight,
+        scrollTop,
+        scrollRatio: scrollTop / scrollHeight
+      });
 
       // Pegar timestamp da mensagem mais antiga
       const oldestTimestamp = new Date(messages[0].timestamp)
@@ -266,6 +280,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         })
         return newMessages
       })
+
+      // Restaurar posição APÓS DOM atualizar
+      requestAnimationFrame(() => {
+        const newScrollHeight = container.scrollHeight;
+        const heightDifference = newScrollHeight - scrollHeight;
+        const newScrollTop = scrollTop + heightDifference;
+        
+        container.scrollTop = newScrollTop;
+        
+        console.log('🎯 DEBUG: Posição restaurada', {
+          oldScrollHeight: scrollHeight,
+          newScrollHeight,
+          heightDifference,
+          oldScrollTop: scrollTop,
+          newScrollTop,
+          finalScrollTop: container.scrollTop
+        });
+      });
 
     } catch (error) {
       console.error('❌ DEBUG: Erro ao carregar mensagens antigas:', error)
@@ -1066,6 +1098,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Mensagens */}
       <div 
+        ref={messagesContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]"
         onScroll={handleScroll}
       >
