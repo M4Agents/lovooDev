@@ -215,6 +215,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
+  // Funções para separadores de data (padrão WhatsApp)
+  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage) => {
+    if (!previousMessage) return true; // Primeira mensagem sempre mostra
+    
+    const currentDate = new Date(currentMessage.timestamp);
+    const prevDate = new Date(previousMessage.timestamp);
+    
+    // Compara apenas dia/mês/ano (ignora hora)
+    return currentDate.toDateString() !== prevDate.toDateString();
+  };
+
+  const formatDateSeparator = (timestamp: string | Date) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return "Hoje";
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return "Ontem";
+    } else {
+      return date.toLocaleDateString('pt-BR'); // DD/MM/AAAA
+    }
+  };
+
   // Função para detectar se usuário está no final do chat
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -1138,33 +1164,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             )}
             
             {messages.map((message, index) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              isOwn={message.direction === 'outbound'}
-              expandedVideoId={expandedVideoId}
-              onToggleVideoExpansion={toggleVideoExpansion}
-              getActualMessageType={getActualMessageType}
-              videoErrors={videoErrors}
-              getSafeVideoUrl={getSafeVideoUrl}
-              onVideoError={handleVideoError}
-              onResetVideoError={resetVideoError}
-              showTimestamp={
-                index === 0 ||
-                (messages[index - 1] && (() => {
-                  try {
-                    const currentTime = message.timestamp instanceof Date ? 
-                      message.timestamp.getTime() : new Date(message.timestamp).getTime()
-                    const prevTime = messages[index - 1].timestamp instanceof Date ? 
-                      messages[index - 1].timestamp.getTime() : new Date(messages[index - 1].timestamp).getTime()
-                    return Math.abs(currentTime - prevTime) > 300000 // 5 minutos
-                  } catch (error) {
-                    console.warn('⚠️ Erro ao calcular timestamp, mostrando sempre:', error)
-                    return true // Mostrar timestamp em caso de erro
+              <React.Fragment key={message.id}>
+                {/* Separador de data */}
+                {shouldShowDateSeparator(message, messages[index - 1]) && (
+                  <DateSeparator timestamp={message.timestamp} formatDateSeparator={formatDateSeparator} />
+                )}
+                
+                {/* Mensagem */}
+                <MessageBubble
+                  message={message}
+                  isOwn={message.direction === 'outbound'}
+                  expandedVideoId={expandedVideoId}
+                  onToggleVideoExpansion={toggleVideoExpansion}
+                  getActualMessageType={getActualMessageType}
+                  videoErrors={videoErrors}
+                  getSafeVideoUrl={getSafeVideoUrl}
+                  onVideoError={handleVideoError}
+                  onResetVideoError={resetVideoError}
+                  showTimestamp={
+                    index === 0 ||
+                    (messages[index - 1] && (() => {
+                      try {
+                        const currentTime = message.timestamp instanceof Date ? 
+                          message.timestamp.getTime() : new Date(message.timestamp).getTime()
+                        const prevTime = messages[index - 1].timestamp instanceof Date ? 
+                          messages[index - 1].timestamp.getTime() : new Date(messages[index - 1].timestamp).getTime()
+                        return Math.abs(currentTime - prevTime) > 300000 // 5 minutos
+                      } catch (error) {
+                        console.warn('⚠️ Erro ao calcular timestamp, mostrando sempre:', error)
+                        return true // Mostrar timestamp em caso de erro
+                      }
+                    })())
                   }
-                })())
-              }
-            />
+                />
+              </React.Fragment>
             ))}
           </>
         )}
@@ -1202,6 +1235,15 @@ interface MessageBubbleProps {
   onVideoError: (messageId: string, error: any) => void
   onResetVideoError: (messageId: string) => void
 }
+
+// Componente para separador de data (estilo WhatsApp)
+const DateSeparator: React.FC<{ timestamp: string | Date; formatDateSeparator: (timestamp: string | Date) => string }> = ({ timestamp, formatDateSeparator }) => (
+  <div className="flex justify-center my-4">
+    <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full shadow-sm">
+      {formatDateSeparator(timestamp)}
+    </div>
+  </div>
+);
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
