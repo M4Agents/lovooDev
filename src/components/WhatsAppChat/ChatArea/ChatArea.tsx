@@ -210,19 +210,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }
 
   // =====================================================
-  // CARREGAR MENSAGENS ANTIGAS (SCROLL INFINITO)
+  // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
-  // Handle scroll para detectar quando usuário rola para o topo
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop } = e.currentTarget;
-    
-    // Se usuário rolou próximo ao topo (100px do topo) e há mais mensagens
-    if (scrollTop < 100 && hasMoreMessages && !loadingOlder && messages.length > 0) {
-      console.log('🔄 DEBUG: Trigger scroll infinito - carregando mensagens antigas');
-      loadOlderMessages();
-    }
-  };
+  // Função loadOlderMessages mantida para o botão "Carregar Mais"
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMoreMessages || messages.length === 0) {
@@ -1063,10 +1054,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Mensagens */}
-      <div 
-        className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]"
-        onScroll={handleScroll}
-      >
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]">
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1077,13 +1065,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         ) : (
           <>
-            {/* Indicador de loading para mensagens antigas */}
-            {loadingOlder && (
-              <div className="text-center py-3">
-                <div className="inline-flex items-center text-sm text-gray-500">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500 mr-2"></div>
-                  Carregando mensagens antigas...
-                </div>
+            {/* Botão "Carregar Mais" no topo */}
+            {hasMoreMessages && (
+              <div className="text-center py-3 border-b border-gray-200 mb-4">
+                <button
+                  onClick={loadOlderMessages}
+                  disabled={loadingOlder}
+                  className="inline-flex items-center px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingOlder ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Carregando mensagens...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                      Carregar mensagens anteriores
+                    </>
+                  )}
+                </button>
               </div>
             )}
             
