@@ -29,6 +29,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [hasMoreMessages, setHasMoreMessages] = useState(true)
   const [sending, setSending] = useState(false)
   const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const [currentVisibleDate, setCurrentVisibleDate] = useState<string | null>(null)
+  const [showDateIndicator, setShowDateIndicator] = useState(false)
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
@@ -241,6 +243,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  // Função para detectar data visível durante scroll
+  const detectVisibleDate = () => {
+    const container = messagesContainerRef.current;
+    if (!container || messages.length === 0) return;
+
+    // Encontrar primeira mensagem visível no topo do viewport
+    const containerRect = container.getBoundingClientRect();
+    const messageElements = container.querySelectorAll('[data-message-date]');
+    
+    for (const element of messageElements) {
+      const rect = element.getBoundingClientRect();
+      
+      // Se a mensagem está visível no topo do container (com margem de 100px)
+      if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
+        const messageDate = element.getAttribute('data-message-date');
+        if (messageDate) {
+          const formattedDate = formatDateSeparator(messageDate);
+          setCurrentVisibleDate(formattedDate);
+          setShowDateIndicator(true);
+          return;
+        }
+      }
+    }
+  };
+
   // Função para detectar se usuário está no final do chat
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -248,6 +275,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // Considera "no final" se está a menos de 50px do fim
     const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
     setIsUserAtBottom(isAtBottom);
+    
+    // Detectar data visível durante scroll
+    detectVisibleDate();
+    
+    // Esconder indicador se estiver no final
+    if (isAtBottom) {
+      setShowDateIndicator(false);
+    }
   };
 
   // Função loadOlderMessages mantida para o botão "Carregar Mais"
@@ -1125,9 +1160,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Mensagens */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]"
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb] relative"
         onScroll={handleScroll}
       >
+        {/* Indicador de data flutuante */}
+        <DateIndicator date={currentVisibleDate || ''} visible={showDateIndicator} />
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1170,33 +1207,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <DateSeparator timestamp={message.timestamp} formatDateSeparator={formatDateSeparator} />
                 )}
                 
-                {/* Mensagem */}
-                <MessageBubble
-                  message={message}
-                  isOwn={message.direction === 'outbound'}
-                  expandedVideoId={expandedVideoId}
-                  onToggleVideoExpansion={toggleVideoExpansion}
-                  getActualMessageType={getActualMessageType}
-                  videoErrors={videoErrors}
-                  getSafeVideoUrl={getSafeVideoUrl}
-                  onVideoError={handleVideoError}
-                  onResetVideoError={resetVideoError}
-                  showTimestamp={
-                    index === 0 ||
-                    (messages[index - 1] && (() => {
-                      try {
-                        const currentTime = message.timestamp instanceof Date ? 
-                          message.timestamp.getTime() : new Date(message.timestamp).getTime()
-                        const prevTime = messages[index - 1].timestamp instanceof Date ? 
-                          messages[index - 1].timestamp.getTime() : new Date(messages[index - 1].timestamp).getTime()
-                        return Math.abs(currentTime - prevTime) > 300000 // 5 minutos
-                      } catch (error) {
-                        console.warn('⚠️ Erro ao calcular timestamp, mostrando sempre:', error)
-                        return true // Mostrar timestamp em caso de erro
-                      }
-                    })())
-                  }
-                />
+                {/* Mensagem com data-attribute para detecção */}
+                <div data-message-date={message.timestamp}>
+                  <MessageBubble
+                    message={message}
+                    isOwn={message.direction === 'outbound'}
+                    expandedVideoId={expandedVideoId}
+                    onToggleVideoExpansion={toggleVideoExpansion}
+                    getActualMessageType={getActualMessageType}
+                    videoErrors={videoErrors}
+                    getSafeVideoUrl={getSafeVideoUrl}
+                    onVideoError={handleVideoError}
+                    onResetVideoError={resetVideoError}
+                    showTimestamp={
+                      index === 0 ||
+                      (messages[index - 1] && (() => {
+                        try {
+                          const currentTime = message.timestamp instanceof Date ? 
+                            message.timestamp.getTime() : new Date(message.timestamp).getTime()
+                          const prevTime = messages[index - 1].timestamp instanceof Date ? 
+                            messages[index - 1].timestamp.getTime() : new Date(messages[index - 1].timestamp).getTime()
+                          return Math.abs(currentTime - prevTime) > 300000 // 5 minutos
+                        } catch (error) {
+                          console.warn('⚠️ Erro ao calcular timestamp, mostrando sempre:', error)
+                          return true // Mostrar timestamp em caso de erro
+                        }
+                      })())
+                    }
+                  />
+                </div>
               </React.Fragment>
             ))}
           </>
@@ -1242,6 +1281,20 @@ const DateSeparator: React.FC<{ timestamp: string | Date; formatDateSeparator: (
     <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full shadow-sm">
       {formatDateSeparator(timestamp)}
     </div>
+  </div>
+);
+
+// Componente para indicador de data flutuante (durante scroll)
+const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => (
+  <div 
+    className={`
+      absolute top-4 left-1/2 transform -translate-x-1/2 z-10
+      bg-black bg-opacity-75 text-white text-xs px-3 py-1 rounded-full
+      transition-all duration-200 ease-in-out pointer-events-none
+      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
+    `}
+  >
+    {date}
   </div>
 );
 
