@@ -77,11 +77,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const fetchMessages = async () => {
     try {
       setLoading(true)
-      console.log('🔍 DEBUG: Iniciando fetchMessages (NOVO SISTEMA DE PAGINAÇÃO)', {
-        conversationId,
-        companyId,
-        timestamp: new Date().toISOString()
-      })
+      // Carregando mensagens...
       
       // NOVO: Carregar mensagens recentes (aumentado para 50 para garantir mídia recente)
       const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
@@ -90,11 +86,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       
       // Merge inteligente: preservar mensagens locais temporárias
       setMessages(prev => {
-        console.log('🔄 DEBUG: Estado anterior do chat:', {
-          total: prev.length,
-          temporarias: prev.filter(msg => msg.id.startsWith('temp-')).length,
-          permanentes: prev.filter(msg => !msg.id.startsWith('temp-')).length
-        })
+        // Processando estado do chat...
         
         // Mensagens temporárias (ainda não confirmadas no banco)
         const tempMessages = prev.filter(msg => msg.id.startsWith('temp-'))
@@ -110,78 +102,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
         
-        console.log('✅ DEBUG: Merge concluído:', {
-          banco: bankMessages.length,
-          temporarias: tempMessages.length,
-          total: sortedMessages.length
-        })
+        // Merge de mensagens concluído
         
-        // DEBUG ESPECÍFICO PARA MÍDIA
-        const mediaMessages = sortedMessages.filter(m => m.media_url)
-        console.log('🖼️ DEBUG: Mensagens de mídia encontradas:', {
-          total: mediaMessages.length,
-          tipos: mediaMessages.map(m => ({
-            id: m.id,
-            type: m.message_type,
-            media_url: m.media_url?.substring(0, 60) + '...',
-            actualType: getActualMessageType(m)
-          }))
-        })  
+        // Processando mensagens de mídia...  
         
-        // DEBUG: Log específico para mensagens com mídia
-        const mediaMessagesData = messagesData?.filter(m => m.media_url) || []
-        if (mediaMessagesData.length > 0) {
-          console.log('🎯 DEBUG: Mensagens com mídia encontradas:', {
-            total: mediaMessagesData.length,
-            detalhes: mediaMessagesData.map(m => ({
-              id: m.id,
-              type: m.message_type,
-              media_url: m.media_url?.substring(0, 60) + '...',
-              actualType: getActualMessageType(m),
-              direction: m.direction,
-              timestamp: m.timestamp
-            }))
-          })  
-        }
-
-        // DEBUG: Log específico para a mensagem da imagem PNG→JPG
-        const targetMessage = messagesData?.find(m => m.media_url?.includes('image_1765038581356_gji3uv3gk'))
-        if (targetMessage) {
-          console.log('🎯 DEBUG: MENSAGEM ALVO ENCONTRADA:', {
-            id: targetMessage.id,
-            message_type: targetMessage.message_type,
-            media_url: targetMessage.media_url,
-            actualType: getActualMessageType(targetMessage),
-            direction: targetMessage.direction,
-            shouldRender: targetMessage.media_url && getActualMessageType(targetMessage) === 'image'
-          })
-        }
-
-        // DEBUG: Log específico para a mensagem PNG corrigida (17:56:47)
-        const recentMessage = messagesData?.find(m => m.id === 'd8cdb4d0-1b08-4c12-abea-58420ae4bd63')
-        if (recentMessage) {
-          console.log('🎉 DEBUG: MENSAGEM PNG CORRIGIDA ENCONTRADA:', {
-            id: recentMessage.id,
-            message_type: recentMessage.message_type,
-            media_url: recentMessage.media_url,
-            actualType: getActualMessageType(recentMessage),
-            direction: recentMessage.direction,
-            shouldRender: recentMessage.media_url && getActualMessageType(recentMessage) === 'image',
-            timestamp: recentMessage.timestamp,
-            isPNG: recentMessage.media_url?.includes('.png')
-          })
-        } else {
-          console.log('❌ DEBUG: MENSAGEM PNG CORRIGIDA NÃO ENCONTRADA no frontend!')
-        }
-
-        // DEBUG: Verificar se mensagem está sendo renderizada
-        console.log('🎯 DEBUG: TOTAL DE MENSAGENS PARA RENDERIZAR:', sortedMessages.length)
-        console.log('🎯 DEBUG: IDs DAS MENSAGENS:', sortedMessages.map(m => m.id))
         return sortedMessages
       })
       
     } catch (error) {
-      console.error('❌ Erro ao buscar mensagens')
+      console.error('Erro ao carregar mensagens')
       // Em caso de erro, manter mensagens existentes
     } finally {
       setLoading(false)
@@ -296,11 +225,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const scrollHeight = container.scrollHeight;
       const scrollTop = container.scrollTop;
       
-      console.log('📍 DEBUG: Posição antes de carregar', {
-        scrollHeight,
-        scrollTop,
-        scrollRatio: scrollTop / scrollHeight
-      });
+      // Salvando posição do scroll...
 
       // Pegar timestamp da mensagem mais antiga
       const oldestTimestamp = new Date(messages[0].timestamp)
@@ -315,7 +240,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       if (olderMessages.length === 0) {
         setHasMoreMessages(false)
-        console.log('📭 DEBUG: Não há mais mensagens antigas')
+        // Não há mais mensagens antigas
         return
       }
 
@@ -338,7 +263,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       });
 
     } catch (error) {
-      console.error('❌ Erro ao carregar mensagens antigas')
+      console.error('Erro ao carregar histórico')
     } finally {
       setLoadingOlder(false)
     }
@@ -350,32 +275,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const fetchConversation = async () => {
     try {
-      console.log('🔍 DEBUG ChatArea.fetchConversation:', { companyId, userId, conversationId })
+      // Carregando conversa...
       const conversations = await chatApi.getConversations(companyId, userId, { type: 'all' })
-      console.log('🔍 DEBUG ChatArea.fetchConversation - total conversas:', conversations.length)
       const conv = conversations.find(c => c.id === conversationId)
-      console.log('🔍 DEBUG ChatArea.fetchConversation - conversa encontrada:', conv)
       setConversation(conv || null)
 
       // Carregar foto do contato a partir das informações detalhadas do contato
       if (conv) {
         try {
-          console.log('🔍 DEBUG ChatArea.fetchConversation - buscando contato para foto:', {
-            companyId,
-            phone: conv.contact_phone
-          })
           const contactInfo = await chatApi.getContactInfo(companyId, conv.contact_phone)
-          console.log('🔍 DEBUG ChatArea.fetchConversation - contactInfo retornado:', contactInfo)
           setContactPhotoUrl(contactInfo?.profile_picture_url || null)
         } catch (error) {
-          console.error('❌ DEBUG ChatArea.fetchConversation - erro ao carregar foto do contato:', error)
+          console.error('Erro ao carregar foto')
           setContactPhotoUrl(null)
         }
       } else {
         setContactPhotoUrl(null)
       }
     } catch (error) {
-      console.error('Error fetching conversation:', error)
+      console.error('Erro ao carregar conversa')
     }
   }
 
@@ -406,27 +324,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     try {
       setSending(true)
-      console.log('🚀 DEBUG: Iniciando envio de mensagem', {
-        conversationId,
-        companyId,
-        userId,
-        content: messageForm.content,
-        tempId: tempMessage.id
-      })
+      // Enviando mensagem...
       
       // Adicionar mensagem local imediatamente
       setMessages(prev => {
-        console.log('📝 DEBUG: Adicionando mensagem temporária ao estado')
+        // Adicionando mensagem temporária...
         return [...prev, tempMessage]
       })
       
       // 2. Enviar para o banco
       const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
-      console.log('✅ DEBUG: Mensagem enviada com sucesso', {
-        tempId: tempMessage.id,
-        realId: messageId,
-        timestamp: new Date().toISOString()
-      })
+      // Mensagem enviada com sucesso
       
       // 3. Atualizar mensagem local com ID real (manter status 'sending')
       setMessages(prev => {
@@ -435,25 +343,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             ? { ...msg, id: messageId } // Não mudar status ainda, aguardar confirmação
             : msg
         )
-        console.log('🔄 DEBUG: Mensagem temporária atualizada com ID real (status ainda "sending")')
+        // Mensagem atualizada com ID real
         return updated
       })
       
       // 4. Monitorar status da mensagem em tempo real
       const checkStatusInterval = setInterval(async () => {
         try {
-          console.log('🔍 DEBUG: Verificando status da mensagem:', messageId)
+          // Verificando status...
           
           // Buscar apenas a mensagem específica para verificar status
           const messagesData = await chatApi.getMessages(conversationId, companyId, 0)
           const sentMessage = messagesData?.find(m => m.id === messageId)
           
           if (sentMessage) {
-            console.log('📊 DEBUG: Status atual da mensagem:', {
-              id: messageId,
-              status: sentMessage.status,
-              timestamp: sentMessage.timestamp
-            })
+            // Atualizando status...
             
             // Atualizar status na UI se mudou
             setMessages(prev => prev.map(msg => 
@@ -464,23 +368,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             
             // Se status foi atualizado para 'sent' ou 'failed', parar monitoramento
             if (sentMessage.status === 'sent' || sentMessage.status === 'failed') {
-              console.log('✅ DEBUG: Status final alcançado, parando monitoramento')
+              // Parando monitoramento
               clearInterval(checkStatusInterval)
             }
           }
         } catch (error) {
-          console.warn('⚠️ DEBUG: Erro ao verificar status:', error)
+          console.warn('Erro ao verificar status:', error)
         }
       }, 1000) // Verificar a cada 1 segundo
       
       // Limpar interval após 30 segundos (timeout)
       setTimeout(() => {
         clearInterval(checkStatusInterval)
-        console.log('⏰ DEBUG: Timeout do monitoramento de status')
+        // Timeout do monitoramento
       }, 30000)
       
     } catch (error) {
-      console.error('❌ Erro ao enviar mensagem:', error)
+      console.error('Erro ao enviar mensagem:', error)
       // Remover mensagem local em caso de erro
       setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
       throw error
@@ -511,7 +415,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     if (!conversationId || !companyId) return
 
-    console.log('🔄 DEBUG: Iniciando polling backup para mensagens recebidas (OTIMIZADO)')
+    // Iniciando polling backup...
     
     const pollInterval = setInterval(async () => {
       try {
@@ -525,11 +429,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           ) || []
           
           if (newMessages.length > 0) {
-            console.log('🆕 DEBUG: Polling detectou novas mensagens (MÍDIA INCLUÍDA):', {
-              novas: newMessages.length,
-              ids: newMessages.map(m => m.id),
-              comMidia: newMessages.filter(m => m.media_url).length
-            })
+            // Novas mensagens detectadas
             
             // Combinar e ordenar
             const allMessages = [...prev, ...newMessages].sort((a, b) => 
@@ -542,13 +442,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           return prev
         })
       } catch (error) {
-        console.warn('⚠️ DEBUG: Erro no polling backup:', error)
+        console.warn('Erro no polling backup:', error)
       }
     }, 3000) // Polling a cada 3 segundos
 
     // Cleanup
     return () => {
-      console.log('🛑 DEBUG: Parando polling backup')
+      // Parando polling backup
       clearInterval(pollInterval)
     }
   }, [conversationId, companyId])
@@ -565,27 +465,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     conversationId,
     // Callback para nova mensagem recebida
     (message) => {
-      const debugLogs = true // Forçar logs para debug
-      
-      console.log('🔔 DEBUG: Nova mensagem recebida via realtime:', {
-        messageId: message.id,
-        conversationId: message.conversation_id,
-        content: message.content?.substring(0, 30),
-        direction: message.direction,
-        timestamp: message.timestamp
-      })
+      // Nova mensagem recebida
       
       setMessages(prev => {
         // Evitar duplicatas
         if (prev.some(m => m.id === message.id)) {
-          console.log('⚠️ DEBUG: Mensagem duplicada ignorada:', message.id)
+          // Mensagem duplicada ignorada
           return prev
         }
         
-        console.log('✅ DEBUG: Adicionando nova mensagem ao estado:', {
-          estadoAnterior: prev.length,
-          novoEstado: prev.length + 1
-        })
+        // Adicionando nova mensagem...
         
         const newMessages = [...prev, message].sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -596,11 +485,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     },
     // Callback para status de mensagem atualizado
     (statusUpdate) => {
-      const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-      
-      if (debugLogs) {
-        console.log('🔄 Status de mensagem atualizado:', statusUpdate)
-      }
+      // Status atualizado
       
       setMessages(prev => 
         prev.map(m => {
@@ -617,22 +502,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // ✅ NOVO: Listener para eventos do chat via Event Bus
   useChatEvent(`chat:conversation:${conversationId}:message`, (payload: any) => {
-    console.log('🎯 DEBUG: Evento de mensagem via Event Bus:', {
-      conversationId,
-      action: payload.action,
-      messageId: payload.data?.id,
-      content: payload.data?.content?.substring(0, 30)
-    })
+    // Evento de mensagem recebido
     
     if (payload.action === 'insert' && payload.data) {
       setMessages(prev => {
         // Evitar duplicatas
         if (prev.some(m => m.id === payload.data.id)) {
-          console.log('⚠️ DEBUG: Mensagem duplicada via EventBus ignorada:', payload.data.id)
+          // Mensagem duplicada ignorada
           return prev
         }
         
-        console.log('✅ DEBUG: Adicionando mensagem via EventBus ao estado')
+        // Adicionando mensagem via EventBus...
         const newMessages = [...prev, payload.data].sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
@@ -644,11 +524,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // ✅ NOVO: Listener para atualizações de status via Event Bus
   useChatEvent(`chat:conversation:${conversationId}:status`, (payload: any) => {
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('🔄 Evento de status via Event Bus:', payload)
-    }
+    // Evento de status recebido
     
     if (payload.action === 'update' && payload.data) {
       const { messageId, status } = payload.data
@@ -840,6 +716,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const fileUrl = URL.createObjectURL(file)
       
       // Configurar preview
+      // Enviando arquivo...  })
+      
+      // Abrir modal
+      setShowPreviewModal(true)
       setPreviewFile({
         file,
         url: fileUrl,
@@ -847,9 +727,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         size: file.size,
         type: file.type
       })
-      
-      // Abrir modal
-      setShowPreviewModal(true)
     } catch (error) {
       console.error('Erro ao abrir preview:', error)
       alert('Erro ao processar arquivo.')
