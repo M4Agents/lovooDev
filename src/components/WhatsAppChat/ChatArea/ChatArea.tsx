@@ -86,23 +86,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       // NOVO: Carregar mensagens recentes (aumentado para 50 para garantir mídia recente)
       const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
       
-      console.log('📊 DEBUG: Dados retornados da API:', {
-        total: messagesData?.length || 0,
-        primeiras3: messagesData?.slice(0, 3).map(m => ({
-          id: m.id,
-          content: m.content?.substring(0, 30),
-          direction: m.direction,
-          status: m.status,
-          timestamp: m.timestamp
-        })),
-        ultimas3: messagesData?.slice(-3).map(m => ({
-          id: m.id,
-          content: m.content?.substring(0, 30),
-          direction: m.direction,
-          status: m.status,
-          timestamp: m.timestamp
-        }))
-      })
+      // Logs removidos por segurança
       
       // Merge inteligente: preservar mensagens locais temporárias
       setMessages(prev => {
@@ -129,16 +113,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         console.log('✅ DEBUG: Merge concluído:', {
           banco: bankMessages.length,
           temporarias: tempMessages.length,
-          total: sortedMessages.length,
-          finalMessages: sortedMessages.slice(-3).map(m => ({
-            id: m.id,
-            content: m.content?.substring(0, 30),
-            direction: m.direction,
-            status: m.status,
-            message_type: m.message_type,
-            media_url: m.media_url ? m.media_url.substring(0, 50) + '...' : null,
-            source: bankMessages.find(b => b.id === m.id) ? 'BANCO' : 'TEMP'
-          }))
+          total: sortedMessages.length
         })
         
         // DEBUG ESPECÍFICO PARA MÍDIA
@@ -206,7 +181,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       })
       
     } catch (error) {
-      console.error('❌ DEBUG: Erro ao buscar mensagens:', error)
+      console.error('❌ Erro ao buscar mensagens')
       // Em caso de erro, manter mensagens existentes
     } finally {
       setLoading(false)
@@ -246,19 +221,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Função para detectar data visível durante scroll
   const detectVisibleDate = () => {
     const container = messagesContainerRef.current;
-    console.log('🔍 DEBUG: Verificando container e mensagens', { 
-      container: !!container, 
-      messagesLength: messages.length,
-      containerRef: messagesContainerRef.current ? 'exists' : 'null'
-    });
+    // Verificando container e mensagens...
     
-    if (!container) {
-      console.log('❌ DEBUG: Container não disponível');
-      return;
-    }
-    
-    if (messages.length === 0) {
-      console.log('❌ DEBUG: Nenhuma mensagem disponível');
+    if (!container || messages.length === 0) {
       return;
     }
 
@@ -266,27 +231,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const containerRect = container.getBoundingClientRect();
     const messageElements = container.querySelectorAll('[data-message-date]');
     
-    console.log('🔍 DEBUG: Detectando data visível', {
-      containerRect: { top: containerRect.top, height: containerRect.height },
-      messageElementsFound: messageElements.length
-    });
+    // Detectando data visível...
     
     for (const element of messageElements) {
       const rect = element.getBoundingClientRect();
       
-      console.log('🔍 DEBUG: Verificando elemento', {
-        rectTop: rect.top,
-        containerTop: containerRect.top,
-        isVisible: rect.top >= containerRect.top && rect.top <= containerRect.top + 100
-      });
+      // Verificando posição do elemento...
       
       // Se a mensagem está visível no topo do container (com margem de 100px)
       if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
         const messageDate = element.getAttribute('data-message-date');
-        console.log('📅 DEBUG: Elemento visível encontrado', { messageDate });
+        // Elemento visível encontrado
         if (messageDate) {
           const formattedDate = formatDateSeparator(messageDate);
-          console.log('✅ DEBUG: Definindo indicador', { messageDate, formattedDate });
+          console.log('📅 Indicador de data ativo:', formattedDate);
           setCurrentVisibleDate(formattedDate);
           setShowDateIndicator(true);
           return;
@@ -294,7 +252,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       }
     }
     
-    console.log('🔍 DEBUG: Nenhuma mensagem visível encontrada no topo');
+    // Nenhuma mensagem visível no topo
   };
 
   // Função para detectar se usuário está no final do chat
@@ -307,13 +265,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     
     // Só executar detecção se não estiver no final
     if (!isAtBottom) {
-      console.log('📜 DEBUG: Scroll detectado - executando detecção', { scrollTop, isAtBottom });
+      console.log('📜 Scroll: detectando data visível');
       
       // Detectar data visível durante scroll
       try {
         detectVisibleDate();
       } catch (error) {
-        console.error('❌ DEBUG: Erro em detectVisibleDate', error);
+        console.error('❌ Erro na detecção de data');
       }
     } else {
       // Esconder indicador se estiver no final
@@ -332,12 +290,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     try {
       setLoadingOlder(true)
-      console.log('⬆️ DEBUG: Carregando mensagens antigas', {
-        conversationId,
-        companyId,
-        currentMessages: messages.length,
-        oldestMessage: messages[0]?.timestamp
-      })
+      // Carregando mensagens antigas...
 
       // Salvar posição atual ANTES de carregar
       const scrollHeight = container.scrollHeight;
@@ -369,12 +322,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       // Adicionar mensagens antigas no início da lista
       setMessages(prev => {
         const newMessages = [...olderMessages, ...prev]
-        console.log('✅ DEBUG: Mensagens antigas adicionadas', {
-          antigas: olderMessages.length,
-          total: newMessages.length,
-          primeiraAntiga: olderMessages[0]?.timestamp,
-          ultimaAntiga: olderMessages[olderMessages.length - 1]?.timestamp
-        })
+        // Mensagens antigas adicionadas
         return newMessages
       })
 
@@ -386,18 +334,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         
         container.scrollTop = newScrollTop;
         
-        console.log('🎯 DEBUG: Posição restaurada', {
-          oldScrollHeight: scrollHeight,
-          newScrollHeight,
-          heightDifference,
-          oldScrollTop: scrollTop,
-          newScrollTop,
-          finalScrollTop: container.scrollTop
-        });
+        // Posição do scroll restaurada
       });
 
     } catch (error) {
-      console.error('❌ DEBUG: Erro ao carregar mensagens antigas:', error)
+      console.error('❌ Erro ao carregar mensagens antigas')
     } finally {
       setLoadingOlder(false)
     }
@@ -1321,22 +1262,18 @@ const DateSeparator: React.FC<{ timestamp: string | Date; formatDateSeparator: (
 );
 
 // Componente para indicador de data flutuante (durante scroll)
-const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => {
-  console.log('📅 DEBUG: DateIndicator renderizado', { date, visible });
-  
-  return (
-    <div 
-      className={`
-        absolute top-4 left-1/2 transform -translate-x-1/2 z-10
-        bg-black bg-opacity-75 text-white text-xs px-3 py-1 rounded-full
-        transition-all duration-200 ease-in-out pointer-events-none
-        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
-      `}
-    >
-      {date}
-    </div>
-  );
-};
+const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => (
+  <div 
+    className={`
+      absolute top-4 left-1/2 transform -translate-x-1/2 z-10
+      bg-black bg-opacity-75 text-white text-xs px-3 py-1 rounded-full
+      transition-all duration-200 ease-in-out pointer-events-none
+      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
+    `}
+  >
+    {date}
+  </div>
+);
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
