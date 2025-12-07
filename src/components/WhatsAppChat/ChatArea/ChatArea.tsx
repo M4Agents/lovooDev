@@ -290,12 +290,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     console.log('📜 DEBUG: Scroll detectado', { scrollTop, isAtBottom, showDateIndicator });
     
     // Detectar data visível durante scroll
-    detectVisibleDate();
+    try {
+      detectVisibleDate();
+    } catch (error) {
+      console.error('❌ DEBUG: Erro em detectVisibleDate', error);
+    }
     
     // Esconder indicador se estiver no final
     if (isAtBottom) {
       console.log('📜 DEBUG: Escondendo indicador (usuário no final)');
       setShowDateIndicator(false);
+    } else {
+      // Se não está no final, deveria mostrar indicador
+      console.log('📜 DEBUG: Não está no final, deveria mostrar indicador');
     }
   };
 
@@ -1299,18 +1306,22 @@ const DateSeparator: React.FC<{ timestamp: string | Date; formatDateSeparator: (
 );
 
 // Componente para indicador de data flutuante (durante scroll)
-const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => (
-  <div 
-    className={`
-      absolute top-4 left-1/2 transform -translate-x-1/2 z-10
-      bg-black bg-opacity-75 text-white text-xs px-3 py-1 rounded-full
-      transition-all duration-200 ease-in-out pointer-events-none
-      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
-    `}
-  >
-    {date}
-  </div>
-);
+const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => {
+  console.log('📅 DEBUG: DateIndicator renderizado', { date, visible });
+  
+  return (
+    <div 
+      className={`
+        absolute top-4 left-1/2 transform -translate-x-1/2 z-10
+        bg-black bg-opacity-75 text-white text-xs px-3 py-1 rounded-full
+        transition-all duration-200 ease-in-out pointer-events-none
+        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
+      `}
+    >
+      {date}
+    </div>
+  );
+};
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
