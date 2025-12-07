@@ -305,24 +305,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
     setIsUserAtBottom(isAtBottom);
     
-    console.log('📜 DEBUG: Scroll detectado', { scrollTop, isAtBottom, showDateIndicator });
-    
-    // Detectar data visível durante scroll
-    console.log('🚀 DEBUG: Tentando executar detectVisibleDate...');
-    try {
-      detectVisibleDate();
-      console.log('✅ DEBUG: detectVisibleDate executada com sucesso');
-    } catch (error) {
-      console.error('❌ DEBUG: Erro em detectVisibleDate', error);
-    }
-    
-    // Esconder indicador se estiver no final
-    if (isAtBottom) {
-      console.log('📜 DEBUG: Escondendo indicador (usuário no final)');
-      setShowDateIndicator(false);
+    // Só executar detecção se não estiver no final
+    if (!isAtBottom) {
+      console.log('📜 DEBUG: Scroll detectado - executando detecção', { scrollTop, isAtBottom });
+      
+      // Detectar data visível durante scroll
+      try {
+        detectVisibleDate();
+      } catch (error) {
+        console.error('❌ DEBUG: Erro em detectVisibleDate', error);
+      }
     } else {
-      // Se não está no final, deveria mostrar indicador
-      console.log('📜 DEBUG: Não está no final, deveria mostrar indicador');
+      // Esconder indicador se estiver no final
+      setShowDateIndicator(false);
     }
   };
 
