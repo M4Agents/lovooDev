@@ -55,17 +55,17 @@ export const useChatRealtime = (
 
   const connect = () => {
     if (!enabled || !companyId) {
-      if (debug) console.log('🔌 Chat realtime desabilitado ou sem companyId')
+      if (debug) console.log('Chat realtime desabilitado')
       return
     }
 
     if (channelRef.current) {
-      if (debug) console.log('🔄 Desconectando canal anterior...')
+      if (debug) console.log('Desconectando canal anterior...')
       channelRef.current.unsubscribe()
     }
 
     if (debug) {
-      console.log('🚀 Iniciando subscription unificada para empresa:', companyId)
+      console.log('Iniciando subscription unificada')
     }
 
     const channelName = `chat-unified-${companyId}-${Date.now()}`
@@ -83,12 +83,7 @@ export const useChatRealtime = (
           },
           (payload) => {
             if (debug) {
-              console.log('📨 Mensagem recebida via subscription:', {
-                event: payload.eventType,
-                table: payload.table,
-                messageId: (payload.new as any)?.id || (payload.old as any)?.id,
-                conversationId: (payload.new as any)?.conversation_id || (payload.old as any)?.conversation_id
-              })
+              console.log('Mensagem recebida via subscription')
             }
 
             // Processar diferentes tipos de eventos
@@ -105,10 +100,7 @@ export const useChatRealtime = (
           },
           (payload) => {
             if (debug) {
-              console.log('💬 Conversa atualizada via subscription:', {
-                event: payload.eventType,
-                conversationId: (payload.new as any)?.id || (payload.old as any)?.id
-              })
+              console.log('Conversa atualizada via subscription')
             }
 
             handleConversationEvent(payload)
@@ -116,7 +108,7 @@ export const useChatRealtime = (
         )
         .subscribe((status) => {
           if (debug) {
-            console.log('📡 Status da subscription:', status)
+            console.log('Status da subscription:', status)
           }
 
           if (status === 'SUBSCRIBED') {
@@ -256,12 +248,12 @@ export const useChatRealtime = (
     const delay = Math.min(reconnectInterval * Math.pow(2, connectionStatus.reconnectAttempts), 30000)
     
     if (debug) {
-      console.log(`🔄 Reagendando reconexão em ${delay}ms (tentativa ${connectionStatus.reconnectAttempts + 1})`)
+      console.log(`Reagendando reconexão em ${delay}ms`)
     }
 
     reconnectTimeoutRef.current = setTimeout(() => {
       if (debug) {
-        console.log('🔄 Tentando reconectar...')
+        console.log('Tentando reconectar...')
       }
       connect()
     }, delay)
@@ -276,7 +268,7 @@ export const useChatRealtime = (
 
     return () => {
       if (debug) {
-        console.log('🔌 Desconectando subscription unificada')
+        console.log('Desconectando subscription unificada')
       }
       
       if (channelRef.current) {
@@ -304,14 +296,14 @@ export const useChatRealtime = (
 
   const forceReconnect = () => {
     if (debug) {
-      console.log('🔄 Forçando reconexão...')
+      console.log('Forçando reconexão...')
     }
     connect()
   }
 
   const disconnect = () => {
     if (debug) {
-      console.log('🔌 Desconectando manualmente...')
+      console.log('Desconectando manualmente...')
     }
     
     if (channelRef.current) {

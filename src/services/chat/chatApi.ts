@@ -121,15 +121,7 @@ export class ChatApi {
       // Se limit for 0, usar um número muito alto para "sem limite"
       const effectiveLimit = limit === 0 ? 999999 : limit
       
-      console.log('🔍 DEBUG: chatApi.getMessages chamado', {
-        conversationId,
-        companyId,
-        limit: limit,
-        effectiveLimit: effectiveLimit,
-        offset,
-        reverseOrder,
-        timestamp: new Date().toISOString()
-      })
+      // Buscando mensagens...
 
       const { data, error } = await supabase.rpc('chat_get_messages', {
         p_conversation_id: conversationId,
@@ -139,40 +131,25 @@ export class ChatApi {
         p_reverse_order: reverseOrder
       })
 
-      console.log('📊 DEBUG: RPC chat_get_messages resultado', {
-        error: error,
-        dataSuccess: data?.success,
-        dataError: data?.error,
-        rawDataLength: data?.data?.length || 0
-      })
+      // Processando resultado...
 
       if (error) {
-        console.error('❌ DEBUG: Erro na RPC:', error)
+        console.error('Erro na consulta')
         throw error
       }
 
       if (!data.success) {
-        console.error('❌ DEBUG: RPC retornou erro:', data.error)
         throw new Error(data.error || 'Erro ao buscar mensagens')
       }
 
       const rawMessages = data.data || []
       const mappedMessages = rawMessages.map(this.mapMessage)
       
-      console.log('✅ DEBUG: Mensagens processadas', {
-        raw: rawMessages.length,
-        mapped: mappedMessages.length,
-        primeiras3: mappedMessages.slice(0, 3).map((m: any) => ({
-          id: m.id,
-          content: m.content?.substring(0, 30),
-          direction: m.direction,
-          status: m.status
-        }))
-      })
+      // Mensagens processadas com sucesso
 
       return mappedMessages
     } catch (error) {
-      console.error('❌ DEBUG: Erro geral em getMessages:', error)
+      console.error('Erro ao buscar mensagens')
       throw error
     }
   }
@@ -186,12 +163,7 @@ export class ChatApi {
     companyId: string,
     limit: number = 30
   ): Promise<ChatMessage[]> {
-    console.log('🔄 DEBUG: Carregando mensagens recentes', {
-      conversationId,
-      companyId,
-      limit,
-      timestamp: new Date().toISOString()
-    })
+    // Carregando mensagens recentes...
 
     // Buscar mensagens mais recentes (ordenação reversa)
     const messages = await this.getMessages(conversationId, companyId, limit, 0, true)
@@ -199,11 +171,7 @@ export class ChatApi {
     // Reverter ordem para exibir cronologicamente (mais antigas no topo)
     const sortedMessages = messages.reverse()
     
-    console.log('✅ DEBUG: Mensagens recentes carregadas', {
-      total: sortedMessages.length,
-      primeiraMensagem: sortedMessages[0]?.timestamp,
-      ultimaMensagem: sortedMessages[sortedMessages.length - 1]?.timestamp
-    })
+    // Mensagens recentes carregadas
 
     return sortedMessages
   }
@@ -214,13 +182,7 @@ export class ChatApi {
     beforeTimestamp: Date,
     limit: number = 20
   ): Promise<ChatMessage[]> {
-    console.log('⬆️ DEBUG: Carregando mensagens antigas', {
-      conversationId,
-      companyId,
-      beforeTimestamp,
-      limit,
-      timestamp: new Date().toISOString()
-    })
+    // Carregando mensagens antigas...
 
     try {
       // Buscar mensagens anteriores ao timestamp fornecido
@@ -232,27 +194,22 @@ export class ChatApi {
       })
 
       if (error) {
-        console.error('❌ DEBUG: Erro na RPC chat_get_messages_before_timestamp:', error)
+        console.error('Erro na consulta de histórico')
         throw error
       }
 
       if (!data.success) {
-        console.error('❌ DEBUG: RPC retornou erro:', data.error)
         throw new Error(data.error || 'Erro ao buscar mensagens antigas')
       }
 
       const rawMessages = data.data || []
       const mappedMessages = rawMessages.map(this.mapMessage)
       
-      console.log('✅ DEBUG: Mensagens antigas carregadas', {
-        total: mappedMessages.length,
-        primeiraMensagem: mappedMessages[0]?.timestamp,
-        ultimaMensagem: mappedMessages[mappedMessages.length - 1]?.timestamp
-      })
+      // Mensagens antigas carregadas
 
       return mappedMessages
     } catch (error) {
-      console.error('❌ DEBUG: Erro ao carregar mensagens antigas:', error)
+      console.error('Erro ao carregar histórico')
       throw error
     }
   }
@@ -264,12 +221,7 @@ export class ChatApi {
     userId: string
   ): Promise<string> {
     try {
-      console.log('🚀 ChatApi.sendMessage - Iniciando:', {
-        conversationId,
-        companyId,
-        userId,
-        message
-      })
+      // Enviando mensagem...
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
@@ -282,34 +234,33 @@ export class ChatApi {
         p_media_url: message.media_url || null
       })
 
-      console.log('📝 RPC chat_create_message - Resultado:', { data, error })
+      // Processando envio...
 
       if (error) {
-        console.error('❌ Erro no RPC:', error)
+        console.error('Erro no envio')
         throw error
       }
 
       if (!data.success) {
-        console.error('❌ RPC retornou erro:', data)
         throw new Error(data.error || 'Erro ao criar mensagem')
       }
 
       const messageId = data.message_id
-      console.log('✅ Mensagem criada no banco:', messageId)
+      // Mensagem criada no banco
 
       // PASSO 2: Enviar via Uazapi de forma assíncrona (não bloqueia UI)
       this.sendViaUazapiAsync(messageId, companyId).catch(error => {
-        console.error('💥 Erro no envio via Uazapi:', error)
+        console.error('Erro no envio via WhatsApp')
         // Erro será tratado pela função SQL que atualiza status para 'failed'
       })
 
       // ✅ CORREÇÃO: Removido auto-refresh que causava loop e experiência ruim
       // O sistema de cache agora garante que mensagens permaneçam visíveis
 
-      console.log('🎯 ChatApi.sendMessage - Concluído com sucesso')
+      // Envio concluído
       return messageId
     } catch (error) {
-      console.error('💥 ChatApi.sendMessage - Erro geral:', error)
+      console.error('Erro no envio da mensagem')
       throw error
     }
   }
@@ -320,15 +271,15 @@ export class ChatApi {
    */
   private static async sendViaUazapiAsync(messageId: string, companyId: string): Promise<void> {
     try {
-      console.log('🚀 sendViaUazapiAsync - INICIANDO:', { messageId, companyId })
+      // Enviando via WhatsApp...
 
       const payload = {
         message_id: messageId,
         company_id: companyId
       }
-      console.log('📦 Payload para envio:', payload)
+      // Preparando envio...
 
-      console.log('🌐 Fazendo fetch para /api/uazapi-send-message...')
+      // Conectando com API...
       const response = await fetch('/api/uazapi-send-message', {
         method: 'POST',
         headers: {
@@ -337,24 +288,21 @@ export class ChatApi {
         body: JSON.stringify(payload)
       })
 
-      console.log('📡 Response status:', response.status, response.statusText)
+      // Processando resposta...
 
       const result = await response.json()
-      console.log('📋 Response body:', result)
+      // Analisando resultado...
 
       if (!response.ok || !result.success) {
-        console.error('❌ FALHA no envio via Uazapi:', {
-          status: response.status,
-          result: result
-        })
+        console.error('Falha no envio via WhatsApp')
         throw new Error(result.error || 'Falha no envio')
       }
 
-      console.log('✅ SUCESSO - Mensagem enviada via Uazapi:', result)
+      // Mensagem enviada com sucesso
       
       // 🔧 CORREÇÃO: Atualizar status no banco para 'sent'
       try {
-        console.log('🔄 Atualizando status da mensagem para "sent"...')
+        // Atualizando status para enviado...
         const { error: updateError } = await supabase
           .from('chat_messages')
           .update({ 
@@ -365,24 +313,20 @@ export class ChatApi {
           .eq('company_id', companyId)
         
         if (updateError) {
-          console.error('❌ Erro ao atualizar status:', updateError)
+          console.error('Erro ao atualizar status')
         } else {
-          console.log('✅ Status atualizado para "sent" no banco')
+          // Status atualizado para enviado
         }
       } catch (updateError) {
-        console.error('💥 Erro crítico ao atualizar status:', updateError)
+        console.error('Erro ao atualizar status')
       }
       
     } catch (error) {
-      console.error('💥 ERRO CRÍTICO no envio via Uazapi:', {
-        error: error,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-        stack: error instanceof Error ? error.stack : undefined
-      })
+      console.error('Erro no envio via WhatsApp')
       
       // 🔧 CORREÇÃO: Atualizar status no banco para 'failed' em caso de erro
       try {
-        console.log('🔄 Atualizando status da mensagem para "failed"...')
+        // Atualizando status para falha...
         await supabase
           .from('chat_messages')
           .update({ 
@@ -392,9 +336,9 @@ export class ChatApi {
           .eq('id', messageId)
           .eq('company_id', companyId)
         
-        console.log('✅ Status atualizado para "failed" no banco')
+        // Status atualizado para falha
       } catch (updateError) {
-        console.error('💥 Erro crítico ao atualizar status de falha:', updateError)
+        console.error('Erro ao atualizar status de falha')
       }
       
       throw error
