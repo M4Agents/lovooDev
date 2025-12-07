@@ -150,7 +150,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Função para detectar data visível durante scroll
   const detectVisibleDate = () => {
     const container = messagesContainerRef.current;
-    // Verificando container e mensagens...
     
     if (!container || messages.length === 0) {
       return;
@@ -160,28 +159,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const containerRect = container.getBoundingClientRect();
     const messageElements = container.querySelectorAll('[data-message-date]');
     
-    // Detectando data visível...
-    
     for (const element of messageElements) {
       const rect = element.getBoundingClientRect();
-      
-      // Verificando posição do elemento...
       
       // Se a mensagem está visível no topo do container (com margem de 100px)
       if (rect.top >= containerRect.top && rect.top <= containerRect.top + 100) {
         const messageDate = element.getAttribute('data-message-date');
-        // Elemento visível encontrado
+        
         if (messageDate) {
-          const formattedDate = formatDateSeparator(messageDate);
-          // Indicador de data ativo
-          setCurrentVisibleDate(formattedDate);
-          setShowDateIndicator(true);
-          return;
+          const messageDateTime = new Date(messageDate);
+          const today = new Date();
+          const yesterday = new Date(today);
+          yesterday.setDate(today.getDate() - 1);
+          
+          // Só mostrar indicador se a mensagem for de ontem ou anterior
+          // (não mostrar para mensagens de hoje)
+          const isToday = messageDateTime.toDateString() === today.toDateString();
+          
+          if (!isToday) {
+            const formattedDate = formatDateSeparator(messageDate);
+            setCurrentVisibleDate(formattedDate);
+            setShowDateIndicator(true);
+            return;
+          } else {
+            // Se é de hoje, esconder indicador
+            setShowDateIndicator(false);
+            return;
+          }
         }
       }
     }
     
-    // Nenhuma mensagem visível no topo
+    // Se não encontrou nenhuma mensagem visível, esconder indicador
+    setShowDateIndicator(false);
   };
 
   // Função para detectar se usuário está no final do chat
