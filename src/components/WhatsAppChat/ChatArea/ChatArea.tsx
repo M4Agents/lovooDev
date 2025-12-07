@@ -213,6 +213,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (SCROLL INFINITO)
   // =====================================================
 
+  // Handle scroll para detectar quando usuário rola para o topo
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop } = e.currentTarget;
+    
+    // Se usuário rolou próximo ao topo (100px do topo) e há mais mensagens
+    if (scrollTop < 100 && hasMoreMessages && !loadingOlder && messages.length > 0) {
+      console.log('🔄 DEBUG: Trigger scroll infinito - carregando mensagens antigas');
+      loadOlderMessages();
+    }
+  };
+
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMoreMessages || messages.length === 0) {
       return
@@ -1052,7 +1063,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Mensagens */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]">
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f5f2eb]"
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1062,7 +1076,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <p className="text-sm text-gray-500 mt-1">Envie a primeira mensagem para começar a conversa</p>
           </div>
         ) : (
-          messages.map((message, index) => (
+          <>
+            {/* Indicador de loading para mensagens antigas */}
+            {loadingOlder && (
+              <div className="text-center py-3">
+                <div className="inline-flex items-center text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500 mr-2"></div>
+                  Carregando mensagens antigas...
+                </div>
+              </div>
+            )}
+            
+            {messages.map((message, index) => (
             <MessageBubble
               key={message.id}
               message={message}
@@ -1090,7 +1115,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 })())
               }
             />
-          ))
+            ))}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
