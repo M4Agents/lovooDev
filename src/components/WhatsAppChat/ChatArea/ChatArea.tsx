@@ -290,8 +290,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     console.log('📜 DEBUG: Scroll detectado', { scrollTop, isAtBottom, showDateIndicator });
     
     // Detectar data visível durante scroll
+    console.log('🚀 DEBUG: Tentando executar detectVisibleDate...');
     try {
       detectVisibleDate();
+      console.log('✅ DEBUG: detectVisibleDate executada com sucesso');
     } catch (error) {
       console.error('❌ DEBUG: Erro em detectVisibleDate', error);
     }
@@ -303,6 +305,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     } else {
       // Se não está no final, deveria mostrar indicador
       console.log('📜 DEBUG: Não está no final, deveria mostrar indicador');
+      // TESTE: Forçar indicador para aparecer
+      setCurrentVisibleDate('TESTE');
+      setShowDateIndicator(true);
+      console.log('🧪 DEBUG: Forçando indicador de teste');
     }
   };
 
