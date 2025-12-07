@@ -1164,13 +1164,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onVideoError,
   onResetVideoError
 }) => {
-  // DEBUG: Log quando MessageBubble é renderizado
-  console.log('🎨 DEBUG: MessageBubble renderizando:', {
-    id: message.id,
-    type: message.message_type,
-    hasMedia: !!message.media_url,
-    direction: message.direction
-  })
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { 
       hour: '2-digit', 
@@ -1261,19 +1254,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {/* DEBUG: Log detalhado para imagens */}
-          {message.media_url && (
-            console.log('🖼️ DEBUG IMAGEM:', {
-              messageId: message.id,
-              media_url: message.media_url,
-              message_type: message.message_type,
-              actualMessageType: actualMessageType,
-              shouldRenderImage: message.media_url && actualMessageType === 'image',
-              direction: message.direction,
-              timestamp: message.timestamp
-            })
-          )}
-
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
               <img
@@ -1281,8 +1261,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 alt={message.content || 'Imagem'}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(message.media_url, '_blank')}
-                onLoad={() => console.log('✅ IMAGEM CARREGADA:', message.media_url)}
-                onError={(e) => console.error('❌ ERRO AO CARREGAR IMAGEM:', message.media_url, e)}
+                onLoad={() => {}}
+                onError={() => console.error('Erro ao carregar imagem')}
               />
             </div>
           )}
