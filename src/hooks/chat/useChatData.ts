@@ -351,15 +351,50 @@ export const useChatData = (
           event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
+          filter: `company_id=eq.${companyId}` // CORREÇÃO: Filtrar por empresa
         },
         (payload) => {
           console.log('New message received:', payload)
           
-          // Atualizar conversa relacionada
+          // Atualizar conversa relacionada com atualização local otimista
           const newMessage = payload.new as any
-          if (newMessage.conversation_id) {
-            // Buscar conversa atualizada
-            fetchConversations()
+          if (newMessage.conversation_id && newMessage.company_id === companyId) {
+            
+            // 1. Primeiro: Atualização local otimista (instantânea)
+            setConversations(prev => {
+              const existingIndex = prev.findIndex(conv => conv.id === newMessage.conversation_id)
+              
+              if (existingIndex >= 0) {
+                // Conversa existe: atualizar e mover para o topo
+                const updated = [...prev]
+                const existingConv = updated[existingIndex]
+                
+                const updatedConv = {
+                  ...existingConv,
+                  last_message_at: new Date(newMessage.timestamp),
+                  last_message_content: newMessage.content,
+                  last_message_direction: newMessage.direction,
+                  unread_count: newMessage.direction === 'inbound' ? existingConv.unread_count + 1 : existingConv.unread_count,
+                  updated_at: new Date(newMessage.timestamp)
+                }
+                
+                // Remover da posição atual e adicionar no topo
+                updated.splice(existingIndex, 1)
+                return [updatedConv, ...updated]
+              } else {
+                // Conversa nova: buscar do servidor (fallback)
+                fetchConversations()
+                return prev
+              }
+            })
+            
+            // 2. Emitir evento para consistência com outros sistemas
+            ChatEventBus.emit('chat:message:received', {
+              conversationId: newMessage.conversation_id,
+              companyId: newMessage.company_id,
+              message: newMessage,
+              timestamp: new Date(newMessage.timestamp)
+            })
           }
         }
       )
