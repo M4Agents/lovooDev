@@ -1478,20 +1478,22 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           )}
           
-          {isOwn && (
-            <div className="flex items-center justify-end mt-1 space-x-1">
-              <span className="text-[11px] opacity-75">
-                {formatDateTime(message.timestamp)}
-              </span>
-              {getStatusIcon(
-                // Tratamento visual: se houver media_url ou uazapi_message_id
-                // e o status estiver como failed, exibir como 'sent' em vez de X
-                (message.media_url || message.uazapi_message_id) && message.status === 'failed'
-                  ? 'sent'
-                  : message.status
-              )}
-            </div>
-          )}
+          {/* Timestamp para todas as mensagens, layout diferente por tipo */}
+          <div className={`flex items-center mt-1 space-x-1 ${
+            isOwn ? 'justify-end' : 'justify-start'
+          }`}>
+            <span className="text-[11px] opacity-75">
+              {formatDateTime(message.timestamp)}
+            </span>
+            {/* Status apenas para mensagens enviadas */}
+            {isOwn && getStatusIcon(
+              // Tratamento visual: se houver media_url ou uazapi_message_id
+              // e o status estiver como failed, exibir como 'sent' em vez de X
+              (message.media_url || message.uazapi_message_id) && message.status === 'failed'
+                ? 'sent'
+                : message.status
+            )}
+          </div>
           </div>
         )}
       </div>
