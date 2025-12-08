@@ -288,12 +288,21 @@ export const useChatData = (
               return [newConversation, ...prev]
             })
           } else if (payload.eventType === 'UPDATE') {
-            const updatedConversation = payload.new as ChatConversation
+            // CORREÇÃO: Atualização parcial inteligente para preservar estrutura da view
             setConversations(prev => 
               prev.map(conv => 
-                conv.id === updatedConversation.id ? updatedConversation : conv
+                conv.id === payload.new.id 
+                  ? { 
+                      ...conv, 
+                      unread_count: payload.new.unread_count,
+                      last_message_at: payload.new.last_message_at ? new Date(payload.new.last_message_at) : conv.last_message_at,
+                      last_message_content: payload.new.last_message_content || conv.last_message_content,
+                      last_message_direction: payload.new.last_message_direction || conv.last_message_direction,
+                      updated_at: new Date(payload.new.updated_at)
+                    }
+                  : conv
               )
-          )
+            )
         } else if (payload.eventType === 'DELETE') {
           const deletedId = payload.old.id
           setConversations(prev => 
