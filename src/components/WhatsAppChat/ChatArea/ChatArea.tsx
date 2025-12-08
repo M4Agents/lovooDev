@@ -402,6 +402,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       fetchMessages()
       
       // NOVO: Auto-marcar conversa como lida quando aberta
+      // 1. Primeiro: Notificar lista para atualização local otimista (instantânea)
+      ChatEventBus.emit('chat:conversation:mark-as-read', {
+        conversationId,
+        companyId,
+        timestamp: new Date()
+      })
+      
+      // 2. Depois: Confirmar no servidor (background)
       chatApi.markConversationAsRead(conversationId, companyId)
         .catch(error => console.warn('Erro ao marcar conversa como lida:', error))
     }

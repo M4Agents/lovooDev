@@ -172,6 +172,25 @@ export const useChatData = (
     }
   }, [companyId])
 
+  // NOVO: Listener para marcar conversa como lida (atualização local otimista)
+  useChatEvent('chat:conversation:mark-as-read', (payload: any) => {
+    if (payload.conversationId && payload.companyId === companyId) {
+      // Atualização local instantânea (sem aguardar servidor)
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === payload.conversationId 
+            ? { 
+                ...conv, 
+                unread_count: 0,
+                last_read_at: payload.timestamp,
+                updated_at: payload.timestamp
+              }
+            : conv
+        )
+      )
+    }
+  }, [companyId])
+
   // =====================================================
   // HANDLERS
   // =====================================================
