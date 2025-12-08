@@ -400,6 +400,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     if (conversationId && companyId) {
       fetchMessages()
+      fetchConversation() // CORREÇÃO: Adicionar busca dos dados da conversa para o header
       
       // NOVO: Auto-marcar conversa como lida quando aberta
       // 1. Primeiro: Notificar lista para atualização local otimista (instantânea)
