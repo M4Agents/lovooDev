@@ -121,14 +121,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
-  // Funções para separadores de data (padrão WhatsApp) - VERSÃO INTELIGENTE
-  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage, messageIndex?: number, totalMessages?: number) => {
-    // SEMPRE mostrar separador para a mensagem mais recente (última na lista)
-    // Isso garante que o usuário sempre veja o contexto temporal ao abrir o chat
-    if (messageIndex !== undefined && totalMessages !== undefined && messageIndex === totalMessages - 1) {
-      return true; // Última mensagem sempre tem separador
-    }
-    
+  // Funções para separadores de data (padrão WhatsApp)
+  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage) => {
     if (!previousMessage) return true; // Primeira mensagem sempre mostra
     
     const currentDate = new Date(currentMessage.timestamp);
@@ -1072,8 +1066,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             
             {messages.map((message, index) => (
               <React.Fragment key={message.id}>
-                {/* Separador de data - VERSÃO INTELIGENTE */}
-                {shouldShowDateSeparator(message, messages[index - 1], index, messages.length) && (
+                {/* Separador de data */}
+                {shouldShowDateSeparator(message, messages[index - 1]) && (
                   <DateSeparator timestamp={message.timestamp} formatDateSeparator={formatDateSeparator} />
                 )}
                 
@@ -1180,8 +1174,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onVideoError,
   onResetVideoError
 }) => {
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
+  const formatDateTime = (date: Date) => {
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit', 
+      year: 'numeric'
+    }) + ' ' + date.toLocaleTimeString('pt-BR', { 
       hour: '2-digit', 
       minute: '2-digit' 
     })
@@ -1246,8 +1244,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         {showTimestamp && (
-          <div className="text-center text-xs text-gray-500 mb-2">
-            {formatTime(message.timestamp)}
+          <div className="text-center text-[10px] text-gray-500 mb-2">
+            {formatDateTime(message.timestamp)}
           </div>
         )}
         
@@ -1365,8 +1363,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           
           {isOwn && (
             <div className="flex items-center justify-end mt-1 space-x-1">
-              <span className="text-xs opacity-75">
-                {formatTime(message.timestamp)}
+              <span className="text-[10px] opacity-75">
+                {formatDateTime(message.timestamp)}
               </span>
               {getStatusIcon(
                 // Tratamento visual: se houver media_url ou uazapi_message_id
