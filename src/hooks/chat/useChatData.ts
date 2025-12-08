@@ -342,6 +342,33 @@ export const useChatData = (
     )
     .subscribe()
 
+    // Função específica para buscar nova conversa (sem dependências circulares)
+    const fetchSingleConversation = async (conversationId: string) => {
+      try {
+        console.log('🔍 Buscando nova conversa:', conversationId)
+        const response = await chatApi.getConversations(companyId, userId, { type: 'all' }, selectedInstance)
+        const newConversation = response.find(conv => conv.id === conversationId)
+        
+        if (newConversation) {
+          console.log('✅ Nova conversa encontrada:', newConversation.contact_name || newConversation.contact_phone)
+          setConversations(prev => {
+            // Verificar se já existe para evitar duplicatas
+            const exists = prev.some(conv => conv.id === conversationId)
+            if (exists) {
+              console.log('⚠️ Conversa já existe na lista, ignorando')
+              return prev
+            }
+            console.log('📝 Adicionando nova conversa no topo da lista')
+            return [newConversation, ...prev]
+          })
+        } else {
+          console.log('❌ Nova conversa não encontrada no servidor')
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar nova conversa:', error)
+      }
+    }
+
     // Subscrever mudanças nas mensagens para atualizar contadores
     const messageSubscription = supabase
       .channel('chat_messages')
@@ -354,15 +381,20 @@ export const useChatData = (
           filter: `company_id=eq.${companyId}` // CORREÇÃO: Filtrar por empresa
         },
         (payload) => {
-          console.log('New message received:', payload)
+          console.log('📨 Nova mensagem recebida via Realtime:', payload)
           
           // Atualizar conversa relacionada com atualização local otimista
           const newMessage = payload.new as any
           if (newMessage.conversation_id && newMessage.company_id === companyId) {
+            console.log('🎯 Processando mensagem para conversa:', newMessage.conversation_id)
+            console.log('📄 Conteúdo:', newMessage.content)
+            console.log('📞 Telefone:', newMessage.from_phone || 'N/A')
+            console.log('⬅️ Direção:', newMessage.direction)
             
             // 1. Primeiro: Atualização local otimista (instantânea)
             setConversations(prev => {
               const existingIndex = prev.findIndex(conv => conv.id === newMessage.conversation_id)
+              console.log('🔍 Conversa existente encontrada no índice:', existingIndex)
               
               if (existingIndex >= 0) {
                 // Conversa existe: atualizar e mover para o topo
@@ -378,12 +410,20 @@ export const useChatData = (
                   updated_at: new Date(newMessage.timestamp)
                 }
                 
+                console.log('✅ Atualizando conversa existente:', {
+                  contact: existingConv.contact_name || existingConv.contact_phone,
+                  oldUnreadCount: existingConv.unread_count,
+                  newUnreadCount: updatedConv.unread_count,
+                  lastMessage: newMessage.content
+                })
+                
                 // Remover da posição atual e adicionar no topo
                 updated.splice(existingIndex, 1)
                 return [updatedConv, ...updated]
               } else {
-                // Conversa nova: buscar do servidor (fallback)
-                fetchConversations()
+                // Conversa nova: buscar do servidor (sem dependência circular)
+                console.log('🆕 Nova conversa detectada, buscando do servidor...')
+                fetchSingleConversation(newMessage.conversation_id)
                 return prev
               }
             })
@@ -394,6 +434,15 @@ export const useChatData = (
               companyId: newMessage.company_id,
               message: newMessage,
               timestamp: new Date(newMessage.timestamp)
+            })
+            
+            console.log('🚀 Evento emitido via ChatEventBus')
+          } else {
+            console.log('⚠️ Mensagem ignorada - não atende critérios:', {
+              hasConversationId: !!newMessage.conversation_id,
+              companyMatch: newMessage.company_id === companyId,
+              expectedCompany: companyId,
+              actualCompany: newMessage.company_id
             })
           }
         }
