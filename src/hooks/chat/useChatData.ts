@@ -259,6 +259,16 @@ export const useChatData = (
       )
     }
 
+    // NOVO: Aplicar filtro por tipo
+    if (filter.type === 'unread') {
+      filtered = filtered.filter(conv => conv.unread_count > 0)
+    } else if (filter.type === 'assigned') {
+      filtered = filtered.filter(conv => conv.assigned_to)
+    } else if (filter.type === 'unassigned') {
+      filtered = filtered.filter(conv => !conv.assigned_to)
+    }
+    // 'all' não precisa de filtro adicional
+
     // ✅ CORREÇÃO: Ordenar por última mensagem (mais recentes primeiro) com proteção
     filtered.sort((a, b) => {
       try {
@@ -274,7 +284,7 @@ export const useChatData = (
     })
 
     return filtered
-  }, [conversations, filter.search])
+  }, [conversations, filter.search, filter.type])
 
   // =====================================================
   // SUBSCRIPTION PARA TEMPO REAL

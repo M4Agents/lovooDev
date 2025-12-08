@@ -95,7 +95,7 @@ export interface ChatScheduledMessage {
 // =====================================================
 
 export interface ConversationFilter {
-  type: 'all' | 'assigned' | 'unassigned'
+  type: 'all' | 'assigned' | 'unassigned' | 'unread'
   search?: string
   instance_id?: string
 }
