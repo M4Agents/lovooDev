@@ -1249,24 +1249,39 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
         
-        <div
-          className={`px-4 py-2 rounded-lg ${
-            isOwn
-              ? 'bg-[#dcf8c6] text-gray-900'
-              : 'bg-white text-gray-900'
-          }`}
-        >
-          {message.media_url && isAudioMessage && (
-            <div className="mb-1 flex items-center justify-center">
-              <audio
-                controls
-                src={message.media_url}
-                className="w-48 h-10"
-              >
-                Seu navegador não suporta o elemento de áudio.
-              </audio>
-            </div>
-          )}
+        {/* Layout especial para mensagens de áudio */}
+        {message.media_url && isAudioMessage ? (
+          <div className="space-y-2">
+            <audio
+              controls
+              src={message.media_url}
+              className="w-full max-w-xs h-10"
+            >
+              Seu navegador não suporta o elemento de áudio.
+            </audio>
+            
+            {isOwn && (
+              <div className="flex items-center justify-end space-x-1">
+                <span className="text-[11px] opacity-75">
+                  {formatDateTime(message.timestamp)}
+                </span>
+                {getStatusIcon(
+                  (message.media_url || message.uazapi_message_id) && message.status === 'failed'
+                    ? 'sent'
+                    : message.status
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Layout normal para outras mensagens */
+          <div
+            className={`px-4 py-2 rounded-lg ${
+              isOwn
+                ? 'bg-[#dcf8c6] text-gray-900'
+                : 'bg-white text-gray-900'
+            }`}
+          >
 
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
@@ -1375,7 +1390,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               )}
             </div>
           )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
