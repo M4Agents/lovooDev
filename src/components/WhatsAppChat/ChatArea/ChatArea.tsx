@@ -1244,7 +1244,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         {showTimestamp && (
-          <div className="text-center text-[10px] text-gray-500 mb-2">
+          <div className="text-center text-[11px] text-gray-500 mb-2">
             {formatDateTime(message.timestamp)}
           </div>
         )}
@@ -1363,7 +1363,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           
           {isOwn && (
             <div className="flex items-center justify-end mt-1 space-x-1">
-              <span className="text-[10px] opacity-75">
+              <span className="text-[11px] opacity-75">
                 {formatDateTime(message.timestamp)}
               </span>
               {getStatusIcon(
