@@ -143,29 +143,72 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="px-6 py-4 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
-        <div className="flex space-x-2">
+      {/* Filtros Modernos */}
+      <div className="px-6 py-6 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
+        <div className="grid grid-cols-2 gap-3">
           {filterOptions.map(option => (
             <button
               key={option.key}
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+              className={`group relative overflow-hidden rounded-2xl p-4 transition-all duration-300 transform hover:scale-[1.02] ${
                 filter.type === option.key
-                  ? 'bg-[#00a884] text-white shadow-lg transform scale-105'
-                  : 'text-slate-600 hover:bg-white/60 hover:shadow-md'
+                  ? 'bg-gradient-to-br from-[#00a884] to-[#00967a] text-white shadow-xl shadow-[#00a884]/25 ring-2 ring-[#00a884]/20'
+                  : 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-lg border border-slate-200/50 hover:border-slate-300/50'
               }`}
             >
-              <div className="text-center">
-                <div className="font-semibold">{option.label}</div>
-                <div className={`text-xs mt-1 ${
-                  filter.type === option.key ? 'text-[#00a884]' : 'text-slate-400'
+              {/* Efeito de brilho no hover */}
+              <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
+                filter.type === option.key ? 'translate-x-full' : 'group-hover:translate-x-full -translate-x-full'
+              }`} />
+              
+              <div className="relative z-10">
+                <div className={`text-sm font-bold mb-1 ${
+                  filter.type === option.key ? 'text-white' : 'text-slate-800'
                 }`}>
-                  {option.count} conversas
+                  {option.label}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-medium ${
+                    filter.type === option.key ? 'text-emerald-100' : 'text-slate-500'
+                  }`}>
+                    {option.count} conversas
+                  </span>
+                  {option.count > 0 && (
+                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                      filter.type === option.key 
+                        ? 'bg-white/20 text-white' 
+                        : option.key === 'unread' 
+                          ? 'bg-red-500 text-white animate-pulse' 
+                          : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {option.count}
+                    </div>
+                  )}
                 </div>
               </div>
+              
+              {/* Indicador ativo */}
+              {filter.type === option.key && (
+                <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse" />
+              )}
             </button>
           ))}
+        </div>
+        
+        {/* Indicador de filtro ativo */}
+        <div className="mt-4 flex items-center justify-center">
+          <div className="flex space-x-1">
+            {filterOptions.map(option => (
+              <div
+                key={option.key}
+                className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  filter.type === option.key 
+                    ? 'bg-[#00a884] scale-125' 
+                    : 'bg-slate-300 hover:bg-slate-400'
+                }`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
