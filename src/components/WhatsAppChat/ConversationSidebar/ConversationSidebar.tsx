@@ -258,7 +258,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       className={`w-full p-4 text-left transition-all duration-200 ${
         isSelected 
           ? 'bg-blue-50 border-r-4 border-[#00a884] shadow-sm' 
-          : 'hover:bg-white/80 hover:shadow-sm'
+          : conversation.unread_count > 0
+            ? 'bg-green-50 hover:bg-green-100 border-l-4 border-green-400 shadow-sm' // NOVO: Destaque para não lidas
+            : 'hover:bg-white/80 hover:shadow-sm'
       }`}
     >
       <div className="flex items-start space-x-3">
@@ -284,7 +286,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           <div className="flex items-center justify-between mb-1">
             <div className="flex-1 min-w-0">
               {/* Nome do Lead */}
-              <h4 className={`text-sm font-semibold truncate ${
+              <h4 className={`text-sm truncate ${
+                conversation.unread_count > 0 ? 'font-bold' : 'font-semibold' // NOVO: Negrito para não lidas
+              } ${
                 isSelected ? 'text-slate-800' : 'text-slate-700'
               }`}>
                 {conversation.contact_name || 'Lead sem nome'}

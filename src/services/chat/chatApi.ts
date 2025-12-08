@@ -106,6 +106,27 @@ export class ChatApi {
     }
   }
 
+  static async markConversationAsRead(
+    conversationId: string,
+    companyId: string
+  ): Promise<void> {
+    try {
+      const { data, error } = await supabase.rpc('chat_mark_conversation_as_read', {
+        p_conversation_id: conversationId,
+        p_company_id: companyId
+      })
+
+      if (error) throw error
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao marcar conversa como lida')
+      }
+    } catch (error) {
+      console.error('Error marking conversation as read:', error)
+      throw error
+    }
+  }
+
   // =====================================================
   // MENSAGENS
   // =====================================================

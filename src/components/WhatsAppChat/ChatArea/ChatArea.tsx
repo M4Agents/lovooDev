@@ -400,9 +400,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     if (conversationId && companyId) {
       fetchMessages()
-      fetchConversation()
+      
+      // NOVO: Auto-marcar conversa como lida quando aberta
+      chatApi.markConversationAsRead(conversationId, companyId)
+        .catch(error => console.warn('Erro ao marcar conversa como lida:', error))
     }
-  }, [conversationId, companyId])
+  }, [conversationId, companyId, fetchMessages])
 
   // Auto-scroll inteligente: só quando usuário está no final
   useEffect(() => {
