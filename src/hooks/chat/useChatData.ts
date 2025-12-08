@@ -293,6 +293,8 @@ export const useChatData = (
   useEffect(() => {
     if (!companyId) return
 
+    console.log('🚀 Iniciando subscriptions do chat:', { companyId, userId, selectedInstance })
+
     // Subscrever mudanças nas conversas
     const conversationSubscription = supabase
       .channel('chat_conversations')
@@ -346,6 +348,14 @@ export const useChatData = (
     const fetchSingleConversation = async (conversationId: string) => {
       try {
         console.log('🔍 Buscando nova conversa:', conversationId)
+        console.log('📋 Parâmetros:', { companyId, userId, selectedInstance })
+        
+        // Validar parâmetros necessários
+        if (!companyId || !userId) {
+          console.log('⚠️ Parâmetros faltando:', { companyId: !!companyId, userId: !!userId })
+          return
+        }
+        
         const response = await chatApi.getConversations(companyId, userId, { type: 'all' }, selectedInstance)
         const newConversation = response.find(conv => conv.id === conversationId)
         
@@ -453,7 +463,7 @@ export const useChatData = (
       conversationSubscription.unsubscribe()
       messageSubscription.unsubscribe()
     }
-  }, [companyId])
+  }, [companyId, userId, selectedInstance]) // CORREÇÃO: Adicionar todas as dependências necessárias
 
   // =====================================================
   // RETORNO DO HOOK
