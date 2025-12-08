@@ -121,8 +121,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
-  // Funções para separadores de data (padrão WhatsApp)
-  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage) => {
+  // Funções para separadores de data (padrão WhatsApp) - VERSÃO INTELIGENTE
+  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage, messageIndex?: number, totalMessages?: number) => {
+    // SEMPRE mostrar separador para a mensagem mais recente (última na lista)
+    // Isso garante que o usuário sempre veja o contexto temporal ao abrir o chat
+    if (messageIndex !== undefined && totalMessages !== undefined && messageIndex === totalMessages - 1) {
+      return true; // Última mensagem sempre tem separador
+    }
+    
     if (!previousMessage) return true; // Primeira mensagem sempre mostra
     
     const currentDate = new Date(currentMessage.timestamp);
@@ -1066,8 +1072,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             
             {messages.map((message, index) => (
               <React.Fragment key={message.id}>
-                {/* Separador de data */}
-                {shouldShowDateSeparator(message, messages[index - 1]) && (
+                {/* Separador de data - VERSÃO INTELIGENTE */}
+                {shouldShowDateSeparator(message, messages[index - 1], index, messages.length) && (
                   <DateSeparator timestamp={message.timestamp} formatDateSeparator={formatDateSeparator} />
                 )}
                 
