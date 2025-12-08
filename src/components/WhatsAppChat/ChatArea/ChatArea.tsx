@@ -405,7 +405,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       chatApi.markConversationAsRead(conversationId, companyId)
         .catch(error => console.warn('Erro ao marcar conversa como lida:', error))
     }
-  }, [conversationId, companyId, fetchMessages])
+  }, [conversationId, companyId]) // CORREÇÃO: Removido fetchMessages para evitar loop infinito
 
   // Auto-scroll inteligente: só quando usuário está no final
   useEffect(() => {
