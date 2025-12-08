@@ -1162,6 +1162,155 @@ const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, vis
   </div>
 );
 
+// =====================================================
+// COMPONENTE PLAYER DE ÁUDIO ESTILO WHATSAPP WEB
+// =====================================================
+
+interface AudioWhatsAppPlayerProps {
+  message: ChatMessage
+  isOwn: boolean
+  formatDateTime: (date: Date) => string
+  getStatusIcon: (status: ChatMessage['status']) => React.ReactNode
+}
+
+const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
+  message,
+  isOwn,
+  formatDateTime,
+  getStatusIcon
+}) => {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  // Waveform visual - barras com alturas diferentes
+  const waveformBars = [3, 6, 4, 8, 5, 7, 3, 6, 4, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 2]
+
+  const handlePlayPause = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause()
+      } else {
+        audioRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration)
+    }
+  }
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime)
+    }
+  }
+
+  const handleEnded = () => {
+    setIsPlaying(false)
+    setCurrentTime(0)
+  }
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60)
+    const seconds = Math.floor(time % 60)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+
+  return (
+    <div className={`rounded-lg p-3 max-w-sm shadow-sm ${
+      isOwn ? 'bg-[#dcf8c6]' : 'bg-white border border-gray-200'
+    }`}>
+      <div className="flex items-center space-x-3">
+        {/* Avatar */}
+        <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        
+        {/* Player Controls */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-2">
+            {/* Play/Pause Button */}
+            <button 
+              onClick={handlePlayPause}
+              className="w-8 h-8 bg-[#34b7f1] hover:bg-[#2da5e0] rounded-full flex items-center justify-center transition-colors"
+            >
+              {isPlaying ? (
+                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M5.5 3.5A1.5 1.5 0 017 2h6a1.5 1.5 0 011.5 1.5v13a1.5 1.5 0 01-1.5 1.5H7A1.5 1.5 0 015.5 16.5v-13z"/>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                </svg>
+              )}
+            </button>
+            
+            {/* Waveform Visual */}
+            <div className="flex-1 flex items-center space-x-0.5 relative">
+              {waveformBars.map((height, index) => {
+                const barProgress = (index / waveformBars.length) * 100
+                const isActive = barProgress <= progress
+                return (
+                  <div 
+                    key={index}
+                    className={`rounded-full transition-colors duration-150 ${
+                      isActive ? 'bg-[#34b7f1]' : 'bg-gray-300'
+                    }`}
+                    style={{
+                      width: '3px',
+                      height: `${height * 2}px`
+                    }}
+                  />
+                )
+              })}
+            </div>
+          </div>
+          
+          {/* Duration */}
+          <div className="text-xs text-gray-600 mt-1">
+            {duration > 0 ? formatTime(duration) : '0:00'}
+          </div>
+        </div>
+        
+        {/* Timestamp + Status */}
+        <div className="text-xs text-gray-500 text-right flex flex-col items-end">
+          <span className="text-[11px]">
+            {formatDateTime(message.timestamp)}
+          </span>
+          {isOwn && (
+            <div className="mt-1">
+              {getStatusIcon(
+                (message.media_url || message.uazapi_message_id) && message.status === 'failed'
+                  ? 'sent'
+                  : message.status
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Audio element oculto */}
+      <audio
+        ref={audioRef}
+        src={message.media_url}
+        onLoadedMetadata={handleLoadedMetadata}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        preload="metadata"
+      />
+    </div>
+  )
+}
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   isOwn,
@@ -1249,30 +1398,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
         
-        {/* Layout especial para mensagens de áudio */}
+        {/* Layout especial para mensagens de áudio - Estilo WhatsApp Web */}
         {message.media_url && isAudioMessage ? (
-          <div className="space-y-2">
-            <audio
-              controls
-              src={message.media_url}
-              className="w-full max-w-xs h-10"
-            >
-              Seu navegador não suporta o elemento de áudio.
-            </audio>
-            
-            {isOwn && (
-              <div className="flex items-center justify-end space-x-1">
-                <span className="text-[11px] opacity-75">
-                  {formatDateTime(message.timestamp)}
-                </span>
-                {getStatusIcon(
-                  (message.media_url || message.uazapi_message_id) && message.status === 'failed'
-                    ? 'sent'
-                    : message.status
-                )}
-              </div>
-            )}
-          </div>
+          <AudioWhatsAppPlayer 
+            message={message}
+            isOwn={isOwn}
+            formatDateTime={formatDateTime}
+            getStatusIcon={getStatusIcon}
+          />
         ) : (
           /* Layout normal para outras mensagens */
           <div
