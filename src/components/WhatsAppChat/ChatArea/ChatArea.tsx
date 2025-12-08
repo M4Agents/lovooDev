@@ -121,17 +121,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // CARREGAR MENSAGENS ANTIGAS (BOTÃO "CARREGAR MAIS")
   // =====================================================
 
-  // Funções para separadores de data (padrão WhatsApp)
-  const shouldShowDateSeparator = (currentMessage: ChatMessage, previousMessage?: ChatMessage) => {
-    if (!previousMessage) return true; // Primeira mensagem sempre mostra
-    
-    const currentDate = new Date(currentMessage.timestamp);
-    const prevDate = new Date(previousMessage.timestamp);
-    
-    // Compara apenas dia/mês/ano (ignora hora)
-    return currentDate.toDateString() !== prevDate.toDateString();
-  };
-
+  // Função para formatação de data do indicador flutuante
   const formatDateSeparator = (timestamp: string | Date) => {
     const date = new Date(timestamp);
     const today = new Date();
@@ -1066,11 +1056,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             
             {messages.map((message, index) => (
               <React.Fragment key={message.id}>
-                {/* Separador de data */}
-                {shouldShowDateSeparator(message, messages[index - 1]) && (
-                  <DateSeparator timestamp={message.timestamp} formatDateSeparator={formatDateSeparator} />
-                )}
-                
                 {/* Mensagem com data-attribute para detecção */}
                 <div data-message-date={message.timestamp}>
                   <MessageBubble
@@ -1138,15 +1123,6 @@ interface MessageBubbleProps {
   onVideoError: (messageId: string, error: any) => void
   onResetVideoError: (messageId: string) => void
 }
-
-// Componente para separador de data (estilo WhatsApp)
-const DateSeparator: React.FC<{ timestamp: string | Date; formatDateSeparator: (timestamp: string | Date) => string }> = ({ timestamp, formatDateSeparator }) => (
-  <div className="flex justify-center my-4">
-    <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full shadow-sm">
-      {formatDateSeparator(timestamp)}
-    </div>
-  </div>
-);
 
 // Componente para indicador de data flutuante (durante scroll)
 const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => (
