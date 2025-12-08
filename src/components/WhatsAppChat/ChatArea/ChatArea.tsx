@@ -1228,13 +1228,6 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
       isOwn ? 'bg-[#dcf8c6]' : 'bg-white border border-gray-200'
     }`}>
       <div className="flex items-center space-x-3">
-        {/* Avatar */}
-        <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-          <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-        </div>
-        
         {/* Player Controls */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2">
