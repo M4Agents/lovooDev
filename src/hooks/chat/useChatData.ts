@@ -294,10 +294,16 @@ export const useChatData = (
     if (!companyId) return
 
     console.log('🚀 Iniciando subscriptions do chat:', { companyId, userId, selectedInstance })
+    console.log('🔍 Valores de debug:', {
+      companyIdExists: !!companyId,
+      companyIdValue: companyId,
+      userIdExists: !!userId,
+      selectedInstanceExists: !!selectedInstance
+    })
 
     // Subscrever mudanças nas conversas
     const conversationSubscription = supabase
-      .channel('chat_conversations')
+      .channel(`chat_conversations_${companyId}`) // Channel único por empresa
       .on(
         'postgres_changes',
         {
@@ -307,7 +313,7 @@ export const useChatData = (
           filter: `company_id=eq.${companyId}`
         },
         (payload) => {
-          console.log('Conversation change:', payload)
+          console.log('📋 Conversation change:', payload)
           
           // Atualizar lista de conversas
           if (payload.eventType === 'INSERT') {
@@ -342,7 +348,16 @@ export const useChatData = (
         }
       }
     )
-    .subscribe()
+    .subscribe((status) => {
+      console.log('📡 Status subscription conversas:', status)
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Subscription de conversas ativa e funcionando')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Erro na subscription de conversas')
+      } else if (status === 'TIMED_OUT') {
+        console.error('⏰ Timeout na subscription de conversas')
+      }
+    })
 
     // Função específica para buscar nova conversa (sem dependências circulares)
     const fetchSingleConversation = async (conversationId: string) => {
@@ -381,7 +396,7 @@ export const useChatData = (
 
     // Subscrever mudanças nas mensagens para atualizar contadores
     const messageSubscription = supabase
-      .channel('chat_messages')
+      .channel(`chat_messages_${companyId}`) // Channel único por empresa
       .on(
         'postgres_changes',
         {
@@ -392,6 +407,13 @@ export const useChatData = (
         },
         (payload) => {
           console.log('📨 Nova mensagem recebida via Realtime:', payload)
+          console.log('🔍 Payload detalhado:', {
+            eventType: payload.eventType,
+            table: payload.table,
+            schema: payload.schema,
+            new: payload.new,
+            old: payload.old
+          })
           
           // Atualizar conversa relacionada com atualização local otimista
           const newMessage = payload.new as any
@@ -457,11 +479,44 @@ export const useChatData = (
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Status subscription mensagens:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscription de mensagens ativa e funcionando')
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Erro na subscription de mensagens')
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏰ Timeout na subscription de mensagens')
+        }
+      })
+
+    // TESTE: Subscription sem filtro para debug
+    const testSubscription = supabase
+      .channel(`test_messages_${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages'
+          // SEM FILTRO para capturar QUALQUER mensagem
+        },
+        (payload) => {
+          console.log('🧪 TESTE - Qualquer mensagem detectada:', payload)
+          const msg = payload.new as any
+          console.log('🧪 TESTE - Company ID da mensagem:', msg.company_id)
+          console.log('🧪 TESTE - Company ID esperado:', companyId)
+          console.log('🧪 TESTE - Match:', msg.company_id === companyId)
+        }
+      )
+      .subscribe((status) => {
+        console.log('🧪 TESTE - Status subscription:', status)
+      })
 
     return () => {
       conversationSubscription.unsubscribe()
       messageSubscription.unsubscribe()
+      testSubscription.unsubscribe()
     }
   }, [companyId, userId, selectedInstance]) // CORREÇÃO: Adicionar todas as dependências necessárias
 
