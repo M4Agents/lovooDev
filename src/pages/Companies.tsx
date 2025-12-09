@@ -402,15 +402,10 @@ export const Companies: React.FC = () => {
     if (!confirm(`Deseja entrar como usuário da empresa "${targetCompany?.name}"?\n\nVocê poderá voltar ao seu usuário original a qualquer momento através do banner laranja que aparecerá no topo.`)) return;
 
     try {
-      console.log('Companies: Starting impersonation for:', companyId);
       await impersonateUser(companyId);
-      console.log('Companies: Impersonation successful');
       
       // Aguardar um pouco mais e verificar se o estado foi atualizado
       setTimeout(() => {
-        console.log('Companies: Checking impersonation state before redirect');
-        console.log('localStorage impersonating:', localStorage.getItem('lovoo_crm_impersonating'));
-        console.log('localStorage company_id:', localStorage.getItem('lovoo_crm_impersonated_company_id'));
         
         // Redirect para dashboard
         window.location.href = '/dashboard';

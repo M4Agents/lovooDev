@@ -973,12 +973,10 @@ export const Settings: React.FC = () => {
   };
 
   const handleSaveUser = async () => {
-    console.log('Settings: User saved, reloading users list');
     
     // Recarregar lista de usuários após salvar
     try {
       await usersListRef.current?.loadUsers();
-      console.log('Settings: Users list reloaded successfully');
     } catch (error) {
       console.error('Settings: Error reloading users list:', error);
     }

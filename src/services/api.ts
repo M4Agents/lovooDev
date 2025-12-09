@@ -321,7 +321,6 @@ export const api = {
 
   // Company Management Functions
   async getClientCompanies(parentCompanyId: string) {
-    console.log('API: Getting client companies for parent:', parentCompanyId);
     
     const { data, error } = await supabase
       .from('companies')
@@ -330,7 +329,6 @@ export const api = {
       .eq('company_type', 'client')
       .order('created_at', { ascending: false });
 
-    console.log('API: Client companies result:', { data, error });
     if (error) throw error;
     return data;
   },

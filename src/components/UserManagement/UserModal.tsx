@@ -145,7 +145,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     if (isOpen) {
       if (user) {
         // Modo edição (MANTIDO)
-        console.log('UserModal: Editing user with role:', user.role);
         setFormData({
           email: user.user_id.startsWith('mock_') ? '' : user.user_id,
           displayName: user.display_name || '',
@@ -198,7 +197,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       );
       
       if (correctProfile && (!selectedProfile || selectedProfile.legacyRole !== formData.role)) {
-        console.log('UserModal: Role changed, updating profile:', formData.role, '→', correctProfile.name);
         setSelectedProfile(correctProfile);
       }
     }
@@ -211,7 +209,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       const preSelectedProfile = availableProfiles.find(p => p.id === preSelectedProfileId);
       
       if (preSelectedProfile) {
-        console.log('UserModal: Pre-selecting profile:', preSelectedProfileId, '→', preSelectedProfile.name);
         setSelectedProfile(preSelectedProfile);
         
         // Atualizar role do formulário baseado no perfil pré-selecionado
@@ -245,13 +242,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         );
         
         if (correctProfile) {
-          console.log('UserModal: Setting correct profile for role:', formData.role, '→', correctProfile.name);
           setSelectedProfile(correctProfile);
         } else {
           // Fallback: buscar qualquer perfil compatível
           const fallbackProfile = profiles.find(p => p.isSystem && getProfileRole(p) === formData.role);
           if (fallbackProfile) {
-            console.log('UserModal: Using fallback profile for role:', formData.role, '→', fallbackProfile.name);
             setSelectedProfile(fallbackProfile);
           }
         }
@@ -350,11 +345,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // 🔧 NOVO: Upload da foto de perfil se selecionada
         let profilePictureUrl = user.profile_picture_url;
         if (formData.profilePicture) {
-          console.log('🔧 UserModal: Starting profile picture upload for existing user');
           const uploadedUrl = await uploadProfilePicture(formData.profilePicture, user.user_id);
           if (uploadedUrl) {
             profilePictureUrl = uploadedUrl;
-            console.log('🔧 UserModal: Profile picture uploaded successfully:', uploadedUrl);
           } else {
             console.warn('🔧 UserModal: Profile picture upload failed, keeping existing URL');
             // Não falhar a operação se o upload da foto falhar
@@ -377,11 +370,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             id: user.id,
             profile_picture_url: profilePictureUrl
           };
-          console.log('🔧 UserModal: Photo-only update request:', photoOnlyRequest);
           await updateCompanyUser(photoOnlyRequest);
         } else {
           // Atualização completa
-          console.log('🔧 UserModal: Full update request:', updateRequest);
           await updateCompanyUser(updateRequest);
         }
 
@@ -399,19 +390,15 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // 🔧 NOVO: Upload da foto de perfil após criação do usuário
         if (formData.profilePicture && result.user_id) {
-          console.log('🔧 UserModal: Starting profile picture upload for new user');
           const uploadedUrl = await uploadProfilePicture(formData.profilePicture, result.user_id);
           if (uploadedUrl) {
-            console.log('🔧 UserModal: Profile picture uploaded, updating user record');
             // Atualizar o usuário com a URL da foto
             const updateRequest: UpdateUserRequest = {
               id: result.id,
               profile_picture_url: uploadedUrl
             };
             await updateCompanyUser(updateRequest);
-            console.log('🔧 UserModal: User record updated with profile picture URL');
           } else {
-            console.warn('🔧 UserModal: Profile picture upload failed for new user, continuing without photo');
             // Não falhar a criação do usuário se o upload da foto falhar
           }
         }
@@ -441,10 +428,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 
                 if (!error && emailResult) {
                   emailForLink = emailResult;
-                  console.log('UserModal: Using real email for link:', emailForLink);
                 }
               } catch (e) {
-                console.log('UserModal: Could not fetch real email, using form email');
               }
             }
             
@@ -477,11 +462,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       onClose();
     } catch (err) {
       console.error('UserModal: Error saving user:', err);
-      console.log('UserModal: Full error details:', {
-        error: err,
-        message: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined
-      });
       
       // TRATAMENTO INTELIGENTE: Verificar se é erro real ou modo compatibilidade
       const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar usuário';
@@ -491,7 +471,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           errorMessage.includes('Admin API não configurada') ||
           errorMessage.includes('Convite simulado criado')) {
         
-        console.log('UserModal: Operating in compatibility mode - treating as success');
         
         // Se era para enviar convite, mostrar modal de sucesso mesmo assim
         if (formData.sendInvite) {
@@ -504,7 +483,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           });
           
           setShowInviteSuccess(true);
-          console.log('UserModal: Showing success modal for compatibility mode');
         }
         
         // Tratar como sucesso

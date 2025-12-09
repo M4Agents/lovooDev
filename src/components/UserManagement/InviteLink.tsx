@@ -23,7 +23,6 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
       if (!user || !isOpen) return;
       
       try {
-        console.log('InviteLink: Fetching real email for user_id:', user.user_id);
         
         // Buscar email real usando função RPC segura
         const { data: emailResult, error } = await supabase.rpc('get_user_email_safe', {
@@ -31,7 +30,6 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
         });
 
         if (!error && emailResult) {
-          console.log('InviteLink: Found real email:', emailResult);
           setRealEmail(emailResult);
         } else {
           console.error('InviteLink: Error fetching email:', error);
@@ -56,7 +54,6 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
     // Usar email real se disponível, senão fallback
     const emailToUse = realEmail || user._email || user.user_id;
     
-    console.log('InviteLink: Generating link with email:', emailToUse);
     
     // Construir URL de convite com domínio oficial
     return `https://app.lovoocrm.com/accept-invite?token=${token}&type=invite&email=${encodeURIComponent(emailToUse)}&user=${user.id}`;
