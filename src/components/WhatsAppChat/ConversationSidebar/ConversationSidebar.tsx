@@ -146,15 +146,31 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       {/* Filtros Compactos */}
       <div className="px-4 py-3 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {filterOptions.map(option => (
+          {filterOptions.map(option => {
+            const getCardStyles = () => {
+              if (filter.type !== option.key) {
+                return 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-md border border-slate-200/50 hover:border-slate-300/50'
+              }
+
+              switch (option.key) {
+                case 'all':
+                  return 'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-lg shadow-slate-500/20 hover:from-slate-600 hover:to-slate-800 hover:shadow-slate-500/30'
+                case 'unread':
+                  return 'bg-gradient-to-br from-amber-400 to-amber-500 text-amber-900 shadow-lg shadow-amber-400/25 hover:from-amber-300 hover:to-amber-400 hover:shadow-amber-400/35'
+                case 'assigned':
+                  return 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-emerald-500/30'
+                case 'unassigned':
+                  return 'bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-lg shadow-slate-500/20 hover:from-slate-400 hover:to-slate-500 hover:shadow-slate-500/30'
+                default:
+                  return 'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-lg shadow-slate-500/20'
+              }
+            }
+
+            return (
             <button
               key={option.key}
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transition-all duration-300 transform hover:scale-[1.02] ${
-                filter.type === option.key
-                  ? 'bg-gradient-to-br from-[#00a884] to-[#00967a] text-white shadow-lg shadow-[#00a884]/20'
-                  : 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-md border border-slate-200/50 hover:border-slate-300/50'
-              }`}
+              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transition-all duration-300 transform hover:scale-[1.02] ${getCardStyles()}`}
             >
               {/* Efeito de brilho no hover */}
               <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
@@ -163,12 +179,20 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               
               <div className="relative z-10">
                 <div className={`text-xs font-medium mb-1 leading-tight ${
-                  filter.type === option.key ? 'text-white' : 'text-slate-600'
+                  filter.type === option.key 
+                    ? option.key === 'unread' 
+                      ? 'text-amber-900' 
+                      : 'text-white'
+                    : 'text-slate-600'
                 }`}>
                   {option.label}
                 </div>
                 <div className={`text-lg font-bold ${
-                  filter.type === option.key ? 'text-white' : 'text-slate-800'
+                  filter.type === option.key 
+                    ? option.key === 'unread' 
+                      ? 'text-amber-900' 
+                      : 'text-white'
+                    : 'text-slate-800'
                 }`}>
                   {option.count}
                 </div>
@@ -179,10 +203,13 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               
               {/* Indicador ativo */}
               {filter.type === option.key && (
-                <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${
+                  option.key === 'unread' ? 'bg-amber-900' : 'bg-white'
+                }`} />
               )}
             </button>
-          ))}
+            )
+          })}
         </div>
       </div>
 
