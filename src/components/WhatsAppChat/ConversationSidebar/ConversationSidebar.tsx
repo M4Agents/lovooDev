@@ -178,28 +178,14 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               }`} />
               
               <div className="relative z-10">
-                <div className={`text-xs font-medium mb-1 leading-tight ${
-                  filter.type === option.key 
-                    ? option.key === 'all' ? 'text-green-800' :
-                      option.key === 'unread' ? 'text-amber-700' :
-                      option.key === 'assigned' ? 'text-blue-800' :
-                      'text-slate-700'
-                    : 'text-slate-500'
-                }`}>
+                <div className="text-xs font-medium mb-1 leading-tight text-black">
                   {option.label}
                 </div>
-                <div className={`text-lg font-bold ${
-                  filter.type === option.key 
-                    ? option.key === 'all' ? 'text-green-800' :
-                      option.key === 'unread' ? 'text-amber-700' :
-                      option.key === 'assigned' ? 'text-blue-800' :
-                      'text-slate-700'
-                    : 'text-slate-800'
-                }`}>
+                <div className="text-lg font-bold text-black">
                   {option.count}
                 </div>
                 {option.count > 0 && option.key === 'unread' && (
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                 )}
               </div>
               
