@@ -194,7 +194,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               </div>
               
               {/* Indicador ativo */}
-              {filter.type === option.key && (
+              {filter.type === option.key && !(option.count > 0 && option.key === 'unread') && (
                 <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse bg-white" />
               )}
             </button>
