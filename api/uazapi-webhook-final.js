@@ -368,10 +368,11 @@ async function processMessage(payload) {
     // =====================================================
     // Verificar se precisa sincronizar foto (otimização de performance)
     try {
+      console.log('🔍 [SYNC FOTO] Iniciando verificação para:', phoneNumber, 'isNewContact:', isNewContact);
       const needsSync = await shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact);
       
       if (needsSync) {
-        console.log('📸 Sincronizando foto do contato:', phoneNumber);
+        console.log('📸 [SYNC FOTO] ✅ SINCRONIZANDO foto do contato:', phoneNumber);
         // Sincronizar foto de perfil do contato via Uazapi em background
         syncContactProfilePictureFromUazapi({
           supabase,
@@ -381,10 +382,10 @@ async function processMessage(payload) {
           companyId: company.id,
           phoneNumber,
         }).catch((syncError) => {
-          console.error('⚠️ Erro ao sincronizar foto do contato (async):', syncError);
+          console.error('⚠️ [SYNC FOTO] Erro ao sincronizar foto do contato (async):', syncError);
         });
       } else {
-        console.log('⏭️ Pulando sincronização de foto (não necessária):', phoneNumber);
+        console.log('⏭️ [SYNC FOTO] PULANDO sincronização de foto (não necessária):', phoneNumber);
       }
     } catch (syncInitError) {
       console.error('⚠️ Erro ao verificar/iniciar sync de foto do contato:', syncInitError);
@@ -714,24 +715,31 @@ async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = 
     const currentUrl = contact.profile_picture_url;
     const lastUpdate = new Date(contact.updated_at);
 
-    // 3. SEM FOTO: sincronizar para tentar obter
+    console.log('[shouldSyncPhoto] Estado atual do contato:', {
+      hasPhoto: !!currentUrl,
+      photoUrl: currentUrl ? currentUrl.substring(0, 50) + '...' : 'null',
+      lastUpdate: lastUpdate.toISOString(),
+      isToday: new Date().toDateString() === lastUpdate.toDateString()
+    });
+
+    // 3. SEM FOTO: sincronizar para tentar obter (PRIORIDADE MÁXIMA)
     if (!currentUrl) {
-      console.log('[shouldSyncPhoto] Sem foto - sincronizar');
+      console.log('[shouldSyncPhoto] ✅ SEM FOTO - FORÇAR SINCRONIZAÇÃO');
       return true;
     }
 
     // 4. URL TEMPORÁRIA: sincronizar para migrar para Storage
     if (currentUrl.includes('pps.whatsapp.net')) {
-      console.log('[shouldSyncPhoto] URL temporária detectada - migrar para Storage');
+      console.log('[shouldSyncPhoto] ✅ URL TEMPORÁRIA - MIGRAR PARA STORAGE');
       return true;
     }
 
-    // 5. VERIFICAR SE JÁ SINCRONIZOU HOJE
+    // 5. VERIFICAR SE JÁ SINCRONIZOU HOJE (apenas se JÁ TEM foto)
     const today = new Date().toDateString();
     const lastUpdateDate = lastUpdate.toDateString();
     
     if (today === lastUpdateDate) {
-      console.log('[shouldSyncPhoto] Já sincronizado hoje (' + lastUpdateDate + ') - pular');
+      console.log('[shouldSyncPhoto] ⏭️ JÁ SINCRONIZADO HOJE (' + lastUpdateDate + ') - PULAR');
       return false;
     }
 
