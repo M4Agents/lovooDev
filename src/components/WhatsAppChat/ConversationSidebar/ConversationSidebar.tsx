@@ -156,13 +156,13 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 case 'all':
                   return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
                 case 'unread':
-                  return 'bg-[#F0FDF4] text-green-800 shadow-sm shadow-green-200/15 hover:bg-[#ECFDF5] hover:shadow-md hover:shadow-green-200/20 border border-green-200/25 transition-all duration-200 ease-out'
+                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
                 case 'assigned':
-                  return 'bg-[#EBF4FF] text-blue-700 shadow-sm shadow-blue-200/15 hover:bg-[#F0F7FF] hover:shadow-md hover:shadow-blue-200/20 border border-blue-200/25 transition-all duration-200 ease-out'
+                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
                 case 'unassigned':
-                  return 'bg-[#F8FAFC] text-slate-600 shadow-sm shadow-slate-200/10 hover:bg-[#F1F5F9] hover:shadow-md hover:shadow-slate-200/15 border border-slate-200/20 transition-all duration-200 ease-out'
+                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
                 default:
-                  return 'bg-[#D9FDD3] text-green-800 shadow-sm shadow-green-200/20 transition-all duration-200 ease-out'
+                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
               }
             }
 
@@ -179,16 +179,12 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               
               <div className="relative z-10">
                 <div className={`text-xs font-medium mb-1 leading-tight ${
-                  filter.type === option.key && option.key === 'all' ? 'text-white' :
-                  filter.type === option.key && option.key === 'unread' ? 'text-green-800' :
-                  'text-slate-700'
+                  filter.type === option.key ? 'text-white' : 'text-slate-700'
                 }`}>
                   {option.label}
                 </div>
                 <div className={`text-lg font-semibold ${
-                  filter.type === option.key && option.key === 'all' ? 'text-white' :
-                  filter.type === option.key && option.key === 'unread' ? 'text-green-800' :
-                  'text-slate-700'
+                  filter.type === option.key ? 'text-white' : 'text-slate-700'
                 }`}>
                   {option.count}
                 </div>
@@ -199,12 +195,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               
               {/* Indicador ativo */}
               {filter.type === option.key && (
-                <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${
-                  option.key === 'all' ? 'bg-white' :
-                  option.key === 'unread' ? 'bg-green-600' :
-                  option.key === 'assigned' ? 'bg-blue-600' :
-                  'bg-slate-500'
-                }`} />
+                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse bg-white" />
               )}
             </button>
             )
