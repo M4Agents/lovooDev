@@ -15,7 +15,6 @@ import { CompanyUser, CreateUserRequest, UpdateUserRequest, UserRole, UserPermis
  */
 export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]> => {
   try {
-    console.log('UserAPI: Fetching users for company:', companyId);
     
     // Usar RPC para evitar problemas com RLS e joins complexos
     const { data, error } = await supabase
@@ -37,11 +36,9 @@ export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]>
         throw fallbackError;
       }
       
-      console.log('UserAPI: Using fallback query, found users:', fallbackData?.length || 0);
       return fallbackData || [];
     }
 
-    console.log('UserAPI: Found users:', data?.length || 0);
     return data || [];
   } catch (error) {
     console.error('UserAPI: Error in getCompanyUsers:', error);
@@ -55,7 +52,6 @@ export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]>
  */
 export const getManagedUsers = async (): Promise<CompanyUser[]> => {
   try {
-    console.log('UserAPI: Fetching managed users with display names');
     
     // Usar RPC para obter usuários com display_name
     const { data, error } = await supabase
@@ -75,15 +71,12 @@ export const getManagedUsers = async (): Promise<CompanyUser[]> => {
         throw fallbackError;
       }
       
-      console.log('UserAPI: Using fallback query for managed users:', fallbackData?.length || 0);
       return fallbackData || [];
     }
 
-    console.log('UserAPI: Found managed users with display names:', data?.length || 0);
     
     // Se não encontrou dados, pode ser problema de RLS - tentar buscar da empresa atual
     if (!data || data.length === 0) {
-      console.log('UserAPI: No users found, trying current company approach');
       
       // Buscar empresa atual do usuário
       const { data: { user } } = await supabase.auth.getUser();
@@ -321,7 +314,6 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
  */
 export const createCompanyUser = async (request: CreateUserRequest): Promise<CompanyUser> => {
   try {
-    console.log('UserAPI: Creating user with real integration:', request);
 
     // Validar permissão
     const canCreate = await canCreateUser(request.companyId);
@@ -363,7 +355,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     // TENTAR CRIAR USUÁRIO REAL (com fallback seguro)
     if (request.sendInvite && request.email) {
       try {
-        console.log('UserAPI: Attempting to create real user via invite');
         
         // Importar authAdmin dinamicamente para evitar dependência circular
         const { inviteUser } = await import('./authAdmin');
@@ -384,21 +375,13 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
             finalUserId = inviteResult.user.id;
             isRealUser = true;
             inviteData = inviteResult.user.app_metadata;
-            console.log('UserAPI: Real user created via Admin API:', inviteResult.user.id);
           } else {
             // Convite simulado - usar user_id atual temporariamente (como empresas)
             finalUserId = currentUser.id;
             isRealUser = false;
             inviteData = inviteResult.user.app_metadata;
-            console.log('UserAPI: Using current user as fallback:', currentUser.id);
           }
           
-          console.log('UserAPI: User invite processed:', {
-            userId: finalUserId,
-            isReal: isRealUser,
-            mode: isRealUser ? 'real' : 'compatibility',
-            hasInviteUrl: !!inviteResult.user.app_metadata?.invite_url
-          });
         } else {
           throw new Error(inviteResult.error || 'Falha ao enviar convite');
         }
@@ -420,13 +403,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     }
 
     // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
-    console.log('UserAPI: Calling create_company_user_safe with params:', {
-      p_company_id: request.companyId,
-      p_user_id: finalUserId,
-      p_role: request.role,
-      p_permissions: permissions,
-      p_created_by: currentUser.id
-    });
 
     let { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
       p_company_id: request.companyId,
@@ -436,7 +412,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       p_created_by: currentUser.id
     });
 
-    console.log('UserAPI: create_company_user_safe result:', { functionResult, error });
 
     // TRATAMENTO INTELIGENTE DE ERRO - Verificar se usuário foi criado mesmo com erro
     if (error) {
@@ -457,7 +432,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
             .single();
             
           if (!checkError && createdUser) {
-            console.log('UserAPI: User was created successfully despite templates error:', createdUser.id);
             // Simular resposta de sucesso
             functionResult = {
               success: true,
@@ -474,11 +448,9 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
             // Limpar erro já que usuário foi criado
             error = null;
           } else {
-            console.error('UserAPI: User was not created, original error is valid');
             throw error;
           }
         } catch (checkError) {
-          console.error('UserAPI: Error checking if user was created:', checkError);
           throw error; // Manter erro original
         }
       } else {
@@ -492,14 +464,10 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       throw new Error(functionResult?.error || 'Erro na criação do usuário');
     }
 
-    console.log('UserAPI: Company user created successfully in new system:', functionResult);
 
     // SISTEMA HÍBRIDO CORRIGIDO: NÃO criar empresas duplicadas
     // Usuários são apenas associados a empresas existentes
     // Empresas só podem ser criadas via Menu Empresas (M4 Digital)
-    console.log('UserAPI: User successfully created in NEW system (company_users)');
-    console.log('UserAPI: No compatibility record needed - AuthContext will use NEW system');
-    console.log('UserAPI: Company creation is exclusive to M4 Digital via Companies menu');
 
     // Converter resultado da função para formato esperado
     const data = {
@@ -530,11 +498,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       })
     };
 
-    console.log('UserAPI: User created successfully:', {
-      id: result.id,
-      isReal: isRealUser,
-      email: request.email
-    });
     
     return result;
   } catch (error) {
@@ -548,11 +511,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
  */
 export const updateCompanyUser = async (request: UpdateUserRequest): Promise<CompanyUser> => {
   try {
-    console.log('🔧 UserAPI: Updating user with detailed info:', {
-      requestId: request.id,
-      profilePictureUrl: request.profile_picture_url,
-      fullRequest: request
-    });
 
     const updateData: any = {
       updated_at: new Date().toISOString()
@@ -593,7 +551,6 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
     
     if (isSimplePhotoUpdate) {
       // Usar função SECURITY DEFINER para atualização de foto (bypassa RLS)
-      console.log('🔧 UserAPI: Using SECURITY DEFINER function for photo update');
       const result = await supabase.rpc('update_user_profile_picture_simple', {
         p_user_record_id: request.id,
         p_profile_picture_url: updateData.profile_picture_url
@@ -603,7 +560,6 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
       error = result.error;
     } else {
       // Atualização completa com JOIN
-      console.log('🔧 UserAPI: Using full update (with JOIN)');
       const result = await supabase
         .from('company_users')
         .update(updateData)
@@ -627,7 +583,6 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
       throw error;
     }
 
-    console.log('UserAPI: User updated successfully:', data);
     return data;
   } catch (error) {
     console.error('UserAPI: Error in updateCompanyUser:', error);
@@ -640,7 +595,6 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
  */
 export const deactivateUser = async (userId: string): Promise<boolean> => {
   try {
-    console.log('UserAPI: Deactivating user:', userId);
 
     // Buscar user_id do usuário atual para permissões
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -666,7 +620,6 @@ export const deactivateUser = async (userId: string): Promise<boolean> => {
       throw new Error(functionResult?.error || 'Erro na desativação do usuário');
     }
 
-    console.log('UserAPI: User deactivated successfully');
     return true;
   } catch (error) {
     console.error('UserAPI: Error in deactivateUser:', error);

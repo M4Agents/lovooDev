@@ -45,7 +45,6 @@ export const stopTrackingQueueProcessor = () => {
 
 export const api = {
   async createLandingPage(companyId: string, data: { name: string; url: string }) {
-    console.log('API: createLandingPage called with:', { companyId, data });
     
     const { data: page, error } = await supabase
       .from('landing_pages')
@@ -58,14 +57,12 @@ export const api = {
       .select()
       .single();
 
-    console.log('API: createLandingPage result:', { page, error });
     
     if (error) throw error;
     return page;
   },
 
   async getLandingPages(companyId: string) {
-    console.log('API: getLandingPages called for company:', companyId);
     
     // Verificar se é super admin
     const { data: company, error: companyError } = await supabase
@@ -74,10 +71,8 @@ export const api = {
       .eq('id', companyId)
       .single();
 
-    console.log('API: Company data:', { company, companyError });
 
     if (companyError) {
-      console.error('API: Error fetching company:', companyError);
       throw companyError;
     }
 
@@ -91,16 +86,12 @@ export const api = {
 
     // Se for super admin, mostrar todas as landing pages
     if (company?.is_super_admin && company?.company_type === 'parent') {
-      console.log('API: Super admin - fetching all landing pages');
       const { data, error } = await query;
-      console.log('API: All landing pages result:', { data, error });
       if (error) throw error;
       return data || [];
     } else {
-      console.log('API: Regular company - fetching company landing pages');
       // Empresa normal vê apenas suas próprias landing pages
       const { data, error } = await query.eq('company_id', companyId);
-      console.log('API: Company landing pages result:', { data, error });
       if (error) throw error;
       return data || [];
     }
@@ -128,8 +119,6 @@ export const api = {
   },
 
   async getAnalytics(landingPageId: string, dateRange?: { start: string; end: string }) {
-    console.log('API: getAnalytics called with landingPageId:', landingPageId);
-    console.log('API: dateRange:', dateRange);
     
     let query = supabase
       .from('conversions')
@@ -1422,7 +1411,6 @@ export const api = {
   },
 
   async getLeadStats(companyId: string) {
-    console.log('API: getLeadStats called for company:', companyId);
     
     try {
       const { data: leads, error } = await supabase
