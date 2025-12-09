@@ -182,7 +182,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (isOpen && company?.id) {
       loadCustomFields();
       if (lead) {
-        console.log('🔍 LEADMODAL - PREENCHENDO FORM DATA COM LEAD:', lead);
         // Edição - preencher dados existentes
         setFormData({
           name: lead.name || '',
@@ -319,15 +318,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
   }, [isOpen, lead, company?.id]);
 
-  // Log adicional para diagnosticar problema
-  useEffect(() => {
-    console.log('🔍 LEADMODAL - DIAGNÓSTICO LEAD:', { 
-      isOpen, 
-      leadId: lead?.id, 
-      leadName: lead?.name,
-      leadExists: !!lead 
-    });
-  }, [isOpen, lead]);
 
   // NOVO: Função para buscar CEP
   const handleCEPSearch = async (cep: string) => {

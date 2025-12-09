@@ -98,13 +98,6 @@ export const Leads: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // DEBUG: Log dos estados de exportação
-  console.log('🔍 DEBUG: Estados de exportação renderizados:', {
-    showExportDropdown,
-    exportLoading,
-    setShowExportDropdown: typeof setShowExportDropdown,
-    setExportLoading: typeof setExportLoading
-  });
 
   useEffect(() => {
     if (company?.id) {

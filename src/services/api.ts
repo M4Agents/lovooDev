@@ -1194,7 +1194,6 @@ export const api = {
 
   // Custom Fields Management
   async getCustomFields(companyId: string) {
-    console.log('API: getCustomFields called for company:', companyId);
     
     try {
       const { data, error } = await supabase
