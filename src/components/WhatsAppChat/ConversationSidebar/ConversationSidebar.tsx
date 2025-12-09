@@ -154,9 +154,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
               switch (option.key) {
                 case 'all':
-                  return 'bg-[#D9FDD3] text-green-800 shadow-sm shadow-green-200/20 hover:bg-[#E8FEE4] hover:shadow-md hover:shadow-green-200/25 border border-green-200/30 transition-all duration-200 ease-out'
+                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
                 case 'unread':
-                  return 'bg-[#FEF9E7] text-amber-700 shadow-sm shadow-yellow-200/15 hover:bg-[#FFFBF0] hover:shadow-md hover:shadow-yellow-200/20 border border-yellow-200/25 transition-all duration-200 ease-out'
+                  return 'bg-[#F0FDF4] text-green-800 shadow-sm shadow-green-200/15 hover:bg-[#ECFDF5] hover:shadow-md hover:shadow-green-200/20 border border-green-200/25 transition-all duration-200 ease-out'
                 case 'assigned':
                   return 'bg-[#EBF4FF] text-blue-700 shadow-sm shadow-blue-200/15 hover:bg-[#F0F7FF] hover:shadow-md hover:shadow-blue-200/20 border border-blue-200/25 transition-all duration-200 ease-out'
                 case 'unassigned':
@@ -178,10 +178,18 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               }`} />
               
               <div className="relative z-10">
-                <div className="text-xs font-medium mb-1 leading-tight text-slate-700">
+                <div className={`text-xs font-medium mb-1 leading-tight ${
+                  filter.type === option.key && option.key === 'all' ? 'text-white' :
+                  filter.type === option.key && option.key === 'unread' ? 'text-green-800' :
+                  'text-slate-700'
+                }`}>
                   {option.label}
                 </div>
-                <div className="text-lg font-semibold text-slate-700">
+                <div className={`text-lg font-semibold ${
+                  filter.type === option.key && option.key === 'all' ? 'text-white' :
+                  filter.type === option.key && option.key === 'unread' ? 'text-green-800' :
+                  'text-slate-700'
+                }`}>
                   {option.count}
                 </div>
                 {option.count > 0 && option.key === 'unread' && (
@@ -192,8 +200,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               {/* Indicador ativo */}
               {filter.type === option.key && (
                 <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${
-                  option.key === 'all' ? 'bg-green-600' :
-                  option.key === 'unread' ? 'bg-amber-600' :
+                  option.key === 'all' ? 'bg-white' :
+                  option.key === 'unread' ? 'bg-green-600' :
                   option.key === 'assigned' ? 'bg-blue-600' :
                   'bg-slate-500'
                 }`} />
