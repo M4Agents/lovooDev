@@ -180,18 +180,20 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               <div className="relative z-10">
                 <div className={`text-xs font-medium mb-1 leading-tight ${
                   filter.type === option.key 
-                    ? option.key === 'unread' 
-                      ? 'text-amber-900' 
-                      : 'text-white'
-                    : 'text-slate-600'
+                    ? option.key === 'all' ? 'text-green-800' :
+                      option.key === 'unread' ? 'text-amber-700' :
+                      option.key === 'assigned' ? 'text-blue-800' :
+                      'text-slate-700'
+                    : 'text-slate-500'
                 }`}>
                   {option.label}
                 </div>
                 <div className={`text-lg font-bold ${
                   filter.type === option.key 
-                    ? option.key === 'unread' 
-                      ? 'text-amber-900' 
-                      : 'text-white'
+                    ? option.key === 'all' ? 'text-green-800' :
+                      option.key === 'unread' ? 'text-amber-700' :
+                      option.key === 'assigned' ? 'text-blue-800' :
+                      'text-slate-700'
                     : 'text-slate-800'
                 }`}>
                   {option.count}
