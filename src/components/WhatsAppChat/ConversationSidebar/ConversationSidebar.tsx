@@ -47,7 +47,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   // =====================================================
 
   const filterOptions = [
-    { key: 'all', label: 'Todas as Conversas', count: conversations.length },
+    { key: 'all', label: 'Todas', count: conversations.length },
     { 
       key: 'unread', 
       label: 'Não Lidas', 
@@ -60,7 +60,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     },
     { 
       key: 'unassigned', 
-      label: 'Não Atribuídas', 
+      label: 'Não Atrib.', 
       count: conversations.filter(c => !c.assigned_to).length 
     }
   ]
@@ -143,17 +143,17 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         </div>
       </div>
 
-      {/* Filtros Modernos */}
-      <div className="px-6 py-6 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
-        <div className="grid grid-cols-2 gap-3">
+      {/* Filtros Compactos */}
+      <div className="px-4 py-3 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {filterOptions.map(option => (
             <button
               key={option.key}
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`group relative overflow-hidden rounded-2xl p-4 transition-all duration-300 transform hover:scale-[1.02] ${
+              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transition-all duration-300 transform hover:scale-[1.02] ${
                 filter.type === option.key
-                  ? 'bg-gradient-to-br from-[#00a884] to-[#00967a] text-white shadow-xl shadow-[#00a884]/25 ring-2 ring-[#00a884]/20'
-                  : 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-lg border border-slate-200/50 hover:border-slate-300/50'
+                  ? 'bg-gradient-to-br from-[#00a884] to-[#00967a] text-white shadow-lg shadow-[#00a884]/20'
+                  : 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-md border border-slate-200/50 hover:border-slate-300/50'
               }`}
             >
               {/* Efeito de brilho no hover */}
@@ -162,53 +162,27 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               }`} />
               
               <div className="relative z-10">
-                <div className={`text-sm font-bold mb-1 ${
-                  filter.type === option.key ? 'text-white' : 'text-slate-800'
+                <div className={`text-xs font-medium mb-1 leading-tight ${
+                  filter.type === option.key ? 'text-white' : 'text-slate-600'
                 }`}>
                   {option.label}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-medium ${
-                    filter.type === option.key ? 'text-emerald-100' : 'text-slate-500'
-                  }`}>
-                    {option.count} conversas
-                  </span>
-                  {option.count > 0 && (
-                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                      filter.type === option.key 
-                        ? 'bg-white/20 text-white' 
-                        : option.key === 'unread' 
-                          ? 'bg-red-500 text-white animate-pulse' 
-                          : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {option.count}
-                    </div>
-                  )}
+                <div className={`text-lg font-bold ${
+                  filter.type === option.key ? 'text-white' : 'text-slate-800'
+                }`}>
+                  {option.count}
                 </div>
+                {option.count > 0 && option.key === 'unread' && (
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                )}
               </div>
               
               {/* Indicador ativo */}
               {filter.type === option.key && (
-                <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse" />
+                <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
               )}
             </button>
           ))}
-        </div>
-        
-        {/* Indicador de filtro ativo */}
-        <div className="mt-4 flex items-center justify-center">
-          <div className="flex space-x-1">
-            {filterOptions.map(option => (
-              <div
-                key={option.key}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  filter.type === option.key 
-                    ? 'bg-[#00a884] scale-125' 
-                    : 'bg-slate-300 hover:bg-slate-400'
-                }`}
-              />
-            ))}
-          </div>
         </div>
       </div>
 
