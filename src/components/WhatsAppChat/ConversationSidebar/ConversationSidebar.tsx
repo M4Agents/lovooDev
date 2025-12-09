@@ -178,10 +178,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               }`} />
               
               <div className="relative z-10">
-                <div className="text-xs font-medium mb-1 leading-tight text-black">
+                <div className="text-xs font-medium mb-1 leading-tight text-slate-700">
                   {option.label}
                 </div>
-                <div className="text-lg font-bold text-black">
+                <div className="text-lg font-semibold text-slate-700">
                   {option.count}
                 </div>
                 {option.count > 0 && option.key === 'unread' && (
