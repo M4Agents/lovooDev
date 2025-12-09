@@ -149,20 +149,20 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           {filterOptions.map(option => {
             const getCardStyles = () => {
               if (filter.type !== option.key) {
-                return 'bg-white/70 backdrop-blur-sm text-slate-700 hover:bg-white/90 hover:shadow-md border border-slate-200/50 hover:border-slate-300/50'
+                return 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-white/80 hover:shadow-sm border border-slate-100/50 hover:border-slate-200/50 transition-all duration-200 ease-out'
               }
 
               switch (option.key) {
                 case 'all':
-                  return 'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-lg shadow-slate-500/20 hover:from-slate-600 hover:to-slate-800 hover:shadow-slate-500/30'
+                  return 'bg-[#D9FDD3] text-green-800 shadow-sm shadow-green-200/20 hover:bg-[#E8FEE4] hover:shadow-md hover:shadow-green-200/25 border border-green-200/30 transition-all duration-200 ease-out'
                 case 'unread':
-                  return 'bg-gradient-to-br from-amber-400 to-amber-500 text-amber-900 shadow-lg shadow-amber-400/25 hover:from-amber-300 hover:to-amber-400 hover:shadow-amber-400/35'
+                  return 'bg-[#FEF9E7] text-amber-700 shadow-sm shadow-yellow-200/15 hover:bg-[#FFFBF0] hover:shadow-md hover:shadow-yellow-200/20 border border-yellow-200/25 transition-all duration-200 ease-out'
                 case 'assigned':
-                  return 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-emerald-500/30'
+                  return 'bg-[#EBF4FF] text-blue-700 shadow-sm shadow-blue-200/15 hover:bg-[#F0F7FF] hover:shadow-md hover:shadow-blue-200/20 border border-blue-200/25 transition-all duration-200 ease-out'
                 case 'unassigned':
-                  return 'bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-lg shadow-slate-500/20 hover:from-slate-400 hover:to-slate-500 hover:shadow-slate-500/30'
+                  return 'bg-[#F8FAFC] text-slate-600 shadow-sm shadow-slate-200/10 hover:bg-[#F1F5F9] hover:shadow-md hover:shadow-slate-200/15 border border-slate-200/20 transition-all duration-200 ease-out'
                 default:
-                  return 'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-lg shadow-slate-500/20'
+                  return 'bg-[#D9FDD3] text-green-800 shadow-sm shadow-green-200/20 transition-all duration-200 ease-out'
               }
             }
 
@@ -170,7 +170,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             <button
               key={option.key}
               onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transition-all duration-300 transform hover:scale-[1.02] ${getCardStyles()}`}
+              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transform hover:scale-[1.005] ${getCardStyles()}`}
             >
               {/* Efeito de brilho no hover */}
               <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
@@ -204,7 +204,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               {/* Indicador ativo */}
               {filter.type === option.key && (
                 <div className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${
-                  option.key === 'unread' ? 'bg-amber-900' : 'bg-white'
+                  option.key === 'all' ? 'bg-green-600' :
+                  option.key === 'unread' ? 'bg-amber-600' :
+                  option.key === 'assigned' ? 'bg-blue-600' :
+                  'bg-slate-500'
                 }`} />
               )}
             </button>
