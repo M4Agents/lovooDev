@@ -206,6 +206,25 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         view_financial: true,
         edit_financial: true
       };
+    case 'support':
+      return {
+        dashboard: true,
+        leads: true,
+        chat: true,
+        analytics: true,
+        settings: true,
+        companies: true,
+        users: true,
+        financial: false, // SEM ACESSO FINANCEIRO
+        create_users: true,
+        edit_users: true,
+        delete_users: true,
+        impersonate: true,
+        view_all_leads: true,
+        edit_all_leads: true,
+        view_financial: false, // SEM ACESSO FINANCEIRO
+        edit_financial: false  // SEM ACESSO FINANCEIRO
+      };
     case 'admin':
       return {
         dashboard: true,
@@ -231,18 +250,18 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         leads: true,
         chat: true,
         analytics: true,
-        settings: false,
-        companies: false,
-        users: false,
-        financial: false,
-        create_users: false,
-        edit_users: false,
-        delete_users: false,
-        impersonate: false,
+        settings: true, // PODE CONFIGURAR SUAS EMPRESAS
+        companies: true, // PODE CRIAR EMPRESAS FILHAS
+        users: true, // PODE GERENCIAR USUÁRIOS DAS SUAS EMPRESAS
+        financial: false, // SEM ACESSO FINANCEIRO
+        create_users: true, // PODE CRIAR USUÁRIOS
+        edit_users: true, // PODE EDITAR USUÁRIOS
+        delete_users: false, // NÃO PODE EXCLUIR USUÁRIOS
+        impersonate: true, // PODE IMPERSONAR SUAS EMPRESAS
         view_all_leads: true,
         edit_all_leads: true,
-        view_financial: false,
-        edit_financial: false
+        view_financial: false, // SEM ACESSO FINANCEIRO
+        edit_financial: false  // SEM ACESSO FINANCEIRO
       };
     case 'manager':
       return {

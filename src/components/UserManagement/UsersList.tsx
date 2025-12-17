@@ -172,7 +172,9 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
   const getRoleName = (role: UserRole): string => {
     switch (role) {
       case 'super_admin':
-        return 'Super Admin';
+        return 'Super Administrador';
+      case 'support':
+        return 'Suporte';
       case 'admin':
         return 'Administrador';
       case 'partner':
@@ -182,7 +184,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       case 'seller':
         return 'Vendedor';
       default:
-        return 'Usuário';
+        return role;
     }
   };
 
@@ -191,6 +193,8 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     switch (role) {
       case 'super_admin':
         return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'support':
+        return 'bg-green-100 text-green-800 border-green-200';
       case 'admin':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'partner':
