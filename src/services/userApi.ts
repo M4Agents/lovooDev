@@ -172,7 +172,7 @@ export const canCreateUser = async (companyId: string): Promise<boolean> => {
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
   // Empresas parent (super admin) podem criar qualquer tipo de usuário
-  const parentRoles: UserRole[] = ['super_admin', 'admin', 'partner', 'manager', 'seller'];
+  const parentRoles: UserRole[] = ['super_admin', 'support', 'admin', 'partner', 'manager', 'seller'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
   if (companyType === 'parent') {
