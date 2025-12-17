@@ -333,18 +333,6 @@ export const api = {
     return data;
   },
 
-  async getAllCompanies() {
-    // Para super admin ver TODAS as empresas (pai + filhas)
-    const { data, error } = await supabase
-      .from('companies')
-      .select('*')
-      .order('company_type', { ascending: true })
-      .order('name', { ascending: true });
-
-    if (error) throw error;
-    return data;
-  },
-
   async createClientCompany(parentCompanyId: string, data: { 
     name: string; 
     domain?: string; 

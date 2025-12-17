@@ -309,10 +309,20 @@ export const Companies: React.FC = () => {
   };
 
   const loadCompanies = async () => {
-    if (!company || !company.is_super_admin) return;
+    console.log('🔍 loadCompanies called - company:', company);
+    console.log('🔍 is_super_admin:', company?.is_super_admin);
+    
+    if (!company || !company.is_super_admin) {
+      console.log('❌ Exiting loadCompanies - not super admin or no company');
+      return;
+    }
 
     try {
-      const data = await api.getClientCompanies(company.id);
+      console.log('🔍 Loading companies for super admin - using getAllCompanies()');
+      // Super admin vê TODAS as empresas (pai + filhas)
+      const data = await api.getAllCompanies();
+      console.log('📊 Companies loaded:', data?.length, 'companies');
+      console.log('📋 Companies data:', data);
       setCompanies(data);
     } catch (error) {
       console.error('Error loading companies:', error);

@@ -1,11 +1,12 @@
-// Webhook Uazapi - BASEADO 100% NO WEBHOOK ANTIGO FUNCIONAL
-// Endpoint: /api/webhook/uazapi/[company_id]
-// CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
+// Webhook Uazapi - NOME COMPLETAMENTE NOVO PARA EVITAR CACHE
+// Endpoint: /api/uazapi-webhook-final
+// SOLUÇÃO DEFINITIVA PARA PROBLEMA DE CACHE DO VERCEL
 
 export default async function handler(req, res) {
-  console.error('🚀 WEBHOOK UAZAPI v2.0 - CACHE BUST ATIVO');
+  console.error('🚀 WEBHOOK EXECUTANDO - LOGS FORÇADOS COM ERROR');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
-  console.error('🔄 CACHE BUST ID:', '20251206-074647');
+  console.error('🔧 MÉTODO:', req.method);
+  console.error('📡 USER-AGENT:', req.headers['user-agent']);
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,19 +25,17 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.error('📥 PAYLOAD RECEBIDO:', JSON.stringify(req.body, null, 2));
-    console.error('📨 MESSAGE COMPLETO:', JSON.stringify(req.body?.message, null, 2));
+    console.log('📥 PAYLOAD RECEBIDO:', req.body);
+    console.log('🔍 PAYLOAD DETALHADO:', JSON.stringify(req.body, null, 2));
     
     const result = await processMessage(req.body);
     
     if (result.success) {
-      console.error('✅ SUCESSO COM CACHE BUST:', result.message_id);
+      console.log('✅ SUCESSO:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
-        message: 'WEBHOOK ATUALIZADO - CACHE INVALIDADO!',
-        timestamp: new Date().toISOString(),
-        version: 'v2.0-cache-bust'
+        message: 'Mensagem processada!'
       });
     } else {
       console.log('⚠️ FILTRADO:', result.error);
@@ -62,7 +61,7 @@ async function processMessage(payload) {
       }
     );
     
-    console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO BASEADO NO ANTIGO');
+    console.log('🔑 SUPABASE CONECTADO - WEBHOOK ANTIGO COM PROCESSAMENTO ROBUSTO');
     
     // Validações
     if (payload.EventType !== 'messages') {
@@ -116,34 +115,81 @@ async function processMessage(payload) {
     const rawType = (message.type || '').toLowerCase();
     const rawMediaType = (message.mediaType || '').toLowerCase();
 
-    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA
-    console.error('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
-    console.error('📊 VARIÁVEIS BÁSICAS:', {
-      rawType: rawType,
-      rawMediaType: rawMediaType,
-      rawMessageType: rawMessageType
+    // LOGS DETALHADOS PARA CAPTURAR ESTRUTURA REAL
+    console.log('🔍 PAYLOAD REAL COMPLETO:', JSON.stringify(payload, null, 2));
+    console.log('📨 MESSAGE REAL COMPLETO:', JSON.stringify(message, null, 2));
+    console.log('🔍 CONTENT DETALHADO:', message.content);
+    console.log('🎥 MEDIA DETALHADO:', message.media);
+
+    console.log('🔍 DETECÇÃO DE TIPOS:', {
+      rawMessageType,
+      rawType,
+      rawMediaType,
+      messageKeys: Object.keys(message),
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      hasMedia: !!message.media
     });
 
     const isTextMessage =
       rawMessageType === 'conversation' ||
       rawMessageType === 'extendedtextmessage';
 
-    // DETECÇÃO ROBUSTA DE MÍDIA - MÚLTIPLOS FORMATOS
-    const condition1 = (rawType === 'media' && !!rawMediaType);
-    const condition2 = (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage');
-    const condition3 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
-    
-    console.error('🎯 CONDIÇÕES DE DETECÇÃO:', {
-      'condition1 (rawType === media && rawMediaType)': condition1,
-      'condition2 (messageType includes message)': condition2,
-      'condition3 (message.content object with URL)': condition3
+    // LOGS DETALHADOS DA DETECÇÃO DE MÍDIA - FORÇADOS COM ERROR
+    console.error('🔍 ANÁLISE DETALHADA DA DETECÇÃO:');
+    console.error('📊 VARIÁVEIS BÁSICAS:', {
+      rawType: rawType,
+      rawMediaType: rawMediaType,
+      rawMessageType: rawMessageType
     });
     
-    const isMediaMessage = condition1 || condition2 || condition3;
+    console.error('📋 CONTENT ANALYSIS:', {
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      contentKeys: message.content ? Object.keys(message.content) : null,
+      hasURL: message.content && message.content.URL,
+      hasUrl: message.content && message.content.url
+    });
     
+    console.error('🎥 MEDIA ANALYSIS:', {
+      hasMedia: !!message.media,
+      mediaType: typeof message.media,
+      mediaKeys: message.media ? Object.keys(message.media) : null,
+      hasMediaUrl: message.media && message.media.url
+    });
+
+    // Detecção robusta de mídia - múltiplos formatos com logs individuais
+    const condition1 = (rawType === 'media' && !!rawMediaType);
+    const condition2 = (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage');
+    const condition3 = (message.media && message.media.url);
+    const condition4 = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    
+    console.error('🎯 CONDIÇÕES INDIVIDUAIS:', {
+      'condition1 (rawType === media && rawMediaType)': condition1,
+      'condition2 (messageType includes message)': condition2,
+      'condition3 (message.media.url exists)': condition3,
+      'condition4 (message.content object with URL)': condition4
+    });
+    
+    const isMediaMessage = condition1 || condition2 || condition3 || condition4;
+
     console.error('🎯 RESULTADO DETECÇÃO:', { isTextMessage, isMediaMessage });
+    
+    // LOG ESPECÍFICO PARA MÍDIA
+    if (isMediaMessage) {
+      console.error('🎥 MÍDIA DETECTADA! Analisando estrutura...');
+      console.error('📋 CONDIÇÕES DE DETECÇÃO:', {
+        'rawType === media && rawMediaType': (rawType === 'media' && !!rawMediaType),
+        'messageType includes message': (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage'),
+        'message.media exists': !!(message.media && message.media.url),
+        'message.content object with URL': !!(message.content && typeof message.content === 'object' && (message.content.URL || message.content.url))
+      });
+    } else {
+      console.error('⚠️ MÍDIA NÃO DETECTADA - VERIFICANDO CONDIÇÕES');
+    }
 
     if (!isTextMessage && !isMediaMessage) {
+      console.log('❌ TIPO NÃO SUPORTADO:', { rawMessageType, rawType, rawMediaType });
       return { success: false, error: 'Tipo não suportado' };
     }
     
@@ -189,17 +235,47 @@ async function processMessage(payload) {
     if (isMediaMessage) {
       console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
       
-      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) || null;
+      // LOGS DETALHADOS DA LOCALIZAÇÃO DA URL
+      console.error('🔍 BUSCANDO URL DE MÍDIA...');
       
-      console.error('🔗 URL DE MÍDIA ENCONTRADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
+      const urlFromContent = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+      const urlFromMedia = (message.media && message.media.url);
+      const urlFromMessage = message.url;
+      
+      console.error('📋 ANÁLISE DE URLs:', {
+        'message.content.URL': message.content && message.content.URL,
+        'message.content.url': message.content && message.content.url,
+        'message.media.url': message.media && message.media.url,
+        'message.url': message.url,
+        'urlFromContent': urlFromContent,
+        'urlFromMedia': urlFromMedia,
+        'urlFromMessage': urlFromMessage
+      });
+      
+      // Localizar URL da mídia de forma robusta
+      const originalUrl = urlFromContent || urlFromMedia || urlFromMessage || null;
+      
+      console.error('🔗 URL FINAL SELECIONADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL ENCONTRADA');
       
       if (originalUrl) {
+        // Determinar tipo de mídia de forma robusta
+        let mediaType = rawMediaType || 
+                       (rawMessageType.includes('video') ? 'video' : 
+                        rawMessageType.includes('image') ? 'image' : 
+                        rawMessageType.includes('audio') ? 'audio' : 'unknown');
+        
+        console.error('🎯 TIPO DE MÍDIA DETERMINADO:', mediaType);
         console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
-        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-        console.error('✅ RESULTADO PROCESSAMENTO:', mediaUrl ? 'SUCESSO' : 'FALHOU');
+        
+        mediaUrl = await processMediaMessageRobust(originalUrl, mediaType, supabase);
+        
+        console.error('✅ RESULTADO DO PROCESSAMENTO:', {
+          success: !!mediaUrl,
+          originalUrl: originalUrl ? originalUrl.substring(0, 80) + '...' : 'N/A',
+          processedUrl: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'FALHOU'
+        });
       } else {
-        console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA');
-        mediaUrl = null;
+        console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA - PULANDO PROCESSAMENTO');
       }
     } else {
       console.error('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
@@ -208,7 +284,7 @@ async function processMessage(payload) {
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
-    console.error('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
+    console.log('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
@@ -247,38 +323,45 @@ async function processMessage(payload) {
       finalName: senderName 
     });
     
-    // USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
-    console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
+    // Buscar/criar contato
+    let contactId;
+    const { data: existingContact } = await supabase
+      .from('chat_contacts')
+      .select('id')
+      .eq('phone_number', phoneNumber)
+      .eq('company_id', company.id)
+      .single();
     
-    const { data: webhookResult, error: webhookError } = await supabase
-      .rpc('process_webhook_message_safe', {
-        p_company_id: company.id,
-        p_instance_id: instance.id,
-        p_phone_number: phoneNumber,
-        p_sender_name: senderName,
-        p_content: messageText,
-        p_message_type: isMediaMessage ? (rawMediaType || 'document') : 'text',
-        p_media_url: mediaUrl,
-        p_direction: direction,
-        p_uazapi_message_id: messageId,
-        p_profile_picture_url: payload.chat?.imagePreview || null
-      });
+    // Determinar se é contato novo ou existente
+    const isNewContact = !existingContact;
     
-    if (webhookError) {
-      console.error('❌ ERRO NA FUNÇÃO SECURITY DEFINER:', webhookError);
-      return { success: false, error: webhookError.message };
+    if (existingContact) {
+      contactId = existingContact.id;
+      console.log('👤 CONTATO EXISTENTE:', contactId);
+    } else {
+      // USAR NOME CORRETO DA COLUNA
+      const { data: newContact, error: contactError } = await supabase
+        .from('chat_contacts')
+        .insert({
+          phone_number: phoneNumber,
+          name: senderName,
+          company_id: company.id,
+          lead_source: 'whatsapp_webhook',
+          profile_picture_url: payload.chat?.imagePreview || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (contactError) {
+        console.error('❌ ERRO CONTATO:', contactError);
+        return { success: false, error: contactError.message };
+      }
+      
+      contactId = newContact.id;
+      console.log('👤 NOVO CONTATO:', contactId);
     }
-    
-    if (!webhookResult || !webhookResult.success) {
-      console.error('❌ FUNÇÃO SECURITY DEFINER RETORNOU ERRO:', webhookResult);
-      return { success: false, error: webhookResult?.error || 'Erro desconhecido na função segura' };
-    }
-    
-    console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
-    
-    const contactId = webhookResult.contact_id;
-    const conversationId = webhookResult.conversation_id;
-    const savedMessageId = webhookResult.message_id;
 
     // =====================================================
     // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
@@ -308,7 +391,106 @@ async function processMessage(payload) {
       // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
     }
     
-    console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
+    // Buscar/criar conversa
+    let conversationId;
+    const { data: existingConversation } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('contact_phone', phoneNumber)
+      .eq('company_id', company.id)
+      .single();
+    
+    if (existingConversation) {
+      conversationId = existingConversation.id;
+      console.log('💬 CONVERSA EXISTENTE:', conversationId);
+      
+      // Atualizar contact_name se estiver vazio
+      await supabase
+        .from('chat_conversations')
+        .update({
+          contact_name: senderName,
+          last_message_at: new Date(timestamp).toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .is('contact_name', null);
+        
+    } else {
+      const { data: newConversation, error: conversationError } = await supabase
+        .from('chat_conversations')
+        .insert({
+          contact_phone: phoneNumber,
+          contact_name: senderName,
+          company_id: company.id,
+          instance_id: instance.id,
+          status: 'active',
+          last_message_at: new Date(timestamp).toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (conversationError) {
+        return { success: false, error: conversationError.message };
+      }
+      
+      conversationId = newConversation.id;
+      console.log('💬 NOVA CONVERSA:', conversationId);
+    }
+    
+    // Verificar duplicata
+    const { data: existingMessage } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('uazapi_message_id', messageId)
+      .single();
+    
+    if (existingMessage) {
+      console.log('📝 DUPLICATA IGNORADA');
+      return { 
+        success: true, 
+        message_id: existingMessage.id,
+        note: 'Duplicata ignorada'
+      };
+    }
+    
+    // Salvar mensagem
+    const messageTypeForDb = isMediaMessage
+      ? (rawMediaType === 'image'
+          ? 'image'
+          : rawMediaType === 'document'
+            ? 'document'
+            : (rawMediaType === 'audio' || rawMediaType === 'ptt')
+              ? 'audio'
+              : rawMediaType === 'video'
+                ? 'video'
+                : 'document')
+      : 'text';
+
+    const { data: savedMessage, error: messageError } = await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: conversationId,
+        company_id: company.id,
+        instance_id: instance.id,
+        uazapi_message_id: messageId,
+        content: messageText,
+        message_type: messageTypeForDb,
+        media_url: mediaUrl,
+        direction,
+        status: 'delivered',
+        timestamp: new Date(timestamp).toISOString(),
+        created_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+    
+    if (messageError) {
+      return { success: false, error: messageError.message };
+    }
+
+    console.log('✅ MENSAGEM SALVA:', savedMessage.id);
 
     // Download automático da mídia inbound via Uazapi (message/download)
     if (isMediaMessage && mediaUrl) {
@@ -317,7 +499,7 @@ async function processMessage(payload) {
           supabase,
           baseUrl: payload.BaseUrl,
           token: payload.token,
-          chatMessageId: savedMessageId,
+          chatMessageId: savedMessage.id,
           messageId,
           mediaType: rawMediaType, // Passar tipo de mídia correto
         });
@@ -403,7 +585,7 @@ async function processMessage(payload) {
     
     return { 
       success: true, 
-      message_id: savedMessageId,
+      message_id: savedMessage.id,
       contact_id: contactId,
       conversation_id: conversationId,
       lead_id: leadId
@@ -423,6 +605,7 @@ async function downloadAndStoreMedia({
   token,
   chatMessageId,
   messageId,
+  mediaType = 'image', // Tipo de mídia (image, video, audio, document)
 }) {
   try {
     console.log(' Solicitando download de mídia via Uazapi /message/download...', { baseUrl, messageId });
@@ -459,11 +642,39 @@ async function downloadAndStoreMedia({
 
     console.log(' URL de mídia retornada pela Uazapi:', publicUrl);
 
-    const { error: updateError } = await supabase
-      .from('chat_messages')
-      .update({ media_url: publicUrl })
+    // Usar função robusta para processar a mídia descriptografada
+    console.log('🔄 PROCESSANDO MÍDIA DESCRIPTOGRAFADA COM FUNÇÃO ROBUSTA...', { mediaType });
+    const processedUrl = await processMediaMessageRobust(null, mediaType, supabase, publicUrl);
+    
+    if (processedUrl && processedUrl !== publicUrl) {
+      console.log('✅ MÍDIA PROCESSADA E SALVA NO SUPABASE STORAGE:', processedUrl);
+      
+      // Atualizar mensagem com URL do Supabase Storage
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ media_url: processedUrl })
+        .eq('id', chatMessageId);
+        
+      if (updateError) {
+        console.error('❌ ERRO AO ATUALIZAR MENSAGEM:', updateError);
+      } else {
+        console.log('✅ MENSAGEM ATUALIZADA COM URL DO SUPABASE STORAGE');
+      }
+    } else {
+      console.log('⚠️ USANDO URL DA UAZAPI DIRETAMENTE');
+      
+      // Fallback: usar URL da Uazapi diretamente
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ media_url: publicUrl })
+        .eq('id', chatMessageId);
+        
+      if (updateError) {
+        console.error('❌ ERRO AO ATUALIZAR MENSAGEM:', updateError);
+      }
+    }
   } catch (error) {
-    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    console.error('[downloadAndStoreMedia] EXCEPTION:', error);
     return null;
   }
 }
@@ -694,38 +905,83 @@ async function syncContactProfilePictureFromUazapi({
 // FUNÇÃO ROBUSTA PARA PROCESSAMENTO DE MÍDIA
 // =====================================================
 // Implementada em: 2025-12-05 - Correção definitiva de vídeos recebidos
-// Download automático de URLs externas + Upload para Supabase Storage
-async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
+// Adicionada ao webhook antigo funcional para processar URLs externas
+export async function processMediaMessageRobust(originalUrl, rawMediaType, supabase, uazapiUrl = null) {
   try {
+    console.log('🚀 FUNÇÃO PROCESSAMENTO EXECUTADA!');
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
+    console.log('📊 PARÂMETROS RECEBIDOS:', { 
+      hasSupabase: !!supabase, 
+      originalUrl: originalUrl?.substring(0, 100),
+      rawMediaType,
+      uazapiUrl: uazapiUrl?.substring(0, 100)
+    });
     
-    // Download da mídia externa (WhatsApp CDN)
-    const response = await fetch(originalUrl);
+    // Usar URL da Uazapi se disponível (descriptografada), senão usar URL original
+    const downloadUrl = uazapiUrl || originalUrl;
+    console.log('🌐 INICIANDO DOWNLOAD:', downloadUrl);
+    console.log('🔗 URL COMPLETA:', downloadUrl);
+    
+    const response = await fetch(downloadUrl);
+    
+    console.log('📡 RESPOSTA RECEBIDA:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries()),
+      url: response.url
+    });
+    
     if (!response.ok) {
-      console.error('❌ Falha ao baixar mídia:', response.status, response.statusText);
+      console.error('❌ FALHA NO DOWNLOAD - DETALHES:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        url: response.url,
+        originalUrl: originalUrl
+      });
       return originalUrl; // Fallback para URL original
     }
+    
+    console.log('✅ DOWNLOAD SUCESSO - Processando buffer...');
     
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // Determinar extensão baseada no tipo de mídia
-    const extension = getFileExtensionRobust(rawMediaType);
+    // Determinar extensão baseada no tipo de mídia e URL original
+    const extension = getFileExtensionRobust(rawMediaType, originalUrl);
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
     
     // Upload para Supabase Storage
+    const contentType = getContentTypeRobust(rawMediaType, extension);
+    console.log('☁️ INICIANDO UPLOAD SUPABASE:', {
+      fileName: fileName,
+      bufferSize: mediaBuffer.byteLength,
+      contentType: contentType,
+      bucket: 'chat-media'
+    });
+    
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: getContentTypeRobust(rawMediaType)
+        contentType: contentType
       });
     
+    console.log('📤 RESULTADO UPLOAD:', { data, error });
+    
     if (error) {
-      console.error('❌ Erro no upload para Supabase:', error);
+      console.error('❌ ERRO DETALHADO NO UPLOAD:', {
+        error: error,
+        fileName: fileName,
+        bufferSize: mediaBuffer.byteLength,
+        contentType: contentType
+      });
       return originalUrl; // Fallback para URL original
     }
+    
+    console.log('✅ UPLOAD SUCESSO - Gerando URL pública...');
     
     // Retornar URL pública estável
     const { data: publicUrl } = supabase.storage
@@ -736,33 +992,120 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     return publicUrl.publicUrl;
     
   } catch (error) {
-    console.error('❌ EXCEPTION no processamento de mídia:', error);
+    console.error('❌ EXCEPTION DETALHADA no processamento de mídia:', {
+      error: error,
+      message: error.message,
+      stack: error.stack,
+      originalUrl: originalUrl,
+      rawMediaType: rawMediaType
+    });
     return originalUrl; // Fallback para URL original
   }
 }
 
 // Função para determinar extensão do arquivo baseada no tipo de mídia
-function getFileExtensionRobust(mediaType) {
+function getFileExtensionRobust(mediaType, originalUrl = null) {
+  // Para imagens, tentar detectar formato real da URL original
+  if (mediaType === 'image' && originalUrl) {
+    // Primeiro: tentar detectar extensão na URL
+    const urlMatch = originalUrl.match(/\.(png|jpg|jpeg|webp|gif|bmp|tiff)(\?|$|&)/i);
+    if (urlMatch) {
+      let ext = urlMatch[1].toLowerCase();
+      // Normalizar jpeg para jpg
+      if (ext === 'jpeg') ext = 'jpg';
+      console.log(`🎨 FORMATO ORIGINAL DETECTADO: ${ext.toUpperCase()} da URL: ${originalUrl.substring(0, 60)}...`);
+      return ext;
+    }
+    
+    // Segundo: para WhatsApp, assumir PNG como padrão (melhor qualidade)
+    if (originalUrl.includes('whatsapp.net') || originalUrl.includes('mmg.whatsapp.net')) {
+      console.log(`🎨 WHATSAPP DETECTADO - USANDO PNG: ${originalUrl.substring(0, 60)}...`);
+      return 'png';
+    }
+  }
+  
+  // Para vídeos, tentar detectar formato real da URL original
+  if (mediaType === 'video' && originalUrl) {
+    // Primeiro: tentar detectar extensão na URL
+    const urlMatch = originalUrl.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv|m4v)(\?|$|&)/i);
+    if (urlMatch) {
+      let ext = urlMatch[1].toLowerCase();
+      console.log(`🎬 FORMATO VÍDEO DETECTADO: ${ext.toUpperCase()} da URL: ${originalUrl.substring(0, 60)}...`);
+      return ext;
+    }
+    
+    // Segundo: para WhatsApp, assumir MP4 como padrão (melhor compatibilidade)
+    if (originalUrl.includes('whatsapp.net') || originalUrl.includes('mmg.whatsapp.net')) {
+      console.log(`🎬 WHATSAPP VÍDEO DETECTADO - USANDO MP4: ${originalUrl.substring(0, 60)}...`);
+      return 'mp4';
+    }
+  }
+  
+  // Fallback para tipos genéricos
   const typeMap = {
     'video': 'mp4',
-    'image': 'jpg', 
+    'image': 'jpg', // Só se não conseguir detectar formato
     'audio': 'ogg',
     'ptt': 'ogg',
     'document': 'pdf'
   };
   
-  return typeMap[mediaType] || 'bin';
+  const extension = typeMap[mediaType] || 'bin';
+  console.log(`📁 FORMATO FALLBACK: ${extension.toUpperCase()} para tipo: ${mediaType}`);
+  return extension;
 }
 
 // Função para determinar content type baseado no tipo de mídia
-function getContentTypeRobust(mediaType) {
+function getContentTypeRobust(mediaType, fileExtension = null) {
+  // Para imagens, usar content-type baseado na extensão real
+  if (mediaType === 'image' && fileExtension) {
+    const imageTypes = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'webp': 'image/webp',
+      'gif': 'image/gif',
+      'bmp': 'image/bmp',
+      'tiff': 'image/tiff'
+    };
+    
+    const contentType = imageTypes[fileExtension.toLowerCase()];
+    if (contentType) {
+      console.log(`🎨 CONTENT-TYPE DETECTADO: ${contentType} para extensão: ${fileExtension}`);
+      return contentType;
+    }
+  }
+  
+  // Para vídeos, usar content-type baseado na extensão real
+  if (mediaType === 'video' && fileExtension) {
+    const videoTypes = {
+      'mp4': 'video/mp4',
+      'avi': 'video/avi',
+      'mov': 'video/quicktime',
+      'wmv': 'video/x-ms-wmv',
+      'flv': 'video/x-flv',
+      'webm': 'video/webm',
+      'mkv': 'video/x-matroska',
+      'm4v': 'video/mp4'
+    };
+    
+    const contentType = videoTypes[fileExtension.toLowerCase()];
+    if (contentType) {
+      console.log(`🎬 CONTENT-TYPE VÍDEO DETECTADO: ${contentType} para extensão: ${fileExtension}`);
+      return contentType;
+    }
+  }
+  
+  // Fallback para tipos genéricos
   const typeMap = {
     'video': 'video/mp4',
-    'image': 'image/jpeg',
+    'image': 'image/jpeg', // Só se não conseguir detectar
     'audio': 'audio/ogg', 
     'ptt': 'audio/ogg',
     'document': 'application/pdf'
   };
   
-  return typeMap[mediaType] || 'application/octet-stream';
+  const contentType = typeMap[mediaType] || 'application/octet-stream';
+  console.log(`📁 CONTENT-TYPE FALLBACK: ${contentType} para tipo: ${mediaType}`);
+  return contentType;
 }

@@ -319,7 +319,41 @@ const processedUrl = await processMediaMessageRobust(null, mediaType, supabase);
 
 ---
 
-**Documento atualizado em**: 06/12/2025 06:48  
-**Versão**: 4.0 - Sistema Completo com Chat e Mídia  
-**Status**: Todas as funcionalidades implementadas e funcionais  
-**Última correção**: Preview de mídia (imagens e vídeos) 100% operacional
+## 🚨 **PROBLEMA IDENTIFICADO - SINCRONIZAÇÃO DE FOTOS DE LEADS**
+
+### **Data**: 09/12/2025 - Investigação Completa
+
+#### **PROBLEMA:**
+- Fotos de leads não atualizam automaticamente no sistema
+- Leads afetados: 5511988037583, 5521994320246
+- Fotos aparecem no WhatsApp mas não no sistema
+
+#### **CAUSA RAIZ IDENTIFICADA:**
+- **Webhook só processa mensagens INBOUND** (recebidas)
+- **Mensagens OUTBOUND** (enviadas pelo sistema) não ativam sincronização
+- Sistema de sincronização existe mas não é ativado para mensagens enviadas
+
+#### **FUNÇÕES IMPLEMENTADAS (FUNCIONAIS):**
+- `shouldSyncPhoto` - linha 687 do webhook
+- `downloadAndStoreContactAvatar` - linha 754 do webhook  
+- `syncContactProfilePictureFromUazapi` - linha 830 do webhook
+
+#### **CORREÇÕES APLICADAS:**
+- Logs detalhados adicionados para debug
+- Commit 1d790dc - melhorar visibilidade do fluxo
+- Sistema preparado para debug completo
+
+#### **PRÓXIMOS PASSOS:**
+1. Testar com mensagem INBOUND (cliente enviando)
+2. Verificar configuração webhook Uazapi
+3. Confirmar ativação da sincronização
+4. Implementar correção se necessário
+
+#### **STATUS:** 🔍 INVESTIGAÇÃO EM ANDAMENTO
+
+---
+
+**Documento atualizado em**: 09/12/2025 11:08  
+**Versão**: 4.1 - Sistema Completo + Diagnóstico de Fotos  
+**Status**: Funcional com problema de sincronização identificado  
+**Última investigação**: Problema de fotos de leads diagnosticado

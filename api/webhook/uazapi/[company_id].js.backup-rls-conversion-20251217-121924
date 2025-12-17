@@ -247,38 +247,45 @@ async function processMessage(payload) {
       finalName: senderName 
     });
     
-    // USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
-    console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
+    // Buscar/criar contato
+    let contactId;
+    const { data: existingContact } = await supabase
+      .from('chat_contacts')
+      .select('id')
+      .eq('phone_number', phoneNumber)
+      .eq('company_id', company.id)
+      .single();
     
-    const { data: webhookResult, error: webhookError } = await supabase
-      .rpc('process_webhook_message_safe', {
-        p_company_id: company.id,
-        p_instance_id: instance.id,
-        p_phone_number: phoneNumber,
-        p_sender_name: senderName,
-        p_content: messageText,
-        p_message_type: isMediaMessage ? (rawMediaType || 'document') : 'text',
-        p_media_url: mediaUrl,
-        p_direction: direction,
-        p_uazapi_message_id: messageId,
-        p_profile_picture_url: payload.chat?.imagePreview || null
-      });
+    // Determinar se é contato novo ou existente
+    const isNewContact = !existingContact;
     
-    if (webhookError) {
-      console.error('❌ ERRO NA FUNÇÃO SECURITY DEFINER:', webhookError);
-      return { success: false, error: webhookError.message };
+    if (existingContact) {
+      contactId = existingContact.id;
+      console.log('👤 CONTATO EXISTENTE:', contactId);
+    } else {
+      // USAR NOME CORRETO DA COLUNA
+      const { data: newContact, error: contactError } = await supabase
+        .from('chat_contacts')
+        .insert({
+          phone_number: phoneNumber,
+          name: senderName,
+          company_id: company.id,
+          lead_source: 'whatsapp_webhook',
+          profile_picture_url: payload.chat?.imagePreview || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (contactError) {
+        console.error('❌ ERRO CONTATO:', contactError);
+        return { success: false, error: contactError.message };
+      }
+      
+      contactId = newContact.id;
+      console.log('👤 NOVO CONTATO:', contactId);
     }
-    
-    if (!webhookResult || !webhookResult.success) {
-      console.error('❌ FUNÇÃO SECURITY DEFINER RETORNOU ERRO:', webhookResult);
-      return { success: false, error: webhookResult?.error || 'Erro desconhecido na função segura' };
-    }
-    
-    console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
-    
-    const contactId = webhookResult.contact_id;
-    const conversationId = webhookResult.conversation_id;
-    const savedMessageId = webhookResult.message_id;
 
     // =====================================================
     // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
@@ -308,7 +315,106 @@ async function processMessage(payload) {
       // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
     }
     
-    console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
+    // Buscar/criar conversa
+    let conversationId;
+    const { data: existingConversation } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('contact_phone', phoneNumber)
+      .eq('company_id', company.id)
+      .single();
+    
+    if (existingConversation) {
+      conversationId = existingConversation.id;
+      console.log('💬 CONVERSA EXISTENTE:', conversationId);
+      
+      // Atualizar contact_name se estiver vazio
+      await supabase
+        .from('chat_conversations')
+        .update({
+          contact_name: senderName,
+          last_message_at: new Date(timestamp).toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId)
+        .is('contact_name', null);
+        
+    } else {
+      const { data: newConversation, error: conversationError } = await supabase
+        .from('chat_conversations')
+        .insert({
+          contact_phone: phoneNumber,
+          contact_name: senderName,
+          company_id: company.id,
+          instance_id: instance.id,
+          status: 'active',
+          last_message_at: new Date(timestamp).toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (conversationError) {
+        return { success: false, error: conversationError.message };
+      }
+      
+      conversationId = newConversation.id;
+      console.log('💬 NOVA CONVERSA:', conversationId);
+    }
+    
+    // Verificar duplicata
+    const { data: existingMessage } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('uazapi_message_id', messageId)
+      .single();
+    
+    if (existingMessage) {
+      console.log('📝 DUPLICATA IGNORADA');
+      return { 
+        success: true, 
+        message_id: existingMessage.id,
+        note: 'Duplicata ignorada'
+      };
+    }
+    
+    // Salvar mensagem
+    const messageTypeForDb = isMediaMessage
+      ? (rawMediaType === 'image'
+          ? 'image'
+          : rawMediaType === 'document'
+            ? 'document'
+            : (rawMediaType === 'audio' || rawMediaType === 'ptt')
+              ? 'audio'
+              : rawMediaType === 'video'
+                ? 'video'
+                : 'document')
+      : 'text';
+
+    const { data: savedMessage, error: messageError } = await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: conversationId,
+        company_id: company.id,
+        instance_id: instance.id,
+        uazapi_message_id: messageId,
+        content: messageText,
+        message_type: messageTypeForDb,
+        media_url: mediaUrl,
+        direction,
+        status: 'delivered',
+        timestamp: new Date(timestamp).toISOString(),
+        created_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+    
+    if (messageError) {
+      return { success: false, error: messageError.message };
+    }
+
+    console.log('✅ MENSAGEM SALVA:', savedMessage.id);
 
     // Download automático da mídia inbound via Uazapi (message/download)
     if (isMediaMessage && mediaUrl) {
@@ -317,9 +423,8 @@ async function processMessage(payload) {
           supabase,
           baseUrl: payload.BaseUrl,
           token: payload.token,
-          chatMessageId: savedMessageId,
+          chatMessageId: savedMessage.id,
           messageId,
-          mediaType: rawMediaType, // Passar tipo de mídia correto
         });
       } catch (mediaError) {
         console.error('⚠️ Erro ao processar mídia inbound (message/download):', mediaError);
@@ -403,7 +508,7 @@ async function processMessage(payload) {
     
     return { 
       success: true, 
-      message_id: savedMessageId,
+      message_id: savedMessage.id,
       contact_id: contactId,
       conversation_id: conversationId,
       lead_id: leadId
