@@ -122,40 +122,32 @@ async function createLeadFromWebhook(params) {
       company_telefone: detectedFields.company_phone || null
     };
     
-    // 5. Criar lead
-    const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .insert(leadData)
-      .select()
-      .single();
+    // 5. Criar lead usando RPC SECURITY DEFINER (compatível com RLS)
+    console.log('🔄 USANDO RPC SECURITY DEFINER PARA CRIAÇÃO SEGURA DE LEAD');
+    
+    const { data: rpcResult, error: leadError } = await supabase
+      .rpc('public_create_lead_webhook', {
+        lead_data: {
+          ...leadData,
+          custom_fields: customFieldsData // Incluir campos personalizados no RPC
+        }
+      });
     
     if (leadError) {
-      console.error('Erro ao criar lead:', leadError);
+      console.error('❌ ERRO RPC CREATE LEAD:', leadError);
       return { success: false, error: leadError.message };
     }
     
-    // 6. Inserir valores dos campos personalizados
-    if (customFieldsData.length > 0) {
-      const customValues = customFieldsData.map(field => ({
-        lead_id: lead.id,
-        field_id: field.field_id,
-        value: String(field.value)
-      }));
-
-      const { error: customError } = await supabase
-        .from('lead_custom_values')
-        .insert(customValues);
-
-      if (customError) {
-        console.error('Erro ao inserir campos personalizados:', customError);
-        // Não falha o processo, apenas loga o erro
-      } else {
-        console.log(`${customFieldsData.length} campos personalizados inseridos para lead ${lead.id}`);
-      }
+    if (!rpcResult || !rpcResult.success) {
+      console.error('❌ RPC RETORNOU ERRO:', rpcResult);
+      return { success: false, error: rpcResult?.error || 'Erro desconhecido no RPC' };
     }
     
-    console.log('Lead criado com sucesso:', lead.id);
-    return { success: true, lead_id: lead.id };
+    const leadId = rpcResult.lead_id;
+    console.log('✅ LEAD CRIADO VIA RPC COM SUCESSO:', leadId);
+    
+    console.log('Lead criado com sucesso:', leadId);
+    return { success: true, lead_id: leadId };
     
   } catch (error) {
     console.error('Exception in createLeadFromWebhook:', error);
@@ -301,51 +293,30 @@ async function processCustomField(supabase, companyId, fieldName, fieldValue) {
     
     console.log(`Processando campo: ${fieldName} → ${normalizedFieldName} (${fieldLabel})`);
     
-    // 2. Verificar se campo já existe
-    const { data: existingField, error: searchError } = await supabase
-      .from('lead_custom_fields')
-      .select('id, field_name, field_type')
-      .eq('company_id', companyId)
-      .eq('field_name', normalizedFieldName)
-      .single();
+    // 2. Usar RPC SECURITY DEFINER para campos personalizados (compatível com RLS)
+    console.log('🔄 USANDO RPC SECURITY DEFINER PARA CAMPO PERSONALIZADO');
     
-    if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
-      console.error('Erro ao buscar campo existente:', searchError);
+    const { data: fieldResult, error: fieldError } = await supabase
+      .rpc('create_custom_field_webhook', {
+        p_company_id: companyId,
+        p_field_name: normalizedFieldName,
+        p_field_label: fieldLabel,
+        p_field_type: detectFieldType(fieldValue),
+        p_is_required: false
+      });
+    
+    if (fieldError) {
+      console.error('❌ ERRO RPC CUSTOM FIELD:', fieldError);
       return null;
     }
     
-    let fieldId;
-    
-    if (existingField) {
-      // 3a. Campo existe - usar existente
-      console.log(`Campo existente encontrado: ${existingField.id}`);
-      fieldId = existingField.id;
-    } else {
-      // 3b. Campo não existe - criar automaticamente
-      console.log(`Criando novo campo personalizado: ${normalizedFieldName}`);
-      
-      const fieldType = detectFieldType(fieldValue);
-      
-      const { data: newField, error: createError } = await supabase
-        .from('lead_custom_fields')
-        .insert({
-          company_id: companyId,
-          field_name: normalizedFieldName,
-          field_label: fieldLabel,
-          field_type: fieldType,
-          is_required: false
-        })
-        .select('id')
-        .single();
-      
-      if (createError) {
-        console.error('Erro ao criar campo personalizado:', createError);
-        return null;
-      }
-      
-      fieldId = newField.id;
-      console.log(`Novo campo criado com ID: ${fieldId}`);
+    if (!fieldResult || !fieldResult.success) {
+      console.error('❌ RPC CUSTOM FIELD RETORNOU ERRO:', fieldResult);
+      return null;
     }
+    
+    const fieldId = fieldResult.field_id;
+    console.log('✅ CAMPO PERSONALIZADO PROCESSADO VIA RPC:', fieldId);
     
     return {
       field_id: fieldId,
