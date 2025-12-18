@@ -1157,51 +1157,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       
-      // 🔧 CORREÇÃO: Buscar roles usando RPC que inclui profile_picture_url
+      // 🔧 CORREÇÃO: Usar RPC único com SECURITY DEFINER para compatibilidade com RLS
       let roles: any[] = [];
       let error = null;
       
       try {
-        // Primeiro, buscar todas as empresas onde o usuário tem acesso
-        const { data: userCompanies } = await supabase
-          .from('company_users')
-          .select('company_id')
-          .eq('user_id', effectiveUserId)
-          .eq('is_active', true);
-
-        if (userCompanies && userCompanies.length > 0) {
-          // Para cada empresa, buscar dados completos usando RPC
-          for (const companyData of userCompanies) {
-            const { data: companyRoles, error: rpcError } = await supabase
-              .rpc('get_company_users_with_details', {
-                p_company_id: companyData.company_id
-              });
-            
-            if (!rpcError && companyRoles) {
-              // Filtrar apenas o usuário atual
-              const userRoles = companyRoles.filter((role: any) => role.user_id === effectiveUserId);
-              roles.push(...userRoles);
+        // Usar RPC específico que bypassa RLS automaticamente
+        const { data: userRoles, error: rpcError } = await supabase
+          .rpc('get_user_roles_for_auth', {
+            p_user_id: effectiveUserId
+          });
+        
+        if (rpcError) {
+          console.warn('AuthContext: RPC get_user_roles_for_auth failed:', rpcError);
+          error = rpcError;
+          roles = [];
+        } else {
+          // Transformar dados do RPC para formato esperado pelo AuthContext
+          roles = (userRoles || []).map((role: any) => ({
+            ...role,
+            companies: {
+              id: role.company_id,
+              name: role.company_name,
+              company_type: role.company_type
             }
-          }
+          }));
         }
       } catch (rpcError) {
-        console.warn('AuthContext: RPC failed, using fallback query:', rpcError);
-        // Fallback para query direta se RPC falhar
-        const { data: fallbackRoles, error: fallbackError } = await supabase
-          .from('company_users')
-          .select(`
-            *,
-            companies:company_id (
-              id,
-              name,
-              company_type
-            )
-          `)
-          .eq('user_id', effectiveUserId)
-          .eq('is_active', true);
-        
-        roles = fallbackRoles || [];
-        error = fallbackError;
+        console.error('AuthContext: Error calling get_user_roles_for_auth:', rpcError);
+        error = rpcError;
+        roles = [];
       }
 
       if (error) {
