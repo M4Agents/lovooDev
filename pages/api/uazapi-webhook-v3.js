@@ -58,7 +58,7 @@ async function processMessage(payload) {
   
   const supabase = createClient(
     'https://etzdsywunlpbgxkphuil.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE4NjI4NjEsImV4cCI6MjA0NzQzODg2MX0.Zt6Nt_Ej6Ue8Ky7Zt6Nt_Ej6Ue8Ky7Zt6Nt_Ej6Ue8Ky7Zt6Nt_Ej6Ue8Ky7'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E'
   );
 
   try {
