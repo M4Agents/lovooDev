@@ -1,16 +1,16 @@
-// WEBHOOK UAZAPI OFICIAL - CÓDIGO V2 APLICADO DEFINITIVAMENTE
-// Endpoint: /api/uazapi-webhook-final (URL OFICIAL CONFORME DOCUMENTAÇÃO)
-// Código V2 funcional aplicado para invalidar cache persistente
+// WEBHOOK UAZAPI OFICIAL - CACHE BUSTING DEFINITIVO
+// Endpoint: /api/uazapi-webhook-final (URL OFICIAL MANTIDA)
+// Código V2 aplicado ao arquivo original para invalidar cache
 // Data: 2025-12-18 - SOLUÇÃO DEFINITIVA CACHE VERCEL
 
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  console.error('🚀 WEBHOOK OFICIAL V2 - CACHE INVALIDADO DEFINITIVAMENTE');
+  console.error('🚀 WEBHOOK OFICIAL - CACHE INVALIDADO - CÓDIGO V2 APLICADO');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
   console.error('🔧 MÉTODO:', req.method);
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
-  console.error('🎯 ARQUIVO OFICIAL - CÓDIGO V2 APLICADO');
+  console.error('🎯 URL OFICIAL MANTIDA - CACHE FORÇADAMENTE INVALIDADO');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,32 +29,32 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('📥 PAYLOAD RECEBIDO OFICIAL V2:', JSON.stringify(req.body, null, 2));
+    console.log('📥 PAYLOAD RECEBIDO:', JSON.stringify(req.body, null, 2));
     
     const result = await processMessage(req.body);
     
     if (result.success) {
-      console.log('✅ SUCESSO OFICIAL V2:', result.message_id);
+      console.log('✅ SUCESSO OFICIAL:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
-        message: 'WEBHOOK OFICIAL V2 - CACHE INVALIDADO SUCESSO!',
+        message: 'WEBHOOK OFICIAL - CACHE INVALIDADO!',
         timestamp: new Date().toISOString(),
-        version: 'oficial-v2-cache-fixed'
+        version: 'oficial-cache-fixed'
       });
     } else {
-      console.log('⚠️ FILTRADO OFICIAL V2:', result.error);
+      console.log('⚠️ FILTRADO OFICIAL:', result.error);
       res.status(200).json({ success: false, error: result.error });
     }
     
   } catch (error) {
-    console.error('❌ ERRO OFICIAL V2:', error);
+    console.error('❌ ERRO OFICIAL:', error);
     res.status(200).json({ success: false, error: error.message });
   }
 }
 
 async function processMessage(payload) {
-  console.log('🔑 SUPABASE CONECTADO - WEBHOOK OFICIAL V2 COM RPC DIRETO');
+  console.log('🔑 SUPABASE CONECTADO - WEBHOOK OFICIAL COM RPC DIRETO');
   
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -100,7 +100,7 @@ async function processMessage(payload) {
     const uazapiMessageId = message.id || message.messageid;
     const profilePictureUrl = payload.chat?.imagePreview || null;
     
-    console.log('📞 DADOS EXTRAÍDOS OFICIAL V2:', {
+    console.log('📞 DADOS EXTRAÍDOS OFICIAL:', {
       phoneNumber,
       senderName,
       content,
@@ -116,12 +116,12 @@ async function processMessage(payload) {
       });
     
     if (instanceError || !instanceData || instanceData.length === 0) {
-      console.error('❌ ERRO RPC INSTÂNCIA OFICIAL V2:', instanceError);
+      console.error('❌ ERRO RPC INSTÂNCIA OFICIAL:', instanceError);
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
     const instanceInfo = instanceData[0];
-    console.log('🏢 EMPRESA ENCONTRADA OFICIAL V2:', instanceInfo.company_name);
+    console.log('🏢 EMPRESA ENCONTRADA OFICIAL:', instanceInfo.company_name);
     
     // USAR RPC PROCESS_WEBHOOK_MESSAGE_SAFE DIRETAMENTE
     const { data: result, error: processError } = await supabase
@@ -139,21 +139,21 @@ async function processMessage(payload) {
       });
     
     if (processError) {
-      console.error('❌ ERRO RPC PROCESS OFICIAL V2:', processError);
+      console.error('❌ ERRO RPC PROCESS OFICIAL:', processError);
       return { success: false, error: 'Erro ao processar mensagem: ' + processError.message };
     }
     
-    console.log('✅ SUCESSO RPC DIRETO OFICIAL V2:', result);
+    console.log('✅ SUCESSO RPC DIRETO OFICIAL:', result);
     return {
       success: true,
       message_id: result.message_id,
       contact_id: result.contact_id,
       conversation_id: result.conversation_id,
-      message: 'Processado via RPC direto OFICIAL V2 (cache invalidated)'
+      message: 'Processado via RPC direto OFICIAL (cache fixed)'
     };
-
+    
   } catch (error) {
-    console.error('❌ ERRO GERAL OFICIAL V2:', error);
+    console.error('❌ EXCEPTION:', error);
     return { success: false, error: error.message };
   }
 }
