@@ -84,7 +84,46 @@ async function processMessage(payload) {
                       payload.chat?.wa_contactName || 
                       'Contato';
     
-    const content = message.text || message.content || '';
+    // DETECÇÃO DE MÍDIA V3
+    const rawType = message.type || '';
+    const rawMediaType = message.mediaType || '';
+    const rawMessageType = message.messageType || '';
+    
+    console.log('🔍 DETECÇÃO MÍDIA V3:', {
+      rawType,
+      rawMediaType,
+      rawMessageType
+    });
+    
+    const isTextMessage = rawMessageType === 'Conversation' || rawMessageType === 'conversation';
+    const isMediaMessage = (rawType === 'media' && !!rawMediaType) || 
+                          (rawMessageType.includes('message') && rawMessageType !== 'Conversation' && rawMessageType !== 'conversation') ||
+                          (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    
+    console.log('🎯 RESULTADO DETECÇÃO V3:', { isTextMessage, isMediaMessage });
+    
+    let content = message.text || message.content || '';
+    let mediaUrl = null;
+    
+    // PROCESSAMENTO DE MÍDIA V3
+    if (isMediaMessage) {
+      console.log('🎥 PROCESSAMENTO DE MÍDIA V3 INICIADO:', { rawMessageType, rawType, rawMediaType });
+      
+      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) || null;
+      
+      console.log('🔗 URL DE MÍDIA V3:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
+      
+      if (originalUrl) {
+        console.log('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust V3...');
+        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
+        console.log('✅ RESULTADO PROCESSAMENTO V3:', mediaUrl ? 'SUCESSO' : 'FALHOU');
+      } else {
+        console.log('❌ NENHUMA URL DE MÍDIA ENCONTRADA V3');
+        mediaUrl = null;
+      }
+    } else {
+      console.log('⚠️ MENSAGEM NÃO É MÍDIA V3 - PULANDO PROCESSAMENTO');
+    }
     const messageType = message.mediaType || 'text';
     const direction = message.fromMe ? 'outbound' : 'inbound';
     const uazapiMessageId = message.id || message.messageid;
@@ -122,7 +161,7 @@ async function processMessage(payload) {
         p_sender_name: senderName,
         p_content: content,
         p_message_type: messageType,
-        p_media_url: null,
+        p_media_url: mediaUrl,
         p_direction: direction,
         p_uazapi_message_id: uazapiMessageId,
         p_profile_picture_url: profilePictureUrl
@@ -146,4 +185,81 @@ async function processMessage(payload) {
     console.error('❌ ERRO GERAL V3:', error);
     return { success: false, error: error.message };
   }
+}
+
+// =====================================================
+// FUNÇÃO DE PROCESSAMENTO DE MÍDIA V3
+// Implementada em: 2025-12-18 - Suporte completo a mídia
+// Download automático de URLs externas + Upload para Supabase Storage
+// =====================================================
+async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
+  try {
+    console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA V3:', rawMediaType, originalUrl.substring(0, 80) + '...');
+    
+    // Download da mídia externa (WhatsApp CDN)
+    const response = await fetch(originalUrl);
+    if (!response.ok) {
+      console.error('❌ Falha ao baixar mídia V3:', response.status, response.statusText);
+      return originalUrl; // Fallback para URL original
+    }
+    
+    const mediaBuffer = await response.arrayBuffer();
+    console.log('📦 Mídia baixada V3, tamanho:', mediaBuffer.byteLength, 'bytes');
+    
+    // Determinar extensão baseada no tipo de mídia
+    const extension = getFileExtensionRobust(rawMediaType);
+    const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
+    
+    console.log('📁 Fazendo upload para Supabase Storage V3:', fileName);
+    
+    // Upload para Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, mediaBuffer, {
+        contentType: getContentTypeRobust(rawMediaType)
+      });
+    
+    if (error) {
+      console.error('❌ Erro no upload para Supabase V3:', error);
+      return originalUrl; // Fallback para URL original
+    }
+    
+    // Retornar URL pública estável
+    const { data: publicUrl } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+    
+    console.log('✅ PROCESSAMENTO CONCLUÍDO V3 - URL INTERNA:', publicUrl.publicUrl.substring(0, 80) + '...');
+    return publicUrl.publicUrl;
+    
+  } catch (error) {
+    console.error('❌ EXCEPTION no processamento de mídia V3:', error);
+    return originalUrl; // Fallback para URL original
+  }
+}
+
+// Função para determinar extensão do arquivo baseada no tipo de mídia
+function getFileExtensionRobust(mediaType) {
+  const typeMap = {
+    'video': 'mp4',
+    'image': 'jpg', 
+    'audio': 'ogg',
+    'ptt': 'ogg',
+    'document': 'pdf'
+  };
+  
+  return typeMap[mediaType] || 'bin';
+}
+
+// Função para determinar content-type baseado no tipo de mídia
+function getContentTypeRobust(mediaType) {
+  const typeMap = {
+    'video': 'video/mp4',
+    'image': 'image/jpeg',
+    'audio': 'audio/ogg',
+    'ptt': 'audio/ogg',
+    'document': 'application/pdf'
+  };
+  
+  return typeMap[mediaType] || 'application/octet-stream';
 }
