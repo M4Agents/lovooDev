@@ -74,6 +74,12 @@ async function processMessage(payload) {
       return { success: false, error: 'Nome da instância não encontrado' };
     }
 
+    // FILTRO DE GRUPOS V3 - BLOQUEAR MENSAGENS DE GRUPOS
+    if (message.isGroup) {
+      console.log('🚫 MENSAGEM DE GRUPO FILTRADA V3 - IGNORANDO');
+      return { success: false, error: 'Mensagem de grupo filtrada' };
+    }
+
     // Extrair dados da mensagem
     const phoneNumber = message.sender?.replace('@s.whatsapp.net', '') || 
                        message.chatid?.replace('@s.whatsapp.net', '') ||
