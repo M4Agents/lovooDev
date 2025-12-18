@@ -74,8 +74,21 @@ async function processMessage(payload) {
       return { success: false, error: 'Nome da instância não encontrado' };
     }
 
-    // FILTRO DE GRUPOS V3 - BLOQUEAR MENSAGENS DE GRUPOS
-    if (message.isGroup) {
+    // FILTRO DE GRUPOS V3 - DETECÇÃO ROBUSTA
+    console.log('🔍 DEBUG GRUPOS V3:', {
+      isGroup: message.isGroup,
+      sender: message.sender,
+      chatid: message.chatid,
+      messageType: message.messageType
+    });
+    
+    // Múltiplas formas de detectar grupos
+    const isGroupMessage = message.isGroup === true || 
+                          message.isGroup === 'true' ||
+                          (message.sender && message.sender.includes('@g.us')) ||
+                          (message.chatid && message.chatid.includes('@g.us'));
+    
+    if (isGroupMessage) {
       console.log('🚫 MENSAGEM DE GRUPO FILTRADA V3 - IGNORANDO');
       return { success: false, error: 'Mensagem de grupo filtrada' };
     }
