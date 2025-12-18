@@ -143,7 +143,7 @@ async function processMessage(payload) {
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id, company_id, companies(id, name, api_key)')
+      .select('id, company_id')
       .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
@@ -152,7 +152,17 @@ async function processMessage(payload) {
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    const company = instance.companies;
+    // Buscar empresa separadamente para evitar problemas de JOIN
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id, name, api_key')
+      .eq('id', instance.company_id)
+      .single();
+    
+    if (companyError || !company) {
+      return { success: false, error: 'Empresa não encontrada para instância: ' + instanceName };
+    }
+    
     console.log('🏢 EMPRESA:', company.name);
     
     // Buscar nome do lead no cadastro
