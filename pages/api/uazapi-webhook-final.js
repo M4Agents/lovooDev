@@ -163,6 +163,14 @@ async function processMessage(payload) {
       api_key: instanceInfo.company_api_key
     };
     
+    // Debug: Verificar se dados estão corretos
+    console.log('🔍 DEBUG RPC RESULT:', {
+      instanceInfo,
+      company,
+      hasName: !!company.name,
+      nameValue: company.name
+    });
+    
     console.log('🏢 EMPRESA (VIA RPC):', company.name);
     
     // Buscar nome do lead no cadastro
