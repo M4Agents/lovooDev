@@ -86,7 +86,9 @@ async function processMessage(payload) {
     const isGroupMessage = message.isGroup === true || 
                           message.isGroup === 'true' ||
                           (message.sender && message.sender.includes('@g.us')) ||
-                          (message.chatid && message.chatid.includes('@g.us'));
+                          (message.chatid && message.chatid.includes('@g.us')) ||
+                          (message.sender && message.sender.includes('@lid')) ||
+                          (message.chatid && message.chatid.includes('@lid'));
     
     if (isGroupMessage) {
       console.log('🚫 MENSAGEM DE GRUPO FILTRADA V3 - IGNORANDO');
@@ -215,36 +217,52 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
   try {
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA V3:', rawMediaType, originalUrl.substring(0, 80) + '...');
     
-    // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA
+    // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA V2
     let finalUrl = originalUrl;
     
     if (message && message.id && originalUrl.includes('whatsapp.net')) {
       console.log('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI V3:', message.id);
+      console.log('🔗 URL ORIGINAL V3:', originalUrl.substring(0, 100) + '...');
       
       try {
+        // Tentar diferentes formatos de requisição para Uazapi
+        const uazapiPayload = {
+          messageId: message.id,
+          id: message.id
+        };
+        
+        console.log('📤 PAYLOAD UAZAPI V3:', JSON.stringify(uazapiPayload));
+        
         const uazapiResponse = await fetch('https://lovoo.uazapi.com/message/download', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify({
-            id: message.id
-          })
+          body: JSON.stringify(uazapiPayload)
         });
+        
+        console.log('📥 RESPONSE STATUS V3:', uazapiResponse.status);
         
         if (uazapiResponse.ok) {
           const uazapiData = await uazapiResponse.json();
+          console.log('📋 RESPONSE DATA V3:', JSON.stringify(uazapiData).substring(0, 200) + '...');
+          
           if (uazapiData.fileURL) {
             finalUrl = uazapiData.fileURL;
             console.log('✅ URL DESCRIPTOGRAFADA V3:', finalUrl.substring(0, 80) + '...');
+          } else if (uazapiData.url) {
+            finalUrl = uazapiData.url;
+            console.log('✅ URL ALTERNATIVA V3:', finalUrl.substring(0, 80) + '...');
           } else {
-            console.log('⚠️ Uazapi não retornou fileURL, usando URL original V3');
+            console.log('⚠️ Uazapi não retornou URL válida V3, usando original');
           }
         } else {
-          console.log('⚠️ Falha na descriptografia Uazapi V3, usando URL original');
+          const errorText = await uazapiResponse.text();
+          console.log('❌ ERRO UAZAPI V3:', uazapiResponse.status, errorText.substring(0, 200));
         }
       } catch (uazapiError) {
-        console.log('⚠️ Erro na descriptografia Uazapi V3:', uazapiError.message);
+        console.log('❌ EXCEPTION UAZAPI V3:', uazapiError.message);
       }
     }
     
