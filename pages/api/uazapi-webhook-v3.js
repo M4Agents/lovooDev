@@ -62,27 +62,28 @@ async function processMessage(payload) {
   );
 
   try {
-    // Validações básicas
+    console.log('🎯 WEBHOOK V3 - ARQUIVO NOVO (cache miss garantido)');
+    console.log('📥 PAYLOAD RECEBIDO V3:', JSON.stringify(payload).substring(0, 200) + '...');
+
+    // Validar payload básico
     if (!payload || !payload.message) {
+      console.log('❌ PAYLOAD INVÁLIDO V3 - sem message');
       return { success: false, error: 'Payload inválido' };
     }
 
-    const message = payload.message;
-    const instanceName = payload.instanceName;
-    
-    if (!instanceName) {
-      return { success: false, error: 'Nome da instância não encontrado' };
-    }
+    const { message, instanceName } = payload;
+    console.log('📨 MENSAGEM V3:', message.messageType, message.text?.substring(0, 50) + '...');
 
-    // FILTRO DE GRUPOS V3 - DETECÇÃO ROBUSTA
-    console.log('🔍 DEBUG GRUPOS V3:', {
+    // FILTRO DE GRUPOS V3 - DETECÇÃO CRÍTICA PRIMEIRO
+    console.log('🔍 DEBUG GRUPOS V3 - DADOS COMPLETOS:', {
       isGroup: message.isGroup,
       sender: message.sender,
       chatid: message.chatid,
-      messageType: message.messageType
+      messageType: message.messageType,
+      senderName: message.senderName
     });
     
-    // Múltiplas formas de detectar grupos
+    // DETECÇÃO ROBUSTA DE GRUPOS - PRIORIDADE MÁXIMA
     const isGroupMessage = message.isGroup === true || 
                           message.isGroup === 'true' ||
                           (message.sender && message.sender.includes('@g.us')) ||
@@ -90,16 +91,18 @@ async function processMessage(payload) {
                           (message.sender && message.sender.includes('@lid')) ||
                           (message.chatid && message.chatid.includes('@lid'));
     
+    console.log('🎯 RESULTADO DETECÇÃO GRUPOS V3:', { isGroupMessage });
+    
     if (isGroupMessage) {
-      console.log('🚫 MENSAGEM DE GRUPO FILTRADA V3 - IGNORANDO');
+      console.log('🚫 MENSAGEM DE GRUPO FILTRADA V3 - IGNORANDO COMPLETAMENTE');
+      console.log('🚫 GRUPO DETECTADO:', message.sender || message.chatid);
       return { success: false, error: 'Mensagem de grupo filtrada' };
     }
 
-    // Extrair dados da mensagem
+    // Extrair dados da mensagem APENAS se não for grupo
     const phoneNumber = message.sender?.replace('@s.whatsapp.net', '') || 
                        message.chatid?.replace('@s.whatsapp.net', '') ||
                        payload.chat?.phone?.replace(/\D/g, '');
-                       
     const senderName = message.senderName || 
                       payload.chat?.name || 
                       payload.chat?.wa_contactName || 
