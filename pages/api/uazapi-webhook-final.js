@@ -151,15 +151,25 @@ async function processMessage(payload) {
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    // Extrair dados do RPC
+    // Extrair dados do RPC com validação defensiva
     const instanceInfo = instanceData[0];
+    
+    // VALIDAÇÃO CRÍTICA: Verificar se instanceInfo existe
+    if (!instanceInfo) {
+      console.error('❌ ERRO CRÍTICO: instanceInfo é null/undefined');
+      return { success: false, error: 'Dados da instância não encontrados' };
+    }
+    
     const instance = {
       id: instanceInfo.instance_id,
       company_id: instanceInfo.company_id
     };
+    
+    // VALIDAÇÃO CRÍTICA: Verificar se company_name existe
+    const companyName = instanceInfo.company_name || 'Empresa Desconhecida';
     const company = {
       id: instanceInfo.company_id,
-      name: instanceInfo.company_name,
+      name: companyName,
       api_key: instanceInfo.company_api_key
     };
     
@@ -168,10 +178,11 @@ async function processMessage(payload) {
       instanceInfo,
       company,
       hasName: !!company.name,
-      nameValue: company.name
+      nameValue: company.name,
+      originalName: instanceInfo.company_name
     });
     
-    console.log('🏢 EMPRESA (VIA RPC):', company.name);
+    console.log('🏢 EMPRESA (VIA RPC - PROTEGIDA):', company.name);
     
     // Buscar nome do lead no cadastro
     const { data: existingLead } = await supabase
