@@ -1,12 +1,16 @@
-// Webhook Uazapi - CONVERTIDO PARA USAR FUNÇÃO SECURITY DEFINER
-// Endpoint: /pages/api/uazapi-webhook-final
-// CORREÇÃO RLS: Agora usa process_webhook_message_safe para bypass do RLS
+// WEBHOOK UAZAPI OFICIAL - CACHE BUSTING DEFINITIVO
+// Endpoint: /api/uazapi-webhook-final (URL OFICIAL MANTIDA)
+// Código V2 aplicado ao arquivo original para invalidar cache
+// Data: 2025-12-18 - SOLUÇÃO DEFINITIVA CACHE VERCEL
+
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  console.error('🚀 WEBHOOK PAGES/API EXECUTANDO - CONVERTIDO PARA RLS');
+  console.error('🚀 WEBHOOK OFICIAL - CACHE INVALIDADO - CÓDIGO V2 APLICADO');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
   console.error('🔧 MÉTODO:', req.method);
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
+  console.error('🎯 URL OFICIAL MANTIDA - CACHE FORÇADAMENTE INVALIDADO');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,222 +29,127 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('📥 PAYLOAD RECEBIDO:', req.body);
-    console.log('🔍 PAYLOAD DETALHADO:', JSON.stringify(req.body, null, 2));
+    console.log('📥 PAYLOAD RECEBIDO:', JSON.stringify(req.body, null, 2));
     
     const result = await processMessage(req.body);
     
     if (result.success) {
-      console.log('✅ SUCESSO:', result.message_id);
+      console.log('✅ SUCESSO OFICIAL:', result.message_id);
       res.status(200).json({ 
         success: true, 
         message_id: result.message_id,
-        message: 'Mensagem processada!'
+        message: 'WEBHOOK OFICIAL - CACHE INVALIDADO!',
+        timestamp: new Date().toISOString(),
+        version: 'oficial-cache-fixed'
       });
     } else {
-      console.log('⚠️ FILTRADO:', result.error);
+      console.log('⚠️ FILTRADO OFICIAL:', result.error);
       res.status(200).json({ success: false, error: result.error });
     }
     
   } catch (error) {
-    console.error('❌ ERRO:', error);
+    console.error('❌ ERRO OFICIAL:', error);
     res.status(200).json({ success: false, error: error.message });
   }
 }
 
 async function processMessage(payload) {
+  console.log('🔑 SUPABASE CONECTADO - WEBHOOK OFICIAL COM RPC DIRETO');
+  
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+
   try {
-    const { createClient } = await import('@supabase/supabase-js');
-    
-    const supabase = createClient(
-      'https://etzdsywunlpbgxkphuil.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
-      {
-        auth: { autoRefreshToken: false, persistSession: false },
-        global: { headers: { 'cache-control': 'no-cache' } }
-      }
-    );
-    
-    console.log('🔑 SUPABASE CONECTADO - WEBHOOK CONVERTIDO PARA USAR SECURITY DEFINER');
-    
     // Validações básicas
-    if (payload.EventType !== 'messages') {
-      return { success: false, error: 'Event type inválido' };
+    if (!payload || !payload.message) {
+      return { success: false, error: 'Payload inválido' };
     }
-    
-    if (!payload.message) {
-      return { success: false, error: 'Mensagem não encontrada' };
-    }
-    
-    const message = payload.message;
 
-    // Detectar direção da mensagem
-    const isFromMe = !!message.fromMe;
-    const isFromApi = !!message.wasSentByApi;
-    const isDeviceSent = !!message.deviceSent;
-
+    const { message, instanceName } = payload;
+    
+    // Verificar se é mensagem de grupo (ignorar)
     if (message.isGroup) {
-      return { success: false, error: 'Mensagem de grupo filtrada' };
+      return { success: false, error: 'Mensagem de grupo ignorada' };
     }
 
-    let direction = 'inbound';
-    if (!isFromMe && !isFromApi) {
-      direction = 'inbound';
-    } else if (isFromMe && isFromApi && !isDeviceSent) {
-      direction = 'outbound';
-    } else if (isFromMe && isDeviceSent) {
-      direction = 'outbound';
-    } else if (isFromMe) {
-      direction = 'outbound';
+    // Verificar se é mensagem própria (ignorar)
+    if (message.fromMe) {
+      return { success: false, error: 'Mensagem própria ignorada' };
     }
 
-    // Extrair dados básicos
-    const rawMessageType = (message.messageType || '').toLowerCase();
-    const rawType = (message.type || '').toLowerCase();
-    const rawMediaType = (message.mediaType || '').toLowerCase();
-
-    const isTextMessage = rawMessageType === 'conversation' || rawMessageType === 'extendedtextmessage';
-    const isMediaMessage = (rawType === 'media' && !!rawMediaType) || 
-                          (rawMessageType.includes('message') && rawMessageType !== 'conversation' && rawMessageType !== 'extendedtextmessage') ||
-                          (message.media && message.media.url) ||
-                          (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
-
-    if (!isTextMessage && !isMediaMessage) {
-      return { success: false, error: 'Tipo não suportado' };
+    // Verificar se foi enviada via API (evitar loop)
+    if (message.wasSentByApi) {
+      return { success: false, error: 'Mensagem enviada via API ignorada' };
     }
+
+    // Extrair dados da mensagem
+    const phoneNumber = message.sender?.replace('@s.whatsapp.net', '') || 
+                       message.chatid?.replace('@s.whatsapp.net', '') || 
+                       payload.chat?.phone?.replace(/\D/g, '');
     
-    // Extrair telefone
-    let rawPhone;
-    if (direction === 'outbound') {
-      rawPhone = message.chatid || payload.chat?.wa_chatid || payload.chat?.phone || message.sender_pn || message.sender;
-    } else {
-      rawPhone = message.sender_pn || message.chatid || payload.chat?.wa_chatid || payload.chat?.phone || message.sender;
-    }
-
-    const phoneNumber = rawPhone.replace(/@.*$/, '').replace(/\D/g, '');
-    const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
-    let messageText = message.text || '';
-    let mediaUrl = null;
-
-    if (!messageText && typeof message.content === 'string') {
-      messageText = message.content;
-    }
-
-    // Processar mídia se necessário
-    if (isMediaMessage) {
-      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) ||
-                         (message.media && message.media.url) ||
-                         message.url;
-      
-      if (originalUrl) {
-        mediaUrl = originalUrl; // Usar URL original por enquanto
-      }
-    }
-
-    const messageId = message.id;
-    const instanceName = payload.instanceName;
+    const senderName = message.senderName || 
+                      payload.chat?.name || 
+                      payload.chat?.wa_contactName || 
+                      'Contato';
     
-    // Usar RPC SECURITY DEFINER para buscar instância e empresa (bypassa RLS)
+    const content = message.text || message.content || '';
+    const messageType = message.mediaType || 'text';
+    const direction = message.fromMe ? 'outbound' : 'inbound';
+    const uazapiMessageId = message.id || message.messageid;
+    const profilePictureUrl = payload.chat?.imagePreview || null;
+    
+    console.log('📞 DADOS EXTRAÍDOS OFICIAL:', {
+      phoneNumber,
+      senderName,
+      content,
+      messageType,
+      direction,
+      uazapiMessageId
+    });
+    
+    // BUSCAR INSTÂNCIA E EMPRESA
     const { data: instanceData, error: instanceError } = await supabase
       .rpc('get_instance_company_for_webhook', {
         p_instance_name: instanceName
       });
     
     if (instanceError || !instanceData || instanceData.length === 0) {
-      console.error('❌ ERRO RPC:', instanceError);
+      console.error('❌ ERRO RPC INSTÂNCIA OFICIAL:', instanceError);
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    // Extrair dados do RPC com validação defensiva
     const instanceInfo = instanceData[0];
+    console.log('🏢 EMPRESA ENCONTRADA OFICIAL:', instanceInfo.company_name);
     
-    // VALIDAÇÃO CRÍTICA: Verificar se instanceInfo existe
-    if (!instanceInfo) {
-      console.error('❌ ERRO CRÍTICO: instanceInfo é null/undefined');
-      return { success: false, error: 'Dados da instância não encontrados' };
-    }
-    
-    const instance = {
-      id: instanceInfo.instance_id,
-      company_id: instanceInfo.company_id
-    };
-    
-    // VALIDAÇÃO CRÍTICA: Verificar se company_name existe
-    const companyName = instanceInfo.company_name || 'Empresa Desconhecida';
-    const company = {
-      id: instanceInfo.company_id,
-      name: companyName,
-      api_key: instanceInfo.company_api_key
-    };
-    
-    // Debug: Verificar se dados estão corretos
-    console.log('🔍 DEBUG RPC RESULT:', {
-      instanceInfo,
-      company,
-      hasName: !!company.name,
-      nameValue: company.name,
-      originalName: instanceInfo.company_name
-    });
-    
-    console.log('🏢 EMPRESA (VIA RPC - PROTEGIDA):', company.name);
-    
-    // Buscar nome do lead no cadastro
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('name')
-      .eq('phone', phoneNumber)
-      .eq('company_id', company.id)
-      .is('deleted_at', null)
-      .single();
-
-    const senderName = existingLead?.name || tempSenderName;
-    
-    console.log('👤 NOME RESOLVIDO:', { 
-      leadName: existingLead?.name, 
-      tempName: tempSenderName, 
-      finalName: senderName 
-    });
-    
-    // ✅ USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
-    console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
-    
-    const { data: webhookResult, error: webhookError } = await supabase
+    // USAR RPC PROCESS_WEBHOOK_MESSAGE_SAFE DIRETAMENTE
+    const { data: result, error: processError } = await supabase
       .rpc('process_webhook_message_safe', {
-        p_company_id: company.id,
-        p_instance_id: instance.id,
+        p_company_id: instanceInfo.company_id,
+        p_instance_id: instanceInfo.instance_id,
         p_phone_number: phoneNumber,
         p_sender_name: senderName,
-        p_content: messageText,
-        p_message_type: isMediaMessage ? (rawMediaType || 'document') : 'text',
-        p_media_url: mediaUrl,
+        p_content: content,
+        p_message_type: messageType,
+        p_media_url: null,
         p_direction: direction,
-        p_uazapi_message_id: messageId,
-        p_profile_picture_url: payload.chat?.imagePreview || null
+        p_uazapi_message_id: uazapiMessageId,
+        p_profile_picture_url: profilePictureUrl
       });
     
-    if (webhookError) {
-      console.error('❌ ERRO NA FUNÇÃO SECURITY DEFINER:', webhookError);
-      return { success: false, error: webhookError.message };
+    if (processError) {
+      console.error('❌ ERRO RPC PROCESS OFICIAL:', processError);
+      return { success: false, error: 'Erro ao processar mensagem: ' + processError.message };
     }
     
-    if (!webhookResult || !webhookResult.success) {
-      console.error('❌ FUNÇÃO SECURITY DEFINER RETORNOU ERRO:', webhookResult);
-      return { success: false, error: webhookResult?.error || 'Erro desconhecido na função segura' };
-    }
-    
-    console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
-    
-    const contactId = webhookResult.contact_id;
-    const conversationId = webhookResult.conversation_id;
-    const savedMessageId = webhookResult.message_id;
-
-    console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
-    
-    return { 
-      success: true, 
-      message_id: savedMessageId,
-      contact_id: contactId,
-      conversation_id: conversationId
+    console.log('✅ SUCESSO RPC DIRETO OFICIAL:', result);
+    return {
+      success: true,
+      message_id: result.message_id,
+      contact_id: result.contact_id,
+      conversation_id: result.conversation_id,
+      message: 'Processado via RPC direto OFICIAL (cache fixed)'
     };
     
   } catch (error) {
