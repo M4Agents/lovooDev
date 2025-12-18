@@ -215,8 +215,41 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
   try {
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA V3:', rawMediaType, originalUrl.substring(0, 80) + '...');
     
-    // Download da mídia externa (WhatsApp CDN)
-    const response = await fetch(originalUrl);
+    // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA
+    let finalUrl = originalUrl;
+    
+    if (message && message.id && originalUrl.includes('whatsapp.net')) {
+      console.log('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI V3:', message.id);
+      
+      try {
+        const uazapiResponse = await fetch('https://lovoo.uazapi.com/message/download', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: message.id
+          })
+        });
+        
+        if (uazapiResponse.ok) {
+          const uazapiData = await uazapiResponse.json();
+          if (uazapiData.fileURL) {
+            finalUrl = uazapiData.fileURL;
+            console.log('✅ URL DESCRIPTOGRAFADA V3:', finalUrl.substring(0, 80) + '...');
+          } else {
+            console.log('⚠️ Uazapi não retornou fileURL, usando URL original V3');
+          }
+        } else {
+          console.log('⚠️ Falha na descriptografia Uazapi V3, usando URL original');
+        }
+      } catch (uazapiError) {
+        console.log('⚠️ Erro na descriptografia Uazapi V3:', uazapiError.message);
+      }
+    }
+    
+    // Download da mídia (URL descriptografada ou original)
+    const response = await fetch(finalUrl);
     if (!response.ok) {
       console.error('❌ Falha ao baixar mídia V3:', response.status, response.statusText);
       return originalUrl; // Fallback para URL original
