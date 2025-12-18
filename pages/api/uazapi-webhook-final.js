@@ -140,30 +140,30 @@ async function processMessage(payload) {
     const messageId = message.id;
     const instanceName = payload.instanceName;
     
-    // Buscar instância
-    const { data: instance, error: instanceError } = await supabase
-      .from('whatsapp_life_instances')
-      .select('id, company_id')
-      .eq('provider_instance_id', instanceName)
-      .eq('status', 'connected')
-      .single();
+    // Usar RPC SECURITY DEFINER para buscar instância e empresa (bypassa RLS)
+    const { data: instanceData, error: instanceError } = await supabase
+      .rpc('get_instance_company_for_webhook', {
+        p_instance_name: instanceName
+      });
     
-    if (instanceError || !instance) {
+    if (instanceError || !instanceData || instanceData.length === 0) {
+      console.error('❌ ERRO RPC:', instanceError);
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    // Buscar empresa separadamente para evitar problemas de JOIN
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('id, name, api_key')
-      .eq('id', instance.company_id)
-      .single();
+    // Extrair dados do RPC
+    const instanceInfo = instanceData[0];
+    const instance = {
+      id: instanceInfo.instance_id,
+      company_id: instanceInfo.company_id
+    };
+    const company = {
+      id: instanceInfo.company_id,
+      name: instanceInfo.company_name,
+      api_key: instanceInfo.company_api_key
+    };
     
-    if (companyError || !company) {
-      return { success: false, error: 'Empresa não encontrada para instância: ' + instanceName };
-    }
-    
-    console.log('🏢 EMPRESA:', company.name);
+    console.log('🏢 EMPRESA (VIA RPC):', company.name);
     
     // Buscar nome do lead no cadastro
     const { data: existingLead } = await supabase
