@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🚫 CORREÇÃO CONVERSAS DUPLICADAS - 2025-12-19 09:23 - FILTRO FROMME ATIVO');
+  console.error('🔄 UNIFICAÇÃO CONVERSAS - 2025-12-19 09:38 - LÓGICA TELEFONE CORRIGIDA');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -117,27 +117,61 @@ async function processMessage(payload) {
       return { success: false, error: 'Mensagem de grupo filtrada' };
     }
 
-    // FILTRO DE MENSAGENS PRÓPRIAS - CORREÇÃO CONVERSAS DUPLICADAS
-    if (message.fromMe) {
-      console.log('🚫 MENSAGEM PRÓPRIA IGNORADA V3 - EVITANDO CONVERSA DUPLICADA');
-      console.log('🚫 OUTBOUND DETECTADO:', message.sender || message.chatid);
-      return { success: false, error: 'Mensagem própria ignorada' };
+    // DETECÇÃO DE DIREÇÃO DA MENSAGEM - SEGUINDO PADRÃO OFICIAL
+    const isFromMe = !!message.fromMe;
+    const isFromApi = !!message.wasSentByApi;
+    const isDeviceSent = !!message.deviceSent;
+
+    let direction = 'inbound';
+    if (!isFromMe && !isFromApi) {
+      direction = 'inbound';
+    } else if (isFromMe && isFromApi && !isDeviceSent) {
+      direction = 'outbound';
+    } else if (isFromMe && isDeviceSent) {
+      direction = 'outbound';
+    } else if (isFromMe) {
+      direction = 'outbound';
     }
 
-    // FILTRO DE MENSAGENS VIA API - EVITAR LOOP
-    if (message.wasSentByApi) {
-      console.log('🚫 MENSAGEM VIA API IGNORADA V3 - EVITANDO LOOP');
-      return { success: false, error: 'Mensagem enviada via API ignorada' };
+    console.log('🎯 DIREÇÃO DETECTADA V3:', {
+      isFromMe,
+      isFromApi,
+      isDeviceSent,
+      direction
+    });
+
+    // EXTRAÇÃO DE TELEFONE POR DIREÇÃO - CORREÇÃO CONVERSAS DUPLICADAS
+    let rawPhone;
+    if (direction === 'outbound') {
+      // Outbound: usar sempre o número do chat/contato (lead), nunca o número do owner/sender
+      rawPhone = message.chatid || 
+                 payload.chat?.wa_chatid || 
+                 payload.chat?.phone || 
+                 message.sender_pn || 
+                 message.sender;
+    } else {
+      // Inbound: manter comportamento atual, priorizando quem enviou a mensagem
+      rawPhone = message.sender_pn || 
+                 message.chatid || 
+                 payload.chat?.wa_chatid || 
+                 payload.chat?.phone || 
+                 message.sender;
     }
 
-    // Extrair dados da mensagem APENAS se não for grupo nem própria
-    const phoneNumber = message.sender?.replace('@s.whatsapp.net', '') || 
-                       message.chatid?.replace('@s.whatsapp.net', '') ||
-                       payload.chat?.phone?.replace(/\D/g, '');
+    // Limpar telefone removendo sufixos @... e caracteres não numéricos
+    const phoneNumber = rawPhone?.replace(/@.*$/, '')?.replace(/\D/g, '') || '';
+    
     const senderName = message.senderName || 
                       payload.chat?.name || 
                       payload.chat?.wa_contactName || 
                       'Contato';
+
+    console.log('📞 EXTRAÇÃO DE TELEFONE V3:', {
+      direction,
+      rawPhone,
+      phoneNumber,
+      senderName
+    });
     
     // DETECÇÃO DE MÍDIA V3
     const rawType = message.type || '';
@@ -180,7 +214,6 @@ async function processMessage(payload) {
       console.log('⚠️ MENSAGEM NÃO É MÍDIA V3 - PULANDO PROCESSAMENTO');
     }
     const messageType = message.mediaType || 'text';
-    const direction = message.fromMe ? 'outbound' : 'inbound';
     const uazapiMessageId = message.id || message.messageid;
     const profilePictureUrl = payload.chat?.imagePreview || null;
     
