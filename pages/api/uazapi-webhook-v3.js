@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🎨 PREVIEW MÍDIA - 2025-12-19 12:04 - CORREÇÃO FINAL IMPLEMENTADA');
+  console.error('🖼️ FORMATO PNG - 2025-12-19 12:12 - PRESERVAÇÃO DE FORMATO IMPLEMENTADA');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -410,17 +410,18 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada V3, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // Determinar extensão baseada no tipo de mídia
-    const extension = getFileExtensionRobust(rawMediaType);
+    // Determinar extensão baseada no tipo de mídia E URL original
+    const extension = getFileExtensionRobust(rawMediaType, originalUrl);
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage V3:', fileName);
+    console.log('🎨 FORMATO DETECTADO V3:', { rawMediaType, extension, originalUrl: originalUrl.substring(0, 100) + '...' });
     
     // Upload para Supabase Storage
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: getContentTypeRobust(rawMediaType)
+        contentType: getContentTypeRobust(rawMediaType, originalUrl)
       });
     
     if (error) {
@@ -443,7 +444,16 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
 }
 
 // Função para determinar extensão do arquivo baseada no tipo de mídia
-function getFileExtensionRobust(mediaType) {
+function getFileExtensionRobust(mediaType, originalUrl = null) {
+  // DETECÇÃO INTELIGENTE DE FORMATO PARA IMAGENS - PRESERVAR PNG
+  if (mediaType === 'image' && originalUrl) {
+    if (originalUrl.includes('.png') || originalUrl.toLowerCase().includes('png')) return 'png';
+    if (originalUrl.includes('.webp') || originalUrl.toLowerCase().includes('webp')) return 'webp';
+    if (originalUrl.includes('.gif') || originalUrl.toLowerCase().includes('gif')) return 'gif';
+    if (originalUrl.includes('.jpeg') || originalUrl.toLowerCase().includes('jpeg')) return 'jpeg';
+    return 'jpg'; // Fallback para JPG
+  }
+  
   const typeMap = {
     'video': 'mp4',
     'image': 'jpg', 
@@ -456,7 +466,16 @@ function getFileExtensionRobust(mediaType) {
 }
 
 // Função para determinar content-type baseado no tipo de mídia
-function getContentTypeRobust(mediaType) {
+function getContentTypeRobust(mediaType, originalUrl = null) {
+  // DETECÇÃO INTELIGENTE DE CONTENT-TYPE PARA IMAGENS - PRESERVAR PNG
+  if (mediaType === 'image' && originalUrl) {
+    if (originalUrl.includes('.png') || originalUrl.toLowerCase().includes('png')) return 'image/png';
+    if (originalUrl.includes('.webp') || originalUrl.toLowerCase().includes('webp')) return 'image/webp';
+    if (originalUrl.includes('.gif') || originalUrl.toLowerCase().includes('gif')) return 'image/gif';
+    if (originalUrl.includes('.jpeg') || originalUrl.toLowerCase().includes('jpeg')) return 'image/jpeg';
+    return 'image/jpeg'; // Fallback para JPEG
+  }
+  
   const typeMap = {
     'video': 'video/mp4',
     'image': 'image/jpeg',
