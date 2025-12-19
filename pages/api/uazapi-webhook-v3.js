@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🔍 MAGIC BYTES - 2025-12-19 12:20 - DETECÇÃO ROBUSTA IMPLEMENTADA');
+  console.error('🚨 CACHE MISS FORÇADO - 2025-12-19 12:32 - MAGIC BYTES ATIVO');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -418,13 +418,16 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage V3:', fileName);
-    console.log('🎨 FORMATO DETECTADO V3:', { 
+    console.error('🎨 FORMATO DETECTADO V3 - MAGIC BYTES ATIVO:', { 
       rawMediaType, 
       extension, 
       contentType,
       detectionMethod: detectedFormat.method,
       originalUrl: originalUrl.substring(0, 100) + '...' 
     });
+    
+    console.error('🔍 MAGIC BYTES FUNCIONANDO - CACHE MISS CONFIRMADO V3');
+    console.error('📸 PNG DETECTADO:', extension === 'png' ? 'SIM' : 'NÃO');
     
     // Upload para Supabase Storage
     const { data, error } = await supabase.storage
