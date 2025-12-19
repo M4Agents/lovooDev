@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🔄 UNIFICAÇÃO CONVERSAS - 2025-12-19 09:38 - LÓGICA TELEFONE CORRIGIDA');
+  console.error('🎥 CORREÇÃO MÍDIA - 2025-12-19 11:57 - DETECÇÃO ROBUSTA IMPLEMENTADA');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -184,12 +184,55 @@ async function processMessage(payload) {
       rawMessageType
     });
     
+    // LOGS DETALHADOS PARA DEBUG DE MÍDIA - SEGUINDO PADRÃO BACKUP FUNCIONAL
+    console.log('🔍 CONTENT ANALYSIS V3:', {
+      hasContent: !!message.content,
+      contentType: typeof message.content,
+      contentKeys: message.content && typeof message.content === 'object' ? Object.keys(message.content) : null,
+      hasURL: message.content && message.content.URL,
+      hasUrl: message.content && message.content.url
+    });
+    
+    console.log('🎥 MEDIA ANALYSIS V3:', {
+      hasMedia: !!message.media,
+      mediaType: typeof message.media,
+      mediaKeys: message.media ? Object.keys(message.media) : null,
+      hasMediaUrl: message.media && message.media.url
+    });
+
+    // DETECÇÃO ROBUSTA DE MÍDIA - SEGUINDO BACKUP FUNCIONAL COM 4 CONDIÇÕES
+    const condition1 = (rawType === 'media' && !!rawMediaType);
+    const condition2 = (rawMessageType.includes('message') && 
+                       rawMessageType !== 'conversation' && 
+                       rawMessageType !== 'extendedtextmessage');
+    const condition3 = (message.media && message.media.url);
+    const condition4 = (message.content && typeof message.content === 'object' && 
+                       (message.content.URL || message.content.url));
+    
+    console.log('🎯 CONDIÇÕES INDIVIDUAIS V3:', {
+      'condition1 (rawType === media && rawMediaType)': condition1,
+      'condition2 (messageType includes message)': condition2,
+      'condition3 (message.media.url exists)': condition3,
+      'condition4 (message.content object with URL)': condition4
+    });
+    
     const isTextMessage = rawMessageType === 'Conversation' || rawMessageType === 'conversation';
-    const isMediaMessage = (rawType === 'media' && !!rawMediaType) || 
-                          (rawMessageType.includes('message') && rawMessageType !== 'Conversation' && rawMessageType !== 'conversation') ||
-                          (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+    const isMediaMessage = condition1 || condition2 || condition3 || condition4;
     
     console.log('🎯 RESULTADO DETECÇÃO V3:', { isTextMessage, isMediaMessage });
+    
+    // LOG ESPECÍFICO PARA MÍDIA
+    if (isMediaMessage) {
+      console.log('🎥 MÍDIA DETECTADA V3! Analisando estrutura...');
+      console.log('📋 CONDIÇÕES DE DETECÇÃO V3:', {
+        'rawType === media && rawMediaType': condition1,
+        'messageType includes message': condition2,
+        'message.media exists': condition3,
+        'message.content object with URL': condition4
+      });
+    } else {
+      console.log('⚠️ MÍDIA NÃO DETECTADA V3 - VERIFICANDO CONDIÇÕES');
+    }
     
     let content = message.text || message.content || '';
     let mediaUrl = null;
@@ -198,9 +241,27 @@ async function processMessage(payload) {
     if (isMediaMessage) {
       console.log('🎥 PROCESSAMENTO DE MÍDIA V3 INICIADO:', { rawMessageType, rawType, rawMediaType });
       
-      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) || null;
+      // LOCALIZAÇÃO ROBUSTA DE URL - SEGUINDO PADRÃO BACKUP FUNCIONAL
+      console.log('🔍 BUSCANDO URL DE MÍDIA V3...');
       
-      console.log('🔗 URL DE MÍDIA V3:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
+      const urlFromContent = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url));
+      const urlFromMedia = (message.media && message.media.url);
+      const urlFromMessage = message.url;
+      
+      console.log('📋 ANÁLISE DE URLs V3:', {
+        'message.content.URL': message.content && message.content.URL,
+        'message.content.url': message.content && message.content.url,
+        'message.media.url': message.media && message.media.url,
+        'message.url': message.url,
+        'urlFromContent': urlFromContent,
+        'urlFromMedia': urlFromMedia,
+        'urlFromMessage': urlFromMessage
+      });
+      
+      // Localizar URL da mídia de forma robusta
+      const originalUrl = urlFromContent || urlFromMedia || urlFromMessage || null;
+      
+      console.log('🔗 URL FINAL SELECIONADA V3:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL ENCONTRADA');
       
       if (originalUrl) {
         console.log('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust V3...');
