@@ -12,6 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
+  console.error('🚫 CORREÇÃO CONVERSAS DUPLICADAS - 2025-12-19 09:23 - FILTRO FROMME ATIVO');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -116,7 +117,20 @@ async function processMessage(payload) {
       return { success: false, error: 'Mensagem de grupo filtrada' };
     }
 
-    // Extrair dados da mensagem APENAS se não for grupo
+    // FILTRO DE MENSAGENS PRÓPRIAS - CORREÇÃO CONVERSAS DUPLICADAS
+    if (message.fromMe) {
+      console.log('🚫 MENSAGEM PRÓPRIA IGNORADA V3 - EVITANDO CONVERSA DUPLICADA');
+      console.log('🚫 OUTBOUND DETECTADO:', message.sender || message.chatid);
+      return { success: false, error: 'Mensagem própria ignorada' };
+    }
+
+    // FILTRO DE MENSAGENS VIA API - EVITAR LOOP
+    if (message.wasSentByApi) {
+      console.log('🚫 MENSAGEM VIA API IGNORADA V3 - EVITANDO LOOP');
+      return { success: false, error: 'Mensagem enviada via API ignorada' };
+    }
+
+    // Extrair dados da mensagem APENAS se não for grupo nem própria
     const phoneNumber = message.sender?.replace('@s.whatsapp.net', '') || 
                        message.chatid?.replace('@s.whatsapp.net', '') ||
                        payload.chat?.phone?.replace(/\D/g, '');
