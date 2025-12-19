@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🎥 CORREÇÃO MÍDIA - 2025-12-19 11:57 - DETECÇÃO ROBUSTA IMPLEMENTADA');
+  console.error('🎨 PREVIEW MÍDIA - 2025-12-19 12:04 - CORREÇÃO FINAL IMPLEMENTADA');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -267,6 +267,12 @@ async function processMessage(payload) {
         console.log('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust V3...');
         mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
         console.log('✅ RESULTADO PROCESSAMENTO V3:', mediaUrl ? 'SUCESSO' : 'FALHOU');
+        
+        // CORREÇÃO FINAL: Limpar content para mídia - mostrar preview em vez de URL
+        if (mediaUrl) {
+          content = `(${rawMediaType || 'mídia'})`;
+          console.log('🎨 CONTENT LIMPO PARA MÍDIA V3:', content);
+        }
       } else {
         console.log('❌ NENHUMA URL DE MÍDIA ENCONTRADA V3');
         mediaUrl = null;
