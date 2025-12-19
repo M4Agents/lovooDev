@@ -83,13 +83,29 @@ async function processMessage(payload) {
       senderName: message.senderName
     });
     
-    // DETECÇÃO ROBUSTA DE GRUPOS - PRIORIDADE MÁXIMA
+    // BLOQUEIO ABSOLUTO DE @LID - REGRA DEFINITIVA
+    // QUALQUER COISA COM @LID DEVE SER DESPREZADA
+    const senderHasLid = message.sender && message.sender.includes('@lid');
+    const chatidHasLid = message.chatid && message.chatid.includes('@lid');
+    
+    console.log('🎯 VERIFICAÇÃO @LID V3:', {
+      sender: message.sender,
+      chatid: message.chatid,
+      senderHasLid,
+      chatidHasLid
+    });
+    
+    if (senderHasLid || chatidHasLid) {
+      console.log('🚫 @LID DETECTADO - BLOQUEANDO COMPLETAMENTE V3');
+      console.log('🚫 IDENTIFICADOR @LID:', senderHasLid ? message.sender : message.chatid);
+      return { success: false, error: 'Mensagem @lid bloqueada - não é telefone válido' };
+    }
+    
+    // DETECÇÃO ADICIONAL DE GRUPOS (@g.us)
     const isGroupMessage = message.isGroup === true || 
                           message.isGroup === 'true' ||
                           (message.sender && message.sender.includes('@g.us')) ||
-                          (message.chatid && message.chatid.includes('@g.us')) ||
-                          (message.sender && message.sender.includes('@lid')) ||
-                          (message.chatid && message.chatid.includes('@lid'));
+                          (message.chatid && message.chatid.includes('@g.us'));
     
     console.log('🎯 RESULTADO DETECÇÃO GRUPOS V3:', { isGroupMessage });
     
