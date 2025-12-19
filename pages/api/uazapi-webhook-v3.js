@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   console.error('🔧 MÉTODO:', req.method);
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
+  console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
