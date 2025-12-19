@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🖼️ FORMATO PNG - 2025-12-19 12:12 - PRESERVAÇÃO DE FORMATO IMPLEMENTADA');
+  console.error('🔍 MAGIC BYTES - 2025-12-19 12:20 - DETECÇÃO ROBUSTA IMPLEMENTADA');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -410,18 +410,27 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada V3, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // Determinar extensão baseada no tipo de mídia E URL original
-    const extension = getFileExtensionRobust(rawMediaType, originalUrl);
+    // DETECÇÃO ROBUSTA DE FORMATO - MAGIC BYTES + CONTENT-TYPE + URL
+    let detectedFormat = detectImageFormat(mediaBuffer, response.headers.get('content-type'), originalUrl);
+    
+    const extension = detectedFormat.extension;
+    const contentType = detectedFormat.contentType;
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     
     console.log('📁 Fazendo upload para Supabase Storage V3:', fileName);
-    console.log('🎨 FORMATO DETECTADO V3:', { rawMediaType, extension, originalUrl: originalUrl.substring(0, 100) + '...' });
+    console.log('🎨 FORMATO DETECTADO V3:', { 
+      rawMediaType, 
+      extension, 
+      contentType,
+      detectionMethod: detectedFormat.method,
+      originalUrl: originalUrl.substring(0, 100) + '...' 
+    });
     
     // Upload para Supabase Storage
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(fileName, mediaBuffer, {
-        contentType: getContentTypeRobust(rawMediaType, originalUrl)
+        contentType: contentType
       });
     
     if (error) {
@@ -485,4 +494,126 @@ function getContentTypeRobust(mediaType, originalUrl = null) {
   };
   
   return typeMap[mediaType] || 'application/octet-stream';
+}
+
+// Função para detectar formato de imagem por magic bytes, content-type e URL
+function detectImageFormat(buffer, responseContentType = null, originalUrl = null) {
+  const bytes = new Uint8Array(buffer);
+  
+  // PRIORIDADE 1: MAGIC BYTES (100% CONFIÁVEL)
+  
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes.length >= 8 && 
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
+      bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A) {
+    return { 
+      extension: 'png', 
+      contentType: 'image/png',
+      method: 'magic-bytes'
+    };
+  }
+  
+  // JPEG: FF D8 FF
+  if (bytes.length >= 3 && 
+      bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return { 
+      extension: 'jpg', 
+      contentType: 'image/jpeg',
+      method: 'magic-bytes'
+    };
+  }
+  
+  // WebP: RIFF...WEBP
+  if (bytes.length >= 12 &&
+      bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return { 
+      extension: 'webp', 
+      contentType: 'image/webp',
+      method: 'magic-bytes'
+    };
+  }
+  
+  // GIF: GIF87a ou GIF89a
+  if (bytes.length >= 6 &&
+      bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+      (bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61)) {
+    return { 
+      extension: 'gif', 
+      contentType: 'image/gif',
+      method: 'magic-bytes'
+    };
+  }
+  
+  // PRIORIDADE 2: CONTENT-TYPE DO RESPONSE HTTP
+  if (responseContentType) {
+    if (responseContentType.includes('image/png')) {
+      return { 
+        extension: 'png', 
+        contentType: 'image/png',
+        method: 'content-type'
+      };
+    }
+    if (responseContentType.includes('image/webp')) {
+      return { 
+        extension: 'webp', 
+        contentType: 'image/webp',
+        method: 'content-type'
+      };
+    }
+    if (responseContentType.includes('image/gif')) {
+      return { 
+        extension: 'gif', 
+        contentType: 'image/gif',
+        method: 'content-type'
+      };
+    }
+    if (responseContentType.includes('image/jpeg') || responseContentType.includes('image/jpg')) {
+      return { 
+        extension: 'jpg', 
+        contentType: 'image/jpeg',
+        method: 'content-type'
+      };
+    }
+  }
+  
+  // PRIORIDADE 3: DETECÇÃO POR URL (FALLBACK)
+  if (originalUrl) {
+    const urlLower = originalUrl.toLowerCase();
+    if (urlLower.includes('.png') || urlLower.includes('png')) {
+      return { 
+        extension: 'png', 
+        contentType: 'image/png',
+        method: 'url-fallback'
+      };
+    }
+    if (urlLower.includes('.webp') || urlLower.includes('webp')) {
+      return { 
+        extension: 'webp', 
+        contentType: 'image/webp',
+        method: 'url-fallback'
+      };
+    }
+    if (urlLower.includes('.gif') || urlLower.includes('gif')) {
+      return { 
+        extension: 'gif', 
+        contentType: 'image/gif',
+        method: 'url-fallback'
+      };
+    }
+    if (urlLower.includes('.jpeg') || urlLower.includes('jpeg')) {
+      return { 
+        extension: 'jpeg', 
+        contentType: 'image/jpeg',
+        method: 'url-fallback'
+      };
+    }
+  }
+  
+  // FALLBACK FINAL: JPG
+  return { 
+    extension: 'jpg', 
+    contentType: 'image/jpeg',
+    method: 'fallback'
+  };
 }
