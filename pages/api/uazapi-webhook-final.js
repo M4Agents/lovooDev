@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  console.error('🚀 WEBHOOK OFICIAL V2 - CACHE INVALIDADO DEFINITIVAMENTE');
+  console.error('🎬 MÍDIA RESTAURADA - 2025-12-20 06:49 - PROCESSAMENTO COMPLETO ATIVO');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
   console.error('🔧 MÉTODO:', req.method);
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
@@ -94,8 +94,30 @@ async function processMessage(payload) {
                       payload.chat?.wa_contactName || 
                       'Contato';
     
-    const content = message.text || message.content || '';
-    const messageType = message.mediaType || 'text';
+    // DETECÇÃO DE MÍDIA RESTAURADA (PRÉ-RLS)
+    const rawMessageType = (message.messageType || '').toLowerCase();
+    const rawType = (message.type || '').toLowerCase();
+    const rawMediaType = (message.mediaType || '').toLowerCase();
+
+    const isTextMessage = rawMessageType === 'conversation' || rawMessageType === 'extendedtextmessage';
+    const isMediaMessage = rawType === 'media' && !!rawMediaType;
+
+    console.log('🎥 DETECÇÃO MÍDIA RESTAURADA:', { isTextMessage, isMediaMessage, rawType, rawMediaType });
+
+    // EXTRAÇÃO DE CONTEÚDO E URL DE MÍDIA
+    let content = message.text || '';
+    let mediaUrl = null;
+
+    if (!content && typeof message.content === 'string') {
+      content = message.content;
+    }
+
+    if (isMediaMessage && message.content && typeof message.content === 'object') {
+      mediaUrl = message.content.URL || message.content.url || null;
+      console.log('📎 URL MÍDIA EXTRAÍDA:', mediaUrl ? mediaUrl.substring(0, 100) + '...' : 'NENHUMA');
+    }
+
+    const messageType = isMediaMessage ? rawMediaType : 'text';
     const direction = message.fromMe ? 'outbound' : 'inbound';
     const uazapiMessageId = message.id || message.messageid;
     const profilePictureUrl = payload.chat?.imagePreview || null;
@@ -123,7 +145,72 @@ async function processMessage(payload) {
     const instanceInfo = instanceData[0];
     console.log('🏢 EMPRESA ENCONTRADA OFICIAL V2:', instanceInfo.company_name);
     
-    // USAR RPC PROCESS_WEBHOOK_MESSAGE_SAFE DIRETAMENTE
+    // PROCESSAMENTO DE MÍDIA RESTAURADO (PRÉ-RLS)
+    let processedMediaUrl = null;
+    
+    if (isMediaMessage && mediaUrl) {
+      console.log('🎬 INICIANDO PROCESSAMENTO DE MÍDIA...');
+      
+      try {
+        // Download da mídia
+        const response = await fetch(mediaUrl);
+        if (!response.ok) {
+          console.error('❌ Falha ao baixar mídia:', response.status);
+        } else {
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          
+          console.log('📦 Mídia baixada, tamanho:', buffer.length, 'bytes');
+          
+          // Determinar extensão baseada no tipo
+          let ext = 'bin';
+          const contentType = response.headers.get('content-type');
+          
+          if (contentType) {
+            if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
+            else if (contentType.includes('png')) ext = 'png';
+            else if (contentType.includes('gif')) ext = 'gif';
+            else if (contentType.includes('pdf')) ext = 'pdf';
+            else if (contentType.includes('audio')) ext = 'ogg';
+            else if (contentType.includes('mp4')) ext = 'mp4';
+            else if (contentType.includes('webp')) ext = 'webp';
+          } else if (rawMediaType) {
+            if (rawMediaType === 'image') ext = 'jpg';
+            else if (rawMediaType === 'audio' || rawMediaType === 'ptt') ext = 'ogg';
+            else if (rawMediaType === 'video') ext = 'mp4';
+            else if (rawMediaType === 'document') ext = 'pdf';
+          }
+          
+          const fileName = `${instanceInfo.company_id}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+          
+          console.log('📁 Fazendo upload para Supabase Storage:', fileName);
+          
+          // Upload para Supabase Storage
+          const { error: uploadError } = await supabase.storage
+            .from('chat-media')
+            .upload(fileName, buffer, {
+              contentType: contentType || undefined,
+              upsert: true
+            });
+          
+          if (uploadError) {
+            console.error('❌ Erro no upload:', uploadError);
+          } else {
+            // Obter URL pública
+            const { data: publicData } = supabase.storage
+              .from('chat-media')
+              .getPublicUrl(fileName);
+            
+            processedMediaUrl = publicData?.publicUrl;
+            console.log('✅ MÍDIA PROCESSADA:', processedMediaUrl ? 'SUCESSO' : 'FALHOU');
+          }
+        }
+      } catch (error) {
+        console.error('❌ ERRO PROCESSAMENTO MÍDIA:', error);
+      }
+    }
+    
+    // USAR RPC PROCESS_WEBHOOK_MESSAGE_SAFE COM MÍDIA PROCESSADA
     const { data: result, error: processError } = await supabase
       .rpc('process_webhook_message_safe', {
         p_company_id: instanceInfo.company_id,
@@ -132,7 +219,7 @@ async function processMessage(payload) {
         p_sender_name: senderName,
         p_content: content,
         p_message_type: messageType,
-        p_media_url: null,
+        p_media_url: processedMediaUrl,
         p_direction: direction,
         p_uazapi_message_id: uazapiMessageId,
         p_profile_picture_url: profilePictureUrl
