@@ -1,9 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -17,17 +13,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Criar cliente Supabase com autenticação via cookies
+    const supabase = createServerSupabaseClient({ req, res })
+    
     // Verificar autenticação do usuário
-    const authHeader = req.headers.authorization
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Authorization header required' })
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid token' })
+      return res.status(401).json({ error: 'Authentication required' })
     }
 
     // Buscar company_id do usuário
@@ -55,8 +48,14 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'File not found or access denied' })
     }
 
+    // Criar cliente com service role para storage operations
+    const storageClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
+
     // Gerar signed URL (válida por 2 horas)
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    const { data: signedUrlData, error: signedUrlError } = await storageClient.storage
       .from('chat-media')
       .createSignedUrl(filename, 7200) // 2 horas = 7200 segundos
 
