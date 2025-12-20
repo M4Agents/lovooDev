@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   console.error('📡 USER-AGENT:', req.headers['user-agent']);
   console.error('🎯 VERSÃO V3 - SOLUÇÃO DEFINITIVA VERCEL');
   console.error('🔥 DEPLOY FORÇADO - 2025-12-19 08:17 - FILTRO @LID ATIVO');
-  console.error('🚨 CACHE MISS FORÇADO - 2025-12-19 12:32 - MAGIC BYTES ATIVO');
+  console.error('🎬 MÍDIA CORRIGIDA V3 - 2025-12-20 08:28 - MAGIC BYTES FUNCIONAIS');
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -411,7 +411,15 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     console.log('📦 Mídia baixada V3, tamanho:', mediaBuffer.byteLength, 'bytes');
     
     // DETECÇÃO ROBUSTA DE FORMATO - MAGIC BYTES + CONTENT-TYPE + URL
-    let detectedFormat = detectImageFormat(mediaBuffer, response.headers.get('content-type'), originalUrl);
+    const responseContentType = response.headers.get('content-type');
+    let detectedFormat = detectImageFormat(mediaBuffer, responseContentType, originalUrl);
+    
+    console.error('🔍 MAGIC BYTES DEBUG V3:', {
+      bufferSize: mediaBuffer.byteLength,
+      firstBytes: new Uint8Array(mediaBuffer.slice(0, 12)),
+      responseContentType,
+      detectedMethod: detectedFormat.method
+    });
     
     const extension = detectedFormat.extension;
     const contentType = detectedFormat.contentType;
@@ -503,12 +511,20 @@ function getContentTypeRobust(mediaType, originalUrl = null) {
 function detectImageFormat(buffer, responseContentType = null, originalUrl = null) {
   const bytes = new Uint8Array(buffer);
   
+  console.error('🔬 MAGIC BYTES ANÁLISE V3:', {
+    bufferLength: bytes.length,
+    firstEightBytes: Array.from(bytes.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')),
+    responseContentType,
+    originalUrlHint: originalUrl ? originalUrl.substring(originalUrl.length - 20) : null
+  });
+  
   // PRIORIDADE 1: MAGIC BYTES (100% CONFIÁVEL)
   
   // PNG: 89 50 4E 47 0D 0A 1A 0A
   if (bytes.length >= 8 && 
       bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
       bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A) {
+    console.error('✅ PNG DETECTADO POR MAGIC BYTES V3!');
     return { 
       extension: 'png', 
       contentType: 'image/png',
@@ -519,6 +535,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
   // JPEG: FF D8 FF
   if (bytes.length >= 3 && 
       bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    console.error('✅ JPEG DETECTADO POR MAGIC BYTES V3!');
     return { 
       extension: 'jpg', 
       contentType: 'image/jpeg',
@@ -530,6 +547,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
   if (bytes.length >= 12 &&
       bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
       bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    console.error('✅ WEBP DETECTADO POR MAGIC BYTES V3!');
     return { 
       extension: 'webp', 
       contentType: 'image/webp',
@@ -541,6 +559,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
   if (bytes.length >= 6 &&
       bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
       (bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61)) {
+    console.error('✅ GIF DETECTADO POR MAGIC BYTES V3!');
     return { 
       extension: 'gif', 
       contentType: 'image/gif',
@@ -550,7 +569,9 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
   
   // PRIORIDADE 2: CONTENT-TYPE DO RESPONSE HTTP
   if (responseContentType) {
+    console.error('🔍 TENTANDO CONTENT-TYPE V3:', responseContentType);
     if (responseContentType.includes('image/png')) {
+      console.error('✅ PNG DETECTADO POR CONTENT-TYPE V3!');
       return { 
         extension: 'png', 
         contentType: 'image/png',
@@ -558,6 +579,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
       };
     }
     if (responseContentType.includes('image/webp')) {
+      console.error('✅ WEBP DETECTADO POR CONTENT-TYPE V3!');
       return { 
         extension: 'webp', 
         contentType: 'image/webp',
@@ -565,6 +587,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
       };
     }
     if (responseContentType.includes('image/gif')) {
+      console.error('✅ GIF DETECTADO POR CONTENT-TYPE V3!');
       return { 
         extension: 'gif', 
         contentType: 'image/gif',
@@ -572,6 +595,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
       };
     }
     if (responseContentType.includes('image/jpeg') || responseContentType.includes('image/jpg')) {
+      console.error('✅ JPEG DETECTADO POR CONTENT-TYPE V3!');
       return { 
         extension: 'jpg', 
         contentType: 'image/jpeg',
@@ -614,6 +638,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
   }
   
   // FALLBACK FINAL: JPG
+  console.error('⚠️ USANDO FALLBACK FINAL V3 - NENHUM FORMATO DETECTADO');
   return { 
     extension: 'jpg', 
     contentType: 'image/jpeg',
