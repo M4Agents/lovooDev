@@ -410,15 +410,19 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     const mediaBuffer = await response.arrayBuffer();
     console.log('📦 Mídia baixada V3, tamanho:', mediaBuffer.byteLength, 'bytes');
     
-    // DETECÇÃO ROBUSTA DE FORMATO - MAGIC BYTES + CONTENT-TYPE + URL
+    // DETECÇÃO ROBUSTA DE FORMATO - MIMETYPE PAYLOAD + MAGIC BYTES + CONTENT-TYPE + URL
     const responseContentType = response.headers.get('content-type');
-    let detectedFormat = detectImageFormat(mediaBuffer, responseContentType, originalUrl);
+    const payloadMimetype = message.content && message.content.mimetype ? message.content.mimetype : null;
     
-    console.error('🔍 MAGIC BYTES DEBUG V3:', {
+    let detectedFormat = detectImageFormat(mediaBuffer, responseContentType, originalUrl, payloadMimetype);
+    
+    console.error('🔍 DETECÇÃO COMPLETA V3:', {
       bufferSize: mediaBuffer.byteLength,
       firstBytes: new Uint8Array(mediaBuffer.slice(0, 12)),
       responseContentType,
-      detectedMethod: detectedFormat.method
+      payloadMimetype,
+      detectedMethod: detectedFormat.method,
+      finalExtension: detectedFormat.extension
     });
     
     const extension = detectedFormat.extension;
@@ -507,18 +511,56 @@ function getContentTypeRobust(mediaType, originalUrl = null) {
   return typeMap[mediaType] || 'application/octet-stream';
 }
 
-// Função para detectar formato de imagem por magic bytes, content-type e URL
-function detectImageFormat(buffer, responseContentType = null, originalUrl = null) {
+// Função para detectar formato de imagem por mimetype, magic bytes, content-type e URL
+function detectImageFormat(buffer, responseContentType = null, originalUrl = null, payloadMimetype = null) {
   const bytes = new Uint8Array(buffer);
   
-  console.error('🔬 MAGIC BYTES ANÁLISE V3:', {
+  console.error('🔬 DETECÇÃO DE FORMATO V3:', {
     bufferLength: bytes.length,
     firstEightBytes: Array.from(bytes.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')),
     responseContentType,
+    payloadMimetype,
     originalUrlHint: originalUrl ? originalUrl.substring(originalUrl.length - 20) : null
   });
   
-  // PRIORIDADE 1: MAGIC BYTES (100% CONFIÁVEL)
+  // PRIORIDADE 1: MIMETYPE DO PAYLOAD ORIGINAL (MAIS CONFIÁVEL QUE MAGIC BYTES EM DADOS CRIPTOGRAFADOS)
+  if (payloadMimetype) {
+    console.error('🎯 TENTANDO MIMETYPE DO PAYLOAD V3:', payloadMimetype);
+    if (payloadMimetype === 'image/png') {
+      console.error('✅ PNG DETECTADO POR MIMETYPE PAYLOAD V3!');
+      return { 
+        extension: 'png', 
+        contentType: 'image/png',
+        method: 'payload-mimetype'
+      };
+    }
+    if (payloadMimetype === 'image/jpeg' || payloadMimetype === 'image/jpg') {
+      console.error('✅ JPEG DETECTADO POR MIMETYPE PAYLOAD V3!');
+      return { 
+        extension: 'jpg', 
+        contentType: 'image/jpeg',
+        method: 'payload-mimetype'
+      };
+    }
+    if (payloadMimetype === 'image/webp') {
+      console.error('✅ WEBP DETECTADO POR MIMETYPE PAYLOAD V3!');
+      return { 
+        extension: 'webp', 
+        contentType: 'image/webp',
+        method: 'payload-mimetype'
+      };
+    }
+    if (payloadMimetype === 'image/gif') {
+      console.error('✅ GIF DETECTADO POR MIMETYPE PAYLOAD V3!');
+      return { 
+        extension: 'gif', 
+        contentType: 'image/gif',
+        method: 'payload-mimetype'
+      };
+    }
+  }
+  
+  // PRIORIDADE 2: MAGIC BYTES (FUNCIONA APENAS EM DADOS NÃO CRIPTOGRAFADOS)
   
   // PNG: 89 50 4E 47 0D 0A 1A 0A
   if (bytes.length >= 8 && 
@@ -567,7 +609,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
     };
   }
   
-  // PRIORIDADE 2: CONTENT-TYPE DO RESPONSE HTTP
+  // PRIORIDADE 3: CONTENT-TYPE DO RESPONSE HTTP
   if (responseContentType) {
     console.error('🔍 TENTANDO CONTENT-TYPE V3:', responseContentType);
     if (responseContentType.includes('image/png')) {
@@ -604,7 +646,7 @@ function detectImageFormat(buffer, responseContentType = null, originalUrl = nul
     }
   }
   
-  // PRIORIDADE 3: DETECÇÃO POR URL (FALLBACK)
+  // PRIORIDADE 4: DETECÇÃO POR URL (FALLBACK)
   if (originalUrl) {
     const urlLower = originalUrl.toLowerCase();
     if (urlLower.includes('.png') || urlLower.includes('png')) {
