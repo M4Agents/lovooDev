@@ -352,8 +352,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         try {
           // Verificando status...
           
-          // Buscar apenas a mensagem específica para verificar status
-          const messagesData = await chatApi.getMessages(conversationId, companyId, 0)
+          // Buscar apenas a mensagem específica para verificar status (usando mensagens recentes)
+          const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
           const sentMessage = messagesData?.find(m => m.id === messageId)
           
           if (sentMessage) {
