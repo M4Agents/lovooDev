@@ -1400,10 +1400,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
               <img
-                src={message.media_url}
+                src={`/api/chat-media/${message.media_url}`}
                 alt={message.content || 'Imagem'}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => window.open(message.media_url, '_blank')}
+                onClick={() => window.open(`/api/chat-media/${message.media_url}`, '_blank')}
                 onLoad={() => {}}
                 onError={() => console.error('Erro ao carregar imagem')}
               />
@@ -1417,7 +1417,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               {!videoErrors.has(message.id) ? (
                 <>
                   <video 
-                    src={getSafeVideoUrl(message.media_url) || message.media_url}
+                    src={`/api/chat-media/${message.media_url}`}
                     className="w-full h-auto rounded-md"
                     preload="metadata"
                     controls={expandedVideoId === message.id}
@@ -1476,7 +1476,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.media_url && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
             <div className="mb-1">
               <a
-                href={message.media_url}
+                href={`/api/chat-media/${message.media_url}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-blue-600 underline"
