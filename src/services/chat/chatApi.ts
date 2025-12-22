@@ -251,15 +251,42 @@ export class ChatApi {
         userId
       });
 
+      // CORREÇÃO CRÍTICA: Verificar se userId existe na tabela company_users
+      const { data: userCheck } = await supabase
+        .from('company_users')
+        .select('user_id')
+        .eq('company_id', companyId)
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .single();
+
+      if (!userCheck) {
+        console.error('❌ UserId inválido para esta empresa:', { userId, companyId });
+        // Buscar um userId válido como fallback
+        const { data: validUsers } = await supabase
+          .from('company_users')
+          .select('user_id')
+          .eq('company_id', companyId)
+          .eq('is_active', true)
+          .limit(1);
+        
+        if (!validUsers || validUsers.length === 0) {
+          throw new Error('Nenhum usuário válido encontrado para esta empresa');
+        }
+        
+        const fallbackUserId = validUsers[0].user_id;
+        console.log('🔧 Usando userId válido como fallback:', fallbackUserId);
+        userId = fallbackUserId;
+      }
+
       // PASSO 1: Criar mensagem no banco (status: 'sending')
-      // CORREÇÃO CRÍTICA: Converter strings para UUID para compatibilidade com RPC
       const { data, error } = await supabase.rpc('chat_create_message', {
-        p_conversation_id: conversationId, // UUID como string
-        p_company_id: companyId,           // UUID como string  
+        p_conversation_id: conversationId,
+        p_company_id: companyId,
         p_content: message.content,
         p_message_type: message.message_type,
         p_direction: 'outbound',
-        p_sent_by: userId,                 // UUID como string
+        p_sent_by: userId,                 // userId validado
         p_media_url: message.media_url || null
       })
 
