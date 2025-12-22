@@ -143,7 +143,7 @@ async function processMessage(payload) {
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id, company_id, companies(id, name, api_key)')
+      .select('id, company_id')
       .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
@@ -152,11 +152,16 @@ async function processMessage(payload) {
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    const company = instance.companies;
+    // Buscar empresa separadamente usando company_id da instância
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id, name, api_key')
+      .eq('id', instance.company_id)
+      .single();
     
     // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
-    if (!company) {
-      console.error('❌ EMPRESA NÃO ENCONTRADA para instância:', instanceName);
+    if (companyError || !company) {
+      console.error('❌ EMPRESA NÃO ENCONTRADA para instância:', instanceName, 'Error:', companyError);
       return { success: false, error: 'Empresa não encontrada para a instância: ' + instanceName };
     }
     
