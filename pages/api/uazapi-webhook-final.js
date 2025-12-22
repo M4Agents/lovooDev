@@ -185,24 +185,41 @@ async function processMessage(payload) {
           
           console.log('📁 Fazendo upload para Supabase Storage:', fileName);
           
-          // Upload para Supabase Storage
-          const { error: uploadError } = await supabase.storage
-            .from('chat-media')
-            .upload(fileName, buffer, {
-              contentType: contentType || undefined,
-              upsert: true
-            });
-          
-          if (uploadError) {
-            console.error('❌ Erro no upload:', uploadError);
-          } else {
-            // Obter URL pública
-            const { data: publicData } = supabase.storage
-              .from('chat-media')
-              .getPublicUrl(fileName);
+          // Upload para AWS S3
+          try {
+            const { S3Storage } = await import('../../src/services/aws');
             
-            processedMediaUrl = publicData?.publicUrl;
-            console.log('✅ MÍDIA PROCESSADA:', processedMediaUrl ? 'SUCESSO' : 'FALHOU');
+            // Usar company_id do instanceInfo
+            const companyId = instanceInfo.company_id;
+            
+            const uploadResult = await S3Storage.uploadToS3({
+              companyId: companyId,
+              messageId: uazapiMessageId || `msg-${Date.now()}`,
+              originalFileName: fileName,
+              buffer: buffer,
+              contentType: contentType || 'application/octet-stream',
+              source: 'whatsapp'
+            });
+            
+            if (!uploadResult.success || !uploadResult.data) {
+              console.error('❌ Erro no upload para S3:', uploadResult.error);
+            } else {
+              // Gerar signed URL para acesso
+              const signedUrlResult = await S3Storage.generateSignedUrl(
+                companyId,
+                uploadResult.data.s3Key,
+                { expiresIn: 7200 } // 2 horas
+              );
+              
+              if (signedUrlResult.success && signedUrlResult.data) {
+                processedMediaUrl = signedUrlResult.data;
+                console.log('✅ MÍDIA S3 PROCESSADA:', processedMediaUrl ? 'SUCESSO' : 'FALHOU');
+              } else {
+                console.error('❌ Erro ao gerar signed URL:', signedUrlResult.error);
+              }
+            }
+          } catch (s3Error) {
+            console.error('❌ Erro no processamento S3:', s3Error);
           }
         }
       } catch (error) {

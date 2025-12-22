@@ -1400,10 +1400,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">
               <img
-                src={`/api/chat-media/${message.media_url.split('/').pop()}`}
+                src={`/api/s3-media/${message.media_url.split('/').pop()}`}
                 alt={message.content || 'Imagem'}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => window.open(`/api/chat-media/${message.media_url.split('/').pop()}`, '_blank')}
+                onClick={() => window.open(`/api/s3-media/${message.media_url.split('/').pop()}`, '_blank')}
                 onLoad={() => {}}
                 onError={() => console.error('Erro ao carregar imagem')}
               />
@@ -1417,7 +1417,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               {!videoErrors.has(message.id) ? (
                 <>
                   <video 
-                    src={`/api/chat-media/${message.media_url.split('/').pop()}`}
+                    src={`/api/s3-media/${message.media_url.split('/').pop()}`}
                     className="w-full h-auto rounded-md"
                     preload="metadata"
                     controls={expandedVideoId === message.id}
@@ -1476,7 +1476,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.media_url && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
             <div className="mb-1">
               <a
-                href={`/api/chat-media/${message.media_url.split('/').pop()}`}
+                href={`/api/s3-media/${message.media_url.split('/').pop()}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-blue-600 underline"

@@ -441,25 +441,46 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     console.error('🔍 MAGIC BYTES FUNCIONANDO - CACHE MISS CONFIRMADO V3');
     console.error('📸 PNG DETECTADO:', extension === 'png' ? 'SIM' : 'NÃO');
     
-    // Upload para Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('chat-media')
-      .upload(fileName, mediaBuffer, {
-        contentType: contentType
+    // Upload para AWS S3
+    try {
+      const { S3Storage } = await import('../../src/services/aws');
+      
+      // Extrair company_id do contexto (assumindo que está disponível)
+      const companyId = message.instance?.company_id || 'default-company';
+      
+      const uploadResult = await S3Storage.uploadToS3({
+        companyId: companyId,
+        messageId: message.id || `msg-${Date.now()}`,
+        originalFileName: fileName,
+        buffer: mediaBuffer,
+        contentType: contentType,
+        source: 'whatsapp'
       });
-    
-    if (error) {
-      console.error('❌ Erro no upload para Supabase V3:', error);
+      
+      if (!uploadResult.success || !uploadResult.data) {
+        console.error('❌ Erro no upload para S3 V3:', uploadResult.error);
+        return originalUrl; // Fallback para URL original
+      }
+      
+      // Gerar signed URL para acesso
+      const signedUrlResult = await S3Storage.generateSignedUrl(
+        companyId,
+        uploadResult.data.s3Key,
+        { expiresIn: 7200 } // 2 horas
+      );
+      
+      if (!signedUrlResult.success || !signedUrlResult.data) {
+        console.error('❌ Erro ao gerar signed URL V3:', signedUrlResult.error);
+        return originalUrl; // Fallback para URL original
+      }
+      
+      console.log('✅ PROCESSAMENTO S3 CONCLUÍDO V3 - KEY:', uploadResult.data.s3Key);
+      return signedUrlResult.data;
+      
+    } catch (s3Error) {
+      console.error('❌ Erro no processamento S3 V3:', s3Error);
       return originalUrl; // Fallback para URL original
     }
-    
-    // Retornar URL pública estável
-    const { data: publicUrl } = supabase.storage
-      .from('chat-media')
-      .getPublicUrl(fileName);
-    
-    console.log('✅ PROCESSAMENTO CONCLUÍDO V3 - URL INTERNA:', publicUrl.publicUrl.substring(0, 80) + '...');
-    return publicUrl.publicUrl;
     
   } catch (error) {
     console.error('❌ EXCEPTION no processamento de mídia V3:', error);

@@ -4,7 +4,8 @@
 // Serviços de API isolados para o sistema de chat
 // NÃO MODIFICA api.ts existente
 
-import { supabase } from '../../lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import { Database } from '../../types/supabase'
 import type {
   ChatConversation,
   ChatMessage,
@@ -686,22 +687,48 @@ export class ChatApi {
     conversationId: string
   ): Promise<string> {
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${companyId}/${conversationId}/${Date.now()}.${fileExt}`
-
-      const { error } = await supabase.storage
-        .from('chat-media')
-        .upload(fileName, file)
-
-      if (error) throw error
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-media')
-        .getPublicUrl(fileName)
-
-      return publicUrl
+      console.log('🚀 Uploading media to S3:', { companyId, conversationId, fileName: file.name });
+      
+      // Import S3Storage dynamically
+      const { S3Storage } = await import('../aws');
+      
+      // Convert File to Buffer
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      // Detect content type
+      const contentType = S3Storage.detectContentType(buffer, file.name);
+      
+      // Upload to S3
+      const uploadResult = await S3Storage.uploadToS3({
+        companyId: companyId,
+        messageId: `frontend-${conversationId}-${Date.now()}`,
+        originalFileName: file.name,
+        buffer: buffer,
+        contentType: contentType,
+        source: 'frontend'
+      });
+      
+      if (!uploadResult.success || !uploadResult.data) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+      
+      // Generate signed URL for immediate use
+      const signedUrlResult = await S3Storage.generateSignedUrl(
+        companyId,
+        uploadResult.data.s3Key,
+        { expiresIn: 7200 } // 2 hours
+      );
+      
+      if (!signedUrlResult.success || !signedUrlResult.data) {
+        throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
+      }
+      
+      console.log('✅ Media uploaded to S3 successfully');
+      return signedUrlResult.data;
+      
     } catch (error) {
-      console.error('Error uploading media:', error)
+      console.error('❌ Error uploading media to S3:', error)
       throw error
     }
   }
