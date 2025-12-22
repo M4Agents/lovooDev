@@ -153,6 +153,13 @@ async function processMessage(payload) {
     }
     
     const company = instance.companies;
+    
+    // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
+    if (!company) {
+      console.error('❌ EMPRESA NÃO ENCONTRADA para instância:', instanceName);
+      return { success: false, error: 'Empresa não encontrada para a instância: ' + instanceName };
+    }
+    
     console.log('🏢 EMPRESA:', company.name);
     
     // Buscar nome do lead no cadastro
