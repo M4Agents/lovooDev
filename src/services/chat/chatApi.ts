@@ -686,8 +686,12 @@ export class ChatApi {
     conversationId: string
   ): Promise<string> {
     try {
-      // CORREÇÃO CRÍTICA: Usar endpoint backend para upload S3
-      // Não podemos importar AWS SDK no frontend
+      console.log('🚀 Uploading media via S3 endpoint:', { 
+        fileName: file.name, 
+        size: file.size,
+        companyId,
+        conversationId 
+      });
       
       const formData = new FormData();
       formData.append('file', file);
@@ -700,21 +704,29 @@ export class ChatApi {
       });
       
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ S3 upload failed:', response.status, errorText);
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
       }
       
       const result = await response.json();
       
       if (!result.success) {
+        console.error('❌ S3 upload error:', result.error);
         throw new Error(result.error || 'Upload failed');
       }
+      
+      console.log('✅ S3 upload successful:', {
+        url: result.url.substring(0, 100) + '...',
+        metadata: result.metadata
+      });
       
       return result.url;
       
     } catch (error) {
-      console.error('Error uploading media:', error);
+      console.error('❌ S3 upload failed, using fallback:', error);
       
-      // FALLBACK: Usar Supabase Storage temporariamente
+      // FALLBACK: Usar Supabase Storage em caso de erro S3
       try {
         console.log('🔄 Fallback: Usando Supabase Storage');
         
@@ -731,9 +743,11 @@ export class ChatApi {
           .from('chat-media')
           .getPublicUrl(fileName);
 
+        console.log('✅ Fallback Supabase upload successful');
         return publicUrl;
+        
       } catch (fallbackError) {
-        console.error('Fallback também falhou:', fallbackError);
+        console.error('❌ Fallback também falhou:', fallbackError);
         throw fallbackError;
       }
     }
