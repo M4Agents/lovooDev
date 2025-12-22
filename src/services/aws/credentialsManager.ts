@@ -2,14 +2,8 @@
 // Created: 2025-12-22
 // Purpose: Manage AWS credentials securely from Supabase database
 
-import { createClient } from '@supabase/supabase-js';
 import { AWSCredentials, S3OperationResult } from './types';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Service role client for backend operations
-const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
+import { supabase } from '../../lib/supabase';
 
 export class CredentialsManager {
   /**
@@ -19,7 +13,7 @@ export class CredentialsManager {
     try {
       console.log('🔐 Buscando credenciais AWS para company:', companyId);
 
-      const { data, error } = await supabaseService
+      const { data, error } = await supabase
         .from('aws_credentials')
         .select('*')
         .eq('company_id', companyId)
@@ -73,13 +67,13 @@ export class CredentialsManager {
       console.log('🔐 Atualizando credenciais AWS para company:', companyId);
 
       // First, deactivate any existing credentials
-      await supabaseService
+      await supabase
         .from('aws_credentials')
         .update({ is_active: false })
         .eq('company_id', companyId);
 
       // Insert new credentials
-      const { data, error } = await supabaseService
+      const { data, error } = await supabase
         .from('aws_credentials')
         .insert({
           company_id: companyId,
@@ -158,7 +152,7 @@ export class CredentialsManager {
    */
   static async getAllCredentials(companyId: string): Promise<S3OperationResult<AWSCredentials[]>> {
     try {
-      const { data, error } = await supabaseService
+      const { data, error } = await supabase
         .from('aws_credentials')
         .select('*')
         .eq('company_id', companyId)
