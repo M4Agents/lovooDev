@@ -252,13 +252,14 @@ export class ChatApi {
       });
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
+      // CORREÇÃO CRÍTICA: Converter strings para UUID para compatibilidade com RPC
       const { data, error } = await supabase.rpc('chat_create_message', {
-        p_conversation_id: conversationId,
-        p_company_id: companyId,
+        p_conversation_id: conversationId, // UUID como string
+        p_company_id: companyId,           // UUID como string  
         p_content: message.content,
         p_message_type: message.message_type,
         p_direction: 'outbound',
-        p_sent_by: userId,
+        p_sent_by: userId,                 // UUID como string
         p_media_url: message.media_url || null
       })
 
