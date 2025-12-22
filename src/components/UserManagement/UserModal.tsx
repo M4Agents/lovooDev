@@ -98,65 +98,41 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         filePath: filePath
       });
 
-      // Upload para AWS S3
-      try {
-        const { S3Storage } = await import('../../services/aws');
-        
-        // Get user's company_id (assuming it's available in context)
-        const companyId = user?.company_id || 'default-company';
-        
-        // Convert File to Buffer
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
-        // Detect content type
-        const contentType = S3Storage.detectContentType(buffer, file.name);
-        
-        console.log('🔧 Upload Debug: Starting S3 upload', {
-          companyId,
-          fileName: file.name,
-          contentType,
-          size: buffer.length
+      // CORREÇÃO CRÍTICA: Usar Supabase Storage (AWS SDK não funciona no frontend)
+      console.log('🔧 Upload Debug: Using Supabase Storage');
+      
+      // Upload para Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('user-profiles')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
         });
-        
-        // Upload to S3
-        const uploadResult = await S3Storage.uploadToS3({
-          companyId: companyId,
-          messageId: `profile-${Date.now()}`,
-          originalFileName: file.name,
-          buffer: buffer,
-          contentType: contentType,
-          source: 'profile'
+
+      console.log('🔧 Upload Debug: Upload result', {
+        success: !error,
+        data: data,
+        error: error
+      });
+
+      if (error) {
+        console.error('🔧 Upload Error Details:', {
+          message: error.message,
+          error: error
         });
-        
-        if (!uploadResult.success || !uploadResult.data) {
-          console.error('🔧 S3 Upload Error:', uploadResult.error);
-          throw new Error(uploadResult.error || 'Upload failed');
-        }
-        
-        // Generate signed URL for immediate use
-        const signedUrlResult = await S3Storage.generateSignedUrl(
-          companyId,
-          uploadResult.data.s3Key,
-          { expiresIn: 7200 } // 2 hours
-        );
-        
-        if (!signedUrlResult.success || !signedUrlResult.data) {
-          console.error('🔧 Signed URL Error:', signedUrlResult.error);
-          throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
-        }
-        
-        console.log('🔧 Upload Debug: S3 upload successful', {
-          s3Key: uploadResult.data.s3Key,
-          signedUrl: signedUrlResult.data.substring(0, 100) + '...'
-        });
-        
-        return signedUrlResult.data;
-        
-      } catch (s3Error) {
-        console.error('🔧 S3 Upload Error: Complete error details:', s3Error);
-        throw s3Error;
+        throw error;
       }
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-profiles')
+        .getPublicUrl(filePath);
+
+      console.log('🔧 Upload Debug: Public URL generated', {
+        publicUrl: publicUrl
+      });
+
+      return publicUrl;
     } catch (error) {
       console.error('🔧 Upload Error: Complete error details:', {
         error: error,

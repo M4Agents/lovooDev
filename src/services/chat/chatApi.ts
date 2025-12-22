@@ -6,6 +6,11 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { Database } from '../../types/supabase'
+
+// Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 import type {
   ChatConversation,
   ChatMessage,
@@ -687,49 +692,56 @@ export class ChatApi {
     conversationId: string
   ): Promise<string> {
     try {
-      console.log('🚀 Uploading media to S3:', { companyId, conversationId, fileName: file.name });
+      // CORREÇÃO CRÍTICA: Usar endpoint backend para upload S3
+      // Não podemos importar AWS SDK no frontend
       
-      // Import S3Storage dynamically
-      const { S3Storage } = await import('../aws');
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('companyId', companyId);
+      formData.append('conversationId', conversationId);
       
-      // Convert File to Buffer
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      
-      // Detect content type
-      const contentType = S3Storage.detectContentType(buffer, file.name);
-      
-      // Upload to S3
-      const uploadResult = await S3Storage.uploadToS3({
-        companyId: companyId,
-        messageId: `frontend-${conversationId}-${Date.now()}`,
-        originalFileName: file.name,
-        buffer: buffer,
-        contentType: contentType,
-        source: 'frontend'
+      const response = await fetch('/api/upload-media', {
+        method: 'POST',
+        body: formData
       });
       
-      if (!uploadResult.success || !uploadResult.data) {
-        throw new Error(uploadResult.error || 'Upload failed');
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
       }
       
-      // Generate signed URL for immediate use
-      const signedUrlResult = await S3Storage.generateSignedUrl(
-        companyId,
-        uploadResult.data.s3Key,
-        { expiresIn: 7200 } // 2 hours
-      );
+      const result = await response.json();
       
-      if (!signedUrlResult.success || !signedUrlResult.data) {
-        throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
       }
       
-      console.log('✅ Media uploaded to S3 successfully');
-      return signedUrlResult.data;
+      return result.url;
       
     } catch (error) {
-      console.error('❌ Error uploading media to S3:', error)
-      throw error
+      console.error('Error uploading media:', error);
+      
+      // FALLBACK: Usar Supabase Storage temporariamente
+      try {
+        console.log('🔄 Fallback: Usando Supabase Storage');
+        
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${companyId}/${conversationId}/${Date.now()}.${fileExt}`;
+
+        const { error } = await supabase.storage
+          .from('chat-media')
+          .upload(fileName, file);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('chat-media')
+          .getPublicUrl(fileName);
+
+        return publicUrl;
+      } catch (fallbackError) {
+        console.error('Fallback também falhou:', fallbackError);
+        throw fallbackError;
+      }
     }
   }
 
