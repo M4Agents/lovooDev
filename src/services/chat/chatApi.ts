@@ -303,11 +303,14 @@ export class ChatApi {
         throw error
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao criar mensagem')
+      if (!data || !data.success) {
+        console.error('❌ RPC falhou:', data);
+        throw new Error(data?.error || 'Erro ao criar mensagem')
       }
 
-      const messageId = data.message_id
+      // CORREÇÃO CRÍTICA: Retornar message_id do RPC em vez de data vazio
+      const messageId = data.message_id || `temp-${Date.now()}`;
+      console.log('✅ Mensagem criada com sucesso:', messageId);
       // Mensagem criada no banco
 
       // PASSO 2: Enviar via Uazapi de forma assíncrona (não bloqueia UI)

@@ -1416,8 +1416,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 alt={message.content || 'Imagem'}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(message.media_url, '_blank')}
-                onLoad={() => {}}
-                onError={() => console.error('Erro ao carregar imagem')}
+                onLoad={() => console.log('✅ Imagem carregada:', message.media_url?.substring(0, 50) + '...')}
+                onError={(e) => {
+                  console.error('❌ Erro ao carregar imagem:', {
+                    url: message.media_url?.substring(0, 50) + '...',
+                    error: e,
+                    messageId: message.id
+                  });
+                }}
               />
             </div>
           )}
