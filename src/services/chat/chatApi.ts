@@ -686,49 +686,67 @@ export class ChatApi {
     conversationId: string
   ): Promise<string> {
     try {
-      console.log('🚀 Uploading media via S3 endpoint:', { 
+      console.log('🚀 Uploading media directly to S3:', { 
         fileName: file.name, 
         size: file.size,
         companyId,
         conversationId 
       });
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('companyId', companyId);
-      formData.append('conversationId', conversationId);
-      
-      const response = await fetch('/api/upload-media', {
-        method: 'POST',
-        body: formData
+
+      // Convert File to ArrayBuffer then to Buffer
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = new Uint8Array(arrayBuffer);
+
+      // Import S3Storage dynamically to avoid issues
+      const { S3Storage } = await import('../../services/aws');
+
+      // Detect content type
+      const contentType = S3Storage.detectContentType(buffer, file.name);
+      console.log('🔍 Content type detected:', contentType);
+
+      // Generate message ID
+      const messageId = `frontend-${conversationId}-${Date.now()}`;
+
+      // Upload to S3
+      console.log('🚀 Starting S3 upload...');
+      const uploadResult = await S3Storage.uploadToS3({
+        companyId: companyId,
+        messageId: messageId,
+        originalFileName: file.name,
+        buffer: buffer,
+        contentType: contentType,
+        source: 'frontend'
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ S3 upload failed:', response.status, errorText);
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+
+      if (!uploadResult.success || !uploadResult.data) {
+        console.error('❌ S3 upload failed:', uploadResult.error);
+        throw new Error(uploadResult.error || 'S3 upload failed');
       }
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        console.error('❌ S3 upload error:', result.error);
-        throw new Error(result.error || 'Upload failed');
+
+      // Generate signed URL for immediate use
+      console.log('🔗 Generating signed URL...');
+      const signedUrlResult = await S3Storage.generateSignedUrl(
+        companyId,
+        uploadResult.data.s3Key,
+        { expiresIn: 7200 } // 2 hours
+      );
+
+      if (!signedUrlResult.success || !signedUrlResult.data) {
+        console.error('❌ Failed to generate signed URL:', signedUrlResult.error);
+        throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
       }
-      
+
       console.log('✅ S3 upload successful:', {
-        url: result.url.substring(0, 100) + '...',
-        metadata: result.metadata
+        s3Key: uploadResult.data.s3Key,
+        size: uploadResult.data.sizeBytes,
+        url: signedUrlResult.data.substring(0, 100) + '...'
       });
-      
-      return result.url;
+
+      return signedUrlResult.data;
       
     } catch (error) {
       console.error('❌ S3 upload failed:', error);
-      
-      // NÃO USAR FALLBACK SUPABASE STORAGE
-      // Sistema deve usar APENAS S3 para mídias do chat
-      throw new Error(`S3 upload failed: ${error.message}. Sistema configurado para usar apenas S3.`);
+      throw new Error(`S3 upload failed: ${error.message}`);
     }
   }
 
