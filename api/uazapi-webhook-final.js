@@ -153,11 +153,19 @@ async function processMessage(payload) {
     }
     
     // Buscar empresa separadamente usando company_id da instância
+    console.log('🔍 Buscando empresa com company_id:', instance.company_id);
+    
     const { data: company, error: companyError } = await supabase
       .from('companies')
       .select('id, name, api_key')
       .eq('id', instance.company_id)
       .single();
+      
+    console.log('🏢 Resultado da busca empresa:', {
+      company: company,
+      error: companyError,
+      company_id_usado: instance.company_id
+    });
     
     // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
     if (companyError || !company) {
