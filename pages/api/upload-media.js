@@ -2,7 +2,7 @@
 // Created: 2025-12-22
 // Purpose: Backend endpoint for S3 media uploads (called from frontend)
 
-import { S3Storage } from '../../services/aws';
+import { S3Storage } from '../../src/services/aws';
 import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
 import formidable from 'formidable';
 import fs from 'fs';
