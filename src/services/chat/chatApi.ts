@@ -697,8 +697,8 @@ export class ChatApi {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = new Uint8Array(arrayBuffer);
 
-      // Import S3Storage dynamically to avoid issues
-      const { S3Storage } = await import('../../services/aws');
+      // Import S3Storage statically - dynamic imports don't work well with classes in Vite
+      const { S3Storage } = await import('../../services/aws/s3Storage');
 
       // Detect content type
       const contentType = S3Storage.detectContentType(buffer, file.name);
