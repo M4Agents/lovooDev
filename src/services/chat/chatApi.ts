@@ -4,13 +4,7 @@
 // Serviços de API isolados para o sistema de chat
 // NÃO MODIFICA api.ts existente
 
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '../../types/supabase'
-
-// Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { supabase } from '../../lib/supabase'
 import type {
   ChatConversation,
   ChatMessage,
