@@ -14,6 +14,8 @@ export default async function handler(req, res) {
 
   try {
     console.log('🚀 Upload media endpoint called');
+    console.log('📋 Request method:', req.method);
+    console.log('📋 Content-Type:', req.headers['content-type']);
 
     // Create Supabase client for authentication
     const supabase = createServerSupabaseClient({ req, res });
@@ -26,16 +28,17 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    // Get user's company_id
+    // Get user's company_id from team_members table
     const { data: userData, error: userError } = await supabase
-      .from('users')
+      .from('team_members')
       .select('company_id')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
       .single();
 
     if (userError || !userData) {
-      console.error('❌ User data not found:', userError);
-      return res.status(403).json({ success: false, error: 'User data not found' });
+      console.error('❌ Team member data not found:', userError);
+      return res.status(403).json({ success: false, error: 'User company not found' });
     }
 
     const companyId = userData.company_id;

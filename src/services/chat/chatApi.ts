@@ -724,32 +724,11 @@ export class ChatApi {
       return result.url;
       
     } catch (error) {
-      console.error('❌ S3 upload failed, using fallback:', error);
+      console.error('❌ S3 upload failed:', error);
       
-      // FALLBACK: Usar Supabase Storage em caso de erro S3
-      try {
-        console.log('🔄 Fallback: Usando Supabase Storage');
-        
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${companyId}/${conversationId}/${Date.now()}.${fileExt}`;
-
-        const { error } = await supabase.storage
-          .from('chat-media')
-          .upload(fileName, file);
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('chat-media')
-          .getPublicUrl(fileName);
-
-        console.log('✅ Fallback Supabase upload successful');
-        return publicUrl;
-        
-      } catch (fallbackError) {
-        console.error('❌ Fallback também falhou:', fallbackError);
-        throw fallbackError;
-      }
+      // NÃO USAR FALLBACK SUPABASE STORAGE
+      // Sistema deve usar APENAS S3 para mídias do chat
+      throw new Error(`S3 upload failed: ${error.message}. Sistema configurado para usar apenas S3.`);
     }
   }
 
