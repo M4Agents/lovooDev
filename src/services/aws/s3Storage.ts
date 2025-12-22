@@ -43,25 +43,35 @@ export class S3Storage {
    */
   static async uploadToS3(options: UploadToS3Options): Promise<S3OperationResult<S3UploadResult>> {
     try {
-      console.log('🚀 Iniciando upload para S3:', {
+      console.log('🚀 S3Storage.uploadToS3 - Iniciando upload:', {
         companyId: options.companyId,
         filename: options.originalFileName,
         size: options.buffer.length,
-        contentType: options.contentType
+        contentType: options.contentType,
+        source: options.source,
+        messageId: options.messageId
       });
 
       // Get S3 client
+      console.log('🔧 S3Storage - Obtendo S3 client para company:', options.companyId);
       const clientResult = await S3ClientFactory.getClient(options.companyId);
+      
       if (!clientResult.success || !clientResult.data) {
+        console.error('❌ S3Storage - Falha ao obter S3 client:', clientResult.error);
         return {
           success: false,
           error: clientResult.error || 'Erro ao obter S3 client'
         };
       }
+      
+      console.log('✅ S3Storage - S3 client obtido com sucesso');
 
       // Get credentials for bucket info
+      console.log('🔧 S3Storage - Obtendo credenciais AWS para company:', options.companyId);
       const credentialsResult = await CredentialsManager.getCredentials(options.companyId);
+      
       if (!credentialsResult.success || !credentialsResult.data) {
+        console.error('❌ S3Storage - Falha ao obter credenciais:', credentialsResult.error);
         return {
           success: false,
           error: credentialsResult.error || 'Erro ao obter credenciais'
@@ -70,8 +80,16 @@ export class S3Storage {
 
       const credentials = credentialsResult.data;
       const s3Client = clientResult.data;
+      
+      console.log('✅ S3Storage - Credenciais obtidas:', {
+        bucket: credentials.bucket,
+        region: credentials.region,
+        hasAccessKey: !!credentials.access_key_id,
+        hasSecretKey: !!credentials.secret_access_key
+      });
 
       // Generate S3 key
+      console.log('🔧 S3Storage - Gerando S3 key...');
       const s3Key = this.generateS3Key({
         companyId: options.companyId,
         type: options.source === 'profile' ? 'profiles' : 'whatsapp',
@@ -79,9 +97,10 @@ export class S3Storage {
         filename: options.originalFileName
       });
 
-      console.log('🔑 S3 Key gerada:', s3Key);
+      console.log('✅ S3Storage - S3 Key gerada:', s3Key);
 
       // Prepare upload command
+      console.log('🔧 S3Storage - Preparando comando de upload...');
       const uploadCommand = new PutObjectCommand({
         Bucket: credentials.bucket,
         Key: s3Key,
@@ -96,12 +115,22 @@ export class S3Storage {
         }
       });
 
-      // Execute upload
-      const uploadResult = await s3Client.send(uploadCommand);
-      console.log('✅ Upload S3 concluído:', {
+      console.log('✅ S3Storage - Comando preparado:', {
         bucket: credentials.bucket,
         key: s3Key,
-        etag: uploadResult.ETag
+        contentType: options.contentType,
+        bodySize: options.buffer.length
+      });
+
+      // Execute upload
+      console.log('🚀 S3Storage - Executando upload para S3...');
+      const uploadResult = await s3Client.send(uploadCommand);
+      
+      console.log('✅ S3Storage - Upload S3 concluído com sucesso!', {
+        bucket: credentials.bucket,
+        key: s3Key,
+        etag: uploadResult.ETag,
+        location: uploadResult.Location
       });
 
       return {
@@ -118,7 +147,17 @@ export class S3Storage {
       };
 
     } catch (error: any) {
-      console.error('❌ Erro no upload S3:', error);
+      console.error('❌ S3Storage - ERRO CRÍTICO no upload S3:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        statusCode: error.$metadata?.httpStatusCode,
+        requestId: error.$metadata?.requestId,
+        stack: error.stack
+      });
+      
+      console.error('❌ S3Storage - Detalhes completos do erro:', error);
+      
       return {
         success: false,
         error: `Erro no upload S3: ${error.message}`,
