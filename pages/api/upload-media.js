@@ -16,6 +16,7 @@ export default async function handler(req, res) {
     console.log('🚀 Upload media endpoint called');
     console.log('📋 Request method:', req.method);
     console.log('📋 Content-Type:', req.headers['content-type']);
+    console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
 
     // Create Supabase client for authentication
     const supabase = createServerSupabaseClient({ req, res });
@@ -25,8 +26,11 @@ export default async function handler(req, res) {
 
     if (authError || !user) {
       console.error('❌ Authentication failed:', authError);
+      console.error('❌ Auth error details:', JSON.stringify(authError, null, 2));
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
+
+    console.log('✅ User authenticated successfully:', user.id);
 
     // Get user's company_id from team_members table
     const { data: userData, error: userError } = await supabase
@@ -38,11 +42,14 @@ export default async function handler(req, res) {
 
     if (userError || !userData) {
       console.error('❌ Team member data not found:', userError);
+      console.error('❌ User error details:', JSON.stringify(userError, null, 2));
+      console.error('❌ User ID searched:', user.id);
       return res.status(403).json({ success: false, error: 'User company not found' });
     }
 
     const companyId = userData.company_id;
-    console.log('🏢 Company ID:', companyId);
+    console.log('🏢 Company ID found:', companyId);
+    console.log('🏢 User data:', JSON.stringify(userData, null, 2));
 
     // Parse form data
     const form = formidable({
@@ -50,36 +57,60 @@ export default async function handler(req, res) {
       keepExtensions: true,
     });
 
+    console.log('📋 Parsing form data...');
     const [fields, files] = await form.parse(req);
+    
+    console.log('📋 Form parsed - Fields:', JSON.stringify(fields, null, 2));
+    console.log('📋 Form parsed - Files:', JSON.stringify(Object.keys(files), null, 2));
     
     const file = Array.isArray(files.file) ? files.file[0] : files.file;
     const conversationId = Array.isArray(fields.conversationId) ? fields.conversationId[0] : fields.conversationId;
 
     if (!file) {
+      console.error('❌ No file provided in request');
       return res.status(400).json({ success: false, error: 'No file provided' });
     }
 
     console.log('📁 File received:', {
       originalFilename: file.originalFilename,
       size: file.size,
-      mimetype: file.mimetype
+      mimetype: file.mimetype,
+      filepath: file.filepath
     });
+    console.log('📁 Conversation ID:', conversationId);
 
     // Read file buffer
+    console.log('📖 Reading file buffer from:', file.filepath);
     const buffer = fs.readFileSync(file.filepath);
+    console.log('📖 Buffer read successfully, size:', buffer.length);
 
     // Detect content type
+    console.log('🔍 Detecting content type...');
     const contentType = S3Storage.detectContentType(buffer, file.originalFilename || 'unknown');
+    console.log('🔍 Content type detected:', contentType);
 
-    // Upload to S3
-    const uploadResult = await S3Storage.uploadToS3({
+    // Prepare S3 upload parameters
+    const messageId = `frontend-${conversationId}-${Date.now()}`;
+    const uploadParams = {
       companyId: companyId,
-      messageId: `frontend-${conversationId}-${Date.now()}`,
+      messageId: messageId,
       originalFileName: file.originalFilename || 'unknown',
       buffer: buffer,
       contentType: contentType,
       source: 'frontend'
+    };
+    
+    console.log('🚀 Starting S3 upload with params:', {
+      companyId,
+      messageId,
+      originalFileName: file.originalFilename,
+      contentType,
+      bufferSize: buffer.length,
+      source: 'frontend'
     });
+
+    // Upload to S3
+    const uploadResult = await S3Storage.uploadToS3(uploadParams);
 
     // Clean up temp file
     fs.unlinkSync(file.filepath);
