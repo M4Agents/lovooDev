@@ -242,7 +242,14 @@ export class ChatApi {
     userId: string
   ): Promise<string> {
     try {
-      // Enviando mensagem...
+      console.log('💾 chatApi.sendMessage recebeu:', {
+        conversationId,
+        companyId,
+        content: message.content,
+        message_type: message.message_type,
+        media_url: message.media_url ? message.media_url.substring(0, 50) + '...' : null,
+        userId
+      });
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
@@ -254,6 +261,12 @@ export class ChatApi {
         p_sent_by: userId,
         p_media_url: message.media_url || null
       })
+
+      console.log('💾 Resultado do chat_create_message:', {
+        success: !error,
+        data: data,
+        error: error
+      });
 
       // Processando envio...
 

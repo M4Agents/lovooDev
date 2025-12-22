@@ -304,6 +304,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSendMessage = async (messageForm: SendMessageForm) => {
     if (!messageForm.content.trim() && !messageForm.media_url) return
 
+    console.log('📤 handleSendMessage recebeu:', {
+      content: messageForm.content,
+      message_type: messageForm.message_type,
+      media_url: messageForm.media_url ? messageForm.media_url.substring(0, 50) + '...' : null
+    });
+
     // 1. Criar mensagem local imediatamente (UX instantâneo)
     const tempMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
@@ -698,6 +704,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const isVideo = mimeType.startsWith('video/')
       
       // Enviar mensagem com legenda usando função existente
+      console.log('🔗 Enviando mensagem com media_url:', {
+        content: captionMessage.trim() || previewFile.name,
+        message_type: isVideo ? 'video' : (isImage ? 'image' : 'document'),
+        media_url: mediaUrl
+      });
+      
       handleSendMessage({
         content: captionMessage.trim() || previewFile.name,
         message_type: isVideo ? 'video' : (isImage ? 'image' : 'document'),
