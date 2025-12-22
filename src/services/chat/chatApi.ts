@@ -279,11 +279,22 @@ export class ChatApi {
         userId = fallbackUserId;
       }
 
+      // CORREÇÃO CRÍTICA: Truncar content para evitar erro "value too long for character varying(500)"
+      const truncatedContent = message.content.length > 450 
+        ? message.content.substring(0, 447) + '...' 
+        : message.content;
+
+      console.log('📝 Content truncado:', {
+        original: message.content.length,
+        truncated: truncatedContent.length,
+        content: truncatedContent
+      });
+
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
         p_conversation_id: conversationId,
         p_company_id: companyId,
-        p_content: message.content,
+        p_content: truncatedContent,        // Content truncado para evitar erro SQL
         p_message_type: message.message_type,
         p_direction: 'outbound',
         p_sent_by: userId,                 // userId validado
