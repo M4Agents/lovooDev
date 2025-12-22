@@ -152,20 +152,26 @@ async function processMessage(payload) {
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
     
-    // Buscar empresa separadamente usando company_id da instância
-    console.log('🔍 Buscando empresa com company_id:', instance.company_id);
+    // Buscar empresa usando função SECURITY DEFINER (bypass RLS)
+    console.log('🔍 Buscando empresa com company_id via SECURITY DEFINER:', instance.company_id);
     
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .select('id, name, api_key')
-      .eq('id', instance.company_id)
-      .single();
+    const { data: companyResult, error: companyError } = await supabase
+      .rpc('webhook_get_company_by_id', {
+        p_company_id: instance.company_id
+      });
       
-    console.log('🏢 Resultado da busca empresa:', {
-      company: company,
+    console.log('🏢 Resultado da busca empresa via RPC:', {
+      result: companyResult,
       error: companyError,
       company_id_usado: instance.company_id
     });
+    
+    // Extrair dados da empresa do resultado da função
+    const company = companyResult?.success ? {
+      id: companyResult.id,
+      name: companyResult.name,
+      api_key: companyResult.api_key
+    } : null;
     
     // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
     if (companyError || !company) {
