@@ -225,7 +225,7 @@ async function processMessage(payload) {
             console.error('📦 AWS S3 DIRETO: Mídia baixada, tamanho:', mediaBuffer.length, 'bytes');
             
             // Detectar formato e gerar nome do arquivo (mesmo sistema do frontend)
-            const { S3Storage } = await import('../src/services/aws/s3Storage');
+            const { S3Storage } = await import('./src/services/aws/s3Storage');
             const contentType = S3Storage.detectContentType(mediaBuffer, 'media');
             const extension = contentType.split('/')[1] || 'bin';
             const fileName = `whatsapp_${Date.now()}_${message.id.substring(0, 8)}.${extension}`;
