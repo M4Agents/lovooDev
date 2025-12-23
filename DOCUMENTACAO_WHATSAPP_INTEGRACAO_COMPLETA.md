@@ -4,12 +4,12 @@
 
 Sistema de integração WhatsApp implementado no LovoCRM usando **Uazapi** como provider principal.
 
-### **✅ STATUS ATUAL (06/12/2025)**
-- **Versão**: V2.0.0 + Chat Completo + Preview de Mídia
+### **✅ STATUS ATUAL (22/12/2025)**
+- **Versão**: V3.0.0 + RLS Seguro + Webhooks Corrigidos
 - **Ambiente**: Produção (https://app.lovoocrm.com/)
-- **Status**: 100% Funcional e Testado
+- **Status**: 100% Funcional com Segurança RLS Ativa
 - **Provider**: Uazapi (API não oficial premium)
-- **Novidades**: Sistema de chat com preview de imagens e vídeos
+- **Novidades**: Sistema seguro com RLS + correção de duplicidade + SECURITY DEFINER
 
 ---
 
@@ -80,12 +80,26 @@ NUNCA: Frontend → API Externa (CORS BLOCK)
 - Histórico completo de conversas
 - Interface responsiva e moderna
 
-### **8. ✅ Preview de Mídia (NOVO)**
+### **8. ✅ Preview de Mídia**
 - **Imagens**: PNG, JPG, WebP com preview automático
 - **Vídeos**: MP4, WebM com player integrado
 - **Descriptografia**: URLs do WhatsApp processadas via Uazapi
 - **Supabase Storage**: Armazenamento seguro de arquivos
 - **Formato preservado**: PNG mantido como PNG, MP4 como MP4
+
+### **9. ✅ Segurança RLS Implementada (NOVO 22/12/2025)**
+- **Row Level Security**: Ativo em todas as tabelas de chat
+- **Isolamento por empresa**: Dados protegidos por políticas RLS
+- **Webhooks seguros**: SECURITY DEFINER para bypass controlado
+- **Função segura**: `webhook_get_company_by_id()` para acesso controlado
+- **Duplicidade eliminada**: Webhook standby para evitar processamento duplo
+
+### **10. ✅ Sistema de Webhooks Robusto (ATUALIZADO 22/12/2025)**
+- **Webhook principal**: `/api/uazapi-webhook-final` com SECURITY DEFINER
+- **Webhook standby**: `/api/webhook/uazapi` preservado mas inativo
+- **Erro PGRST116 resolvido**: Empresa encontrada via função segura
+- **Processamento único**: Eliminada duplicidade de mensagens
+- **RLS compatível**: Funciona com Row Level Security ativo
 
 ---
 
