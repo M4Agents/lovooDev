@@ -218,21 +218,11 @@ async function processMessage(payload) {
           console.error('🚀 AWS S3 DIRETO: Fazendo download da URL temporária...');
           console.error('🔗 URL temporária WhatsApp:', originalUrl.substring(0, 100) + '...');
           
-          // CORREÇÃO FINAL: Download com headers adequados para evitar corrupção
-          const mediaResponse = await fetch(originalUrl, {
-            headers: {
-              'User-Agent': 'WhatsApp/2.0',
-              'Accept': '*/*',
-              'Accept-Encoding': 'identity',
-              'Cache-Control': 'no-cache'
-            },
-            timeout: 30000
-          });
-          
+          // Download direto da URL temporária (sem descriptografia)
+          const mediaResponse = await fetch(originalUrl);
           if (mediaResponse.ok) {
             const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-            console.error('📦 AWS S3 DIRETO: Mídia baixada com headers corretos, tamanho:', mediaBuffer.length, 'bytes');
-            console.error('🔧 CORREÇÃO APLICADA: Headers adequados para evitar corrupção do arquivo');
+            console.error('📦 AWS S3 DIRETO: Mídia baixada, tamanho:', mediaBuffer.length, 'bytes');
             
             // Detectar formato e gerar nome do arquivo (CORREÇÃO: usar mimetype do payload)
             const { S3Storage } = await import('../src/services/aws/s3Storage.js');
