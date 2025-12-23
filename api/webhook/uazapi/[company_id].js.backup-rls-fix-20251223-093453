@@ -186,9 +186,6 @@ async function processMessage(payload) {
       messageText = message.content;
     }
 
-    // 🎬 PROCESSAMENTO DE MÍDIA ANTES DO RPC - CORREÇÃO CRÍTICA
-    let finalMediaUrl = null;
-    
     if (isMediaMessage) {
       console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
       
@@ -197,52 +194,16 @@ async function processMessage(payload) {
       console.error('🔗 URL DE MÍDIA ENCONTRADA:', originalUrl ? originalUrl.substring(0, 100) + '...' : 'NENHUMA URL');
       
       if (originalUrl) {
-        console.error('🎬 PROCESSANDO MÍDIA ANTES DO RPC:', { mediaUrl: originalUrl.substring(0, 80) + '...' });
-        
-        // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA
-        if (message && message.id && originalUrl.includes('whatsapp.net')) {
-          try {
-            console.error('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI:', message.id);
-            const uazapiResponse = await fetch('https://lovoo.uazapi.com/message/download', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: message.id })
-            });
-            
-            if (uazapiResponse.ok) {
-              const uazapiData = await uazapiResponse.json();
-              if (uazapiData.fileURL) {
-                console.error('✅ URL DESCRIPTOGRAFADA OBTIDA VIA UAZAPI');
-                finalMediaUrl = uazapiData.fileURL;
-              } else {
-                console.error('⚠️ UAZAPI NÃO RETORNOU fileURL - usando processamento robusto');
-                finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-              }
-            } else {
-              console.error('⚠️ ERRO NA DESCRIPTOGRAFIA UAZAPI - usando processamento robusto');
-              finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-            }
-          } catch (decryptError) {
-            console.error('❌ ERRO NA DESCRIPTOGRAFIA:', decryptError);
-            console.error('🔄 FALLBACK: usando processamento robusto');
-            finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-          }
-        } else {
-          console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
-          finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-        }
-        
-        console.error('✅ MÍDIA PROCESSADA - URL FINAL:', finalMediaUrl ? 'SUCESSO' : 'FALHOU');
+        console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
+        mediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
+        console.error('✅ RESULTADO PROCESSAMENTO:', mediaUrl ? 'SUCESSO' : 'FALHOU');
       } else {
         console.error('❌ NENHUMA URL DE MÍDIA ENCONTRADA');
-        finalMediaUrl = null;
+        mediaUrl = null;
       }
     } else {
       console.error('⚠️ MENSAGEM NÃO É MÍDIA - PULANDO PROCESSAMENTO');
     }
-    
-    // Usar URL processada para o RPC
-    mediaUrl = finalMediaUrl;
     const messageId = message.id;
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
@@ -288,7 +249,6 @@ async function processMessage(payload) {
     
     // USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
     console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
-    console.error('📎 MÍDIA URL FINAL PARA RPC:', mediaUrl ? mediaUrl.substring(0, 100) + '...' : 'NULL');
     
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
