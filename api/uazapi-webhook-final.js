@@ -61,6 +61,12 @@ async function processMessage(payload) {
       }
     );
     
+    // 🔍 LOG IDENTIFICADOR DE VERSÃO - INVESTIGAÇÃO DE DEPLOY
+    const versionTimestamp = '2025-12-23 08:47:00';
+    console.log('🚀 WEBHOOK FINAL EXECUTANDO - VERSÃO:', versionTimestamp);
+    console.log('🔍 INVESTIGAÇÃO: Verificando se código corrigido está ativo');
+    console.log('📝 CORREÇÃO ESPERADA: Processamento de mídia antes do RPC');
+    
     console.log('🔑 SUPABASE CONECTADO - WEBHOOK CONVERTIDO PARA USAR SECURITY DEFINER');
     
     // Validações básicas
