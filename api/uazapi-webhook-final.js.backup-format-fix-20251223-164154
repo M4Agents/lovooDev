@@ -224,23 +224,11 @@ async function processMessage(payload) {
             const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
             console.error('📦 AWS S3 DIRETO: Mídia baixada, tamanho:', mediaBuffer.length, 'bytes');
             
-            // Detectar formato e gerar nome do arquivo (CORREÇÃO: usar mimetype do payload)
+            // Detectar formato e gerar nome do arquivo (mesmo sistema do frontend)
             const { S3Storage } = await import('../src/services/aws/s3Storage.js');
-            
-            // PRIORIZAR MIMETYPE DO PAYLOAD WHATSAPP
-            const payloadMimetype = message.content?.mimetype;
-            const detectedContentType = S3Storage.detectContentType(mediaBuffer, 'media');
-            const contentType = payloadMimetype || detectedContentType;
-            
+            const contentType = S3Storage.detectContentType(mediaBuffer, 'media');
             const extension = contentType.split('/')[1] || 'bin';
             const fileName = `whatsapp_${Date.now()}_${message.id.substring(0, 8)}.${extension}`;
-            
-            console.error('🎯 CORREÇÃO FORMATO:', { 
-              payloadMimetype, 
-              detectedContentType, 
-              finalContentType: contentType,
-              extension 
-            });
             
             console.error('🔬 AWS S3 DIRETO: Formato detectado:', { contentType, extension, fileName });
             
