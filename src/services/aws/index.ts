@@ -3,8 +3,10 @@
 // Purpose: Export all AWS services for easy importing
 
 export { S3ClientFactory } from './s3Client.js';
-export { S3Storage } from './s3Storage.js';
 export { CredentialsManager } from './credentialsManager.js';
+export { S3Storage } from './s3Storage.js';
+export { S3CorsConfig } from './corsConfig.js';
+export { S3BucketSetup } from './bucketSetup.js';
 export * from './types.js';
 
 // Re-export commonly used functions for convenience
