@@ -2,7 +2,7 @@
 // Created: 2025-12-22
 // Purpose: Manage AWS credentials securely from Supabase database
 
-import { AWSCredentials, S3OperationResult } from './types';
+import { AWSCredentials, S3OperationResult } from './types.js';
 import { supabase } from '../../lib/supabase';
 
 export class CredentialsManager {

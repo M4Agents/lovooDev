@@ -4,8 +4,8 @@
 
 import { PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { S3ClientFactory } from './s3Client';
-import { CredentialsManager } from './credentialsManager';
+import { S3ClientFactory } from './s3Client.js';
+import { CredentialsManager } from './credentialsManager.js';
 import { 
   S3UploadParams, 
   S3UploadResult, 
@@ -14,7 +14,7 @@ import {
   SignedUrlOptions, 
   UploadToS3Options,
   S3OperationResult 
-} from './types';
+} from './types.js';
 
 export class S3Storage {
   /**

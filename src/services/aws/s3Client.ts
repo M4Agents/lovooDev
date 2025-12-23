@@ -3,8 +3,8 @@
 // Purpose: S3 client factory with credentials management
 
 import { S3Client } from '@aws-sdk/client-s3';
-import { CredentialsManager } from './credentialsManager';
-import { S3ClientConfig, S3OperationResult } from './types';
+import { CredentialsManager } from './credentialsManager.js';
+import { S3ClientConfig, S3OperationResult } from './types.js';
 
 export class S3ClientFactory {
   private static clientCache = new Map<string, S3Client>();

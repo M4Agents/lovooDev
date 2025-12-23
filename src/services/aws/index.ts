@@ -2,10 +2,10 @@
 // Created: 2025-12-22
 // Purpose: Export all AWS services for easy importing
 
-export { S3ClientFactory } from './s3Client';
-export { S3Storage } from './s3Storage';
-export { CredentialsManager } from './credentialsManager';
-export * from './types';
+export { S3ClientFactory } from './s3Client.js';
+export { S3Storage } from './s3Storage.js';
+export { CredentialsManager } from './credentialsManager.js';
+export * from './types.js';
 
 // Re-export commonly used functions for convenience
 export const uploadToS3 = S3Storage.uploadToS3.bind(S3Storage);
