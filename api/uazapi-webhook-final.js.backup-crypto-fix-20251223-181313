@@ -235,7 +235,7 @@ async function processMessage(payload) {
             console.error('🔧 CORREÇÃO APLICADA: Headers adequados para evitar corrupção do arquivo');
             
             // 🔍 DEBUG INTEGRIDADE: Verificar se arquivo não está corrompido
-            const crypto = await import('crypto');
+            const crypto = require('crypto');
             
             // Comparar tamanhos
             const originalSize = message.content?.fileLength;
@@ -248,7 +248,7 @@ async function processMessage(payload) {
             });
             
             // Comparar hash SHA256
-            const downloadedHash = crypto.default.createHash('sha256').update(mediaBuffer).digest('base64');
+            const downloadedHash = crypto.createHash('sha256').update(mediaBuffer).digest('base64');
             const originalHash = message.content?.fileSHA256;
             console.error('🔐 VERIFICAÇÃO HASH SHA256:', {
               originalHash,
