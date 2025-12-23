@@ -251,60 +251,6 @@ async function processMessage(payload) {
             // 🔍 DEBUG INTEGRIDADE: Verificar se arquivo não está corrompido
             const crypto = await import('crypto');
             
-            // 🔓 FUNÇÃO DESCRIPTOGRAFIA WHATSAPP
-            async function decryptWhatsAppMedia(encryptedBuffer, mediaKeyBase64) {
-              try {
-                console.error('🔓 Iniciando descriptografia WhatsApp com mediaKey...');
-                
-                // Converter mediaKey de base64 para buffer
-                const mediaKey = Buffer.from(mediaKeyBase64, 'base64');
-                
-                // WhatsApp usa HKDF para derivar chaves de criptografia
-                // Expandir mediaKey usando HKDF-SHA256
-                const hkdfInfo = Buffer.from('WhatsApp Media Keys', 'utf8');
-                const hkdfSalt = Buffer.alloc(32); // Salt vazio para mídia
-                
-                // Derivar chave AES (32 bytes) e IV (16 bytes)
-                const expandedKey = crypto.default.createHmac('sha256', hkdfSalt)
-                  .update(Buffer.concat([mediaKey, Buffer.from([0x01]), hkdfInfo]))
-                  .digest();
-                
-                const aesKey = expandedKey.slice(0, 32);
-                const hmacKey = crypto.default.createHmac('sha256', hkdfSalt)
-                  .update(Buffer.concat([mediaKey, Buffer.from([0x02]), hkdfInfo]))
-                  .digest().slice(0, 32);
-                
-                // Extrair IV e dados criptografados
-                const iv = encryptedBuffer.slice(0, 16);
-                const encryptedData = encryptedBuffer.slice(16, -32);
-                const hmac = encryptedBuffer.slice(-32);
-                
-                // Verificar HMAC
-                const calculatedHmac = crypto.default.createHmac('sha256', hmacKey)
-                  .update(Buffer.concat([iv, encryptedData]))
-                  .digest();
-                
-                if (!hmac.equals(calculatedHmac)) {
-                  console.error('❌ HMAC verification failed');
-                  return null;
-                }
-                
-                // Descriptografar usando AES-256-CBC
-                const decipher = crypto.default.createDecipheriv('aes-256-cbc', aesKey, iv);
-                const decrypted = Buffer.concat([
-                  decipher.update(encryptedData),
-                  decipher.final()
-                ]);
-                
-                console.error('✅ Descriptografia WhatsApp concluída com sucesso');
-                return decrypted;
-                
-              } catch (error) {
-                console.error('❌ Erro na descriptografia WhatsApp:', error.message);
-                return null;
-              }
-            }
-            
             // Comparar tamanhos
             const originalSize = message.content?.fileLength;
             const downloadedSize = mediaBuffer.length;
@@ -333,62 +279,13 @@ async function processMessage(payload) {
               expectedJPEG: [0xFF, 0xD8, 0xFF]
             });
             
-            // 🔓 DESCRIPTOGRAFIA WHATSAPP: Arquivo está criptografado, precisa descriptografar
-            let finalBuffer = mediaBuffer;
-            
-            if (!isIntegral && message.content?.mediaKey) {
-              console.error('🔓 DESCRIPTOGRAFIA WHATSAPP: Arquivo criptografado detectado, iniciando descriptografia...');
-              
-              try {
-                // Descriptografar usando mediaKey do WhatsApp
-                const decryptedBuffer = await decryptWhatsAppMedia(mediaBuffer, message.content.mediaKey);
-                
-                if (decryptedBuffer) {
-                  console.error('✅ DESCRIPTOGRAFIA WHATSAPP: Arquivo descriptografado com sucesso');
-                  finalBuffer = decryptedBuffer;
-                  
-                  // Verificar integridade do arquivo descriptografado
-                  const decryptedHash = crypto.default.createHash('sha256').update(finalBuffer).digest('base64');
-                  const decryptedSize = finalBuffer.length;
-                  const decryptedMagicBytes = Array.from(finalBuffer.slice(0, 8));
-                  const isDecryptedValidJPEG = finalBuffer[0] === 0xFF && finalBuffer[1] === 0xD8 && finalBuffer[2] === 0xFF;
-                  
-                  console.error('🔐 VERIFICAÇÃO ARQUIVO DESCRIPTOGRAFADO:', {
-                    originalHash,
-                    decryptedHash,
-                    hashMatch: originalHash === decryptedHash,
-                    originalSize,
-                    decryptedSize,
-                    sizeMatch: originalSize === decryptedSize,
-                    isValidJPEG: isDecryptedValidJPEG,
-                    magicBytes: decryptedMagicBytes
-                  });
-                  
-                  console.error('✅ STATUS FINAL DESCRIPTOGRAFIA:', {
-                    success: originalHash === decryptedHash && isDecryptedValidJPEG,
-                    hashOK: originalHash === decryptedHash,
-                    formatOK: isDecryptedValidJPEG
-                  });
-                } else {
-                  console.error('❌ DESCRIPTOGRAFIA WHATSAPP: Falha na descriptografia, usando arquivo original');
-                }
-              } catch (decryptError) {
-                console.error('❌ ERRO DESCRIPTOGRAFIA WHATSAPP:', decryptError.message);
-                console.error('🔄 FALLBACK: Usando arquivo criptografado original');
-              }
-            }
-            
-            // Status geral da integridade (arquivo original ou descriptografado)
-            const finalHash = crypto.default.createHash('sha256').update(finalBuffer).digest('base64');
-            const finalIsValidJPEG = finalBuffer[0] === 0xFF && finalBuffer[1] === 0xD8 && finalBuffer[2] === 0xFF;
-            const finalIsIntegral = (originalHash === finalHash) && finalIsValidJPEG;
-            
-            console.error('✅ STATUS INTEGRIDADE FINAL:', {
-              isIntegral: finalIsIntegral,
-              sizeOK: originalSize === finalBuffer.length,
-              hashOK: originalHash === finalHash,
-              formatOK: finalIsValidJPEG,
-              bufferUsed: finalBuffer === mediaBuffer ? 'original' : 'descriptografado'
+            // Status geral da integridade
+            const isIntegral = (originalSize === downloadedSize) && (originalHash === downloadedHash) && isValidJPEG;
+            console.error('✅ STATUS INTEGRIDADE ARQUIVO:', {
+              isIntegral,
+              sizeOK: originalSize === downloadedSize,
+              hashOK: originalHash === downloadedHash,
+              formatOK: isValidJPEG
             });
             
             // Detectar formato e gerar nome do arquivo (CORREÇÃO: usar mimetype do payload)
@@ -423,7 +320,7 @@ async function processMessage(payload) {
             
             const s3Result = await S3Storage.uploadToS3({
               companyId: company.id,
-              buffer: finalBuffer,
+              buffer: mediaBuffer,
               originalFileName: fileName,
               contentType: contentType,
               source: 'whatsapp',
