@@ -246,21 +246,13 @@ async function processMessage(payload) {
             
             // Upload para AWS S3 (mesmo sistema do frontend)
             console.error('☁️ AWS S3 DIRETO: Fazendo upload para S3...');
-            
-            // CORREÇÃO CRÍTICA: Sanitizar messageId para evitar caracteres especiais em URLs
-            const sanitizedMessageId = message.id.replace(/[^a-zA-Z0-9\-_]/g, '_');
-            console.error('🔧 MESSAGEID SANITIZADO:', { 
-              original: message.id, 
-              sanitized: sanitizedMessageId 
-            });
-            
             const s3Result = await S3Storage.uploadToS3({
               companyId: company.id,
               buffer: mediaBuffer,
               originalFileName: fileName,
               contentType: contentType,
               source: 'whatsapp',
-              messageId: sanitizedMessageId
+              messageId: message.id
             });
             
             if (s3Result.success) {
