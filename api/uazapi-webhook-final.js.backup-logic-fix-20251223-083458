@@ -126,15 +126,50 @@ async function processMessage(payload) {
       messageText = message.content;
     }
 
-    // Processar mídia se necessário - EXTRAIR URL APENAS
+    // Processar mídia se necessário
     if (isMediaMessage) {
       const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) ||
                          (message.media && message.media.url) ||
                          message.url;
       
       if (originalUrl) {
-        console.log('📎 MÍDIA DETECTADA - URL EXTRAÍDA:', originalUrl.substring(0, 80) + '...');
-        mediaUrl = originalUrl; // Apenas extrair URL - processamento será feito depois
+        console.log('🎬 PROCESSANDO MÍDIA RECEBIDA:', { originalUrl: originalUrl.substring(0, 80) + '...', rawMediaType });
+        
+        // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA PARA PREVIEW
+        if (message && message.id && originalUrl.includes('whatsapp.net')) {
+          console.log('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI:', message.id);
+          
+          try {
+            const uazapiResponse = await fetch('https://lovoo.uazapi.com/message/download', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: message.id })
+            });
+            
+            if (uazapiResponse.ok) {
+              const uazapiData = await uazapiResponse.json();
+              if (uazapiData.fileURL) {
+                console.log('✅ URL DESCRIPTOGRAFADA OBTIDA VIA UAZAPI');
+                
+                // PROCESSAR MÍDIA ROBUSTAMENTE - DOWNLOAD + UPLOAD PARA SUPABASE
+                const processedUrl = await processMediaMessageRobust(message, supabase, uazapiData.fileURL, rawMediaType);
+                mediaUrl = processedUrl;
+              } else {
+                console.log('⚠️ UAZAPI NÃO RETORNOU fileURL, usando URL original');
+                mediaUrl = originalUrl;
+              }
+            } else {
+              console.log('⚠️ FALHA NA DESCRIPTOGRAFIA UAZAPI, usando URL original');
+              mediaUrl = originalUrl;
+            }
+          } catch (error) {
+            console.error('❌ ERRO NA DESCRIPTOGRAFIA UAZAPI:', error);
+            mediaUrl = originalUrl; // Fallback para URL original
+          }
+        } else {
+          console.log('📝 URL NÃO É DO WHATSAPP OU SEM MESSAGE ID, usando diretamente');
+          mediaUrl = originalUrl;
+        }
       }
     }
 
@@ -199,48 +234,8 @@ async function processMessage(payload) {
       finalName: senderName 
     });
     
-    // 🎬 PROCESSAR MÍDIA ANTES DE CHAMAR RPC (CORREÇÃO CRÍTICA)
-    let finalMediaUrl = mediaUrl;
-    if (isMediaMessage && mediaUrl) {
-      console.log('🎬 PROCESSANDO MÍDIA ANTES DO RPC:', { mediaUrl: mediaUrl.substring(0, 80) + '...', rawMediaType });
-      
-      // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA PARA PREVIEW
-      if (message && message.id && mediaUrl.includes('whatsapp.net')) {
-        console.log('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI:', message.id);
-        
-        try {
-          const uazapiResponse = await fetch('https://lovoo.uazapi.com/message/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: message.id })
-          });
-          
-          if (uazapiResponse.ok) {
-            const uazapiData = await uazapiResponse.json();
-            if (uazapiData.fileURL) {
-              console.log('✅ URL DESCRIPTOGRAFADA OBTIDA VIA UAZAPI');
-              
-              // PROCESSAR MÍDIA ROBUSTAMENTE - DOWNLOAD + UPLOAD PARA SUPABASE
-              const processedUrl = await processMediaMessageRobust(message, supabase, uazapiData.fileURL, rawMediaType);
-              finalMediaUrl = processedUrl;
-              console.log('✅ MÍDIA PROCESSADA - URL FINAL:', finalMediaUrl.substring(0, 80) + '...');
-            } else {
-              console.log('⚠️ UAZAPI NÃO RETORNOU fileURL, usando URL original');
-            }
-          } else {
-            console.log('⚠️ FALHA NA DESCRIPTOGRAFIA UAZAPI, usando URL original');
-          }
-        } catch (error) {
-          console.error('❌ ERRO NA DESCRIPTOGRAFIA UAZAPI:', error);
-        }
-      } else {
-        console.log('📝 URL NÃO É DO WHATSAPP OU SEM MESSAGE ID, usando diretamente');
-      }
-    }
-    
     // ✅ USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
     console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
-    console.log('📎 MÍDIA URL FINAL PARA RPC:', finalMediaUrl ? finalMediaUrl.substring(0, 80) + '...' : 'null');
     
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
@@ -250,7 +245,7 @@ async function processMessage(payload) {
         p_sender_name: senderName,
         p_content: messageText,
         p_message_type: isMediaMessage ? (rawMediaType || 'document') : 'text',
-        p_media_url: finalMediaUrl,
+        p_media_url: mediaUrl,
         p_direction: direction,
         p_uazapi_message_id: messageId,
         p_profile_picture_url: payload.chat?.imagePreview || null
