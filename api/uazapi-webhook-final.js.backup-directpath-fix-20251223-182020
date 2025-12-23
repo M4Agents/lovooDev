@@ -132,25 +132,11 @@ async function processMessage(payload) {
       messageText = message.content;
     }
 
-    // Processar mídia se necessário - CORREÇÃO FINAL: USAR DIRECTPATH
+    // Processar mídia se necessário - EXTRAIR URL APENAS
     if (isMediaMessage) {
-      // CORREÇÃO CRÍTICA: Usar directPath em vez de URL criptografada
-      let originalUrl = null;
-      
-      if (message.content && typeof message.content === 'object') {
-        if (message.content.directPath) {
-          // SOLUÇÃO DEFINITIVA: directPath contém arquivo descriptografado
-          originalUrl = `https://mmg.whatsapp.net${message.content.directPath}`;
-          console.log('🔧 CORREÇÃO FINAL: Usando directPath em vez de URL criptografada');
-        } else if (message.content.URL || message.content.url) {
-          // FALLBACK: usar URL se directPath não disponível
-          originalUrl = message.content.URL || message.content.url;
-          console.log('⚠️ FALLBACK: Usando URL (pode estar criptografada)');
-        }
-      } else {
-        // FALLBACK: outros formatos
-        originalUrl = (message.media && message.media.url) || message.url;
-      }
+      const originalUrl = (message.content && typeof message.content === 'object' && (message.content.URL || message.content.url)) ||
+                         (message.media && message.media.url) ||
+                         message.url;
       
       if (originalUrl) {
         console.log('📎 MÍDIA DETECTADA - URL EXTRAÍDA:', originalUrl.substring(0, 80) + '...');
