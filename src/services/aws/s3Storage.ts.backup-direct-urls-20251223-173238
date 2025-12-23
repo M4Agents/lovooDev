@@ -167,7 +167,7 @@ export class S3Storage {
   }
 
   /**
-   * Generate direct public URL for S3 object (CORREÇÃO FINAL - SEM SIGNED URLS)
+   * Generate signed URL for S3 object
    */
   static async generateSignedUrl(
     companyId: string,
@@ -175,7 +175,16 @@ export class S3Storage {
     options: SignedUrlOptions = { expiresIn: 7200 }
   ): Promise<S3OperationResult<string>> {
     try {
-      console.log('🔗 CORREÇÃO FINAL: Gerando URL direta (sem signed URL) para:', { companyId, s3Key });
+      console.log('🔗 Gerando signed URL para:', { companyId, s3Key });
+
+      // Get S3 client
+      const clientResult = await S3ClientFactory.getClient(companyId);
+      if (!clientResult.success || !clientResult.data) {
+        return {
+          success: false,
+          error: clientResult.error || 'Erro ao obter S3 client'
+        };
+      }
 
       // Get credentials for bucket info
       const credentialsResult = await CredentialsManager.getCredentials(companyId);
@@ -187,27 +196,32 @@ export class S3Storage {
       }
 
       const credentials = credentialsResult.data;
-      
-      // CORREÇÃO FINAL: Gerar URL direta pública (sem signed URL)
-      const directUrl = `https://${credentials.bucket}.s3.${credentials.region}.amazonaws.com/${s3Key}`;
-      
-      console.log('✅ CORREÇÃO FINAL: URL direta gerada (sem signed URL):', {
-        bucket: credentials.bucket,
-        region: credentials.region,
-        s3Key: s3Key.substring(0, 50) + '...',
-        directUrl: directUrl.substring(0, 100) + '...'
+      const s3Client = clientResult.data;
+
+      // Create GetObject command
+      const getObjectCommand = new GetObjectCommand({
+        Bucket: credentials.bucket,
+        Key: s3Key,
+        ResponseContentType: options.responseContentType,
+        ResponseContentDisposition: options.responseContentDisposition
       });
-      
+
+      // Generate signed URL
+      const signedUrl = await getSignedUrl(s3Client, getObjectCommand, {
+        expiresIn: options.expiresIn
+      });
+
+      console.log('✅ Signed URL gerada com sucesso');
       return {
         success: true,
-        data: directUrl
+        data: signedUrl
       };
 
     } catch (error: any) {
-      console.error('❌ Erro ao gerar URL direta:', error);
+      console.error('❌ Erro ao gerar signed URL:', error);
       return {
         success: false,
-        error: `Erro ao gerar URL direta: ${error.message}`,
+        error: `Erro ao gerar signed URL: ${error.message}`,
         details: error
       };
     }
