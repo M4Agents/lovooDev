@@ -234,46 +234,6 @@ async function processMessage(payload) {
             console.error('📦 AWS S3 DIRETO: Mídia baixada com headers corretos, tamanho:', mediaBuffer.length, 'bytes');
             console.error('🔧 CORREÇÃO APLICADA: Headers adequados para evitar corrupção do arquivo');
             
-            // 🔍 DEBUG INTEGRIDADE: Verificar se arquivo não está corrompido
-            const crypto = require('crypto');
-            
-            // Comparar tamanhos
-            const originalSize = message.content?.fileLength;
-            const downloadedSize = mediaBuffer.length;
-            console.error('📊 VERIFICAÇÃO TAMANHO:', {
-              originalSize,
-              downloadedSize,
-              match: originalSize === downloadedSize,
-              difference: downloadedSize - originalSize
-            });
-            
-            // Comparar hash SHA256
-            const downloadedHash = crypto.createHash('sha256').update(mediaBuffer).digest('base64');
-            const originalHash = message.content?.fileSHA256;
-            console.error('🔐 VERIFICAÇÃO HASH SHA256:', {
-              originalHash,
-              downloadedHash,
-              match: originalHash === downloadedHash
-            });
-            
-            // Verificar magic bytes (JPEG)
-            const magicBytes = Array.from(mediaBuffer.slice(0, 8));
-            const isValidJPEG = mediaBuffer[0] === 0xFF && mediaBuffer[1] === 0xD8 && mediaBuffer[2] === 0xFF;
-            console.error('🔬 VERIFICAÇÃO MAGIC BYTES:', {
-              firstBytes: magicBytes,
-              isValidJPEG,
-              expectedJPEG: [0xFF, 0xD8, 0xFF]
-            });
-            
-            // Status geral da integridade
-            const isIntegral = (originalSize === downloadedSize) && (originalHash === downloadedHash) && isValidJPEG;
-            console.error('✅ STATUS INTEGRIDADE ARQUIVO:', {
-              isIntegral,
-              sizeOK: originalSize === downloadedSize,
-              hashOK: originalHash === downloadedHash,
-              formatOK: isValidJPEG
-            });
-            
             // Detectar formato e gerar nome do arquivo (CORREÇÃO: usar mimetype do payload)
             const { S3Storage } = await import('../src/services/aws/s3Storage.js');
             
