@@ -199,7 +199,7 @@ async function processMessage(payload) {
       if (originalUrl) {
         console.error('🎬 PROCESSANDO MÍDIA ANTES DO RPC:', { mediaUrl: originalUrl.substring(0, 80) + '...' });
         
-        // MIGRAÇÃO PARA AWS S3 - MESMO PADRÃO DO ENVIO
+        // DESCRIPTOGRAFIA VIA UAZAPI - CORREÇÃO CRÍTICA
         if (message && message.id && originalUrl.includes('whatsapp.net')) {
           try {
             console.error('🔓 DESCRIPTOGRAFANDO URL VIA UAZAPI:', message.id);
@@ -213,74 +213,22 @@ async function processMessage(payload) {
               const uazapiData = await uazapiResponse.json();
               if (uazapiData.fileURL) {
                 console.error('✅ URL DESCRIPTOGRAFADA OBTIDA VIA UAZAPI');
-                
-                // MIGRAÇÃO AWS S3: Download e upload para S3
-                console.error('🚀 AWS S3: Fazendo download da mídia descriptografada...');
-                const mediaResponse = await fetch(uazapiData.fileURL);
-                if (mediaResponse.ok) {
-                  const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
-                  console.error('📦 AWS S3: Mídia baixada, tamanho:', mediaBuffer.length, 'bytes');
-                  
-                  // Detectar formato e gerar nome do arquivo
-                  const { S3Storage } = await import('../../../src/services/aws/s3Storage');
-                  const contentType = S3Storage.detectContentType(mediaBuffer, 'media');
-                  const extension = contentType.split('/')[1] || 'bin';
-                  const fileName = `whatsapp_${Date.now()}_${message.id.substring(0, 8)}.${extension}`;
-                  
-                  console.error('🔬 AWS S3: Formato detectado:', { contentType, extension, fileName });
-                  
-                  // Upload para AWS S3
-                  console.error('☁️ AWS S3: Fazendo upload para S3...');
-                  const s3Result = await S3Storage.uploadToS3({
-                    companyId: company.id,
-                    buffer: mediaBuffer,
-                    originalFileName: fileName,
-                    contentType: contentType,
-                    source: 'whatsapp',
-                    messageId: message.id
-                  });
-                  
-                  if (s3Result.success) {
-                    console.error('✅ AWS S3: Upload concluído com sucesso!');
-                    
-                    // Gerar signed URL permanente
-                    console.error('🔗 AWS S3: Gerando signed URL...');
-                    const signedUrlResult = await S3Storage.generateSignedUrl(
-                      company.id, 
-                      s3Result.data.s3Key,
-                      { expiresIn: 86400 } // 24 horas
-                    );
-                    
-                    if (signedUrlResult.success) {
-                      finalMediaUrl = signedUrlResult.data;
-                      console.error('🎯 AWS S3: URL permanente gerada:', finalMediaUrl.substring(0, 100) + '...');
-                    } else {
-                      console.error('❌ AWS S3: Erro ao gerar signed URL:', signedUrlResult.error);
-                      finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-                    }
-                  } else {
-                    console.error('❌ AWS S3: Erro no upload:', s3Result.error);
-                    finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-                  }
-                } else {
-                  console.error('❌ AWS S3: Erro ao baixar mídia descriptografada');
-                  finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
-                }
+                finalMediaUrl = uazapiData.fileURL;
               } else {
-                console.error('⚠️ UAZAPI NÃO RETORNOU fileURL - usando fallback Supabase');
+                console.error('⚠️ UAZAPI NÃO RETORNOU fileURL - usando processamento robusto');
                 finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
               }
             } else {
-              console.error('⚠️ ERRO NA DESCRIPTOGRAFIA UAZAPI - usando fallback Supabase');
+              console.error('⚠️ ERRO NA DESCRIPTOGRAFIA UAZAPI - usando processamento robusto');
               finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
             }
           } catch (decryptError) {
-            console.error('❌ ERRO NA DESCRIPTOGRAFIA/AWS S3:', decryptError);
-            console.error('🔄 FALLBACK: usando processamento Supabase');
+            console.error('❌ ERRO NA DESCRIPTOGRAFIA:', decryptError);
+            console.error('🔄 FALLBACK: usando processamento robusto');
             finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
           }
         } else {
-          console.error('🚀 USANDO FALLBACK SUPABASE STORAGE...');
+          console.error('🚀 CHAMANDO FUNÇÃO processMediaMessageRobust...');
           finalMediaUrl = await processMediaMessageRobust(message, supabase, originalUrl, rawMediaType);
         }
         
