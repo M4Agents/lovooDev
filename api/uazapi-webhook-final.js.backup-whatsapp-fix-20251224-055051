@@ -251,61 +251,56 @@ async function processMessage(payload) {
             // 🔍 DEBUG INTEGRIDADE: Verificar se arquivo não está corrompido
             const crypto = await import('crypto');
             
-            // 🔓 FUNÇÃO DESCRIPTOGRAFIA WHATSAPP (ALGORITMO CORRETO)
+            // 🔓 FUNÇÃO DESCRIPTOGRAFIA WHATSAPP
             async function decryptWhatsAppMedia(encryptedBuffer, mediaKeyBase64) {
               try {
-                console.error('🔓 CORREÇÃO FINAL: Iniciando descriptografia WhatsApp com algoritmo correto...');
+                console.error('🔓 Iniciando descriptografia WhatsApp com mediaKey...');
                 
                 // Converter mediaKey de base64 para buffer
                 const mediaKey = Buffer.from(mediaKeyBase64, 'base64');
                 
-                // CORREÇÃO 1: Info string específica para imagens
-                const hkdfInfo = Buffer.from('WhatsApp Image Keys', 'utf8');
-                const hkdfSalt = Buffer.alloc(32, 0); // Salt vazio (32 bytes zero)
+                // WhatsApp usa HKDF para derivar chaves de criptografia
+                // Expandir mediaKey usando HKDF-SHA256
+                const hkdfInfo = Buffer.from('WhatsApp Media Keys', 'utf8');
+                const hkdfSalt = Buffer.alloc(32); // Salt vazio para mídia
                 
-                // CORREÇÃO 2: HKDF correto - derivar 112 bytes total
-                // iv (16) + cipherKey (32) + macKey (32) + refKey (32) = 112 bytes
-                const expanded = crypto.default.hkdfSync('sha256', mediaKey, hkdfSalt, hkdfInfo, 112);
+                // Derivar chave AES (32 bytes) e IV (16 bytes)
+                const expandedKey = crypto.default.createHmac('sha256', hkdfSalt)
+                  .update(Buffer.concat([mediaKey, Buffer.from([0x01]), hkdfInfo]))
+                  .digest();
                 
-                const iv = expanded.subarray(0, 16);
-                const cipherKey = expanded.subarray(16, 48);
-                // macKey = expanded.subarray(48, 80); // não usado neste fluxo
-                // refKey = expanded.subarray(80, 112); // não usado neste fluxo
+                const aesKey = expandedKey.slice(0, 32);
+                const hmacKey = crypto.default.createHmac('sha256', hkdfSalt)
+                  .update(Buffer.concat([mediaKey, Buffer.from([0x02]), hkdfInfo]))
+                  .digest().slice(0, 32);
                 
-                console.error('🔧 CORREÇÃO APLICADA: HKDF com 112 bytes, info="WhatsApp Image Keys"');
+                // Extrair IV e dados criptografados
+                const iv = encryptedBuffer.slice(0, 16);
+                const encryptedData = encryptedBuffer.slice(16, -32);
+                const hmac = encryptedBuffer.slice(-32);
                 
-                // CORREÇÃO 3: Remover MAC de 10 bytes do final antes de descriptografar
-                const maybeMacLen = 10;
-                const cipher = encryptedBuffer.length > maybeMacLen ? 
-                  encryptedBuffer.subarray(0, encryptedBuffer.length - maybeMacLen) : 
-                  encryptedBuffer;
+                // Verificar HMAC
+                const calculatedHmac = crypto.default.createHmac('sha256', hmacKey)
+                  .update(Buffer.concat([iv, encryptedData]))
+                  .digest();
                 
-                console.error('🔧 CORREÇÃO APLICADA: Removido MAC de 10 bytes do final');
-                console.error('📊 TAMANHOS:', {
-                  original: encryptedBuffer.length,
-                  semMAC: cipher.length,
-                  removido: encryptedBuffer.length - cipher.length
-                });
+                if (!hmac.equals(calculatedHmac)) {
+                  console.error('❌ HMAC verification failed');
+                  return null;
+                }
                 
                 // Descriptografar usando AES-256-CBC
-                const decipher = crypto.default.createDecipheriv('aes-256-cbc', cipherKey, iv);
+                const decipher = crypto.default.createDecipheriv('aes-256-cbc', aesKey, iv);
                 const decrypted = Buffer.concat([
-                  decipher.update(cipher),
+                  decipher.update(encryptedData),
                   decipher.final()
                 ]);
                 
-                console.error('✅ CORREÇÃO FINAL: Descriptografia WhatsApp concluída com algoritmo correto');
-                console.error('📊 RESULTADO:', {
-                  tamanhoDescriptografado: decrypted.length,
-                  primeirosBytes: Array.from(decrypted.slice(0, 8)),
-                  magicBytesJPEG: decrypted[0] === 0xFF && decrypted[1] === 0xD8 && decrypted[2] === 0xFF
-                });
-                
+                console.error('✅ Descriptografia WhatsApp concluída com sucesso');
                 return decrypted;
                 
               } catch (error) {
-                console.error('❌ ERRO DESCRIPTOGRAFIA WHATSAPP (algoritmo correto):', error.message);
-                console.error('🔄 STACK:', error.stack);
+                console.error('❌ Erro na descriptografia WhatsApp:', error.message);
                 return null;
               }
             }
