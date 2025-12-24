@@ -350,22 +350,10 @@ async function processMessage(payload) {
             if (message.content?.mediaKey) {
               console.error('🔓 INICIANDO DESCRIPTOGRAFIA...');
               
-              // CORREÇÃO: Detectar mediaType automaticamente do payload
-              const autoMediaType = message.mediaType || message.messageType || 'image';
-              const normalizedMediaType = autoMediaType.toLowerCase().replace('message', '');
-              
-              console.error('🎯 DETECÇÃO MEDIATYPE:', {
-                messageMediaType: message.mediaType,
-                messageType: message.messageType,
-                autoDetected: autoMediaType,
-                normalized: normalizedMediaType,
-                mimetype: message.content?.mimetype
-              });
-              
               const decryptedBuffer = decryptWhatsAppMedia({
                 encryptedBuffer,
                 mediaKeyB64: message.content.mediaKey,
-                mediaType: normalizedMediaType
+                mediaType: 'image'
               });
               
               if (decryptedBuffer) {
