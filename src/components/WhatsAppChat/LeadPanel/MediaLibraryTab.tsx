@@ -38,6 +38,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const [companyFolders, setCompanyFolders] = useState<CompanyFolder[]>([])
   const [activeSection, setActiveSection] = useState<'lead' | 'company'>('lead')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [uploading, setUploading] = useState(false)
 
   // =====================================================
   // BUSCAR DADOS (MOCK INICIAL)
@@ -101,6 +104,104 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const handleSearchChange = (query: string) => {
     setSearchQuery(query)
     // TODO: Implementar busca em tempo real
+  }
+
+  const handleUploadClick = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt'
+    input.onchange = handleFileSelect
+    input.click()
+  }
+
+  const handleFileSelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) return
+
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        await uploadFile(file)
+      }
+      // Recarregar dados após upload
+      await fetchMediaData()
+    } catch (error) {
+      console.error('❌ Erro no upload:', error)
+      alert('Erro ao fazer upload dos arquivos. Tente novamente.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const uploadFile = async (file: File) => {
+    // Validações
+    const maxSizes = {
+      image: 25 * 1024 * 1024, // 25MB
+      video: 100 * 1024 * 1024, // 100MB
+      audio: 50 * 1024 * 1024, // 50MB
+      document: 20 * 1024 * 1024 // 20MB
+    }
+
+    const fileType = getFileType(file.type)
+    const maxSize = maxSizes[fileType as keyof typeof maxSizes] || maxSizes.document
+
+    if (file.size > maxSize) {
+      throw new Error(`Arquivo ${file.name} excede o tamanho máximo permitido`)
+    }
+
+    // TODO: Implementar upload real para AWS S3
+    console.log('📤 Uploading file:', file.name, 'Type:', fileType, 'Size:', file.size)
+    
+    // Simular upload por enquanto
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+
+  const getFileType = (mimeType: string): string => {
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType.startsWith('video/')) return 'video'
+    if (mimeType.startsWith('audio/')) return 'audio'
+    return 'document'
+  }
+
+  const handleNewFolderClick = () => {
+    setShowNewFolderModal(true)
+    setNewFolderName('')
+  }
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) {
+      alert('Por favor, digite um nome para a pasta')
+      return
+    }
+
+    if (!companyId) {
+      alert('Erro: ID da empresa não encontrado')
+      return
+    }
+
+    try {
+      await mediaLibraryApi.createFolder(companyId, {
+        name: newFolderName.trim(),
+        description: `Pasta criada pelo usuário`,
+        icon: '📁'
+      })
+      
+      setShowNewFolderModal(false)
+      setNewFolderName('')
+      
+      // Recarregar pastas
+      await fetchMediaData()
+    } catch (error) {
+      console.error('❌ Erro ao criar pasta:', error)
+      alert('Erro ao criar pasta. Tente novamente.')
+    }
+  }
+
+  const handleFolderClick = (folder: CompanyFolder) => {
+    console.log('📁 Pasta clicada:', folder.name)
+    // TODO: Implementar navegação para dentro da pasta
   }
 
   // =====================================================
@@ -270,14 +371,73 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
 
       {/* Ações da biblioteca */}
       <div className="space-y-2 border-t border-gray-200 pt-4">
-        <button className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-          📤 Upload Arquivo
+        <button 
+          onClick={handleUploadClick}
+          disabled={uploading}
+          className={`w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+            uploading 
+              ? 'bg-gray-400 text-white cursor-not-allowed' 
+              : 'text-white bg-blue-600 hover:bg-blue-700'
+          }`}
+        >
+          {uploading ? '⏳ Enviando...' : '📤 Upload Arquivo'}
         </button>
         
-        <button className="w-full px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+        <button 
+          onClick={handleNewFolderClick}
+          className="w-full px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+        >
           📁 Nova Pasta
         </button>
       </div>
+
+      {/* Modal Nova Pasta */}
+      {showNewFolderModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+            <h3 className="text-lg font-semibold mb-4">Nova Pasta</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nome da pasta
+              </label>
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Digite o nome da pasta..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateFolder()
+                  }
+                }}
+              />
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowNewFolderModal(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  newFolderName.trim()
+                    ? 'text-white bg-blue-600 hover:bg-blue-700'
+                    : 'text-gray-400 bg-gray-200 cursor-not-allowed'
+                }`}
+              >
+                Criar Pasta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
