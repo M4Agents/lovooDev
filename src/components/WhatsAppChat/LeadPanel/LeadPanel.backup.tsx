@@ -1,13 +1,13 @@
 // =====================================================
-// LEAD PANEL - COMPONENTE ISOLADO
+// LEAD PANEL - BACKUP ORIGINAL (24/12/2025)
 // =====================================================
-// Painel com informações do lead e agendamento
-// NÃO MODIFICA componentes existentes
+// Este é um backup do LeadPanel original antes da
+// implementação da biblioteca de mídia
+// NUNCA MODIFICAR ESTE ARQUIVO
 
 import React, { useState, useEffect } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
-import MediaLibraryTab from './MediaLibraryTab'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -157,7 +157,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'media'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'schedule'>('info')
   const [conversation, setConversation] = useState<any>(null)
   
   // Estados para o LeadModal
@@ -225,7 +225,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         <div className="flex space-x-1">
           <button
             onClick={() => setActiveTab('info')}
-            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
+            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === 'info'
                 ? 'bg-blue-100 text-blue-700'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -235,23 +235,13 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('schedule')}
-            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
+            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === 'schedule'
                 ? 'bg-blue-100 text-blue-700'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
             Agendar
-          </button>
-          <button
-            onClick={() => setActiveTab('media')}
-            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
-              activeTab === 'media'
-                ? 'bg-blue-100 text-blue-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            📚 Biblioteca
           </button>
         </div>
       </div>
@@ -269,19 +259,13 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               setShowLeadModal(true)
             }}
           />
-        ) : activeTab === 'schedule' ? (
+        ) : (
           <ScheduleMessages
             conversationId={conversationId}
             companyId={companyId}
             instanceId={conversation?.instance_id}
             scheduledMessages={scheduledMessages}
             onUpdate={fetchData}
-          />
-        ) : (
-          <MediaLibraryTab
-            conversationId={conversationId}
-            companyId={companyId}
-            leadId={contact?.id}
           />
         )}
       </div>
