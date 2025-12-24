@@ -4,12 +4,13 @@
 
 Sistema de integração WhatsApp implementado no LovoCRM usando **Uazapi** como provider principal.
 
-### **✅ STATUS ATUAL (22/12/2025)**
-- **Versão**: V3.0.0 + RLS Seguro + Webhooks Corrigidos
+### **✅ STATUS ATUAL (24/12/2025)**
+- **Versão**: V4.0.0 + AWS S3 + Descriptografia WhatsApp Completa
 - **Ambiente**: Produção (https://app.lovoocrm.com/)
-- **Status**: 100% Funcional com Segurança RLS Ativa
+- **Status**: 100% Funcional - Sistema de Mídia Completo
 - **Provider**: Uazapi (API não oficial premium)
-- **Novidades**: Sistema seguro com RLS + correção de duplicidade + SECURITY DEFINER
+- **Mídia**: AWS S3 + Descriptografia WhatsApp para todos os tipos
+- **Novidades**: Sistema completo INBOUND/OUTBOUND + Preview 100% funcional
 
 ---
 
@@ -367,7 +368,52 @@ const processedUrl = await processMediaMessageRobust(null, mediaType, supabase);
 
 ---
 
-**Documento atualizado em**: 09/12/2025 11:08  
-**Versão**: 4.1 - Sistema Completo + Diagnóstico de Fotos  
-**Status**: Funcional com problema de sincronização identificado  
-**Última investigação**: Problema de fotos de leads diagnosticado
+## 🎯 **SISTEMA DE MÍDIA AWS S3 - IMPLEMENTAÇÃO COMPLETA**
+
+### **✅ MÍDIA INBOUND (Lead → Chat)**
+- **Descriptografia WhatsApp:** AES-256-CBC + HKDF-SHA256 implementada
+- **Tipos Suportados:** Imagens, Vídeos, Áudios, Documentos
+- **Detecção Automática:** MediaType detectado do payload WhatsApp
+- **Storage:** AWS S3 com URLs diretas públicas
+- **Preview:** 100% funcional para todos os tipos
+
+### **✅ MÍDIA OUTBOUND (Chat → Lead)**
+- **Upload Direto:** AWS S3 sem necessidade de descriptografia
+- **Frontend:** chatApi.ts integrado com S3Storage
+- **Tipos Suportados:** Todos os tipos de mídia
+- **Preview:** 100% funcional
+- **Performance:** Otimizada com upload direto
+
+### **🔓 ALGORITMO DE DESCRIPTOGRAFIA WHATSAPP**
+```javascript
+// Info strings por tipo de mídia
+const infoByType = {
+  image: 'WhatsApp Image Keys',
+  video: 'WhatsApp Video Keys', 
+  audio: 'WhatsApp Audio Keys',
+  document: 'WhatsApp Document Keys'
+};
+
+// Processo completo implementado:
+// 1. Download arquivo criptografado
+// 2. HKDF derivação de chaves (112 bytes)
+// 3. Remoção MAC (10 bytes finais)
+// 4. AES-256-CBC descriptografia
+// 5. Validação hash + magic bytes
+// 6. Upload S3 arquivo limpo
+```
+
+### **📊 LOGS DE DEBUG IMPLEMENTADOS**
+- Detecção automática de mediaType
+- Validação hash criptografado vs fileEncSHA256
+- Processo de descriptografia completo
+- Validação hash descriptografado vs fileSHA256
+- Verificação magic bytes por tipo
+- Status final de integridade
+
+---
+
+**Documento atualizado em**: 24/12/2025 06:50  
+**Versão**: 5.0 - Sistema Mídia AWS S3 Completo  
+**Status**: ✅ 100% FUNCIONAL - INBOUND + OUTBOUND operacional  
+**Última implementação**: Descriptografia WhatsApp + AWS S3 completo

@@ -1,12 +1,14 @@
 # 🚀 Lovoo CRM - Analytics Comportamental para Landing Pages
 
-**Versão**: 1.0.0 | **Status**: ✅ Produção | **URL**: https://app.lovoocrm.com/
+**Versão**: 4.0.0 | **Status**: ✅ Produção | **URL**: https://app.lovoocrm.com/
 
-Plataforma SaaS multi-tenant completa para coletar, analisar e enviar dados comportamentais detalhados de visitantes em landing pages.
+Plataforma SaaS multi-tenant completa com sistema de chat WhatsApp integrado, mídia AWS S3 e analytics comportamental para landing pages.
 
 ## 🎯 Características Principais
 
 - **Multi-Tenant**: Múltiplas empresas com dados completamente isolados
+- **Chat WhatsApp**: Sistema completo de mensagens com mídia AWS S3
+- **Mídia Inteligente**: Descriptografia WhatsApp + upload AWS S3 automático
 - **Tracking Comportamental**: Coleta de cliques, scroll, tempo de permanência, interações com formulários
 - **Heatmaps Visuais**: Visualização gráfica de onde os usuários clicam
 - **Analytics em Tempo Real**: Atualizações ao vivo via WebSocket

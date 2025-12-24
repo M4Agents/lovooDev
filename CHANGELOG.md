@@ -2,6 +2,38 @@
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
+## [4.0.0] - 2025-12-24 🎯 **SISTEMA DE MÍDIA AWS S3 COMPLETO**
+
+### ✨ Adicionado
+- **Sistema AWS S3** completo para mídia WhatsApp (INBOUND + OUTBOUND)
+- **Descriptografia WhatsApp** com algoritmo AES-256-CBC + HKDF-SHA256
+- **Detecção automática de MediaType** (imagens, vídeos, áudios, documentos)
+- **URLs diretas públicas** para melhor performance e compatibilidade
+- **Preview de mídia** 100% funcional para todos os tipos
+- **Logs detalhados** para debug e monitoramento do sistema
+- **Validação de integridade** com hash SHA256 e magic bytes
+- **Fallback robusto** para URLs originais em caso de erro
+
+### 🔄 Modificado
+- **Webhook final** atualizado com descriptografia WhatsApp completa
+- **Frontend chatApi.ts** migrado para AWS S3 direto
+- **S3Storage service** implementado com URLs diretas (sem signed URLs)
+- **Sistema de mídia** unificado para ambas as direções (INBOUND/OUTBOUND)
+
+### 🛠️ Corrigido
+- **Erro expanded.subarray** resolvido com normalização de Buffer
+- **MediaType hardcoded** substituído por detecção automática
+- **Descriptografia de vídeos** funcionando com info string correta
+- **Preview de mídia** exibindo corretamente no chat
+- **Arquivos S3** abrindo corretamente no navegador
+
+### 🎯 Benefícios
+- **Performance:** Upload/download otimizado via AWS S3
+- **Compatibilidade:** URLs diretas funcionam em todos os navegadores
+- **Segurança:** Descriptografia local + isolamento por empresa
+- **Escalabilidade:** Suporte ilimitado de mídia
+- **Confiabilidade:** Sistema robusto com fallbacks
+
 ## [1.1.0] - 2025-11-10 🎯 **VERSÃO ESTÁVEL - WEBHOOK AVANÇADO FUNCIONAL**
 
 ### ✨ Adicionado

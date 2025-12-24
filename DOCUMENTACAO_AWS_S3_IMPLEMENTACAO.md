@@ -1,11 +1,11 @@
-# DOCUMENTAÇÃO COMPLETA - IMPLEMENTAÇÃO AWS S3
+# DOCUMENTAÇÃO COMPLETA - SISTEMA DE MÍDIA AWS S3
 
 ## 📋 VISÃO GERAL
 
-**Data:** 22/12/2025  
+**Data:** 24/12/2025  
 **Sistema:** LovooCRM - Chat WhatsApp  
-**Objetivo:** Implementação completa do AWS S3 para mídia do chat  
-**Status:** ✅ IMPLEMENTADO E FUNCIONANDO - Sistema híbrido operacional  
+**Objetivo:** Sistema completo de mídia AWS S3 com descriptografia WhatsApp  
+**Status:** ✅ 100% FUNCIONAL - Sistema completo INBOUND + OUTBOUND operacional  
 
 ## 🎯 ESPECIFICAÇÕES AWS S3
 
@@ -29,10 +29,12 @@ clientes/dcc99d3d-9def-4b93-aeb2-1a3be5f15413/whatsapp/2025/12/22/msg-whatsapp-7
 
 ## ✅ STATUS ATUAL DA IMPLEMENTAÇÃO
 
-### **SISTEMA HÍBRIDO OPERACIONAL:**
-- **Frontend:** AWS S3 para upload de mídia enviada
-- **Webhooks:** Supabase Storage para mídia recebida (temporário)
-- **Preview:** Funcionando para ambos os sistemas
+### **SISTEMA COMPLETO AWS S3 OPERACIONAL:**
+- **INBOUND (Lead → Chat):** AWS S3 + Descriptografia WhatsApp completa
+- **OUTBOUND (Chat → Lead):** AWS S3 direto (sem descriptografia necessária)
+- **Tipos de Mídia:** Imagens, Vídeos, Áudios, Documentos (todos funcionando)
+- **Preview:** 100% funcional para todos os tipos
+- **URLs:** Diretas públicas (sem signed URLs)
 - **Chat:** 100% operacional com mídia bidirecional
 
 ## 🔒 SEGURANÇA E CREDENCIAIS
@@ -117,14 +119,16 @@ interface MediaMetadata {
 - [x] Atualizar componentes
 - [x] Remover endpoint antigo
 
-### FASE 5 - Validação 🔄
-- [ ] Aplicar migration no Supabase
-- [ ] Configurar credenciais AWS
-- [ ] Testes de upload via webhook
-- [ ] Testes de upload via frontend
-- [ ] Validação de signed URLs
-- [ ] Verificação de preview
-- [ ] Testes de segurança
+### FASE 5 - Validação ✅
+- [x] Aplicar migration no Supabase
+- [x] Configurar credenciais AWS
+- [x] Testes de upload via webhook
+- [x] Testes de upload via frontend
+- [x] Validação de URLs diretas
+- [x] Verificação de preview
+- [x] Testes de segurança
+- [x] Descriptografia WhatsApp implementada
+- [x] Detecção automática de mediaType
 
 ## 🎯 BENEFÍCIOS ESPERADOS
 
@@ -155,19 +159,23 @@ interface MediaMetadata {
 
 ## 🚀 STATUS DA IMPLEMENTAÇÃO
 
-### ✅ CONCLUÍDO
+### ✅ CONCLUÍDO - SISTEMA 100% FUNCIONAL
 - **Infraestrutura:** Tabela aws_credentials, AWS SDK v3, estrutura de serviços
 - **Serviços AWS:** s3Client.ts, credentialsManager.ts, s3Storage.ts, types.ts
-- **Webhooks:** uazapi-webhook-final.js e uazapi-webhook-v3.js migrados para S3
-- **Frontend:** chatApi.ts, ChatArea.tsx, UserModal.tsx atualizados
-- **Endpoint:** /api/s3-media/[filename].js criado
+- **Webhooks:** uazapi-webhook-final.js migrado para S3 + descriptografia WhatsApp
+- **Frontend:** chatApi.ts, ChatArea.tsx, UserModal.tsx usando AWS S3
+- **URLs:** Sistema de URLs diretas públicas implementado
+- **Descriptografia:** Algoritmo WhatsApp completo (AES-256-CBC + HKDF)
+- **MediaType:** Detecção automática para imagens, vídeos, áudios, documentos
+- **Preview:** Funcionando 100% para todos os tipos de mídia
+- **Testes:** Validado em produção com sucesso
 
-### 🔄 PRÓXIMOS PASSOS
-1. **Aplicar migration:** `supabase migration up`
-2. **Configurar credenciais AWS** na tabela aws_credentials
-3. **Testar uploads** via webhook e frontend
-4. **Validar signed URLs** e preview de mídia
-5. **Deploy** para produção
+### 🎉 SISTEMA OPERACIONAL
+✅ **INBOUND (Lead → Chat):** Descriptografia + AWS S3 funcionando  
+✅ **OUTBOUND (Chat → Lead):** Upload direto AWS S3 funcionando  
+✅ **Preview:** Todos os tipos de mídia exibindo corretamente  
+✅ **S3:** Arquivos abrindo corretamente no bucket  
+✅ **Performance:** Sistema otimizado e estável
 
 ### ⚠️ CONSIDERAÇÕES IMPORTANTES
 - **Credenciais AWS:** Devem ser configuradas por empresa na tabela
@@ -187,17 +195,52 @@ interface MediaMetadata {
 - src/pages/api/s3-media/[filename].js
 
 ✅ MODIFICADOS:
-- pages/api/uazapi-webhook-v3.js
-- pages/api/uazapi-webhook-final.js
-- src/services/chat/chatApi.ts
-- src/components/WhatsAppChat/ChatArea/ChatArea.tsx
-- src/components/UserManagement/UserModal.tsx
+- api/uazapi-webhook-final.js (descriptografia WhatsApp + detecção mediaType)
+- src/services/chat/chatApi.ts (AWS S3 upload)
+- src/components/WhatsAppChat/ChatArea/ChatArea.tsx (AWS S3 integration)
+- src/components/UserManagement/UserModal.tsx (AWS S3 profiles)
+- src/services/aws/s3Storage.ts (URLs diretas públicas)
 ```
 
 ---
 
-**Documento criado em:** 22/12/2025  
-**Versão:** 1.0  
-**Status:** Implementação completa - Pronto para testes  
+## 🔓 DESCRIPTOGRAFIA WHATSAPP - DETALHES TÉCNICOS
+
+### Algoritmo Implementado
+- **Criptografia:** AES-256-CBC
+- **Derivação de Chaves:** HKDF-SHA256 (112 bytes)
+- **Info Strings por Tipo:**
+  - Imagens: `'WhatsApp Image Keys'`
+  - Vídeos: `'WhatsApp Video Keys'`
+  - Áudios: `'WhatsApp Audio Keys'`
+  - Documentos: `'WhatsApp Document Keys'`
+
+### Processo de Descriptografia
+1. **Download:** Arquivo criptografado do WhatsApp
+2. **Validação:** Hash criptografado vs `fileEncSHA256`
+3. **HKDF:** Derivação de chaves usando `mediaKey`
+4. **Remoção MAC:** 10 bytes finais removidos
+5. **AES Decrypt:** Descriptografia AES-256-CBC
+6. **Validação:** Hash descriptografado vs `fileSHA256`
+7. **Magic Bytes:** Verificação de formato (JPEG, MP4, etc.)
+8. **Upload S3:** Arquivo limpo para AWS S3
+
+### Detecção Automática de MediaType
+```javascript
+const autoMediaType = message.mediaType || message.messageType || 'image';
+const normalizedMediaType = autoMediaType.toLowerCase().replace('message', '');
+```
+
+**Mapeamento:**
+- `VideoMessage` → `video` → `'WhatsApp Video Keys'`
+- `ImageMessage` → `image` → `'WhatsApp Image Keys'`
+- `AudioMessage` → `audio` → `'WhatsApp Audio Keys'`
+- `DocumentMessage` → `document` → `'WhatsApp Document Keys'`
+
+---
+
+**Documento atualizado em:** 24/12/2025  
+**Versão:** 2.0  
+**Status:** ✅ SISTEMA 100% FUNCIONAL - Produção validada  
 **Autor:** Sistema Cascade  
-**Próxima revisão:** Após validação em produção
+**Última revisão:** Sistema completo operacional
