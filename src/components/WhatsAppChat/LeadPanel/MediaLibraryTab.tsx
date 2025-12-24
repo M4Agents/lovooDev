@@ -47,10 +47,12 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     try {
       setLoading(true)
       
-      if (!leadId || !companyId) {
-        console.log('⚠️ leadId ou companyId não disponível ainda')
+      if (!companyId) {
+        console.log('⚠️ companyId não disponível ainda')
         return
       }
+
+      console.log('📊 Dados disponíveis:', { leadId, companyId, conversationId })
 
       console.log('📊 Carregando dados da biblioteca de mídia...')
       
@@ -189,9 +191,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           </h5>
           
           {recentMedia.length === 0 ? (
-            <div className="text-center py-6 text-gray-500">
-              <div className="text-2xl mb-2">📭</div>
-              <p className="text-sm">Nenhuma mídia recebida ainda</p>
+            <div className="text-center py-8 text-gray-500">
+              <div className="mb-2">📂</div>
+              <div>Nenhuma mídia recebida ainda</div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -230,31 +232,39 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         </div>
       </div>
 
-      {/* Seção Biblioteca da Empresa */}
-      <div className="space-y-3 border-t border-gray-200 pt-4">
-        <h4 className="text-sm font-medium text-gray-700">
-          📁 Biblioteca da Empresa
+      {/* Biblioteca da Empresa */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium text-gray-700 flex items-center">
+          <span className="mr-2">🏢</span>
+          Biblioteca da Empresa
         </h4>
         
         <div className="space-y-2">
-          {companyFolders.map(folder => (
-            <div 
-              key={folder.id}
-              className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-lg cursor-pointer"
-            >
-              <span className="text-lg">{folder.icon}</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{folder.name}</p>
-                <p className="text-xs text-gray-500">
-                  {folder.file_count || 0} arquivos
-                  {folder.description && ` • ${folder.description}`}
-                </p>
-              </div>
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+          {companyFolders.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <div className="mb-2">📁</div>
+              <div>Nenhuma pasta criada ainda</div>
             </div>
-          ))}
+          ) : (
+            companyFolders.map(folder => (
+              <div 
+                key={folder.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
+                onClick={() => handleFolderClick(folder)}
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg">{folder.icon}</span>
+                  <div>
+                    <div className="font-medium text-gray-900">{folder.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {folder.file_count || 0} arquivos • {folder.description}
+                    </div>
+                  </div>
+                </div>
+                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -269,12 +279,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         </button>
       </div>
 
-      {/* Status da implementação */}
-      <div className="text-center py-2">
-        <p className="text-xs text-gray-400">
-          🚧 Biblioteca em desenvolvimento
-        </p>
-      </div>
     </div>
   )
 }

@@ -81,11 +81,23 @@ class MediaLibraryApiService {
    * Obter resumo de mídias por lead
    */
   async getLeadMediaSummary(
-    leadId: string, 
+    leadId: string | undefined, 
     companyId: string
   ): Promise<MediaSummary> {
     try {
       console.log('📊 Buscando resumo de mídia para lead:', { leadId, companyId })
+
+      // Se não há leadId, retornar contadores zerados
+      if (!leadId) {
+        console.log('📊 Sem leadId - retornando contadores zerados')
+        return {
+          images: 0,
+          videos: 0,
+          audios: 0,
+          documents: 0,
+          total: 0
+        }
+      }
 
       const response = await fetch(
         `${this.baseUrl}/leads/${leadId}/summary?company_id=${companyId}`,
@@ -98,28 +110,31 @@ class MediaLibraryApiService {
       )
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        console.log(`⚠️ API retornou ${response.status} - usando contadores zerados`)
+        return {
+          images: 0,
+          videos: 0,
+          audios: 0,
+          documents: 0,
+          total: 0
+        }
       }
 
       const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.message || 'Erro ao buscar resumo de mídia')
-      }
-
-      console.log('✅ Resumo obtido:', data.data.summary)
-      return data.data.summary
+      console.log('✅ Resumo de mídia recebido:', data)
+      
+      return data
 
     } catch (error) {
       console.error('❌ Erro ao buscar resumo de mídia:', error)
       
-      // Fallback para dados mock em caso de erro
+      // Retornar contadores zerados em vez de dados mock
       return {
-        images: 45,
-        videos: 12,
-        audios: 89,
-        documents: 30,
-        total: 176
+        images: 0,
+        videos: 0,
+        audios: 0,
+        documents: 0,
+        total: 0
       }
     }
   }
@@ -128,7 +143,7 @@ class MediaLibraryApiService {
    * Listar arquivos de mídia por lead
    */
   async getLeadMediaFiles(
-    leadId: string,
+    leadId: string | undefined,
     companyId: string,
     options: {
       fileType?: 'image' | 'video' | 'audio' | 'document'
@@ -146,6 +161,20 @@ class MediaLibraryApiService {
       } = options
 
       console.log('📱 Buscando arquivos para lead:', { leadId, companyId, options })
+
+      // Se não há leadId, retornar lista vazia
+      if (!leadId) {
+        console.log('📱 Sem leadId - retornando lista vazia')
+        return {
+          files: [],
+          pagination: {
+            page: 1,
+            limit: 20,
+            total: 0,
+            totalPages: 0
+          }
+        }
+      }
 
       // Construir query parameters
       const params = new URLSearchParams({
@@ -192,7 +221,7 @@ class MediaLibraryApiService {
     } catch (error) {
       console.error('❌ Erro ao buscar arquivos:', error)
       
-      // Fallback para dados mock em caso de erro
+      // Retornar lista vazia em vez de dados mock
       return {
         files: [],
         pagination: {
@@ -204,7 +233,7 @@ class MediaLibraryApiService {
           hasPrevPage: false
         },
         filters: {
-          leadId,
+          leadId: leadId || '',
           file_type: options.fileType || 'all',
           search: options.search || ''
         },
@@ -250,39 +279,8 @@ class MediaLibraryApiService {
     } catch (error) {
       console.error('❌ Erro ao buscar pastas:', error)
       
-      // Fallback para dados mock em caso de erro
-      return [
-        {
-          id: 'mock_1',
-          company_id: companyId,
-          name: 'Marketing',
-          path: '/marketing',
-          icon: '📢',
-          description: 'Materiais de marketing e campanhas',
-          file_count: 234,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'mock_2',
-          company_id: companyId,
-          name: 'Produtos',
-          path: '/produtos',
-          icon: '📦',
-          description: 'Imagens e documentos de produtos',
-          file_count: 156,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'mock_3',
-          company_id: companyId,
-          name: 'Documentos',
-          path: '/documentos',
-          icon: '📄',
-          description: 'Documentos gerais da empresa',
-          file_count: 89,
-          created_at: new Date().toISOString()
-        }
-      ]
+      // Retornar lista vazia em vez de dados mock
+      return []
     }
   }
 
