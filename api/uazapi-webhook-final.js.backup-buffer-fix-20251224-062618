@@ -248,31 +248,22 @@ async function processMessage(payload) {
             console.error('📦 AWS S3 DIRETO: Mídia baixada com headers corretos, tamanho:', encryptedBuffer.length, 'bytes');
             console.error('🔧 CORREÇÃO APLICADA: Headers adequados para evitar corrupção do arquivo');
             
-            // 🔍 IMPORTAR CRYPTO (NODE RUNTIME)
+            // 🔍 IMPORTAR CRYPTO
             const crypto = await import('crypto');
             
-            // 🔓 FUNÇÃO DESCRIPTOGRAFIA WHATSAPP (BUFFER NORMALIZADO)
+            // 🔓 FUNÇÃO DESCRIPTOGRAFIA WHATSAPP (FLUXO CORRETO)
             function sha256Base64(buf) {
               return crypto.default.createHash('sha256').update(buf).digest('base64');
             }
             
-            // CORREÇÃO CRÍTICA: Normalizar tipos para Buffer
-            function asBuffer(x) {
-              if (Buffer.isBuffer(x)) return x;
-              if (x instanceof Uint8Array) return Buffer.from(x);
-              if (x instanceof ArrayBuffer) return Buffer.from(new Uint8Array(x));
-              return Buffer.from(x);
-            }
-            
             function hkdf(mediaKey, length, info) {
               const salt = Buffer.alloc(32, 0);
-              const out = crypto.default.hkdfSync('sha256', mediaKey, salt, Buffer.from(info, 'utf8'), length);
-              return asBuffer(out); // ✅ GARANTIR BUFFER
+              return crypto.default.hkdfSync('sha256', mediaKey, salt, Buffer.from(info, 'utf8'), length);
             }
             
             function decryptWhatsAppMedia({ encryptedBuffer, mediaKeyB64, mediaType }) {
               try {
-                console.error('🔓 CORREÇÃO BUFFER: Iniciando descriptografia WhatsApp...');
+                console.error('🔓 FLUXO CORRETO: Iniciando descriptografia WhatsApp...');
                 
                 const mediaKey = Buffer.from(mediaKeyB64, 'base64');
                 
@@ -286,14 +277,7 @@ async function processMessage(payload) {
                 const info = infoByType[mediaType] || 'WhatsApp Media Keys';
                 console.error('🔧 INFO STRING:', info);
                 
-                // CORREÇÃO: HKDF retorna Buffer garantido
                 const expanded = hkdf(mediaKey, 112, info);
-                console.error('🔧 HKDF TIPO:', {
-                  isBuffer: Buffer.isBuffer(expanded),
-                  hasSubarray: typeof expanded.subarray === 'function',
-                  length: expanded.length
-                });
-                
                 const iv = expanded.subarray(0, 16);
                 const cipherKey = expanded.subarray(16, 48);
                 
@@ -311,26 +295,11 @@ async function processMessage(payload) {
                 const decipher = crypto.default.createDecipheriv('aes-256-cbc', cipherKey, iv);
                 const decrypted = Buffer.concat([decipher.update(cipher), decipher.final()]);
                 
-                console.error('✅ CORREÇÃO BUFFER: Descriptografia concluída com sucesso');
-                
-                // VALIDAÇÃO COMPLETA
-                const isJpeg = decrypted.length >= 3 &&
-                              decrypted[0] === 0xFF &&
-                              decrypted[1] === 0xD8 &&
-                              decrypted[2] === 0xFF;
-                
-                console.error('🔬 VALIDAÇÃO FINAL:', {
-                  tamanho: decrypted.length,
-                  primeiros3Bytes: Array.from(decrypted.subarray(0, 3)),
-                  isJpeg,
-                  esperado: [0xFF, 0xD8, 0xFF]
-                });
-                
+                console.error('✅ FLUXO CORRETO: Descriptografia concluída com sucesso');
                 return decrypted;
                 
               } catch (error) {
-                console.error('❌ ERRO DESCRIPTOGRAFIA BUFFER:', error.message);
-                console.error('🔄 STACK COMPLETO:', error.stack);
+                console.error('❌ ERRO DESCRIPTOGRAFIA:', error.message);
                 return null;
               }
             }
@@ -384,13 +353,6 @@ async function processMessage(payload) {
                   formatOK: isJpeg,
                   success: (decHash === expectedDecHash) && isJpeg
                 });
-                
-                // 6️⃣ VALIDAÇÃO HASH SHA256 COMPLETA
-                if (decHash === expectedDecHash) {
-                  console.error('✅ HASH SHA256: Arquivo descriptografado íntegro');
-                } else {
-                  console.error('❌ HASH SHA256: Arquivo pode estar corrompido');
-                }
                 
               } else {
                 console.error('❌ DESCRIPTOGRAFIA FALHOU: Usando buffer original');
