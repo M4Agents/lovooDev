@@ -78,19 +78,46 @@ export const MediaLibrary: React.FC = () => {
       const folders = await mediaManagement.getFoldersHierarchy(company.id)
       
       // Carregar arquivos da pasta atual (raiz se nenhuma selecionada)
-      // CORREÇÃO CRÍTICA: Usar API correta com folderId para pasta Chat
-      const filesData = state.currentFolder 
-        ? await mediaManagement.getLeadMediaFiles(undefined, company.id, {
+      let filesData
+      
+      // CORREÇÃO CRÍTICA: Verificar se é pasta Chat especificamente
+      const isChatFolder = state.currentFolder?.name === 'Chat' || state.currentFolder?.path === '/chat'
+      
+      if (isChatFolder) {
+        console.log('💬 FRONTEND: Detectou pasta Chat, usando API específica')
+        try {
+          filesData = await mediaManagement.getLeadMediaFiles(undefined, company.id, {
             search: state.searchQuery,
             fileType: state.filterType === 'all' ? undefined : state.filterType as any,
             folderId: state.currentFolder.id
           })
-        : await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+        } catch (error) {
+          console.error('❌ Erro na API da pasta Chat, usando fallback:', error)
+          // Fallback para pasta Chat: usar API de pastas normal
+          filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
             search: state.searchQuery,
             sortBy: state.sortBy,
             sortOrder: state.sortOrder,
             fileType: state.filterType === 'all' ? undefined : state.filterType
           })
+        }
+      } else if (state.currentFolder) {
+        // Outras pastas: usar API normal
+        filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+          search: state.searchQuery,
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
+          fileType: state.filterType === 'all' ? undefined : state.filterType
+        })
+      } else {
+        // Pasta raiz
+        filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+          search: state.searchQuery,
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
+          fileType: state.filterType === 'all' ? undefined : state.filterType
+        })
+      }
 
       setState(prev => ({
         ...prev,
