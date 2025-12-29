@@ -479,8 +479,17 @@ class MediaManagementService {
       }
 
       const data = await response.json()
-      console.log('✅ Exclusão em lote concluída:', data.data)
-      return data.data
+      console.log('✅ Exclusão em lote concluída:', data)
+      
+      // Transformar resposta da API para formato esperado pelo frontend
+      const result: BulkActionResult = {
+        success: data.success,
+        processed: data.deletedFiles?.length || 0,
+        failed: 0,
+        errors: []
+      }
+      
+      return result
 
     } catch (error) {
       console.error('❌ Erro na exclusão em lote:', error)
