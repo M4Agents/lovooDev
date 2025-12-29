@@ -36,7 +36,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   })
   const [recentMedia, setRecentMedia] = useState<MediaFile[]>([])
   const [companyFolders, setCompanyFolders] = useState<CompanyFolder[]>([])
-  const [activeSection, setActiveSection] = useState<'lead' | 'company'>('lead')
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewFolderModal, setShowNewFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -362,7 +361,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
                     </div>
                   </div>
                 </div>
-                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </div>
             ))
           )}
