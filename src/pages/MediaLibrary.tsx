@@ -78,12 +78,19 @@ export const MediaLibrary: React.FC = () => {
       const folders = await mediaManagement.getFoldersHierarchy(company.id)
       
       // Carregar arquivos da pasta atual (raiz se nenhuma selecionada)
-      const filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
-        search: state.searchQuery,
-        sortBy: state.sortBy,
-        sortOrder: state.sortOrder,
-        fileType: state.filterType === 'all' ? undefined : state.filterType
-      })
+      // CORREÇÃO CRÍTICA: Usar API correta com folderId para pasta Chat
+      const filesData = state.currentFolder 
+        ? await mediaManagement.getLeadMediaFiles(undefined, company.id, {
+            search: state.searchQuery,
+            fileType: state.filterType === 'all' ? undefined : state.filterType as any,
+            folderId: state.currentFolder.id
+          })
+        : await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+            search: state.searchQuery,
+            sortBy: state.sortBy,
+            sortOrder: state.sortOrder,
+            fileType: state.filterType === 'all' ? undefined : state.filterType
+          })
 
       setState(prev => ({
         ...prev,

@@ -150,6 +150,7 @@ class MediaLibraryApiService {
       page?: number
       limit?: number
       search?: string
+      folderId?: string
     } = {}
   ): Promise<MediaFilesResponse> {
     try {
@@ -157,14 +158,15 @@ class MediaLibraryApiService {
         fileType,
         page = 1,
         limit = 20,
-        search = ''
+        search = '',
+        folderId
       } = options
 
       console.log('📱 Buscando arquivos para lead:', { leadId, companyId, options })
 
-      // Se não há leadId, retornar lista vazia
-      if (!leadId) {
-        console.log('📱 Sem leadId - retornando lista vazia')
+      // Se não há leadId E não há folderId, retornar lista vazia
+      if (!leadId && !folderId) {
+        console.log('📱 Sem leadId e sem folderId - retornando lista vazia')
         return {
           files: [],
           pagination: {
@@ -189,6 +191,12 @@ class MediaLibraryApiService {
 
       if (search.trim()) {
         params.append('search', search.trim())
+      }
+
+      // CORREÇÃO CRÍTICA: Adicionar folder_id quando fornecido
+      if (folderId) {
+        params.append('folder_id', folderId)
+        console.log('💬 FOLDER_ID ADICIONADO:', folderId)
       }
 
       const response = await fetch(
