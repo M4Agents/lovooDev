@@ -14,11 +14,23 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+// Validação robusta para prevenir falhas silenciosas
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Supabase configuration missing')
+  console.error('❌ Supabase configuration missing:', { 
+    hasUrl: !!supabaseUrl, 
+    hasKey: !!supabaseServiceKey 
+  })
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+// Inicialização segura com fallback
+let supabase = null
+try {
+  if (supabaseUrl && supabaseServiceKey) {
+    supabase = createClient(supabaseUrl, supabaseServiceKey)
+  }
+} catch (initError) {
+  console.error('❌ Erro ao inicializar Supabase:', initError)
+}
 
 // =====================================================
 // HELPER: GERAR PASTAS MOCK
@@ -134,6 +146,15 @@ const generateMockFolders = (companyId) => {
 
 export default async function handler(req, res) {
   try {
+    // Validação de inicialização do Supabase
+    if (!supabase) {
+      console.error('❌ Supabase não inicializado - verificar variáveis de ambiente')
+      return res.status(500).json({
+        error: 'Configuração inválida',
+        message: 'Serviço temporariamente indisponível - configuração ausente'
+      })
+    }
+
     const { company_id } = req.query
 
     // Validação básica
