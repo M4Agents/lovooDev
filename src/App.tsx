@@ -10,6 +10,7 @@ import { Settings } from './pages/Settings';
 import { Companies } from './pages/Companies';
 import { Leads } from './pages/Leads';
 import { PlansManagement } from './pages/PlansManagement';
+import { MediaLibrary } from './pages/MediaLibrary';
 import Chat from './pages/Chat';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -149,6 +150,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <PlansManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/media-library"
+        element={
+          <ProtectedRoute>
+            <MediaLibrary />
           </ProtectedRoute>
         }
       />

@@ -12,7 +12,8 @@ import {
   TrendingUp,
   Activity,
   Building2,
-  Users
+  Users,
+  FolderOpen
 } from 'lucide-react';
 
 type LayoutProps = {
@@ -36,6 +37,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
     { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
+    { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];
 
