@@ -115,7 +115,7 @@ export default async function handler(req, res) {
       // Gerar URL de preview usando endpoint proxy (como chat faz)
       const previewUrl = `/api/s3-media/${encodeURIComponent(uploadedFile.originalFilename)}`
 
-      // Salvar metadados no banco lead_media_unified (sem folder_id que não existe)
+      // Salvar metadados no banco lead_media_unified (apenas campos essenciais que existem)
       const fileRecord = {
         id: `lib_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         company_id: company_id,
@@ -126,10 +126,7 @@ export default async function handler(req, res) {
         mime_type: uploadedFile.mimetype,
         file_size: uploadedFile.size,
         s3_key: s3Key,
-        preview_url: previewUrl,
-        source: 'biblioteca',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        preview_url: previewUrl
       }
       
       console.log('💾 Salvando no banco:', fileRecord)
