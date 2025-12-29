@@ -124,9 +124,9 @@ export default async function handler(req, res) {
       .eq('company_id', company_id)
 
     if (isChatFolder) {
-      // PASTA CHAT: Buscar TODAS as mídias de TODOS os leads da empresa
-      query = query.eq('folder_id', folder_id)
-      console.log('💬 Query para PASTA CHAT - todas as mídias da empresa')
+      // PASTA CHAT: Buscar mídias da pasta 'clientes' no S3 (WhatsApp)
+      query = query.like('s3_key', 'clientes/%')
+      console.log('💬 Query para PASTA CHAT - mídias da pasta clientes/ (WhatsApp)')
     } else {
       // LEAD ESPECÍFICO: Buscar apenas mídias daquele lead
       if (!leadId) {
