@@ -109,10 +109,10 @@ export default async function handler(req, res) {
         correctedS3Key = correctedS3Key.replace('supabase/', '')
       }
 
-      // Gerar URL direta do S3 (seguindo padrão do chat funcionando)
-      if (!previewUrl && correctedS3Key) {
-        previewUrl = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${correctedS3Key}`
-        console.log('✅ URL direta S3 gerada para:', file.original_filename)
+      // Usar endpoint do chat que funciona 100% (com fallbacks robustos)
+      if (!previewUrl && file.original_filename) {
+        previewUrl = `/api/s3-media/${encodeURIComponent(file.original_filename)}`
+        console.log('✅ URL endpoint chat gerada para:', file.original_filename)
       }
 
       return {
@@ -140,7 +140,7 @@ export default async function handler(req, res) {
     const hasNextPage = pageNum < totalPages
     const hasPrevPage = pageNum > 1
 
-    console.log('✅ Arquivos AWS S3 obtidos:', files.length, '(URLs diretas como no chat)')
+    console.log('✅ Arquivos AWS S3 obtidos:', files.length, '(usando endpoint /api/s3-media/ do chat)')
 
     return res.status(200).json({
       success: true,
