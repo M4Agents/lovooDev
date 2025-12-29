@@ -580,7 +580,7 @@ async function processMessage(payload) {
             p_mime_type: message.content?.mimetype || 'application/octet-stream',
             p_file_size: message.content?.fileLength || 0,
             p_preview_url: finalMediaUrl,
-            p_source_message_id: message.id,
+            p_source_message_id: savedMessageId, // Usar UUID válido retornado pela função SECURITY DEFINER
             p_source_conversation_id: conversationId
           });
           
