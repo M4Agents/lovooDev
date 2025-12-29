@@ -200,7 +200,7 @@ class MediaLibraryApiService {
       }
 
       const response = await fetch(
-        `${this.baseUrl}/leads/${leadId}/files?${params.toString()}`,
+        `${this.baseUrl}/leads/${leadId || 'undefined'}/files?${params.toString()}`,
         {
           method: 'GET',
           headers: {
@@ -215,16 +215,41 @@ class MediaLibraryApiService {
 
       const data = await response.json()
 
-      if (!data.success) {
-        throw new Error(data.message || 'Erro ao buscar arquivos')
+      console.log('📊 Resposta da API recebida:', data)
+
+      // Verificar se a resposta tem a estrutura esperada
+      if (data.success && data.data) {
+        console.log('✅ Arquivos obtidos:', {
+          count: data.data.files?.length || 0,
+          totalCount: data.data.pagination?.totalCount || 0
+        })
+        return data.data
+      } else if (data.files) {
+        // Resposta direta sem wrapper success/data
+        console.log('✅ Arquivos obtidos (formato direto):', {
+          count: data.files.length,
+          totalCount: data.pagination?.totalCount || data.files.length
+        })
+        return {
+          files: data.files,
+          pagination: data.pagination || {
+            page: 1,
+            limit: 20,
+            totalCount: data.files.length,
+            totalPages: Math.ceil(data.files.length / 20),
+            hasNextPage: false,
+            hasPrevPage: false
+          },
+          filters: {
+            leadId: leadId || '',
+            file_type: options.fileType || 'all',
+            search: options.search || ''
+          },
+          lastUpdated: new Date().toISOString()
+        }
+      } else {
+        throw new Error(data.message || 'Estrutura de resposta inválida')
       }
-
-      console.log('✅ Arquivos obtidos:', {
-        count: data.data.files.length,
-        totalCount: data.data.pagination.totalCount
-      })
-
-      return data.data
 
     } catch (error) {
       console.error('❌ Erro ao buscar arquivos:', error)
