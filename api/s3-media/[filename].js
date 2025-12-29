@@ -57,13 +57,56 @@ export default async function handler(req, res) {
       console.log('🔑 S3 Key original:', fileData.s3_key);
       console.log('🔑 S3 Key limpa:', cleanS3Key);
       
-      // Gerar URL direta do AWS S3 (EXCLUSIVAMENTE S3)
+      // Fazer proxy do arquivo do AWS S3 (contorna CORS)
       const s3Url = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${cleanS3Key}`;
       
-      console.log('🔗 URL AWS S3 gerada:', s3Url);
+      console.log('🔗 Fazendo proxy do AWS S3:', s3Url);
       
-      // Redirecionar para URL direta do AWS S3
-      return res.redirect(302, s3Url);
+      try {
+        // Fazer requisição server-side para o S3
+        const s3Response = await fetch(s3Url);
+        
+        if (!s3Response.ok) {
+          console.error('❌ Erro ao buscar arquivo no S3:', s3Response.status, s3Response.statusText);
+          return res.status(404).json({ 
+            error: 'File not found in S3',
+            s3Status: s3Response.status,
+            s3StatusText: s3Response.statusText
+          });
+        }
+        
+        console.log('✅ Arquivo obtido do S3 com sucesso');
+        
+        // Obter tipo de conteúdo do S3
+        const contentType = s3Response.headers.get('content-type') || 'application/octet-stream';
+        const contentLength = s3Response.headers.get('content-length');
+        
+        // Configurar headers da resposta
+        res.setHeader('Content-Type', contentType);
+        if (contentLength) {
+          res.setHeader('Content-Length', contentLength);
+        }
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache por 1 ano
+        
+        // Fazer stream do arquivo do S3 para o cliente
+        const reader = s3Response.body.getReader();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(Buffer.from(value));
+        }
+        
+        res.end();
+        return;
+        
+      } catch (fetchError) {
+        console.error('❌ Erro ao fazer proxy do S3:', fetchError);
+        return res.status(500).json({ 
+          error: 'Failed to proxy file from S3',
+          details: fetchError.message
+        });
+      }
       
     } catch (error) {
       console.error('❌ Erro ao buscar arquivo no banco:', error);
