@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
-    console.log('📄 Buscando arquivos:', { 
+    console.log('📄 Buscando arquivos AWS S3:', { 
       company_id, 
       folder_id, 
       file_type, 
@@ -57,15 +57,17 @@ export default async function handler(req, res) {
       limit: limitNum,
       search,
       sort_by,
-      sort_order
+      sort_order,
+      filter: 'Apenas arquivos no AWS S3 (excluindo URLs externas)'
     })
 
-    // Por enquanto, retornar dados da tabela lead_media_unified
-    // Em uma implementação completa, haveria uma tabela company_media_files
+    // Buscar apenas arquivos que estão realmente no AWS S3
+    // Excluir URLs externas (WhatsApp, UAZ API, etc.)
     let query = supabase
       .from('lead_media_unified')
       .select('*', { count: 'exact' })
       .eq('company_id', company_id)
+      .not('s3_key', 'like', 'supabase/https://%')
 
     // Filtrar por tipo se especificado
     if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
@@ -136,7 +138,7 @@ export default async function handler(req, res) {
     const hasNextPage = pageNum < totalPages
     const hasPrevPage = pageNum > 1
 
-    console.log('✅ Arquivos obtidos:', files.length)
+    console.log('✅ Arquivos AWS S3 obtidos:', files.length, '(URLs externas filtradas)')
 
     return res.status(200).json({
       success: true,
