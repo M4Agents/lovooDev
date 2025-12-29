@@ -142,10 +142,13 @@ export default async function handler(req, res) {
       `, { count: 'exact' })
       .eq('company_id', company_id)
 
+    console.log('🔍 DEBUG: isChatFolder =', isChatFolder, 'leadId =', leadId)
+
     if (isChatFolder) {
       // PASTA CHAT: Buscar mídias da pasta 'clientes' no S3 (WhatsApp)
       query = query.like('s3_key', 'clientes/%')
       console.log('💬 Query para PASTA CHAT - mídias da pasta clientes/ (WhatsApp)')
+      console.log('🔍 DEBUG: Aplicando filtro S3: s3_key LIKE clientes/%')
     } else {
       // LEAD ESPECÍFICO: Buscar apenas mídias daquele lead
       if (!leadId) {
@@ -184,7 +187,15 @@ export default async function handler(req, res) {
       limit: limitNum
     })
 
+    console.log('🔍 DEBUG: Query final construída, executando...')
     const { data, error, count } = await query
+
+    console.log('📊 DEBUG: Resultado da query:', {
+      dataCount: data?.length || 0,
+      totalCount: count,
+      error: error?.message,
+      firstItem: data?.[0]?.s3_key || 'N/A'
+    })
 
     if (error) {
       console.error('❌ ERRO na query Supabase:', {
