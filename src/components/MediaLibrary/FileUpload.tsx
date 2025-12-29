@@ -224,12 +224,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         await uploadFile(file)
       }
 
-      // Verificar se todos foram bem-sucedidos
-      const allSuccess = uploadFiles.every(f => f.status === 'success' || f.status === 'error')
+      // Aguardar todos os uploads terminarem e verificar se pelo menos um foi bem-sucedido
+      const hasSuccess = uploadFiles.some(f => f.status === 'success')
       
-      if (allSuccess) {
+      if (hasSuccess) {
         setTimeout(() => {
-          onComplete()
+          onComplete() // Chama refresh automático da lista
         }, 1000)
       }
 
