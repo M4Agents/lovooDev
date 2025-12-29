@@ -548,31 +548,11 @@ async function processMessage(payload) {
         if (s3Key && s3Key.startsWith('clientes/')) {
           console.error('💬 BIBLIOTECA: S3 key válida encontrada:', s3Key);
           
-          // CORREÇÃO DEFINITIVA: Buscar lead_id usando telefone do payload
-          let leadId = null;
+          // CORREÇÃO DEFINITIVA: Sincronização genérica para pasta Chat (sem lead_id específico)
+          console.error('💬 BIBLIOTECA: Implementando sincronização genérica para pasta Chat');
+          console.error('💬 BIBLIOTECA: Salvando mídia com company_id apenas (sem lead_id específico)');
           
-          // Extrair telefone do payload para buscar lead_id correto
-          if (payload?.chat?.phone) {
-            const phoneFromPayload = payload.chat.phone.replace(/\D/g, ''); // Remove caracteres não numéricos
-            console.error('💬 BIBLIOTECA: Telefone encontrado no payload:', phoneFromPayload);
-            
-            // Buscar lead_id na tabela leads usando o telefone
-            const { data: leadData, error: leadError } = await supabase
-              .from('leads')
-              .select('id')
-              .eq('phone', phoneFromPayload)
-              .eq('company_id', company.id)
-              .single();
-              
-            if (leadData && leadData.id) {
-              leadId = leadData.id;
-              console.error('💬 BIBLIOTECA: Lead ID encontrado via telefone:', leadId);
-            } else {
-              console.error('⚠️ BIBLIOTECA: Lead não encontrado para telefone:', phoneFromPayload);
-            }
-          }
-          
-          if (leadId) {
+          // Sempre salvar mídia para pasta Chat - não depende de lead específico
             
             // Determinar tipo de arquivo da URL
             const fileExtension = s3Key.split('.').pop().toLowerCase();
@@ -582,35 +562,32 @@ async function processMessage(payload) {
             
             const originalFilename = s3Key.split('/').pop();
             
-            console.error('💬 BIBLIOTECA: Chamando save_chat_media...', {
-              p_company_id: company.id,
-              p_lead_id: leadId,
-              p_s3_key: s3Key,
-              p_original_filename: originalFilename,
-              p_file_type: fileType
-            });
-            
-            // Salvar na biblioteca usando função do banco
-            const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
-              p_company_id: company.id,
-              p_lead_id: leadId,
-              p_s3_key: s3Key,
-              p_original_filename: originalFilename,
-              p_file_type: fileType,
-              p_mime_type: message.content?.mimetype || 'application/octet-stream',
-              p_file_size: message.content?.fileLength || 0,
-              p_preview_url: finalMediaUrl,
-              p_source_message_id: message.id,
-              p_source_conversation_id: conversationId
-            });
-            
-            if (mediaError) {
-              console.error('❌ BIBLIOTECA: Erro ao salvar:', mediaError);
-            } else {
-              console.error('✅ BIBLIOTECA: Mídia sincronizada com ID:', mediaRecord);
-            }
+          console.error('💬 BIBLIOTECA: Chamando save_chat_media...', {
+            p_company_id: company.id,
+            p_lead_id: null, // NULL para pasta Chat genérica
+            p_s3_key: s3Key,
+            p_original_filename: originalFilename,
+            p_file_type: fileType
+          });
+          
+          // Salvar na biblioteca usando função do banco (SEM lead_id específico)
+          const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
+            p_company_id: company.id,
+            p_lead_id: null, // NULL para pasta Chat genérica - todas as mídias da empresa
+            p_s3_key: s3Key,
+            p_original_filename: originalFilename,
+            p_file_type: fileType,
+            p_mime_type: message.content?.mimetype || 'application/octet-stream',
+            p_file_size: message.content?.fileLength || 0,
+            p_preview_url: finalMediaUrl,
+            p_source_message_id: message.id,
+            p_source_conversation_id: conversationId
+          });
+          
+          if (mediaError) {
+            console.error('❌ BIBLIOTECA: Erro ao salvar:', mediaError);
           } else {
-            console.error('⚠️ BIBLIOTECA: Lead ID não encontrado no payload wa_chatlid');
+            console.error('✅ BIBLIOTECA: Mídia sincronizada com ID (pasta Chat genérica):', mediaRecord);
           }
         } else {
           console.error('⚠️ BIBLIOTECA: S3 key inválida ou não é mídia do WhatsApp:', s3Key);
