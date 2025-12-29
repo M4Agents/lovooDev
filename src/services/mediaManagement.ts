@@ -464,13 +464,13 @@ class MediaManagementService {
       console.log('🗑️ Excluindo múltiplos arquivos:', fileIds.length)
 
       const response = await fetch(
-        `${this.baseUrl}/files/bulk-delete?company_id=${companyId}`,
+        `${this.baseUrl}/files/delete?company_id=${companyId}`,
         {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ file_ids: fileIds })
+          body: JSON.stringify({ fileIds: fileIds })
         }
       )
 
