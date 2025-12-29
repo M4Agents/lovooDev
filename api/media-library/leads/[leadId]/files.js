@@ -149,6 +149,10 @@ export default async function handler(req, res) {
       query = query.like('s3_key', 'clientes/%')
       console.log('💬 Query para PASTA CHAT - mídias da pasta clientes/ (WhatsApp)')
       console.log('🔍 DEBUG: Aplicando filtro S3: s3_key LIKE clientes/%')
+      
+      // CORREÇÃO CRÍTICA: Forçar filtro adicional para garantir
+      query = query.not('s3_key', 'like', 'biblioteca/%')
+      console.log('🔍 DEBUG: Filtro adicional: NOT s3_key LIKE biblioteca/%')
     } else {
       // LEAD ESPECÍFICO: Buscar apenas mídias daquele lead
       if (!leadId) {
