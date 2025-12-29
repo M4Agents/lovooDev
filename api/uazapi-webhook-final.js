@@ -548,19 +548,27 @@ async function processMessage(payload) {
         if (s3Key && s3Key.startsWith('clientes/')) {
           console.error('💬 BIBLIOTECA: S3 key válida encontrada:', s3Key);
           
-          // CORREÇÃO DEFINITIVA: Extrair lead_id diretamente do payload wa_chatlid
+          // CORREÇÃO DEFINITIVA: Buscar lead_id usando telefone do payload
           let leadId = null;
           
-          // Tentar extrair do payload original primeiro
-          if (payload?.chat?.wa_chatlid) {
-            const chatLid = payload.chat.wa_chatlid;
-            console.error('💬 BIBLIOTECA: wa_chatlid encontrado no payload:', chatLid);
+          // Extrair telefone do payload para buscar lead_id correto
+          if (payload?.chat?.phone) {
+            const phoneFromPayload = payload.chat.phone.replace(/\D/g, ''); // Remove caracteres não numéricos
+            console.error('💬 BIBLIOTECA: Telefone encontrado no payload:', phoneFromPayload);
             
-            // Extrair número do formato "183120359858182@lid"
-            const leadIdMatch = chatLid.match(/^(\d+)@lid$/);
-            if (leadIdMatch) {
-              leadId = parseInt(leadIdMatch[1]);
-              console.error('💬 BIBLIOTECA: Lead ID extraído do payload:', leadId);
+            // Buscar lead_id na tabela leads usando o telefone
+            const { data: leadData, error: leadError } = await supabase
+              .from('leads')
+              .select('id')
+              .eq('phone', phoneFromPayload)
+              .eq('company_id', company.id)
+              .single();
+              
+            if (leadData && leadData.id) {
+              leadId = leadData.id;
+              console.error('💬 BIBLIOTECA: Lead ID encontrado via telefone:', leadId);
+            } else {
+              console.error('⚠️ BIBLIOTECA: Lead não encontrado para telefone:', phoneFromPayload);
             }
           }
           
