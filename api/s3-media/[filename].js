@@ -28,15 +28,13 @@ export default async function handler(req, res) {
   try {
     console.log('🔗 S3 Media Request:', { filename });
 
-    // Como os arquivos estão no banco mas não no Supabase Storage,
-    // vamos retornar uma URL placeholder ou erro mais informativo
+    // Buscar s3_key no banco e gerar URL direta do AWS S3
     console.log('📄 Arquivo solicitado:', filename);
     
-    // Buscar informações do arquivo no banco
     try {
       const { data: fileData, error: dbError } = await supabase
         .from('lead_media_unified')
-        .select('original_filename, s3_key, preview_url, file_type')
+        .select('original_filename, s3_key, file_type')
         .eq('original_filename', filename)
         .single();
       
@@ -50,21 +48,22 @@ export default async function handler(req, res) {
       
       console.log('✅ Arquivo encontrado no banco:', fileData);
       
-      // Se tem preview_url, usar ela
-      if (fileData.preview_url) {
-        console.log('🔗 Redirecionando para preview_url:', fileData.preview_url);
-        return res.redirect(302, fileData.preview_url);
+      // Limpar prefixo "supabase/" da chave S3
+      let cleanS3Key = fileData.s3_key;
+      if (cleanS3Key && cleanS3Key.startsWith('supabase/')) {
+        cleanS3Key = cleanS3Key.replace('supabase/', '');
       }
       
-      // Caso contrário, retornar informações do arquivo
-      return res.status(200).json({
-        message: 'File found but no accessible URL',
-        file: {
-          filename: fileData.original_filename,
-          type: fileData.file_type,
-          s3_key: fileData.s3_key
-        }
-      });
+      console.log('🔑 S3 Key original:', fileData.s3_key);
+      console.log('🔑 S3 Key limpa:', cleanS3Key);
+      
+      // Gerar URL direta do AWS S3 (EXCLUSIVAMENTE S3)
+      const s3Url = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${cleanS3Key}`;
+      
+      console.log('🔗 URL AWS S3 gerada:', s3Url);
+      
+      // Redirecionar para URL direta do AWS S3
+      return res.redirect(302, s3Url);
       
     } catch (error) {
       console.error('❌ Erro ao buscar arquivo no banco:', error);
