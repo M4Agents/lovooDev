@@ -3,6 +3,7 @@
 // =====================================================
 // Endpoint para gerenciar pastas da biblioteca da empresa
 // CRUD completo com estrutura hierárquica
+// Atualizado: 29/12/2025 - Forçar redeploy para resolver cache Vercel
 
 import { createClient } from '@supabase/supabase-js'
 
