@@ -43,9 +43,13 @@ export default async function handler(req, res) {
 
     const [fields, files] = await form.parse(req)
     
+    console.log('📋 Dados recebidos:', { fields, files: Object.keys(files) })
+    
     // Extrair dados do form
     const company_id = fields.company_id?.[0]
     const folder_id = fields.folder_id?.[0] || null
+    
+    console.log('🔍 Parâmetros extraídos:', { company_id, folder_id })
     
     // Validações básicas
     if (!company_id) {
