@@ -28,29 +28,46 @@ export default async function handler(req, res) {
   try {
     console.log('🔗 S3 Media Request:', { filename });
 
-    // Tentar Supabase Storage primeiro (fallback simples)
+    // Como os arquivos estão no banco mas não no Supabase Storage,
+    // vamos retornar uma URL placeholder ou erro mais informativo
+    console.log('📄 Arquivo solicitado:', filename);
+    
+    // Buscar informações do arquivo no banco
     try {
-      console.log('🔄 Tentando Supabase Storage para:', filename);
+      const { data: fileData, error: dbError } = await supabase
+        .from('lead_media_unified')
+        .select('original_filename, s3_key, preview_url, file_type')
+        .eq('original_filename', filename)
+        .single();
       
-      // Extrair nome do arquivo se necessário
-      let supabaseFilename = filename;
-      if (filename.includes('chat-media/')) {
-        supabaseFilename = filename.split('chat-media/')[1];
+      if (dbError || !fileData) {
+        console.log('❌ Arquivo não encontrado no banco:', filename);
+        return res.status(404).json({ 
+          error: 'File not found in database',
+          filename
+        });
       }
       
-      console.log('📁 Supabase filename:', supabaseFilename);
+      console.log('✅ Arquivo encontrado no banco:', fileData);
       
-      // Gerar URL pública do Supabase Storage
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-media')
-        .getPublicUrl(supabaseFilename);
-      
-      if (publicUrl) {
-        console.log('✅ Supabase Storage URL gerada:', publicUrl);
-        return res.redirect(302, publicUrl);
+      // Se tem preview_url, usar ela
+      if (fileData.preview_url) {
+        console.log('🔗 Redirecionando para preview_url:', fileData.preview_url);
+        return res.redirect(302, fileData.preview_url);
       }
-    } catch (supabaseError) {
-      console.error('❌ Supabase Storage falhou:', supabaseError);
+      
+      // Caso contrário, retornar informações do arquivo
+      return res.status(200).json({
+        message: 'File found but no accessible URL',
+        file: {
+          filename: fileData.original_filename,
+          type: fileData.file_type,
+          s3_key: fileData.s3_key
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar arquivo no banco:', error);
     }
     
     // Se chegou aqui, arquivo não encontrado
