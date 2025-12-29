@@ -115,9 +115,8 @@ export default async function handler(req, res) {
       // Gerar URL de preview usando endpoint proxy (como chat faz)
       const previewUrl = `/api/s3-media/${encodeURIComponent(uploadedFile.originalFilename)}`
 
-      // Salvar metadados no banco lead_media_unified (apenas campos essenciais que existem)
+      // Salvar metadados no banco lead_media_unified (sem ID - deixar PostgreSQL gerar UUID)
       const fileRecord = {
-        id: `lib_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         company_id: company_id,
         original_filename: uploadedFile.originalFilename,
         file_type: uploadedFile.mimetype.startsWith('image/') ? 'image' : 
