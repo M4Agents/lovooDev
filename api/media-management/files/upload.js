@@ -75,42 +75,76 @@ export default async function handler(req, res) {
       company_id
     })
 
-    // Usar abordagem do chat: upload via API endpoint (como chatApi.ts faz)
-    console.log('🚀 Usando abordagem do chat para upload...')
+    // UPLOAD REAL PARA AWS S3 usando credenciais do banco
+    console.log('🚀 Iniciando upload REAL para AWS S3...')
     
-    // Converter arquivo para formato compatível com chat
+    // Ler arquivo como buffer
     const fileBuffer = fs.readFileSync(uploadedFile.filepath)
     
-    // Simular File object para compatibilidade com chatApi
-    const fileObj = {
-      name: uploadedFile.originalFilename,
-      size: uploadedFile.size,
-      type: uploadedFile.mimetype,
-      arrayBuffer: async () => fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength)
-    }
-    
-    // Usar mesmo método do chat: chamada para API de upload
     try {
-      console.log('📤 Chamando API de upload do chat...')
+      console.log('🔑 Buscando credenciais AWS no banco...')
       
-      // Fazer upload usando mesmo endpoint que o chat usa
-      const formData = new FormData()
-      const blob = new Blob([fileBuffer], { type: uploadedFile.mimetype })
-      formData.append('file', blob, uploadedFile.originalFilename)
-      formData.append('company_id', company_id)
-      formData.append('conversation_id', `biblioteca-${company_id}`)
+      // Buscar credenciais AWS da empresa no banco
+      const { data: awsCredentials, error: credError } = await supabase
+        .from('aws_credentials')
+        .select('access_key_id, secret_access_key, region, bucket')
+        .eq('company_id', company_id)
+        .single()
       
-      // Simular upload bem-sucedido por enquanto (mesmo padrão do chat)
+      if (credError || !awsCredentials) {
+        console.error('❌ Credenciais AWS não encontradas:', credError)
+        throw new Error('Credenciais AWS não configuradas para esta empresa')
+      }
+      
+      console.log('✅ Credenciais AWS encontradas:', { 
+        bucket: awsCredentials.bucket, 
+        region: awsCredentials.region 
+      })
+      
+      // Importar AWS SDK v3
+      const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3')
+      
+      // Configurar cliente S3
+      const s3Client = new S3Client({
+        region: awsCredentials.region,
+        credentials: {
+          accessKeyId: awsCredentials.access_key_id,
+          secretAccessKey: awsCredentials.secret_access_key
+        }
+      })
+      
+      // Gerar chave S3 seguindo padrão do chat
       const messageId = `biblioteca-${company_id}-${Date.now()}`
       const now = new Date()
       const year = now.getFullYear()
       const month = String(now.getMonth() + 1).padStart(2, '0')
       const day = String(now.getDate()).padStart(2, '0')
       
-      // Gerar chave S3 seguindo padrão do chat
       const s3Key = `biblioteca/companies/${company_id}/${year}/${month}/${day}/${messageId}/${uploadedFile.originalFilename}`
       
-      console.log('✅ Upload simulado bem-sucedido (padrão chat):', { s3Key, messageId })
+      console.log('📤 Fazendo upload REAL para S3:', { 
+        bucket: awsCredentials.bucket, 
+        key: s3Key,
+        size: fileBuffer.length 
+      })
+      
+      // Comando de upload para S3
+      const uploadCommand = new PutObjectCommand({
+        Bucket: awsCredentials.bucket,
+        Key: s3Key,
+        Body: fileBuffer,
+        ContentType: uploadedFile.mimetype,
+        ContentLength: fileBuffer.length
+      })
+      
+      // Executar upload real para S3
+      const uploadResult = await s3Client.send(uploadCommand)
+      
+      console.log('✅ Upload REAL para S3 bem-sucedido:', { 
+        s3Key, 
+        messageId, 
+        etag: uploadResult.ETag 
+      })
 
       // Gerar URL de preview usando endpoint proxy (como chat faz)
       const previewUrl = `/api/s3-media/${encodeURIComponent(uploadedFile.originalFilename)}`
