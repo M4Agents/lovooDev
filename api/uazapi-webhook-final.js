@@ -552,8 +552,8 @@ async function processMessage(payload) {
           let leadId = null;
           
           // Tentar extrair do payload original primeiro
-          if (req.body?.chat?.wa_chatlid) {
-            const chatLid = req.body.chat.wa_chatlid;
+          if (payload?.chat?.wa_chatlid) {
+            const chatLid = payload.chat.wa_chatlid;
             console.error('💬 BIBLIOTECA: wa_chatlid encontrado no payload:', chatLid);
             
             // Extrair número do formato "183120359858182@lid"
