@@ -125,19 +125,38 @@ export default async function handler(req, res) {
 
     // Verificar se é pasta Chat (buscar ID da pasta Chat)
     let isChatFolder = false
+    console.log('🔍 DEBUG: Verificando folder_id recebido:', {
+      folder_id,
+      type: typeof folder_id,
+      hasValue: !!folder_id
+    })
+    
     if (folder_id) {
       console.log('🔍 Verificando se é pasta Chat...')
-      const { data: folderData } = await supabase
+      const { data: folderData, error: folderError } = await supabase
         .from('company_folders')
-        .select('path, name')
+        .select('path, name, id')
         .eq('id', folder_id)
         .eq('company_id', company_id)
         .single()
       
+      console.log('📁 DEBUG: Resultado da busca da pasta:', {
+        folderData,
+        folderError,
+        searchedId: folder_id,
+        company_id
+      })
+      
       if (folderData && folderData.path === '/chat') {
         isChatFolder = true
-        console.log('💬 PASTA CHAT DETECTADA - Buscando TODAS as mídias da empresa')
+        console.log('💬 PASTA CHAT DETECTADA - Aplicando filtro S3 clientes/')
+      } else if (folderData) {
+        console.log('📁 Pasta encontrada mas NÃO é Chat:', folderData.path)
+      } else {
+        console.log('❌ Pasta não encontrada com ID:', folder_id)
       }
+    } else {
+      console.log('⚠️ folder_id não fornecido - usando lógica de lead específico')
     }
 
     console.log('🔍 Buscando dados reais na tabela lead_media_unified...')
