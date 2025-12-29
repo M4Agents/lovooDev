@@ -228,7 +228,29 @@ export default async function handler(req, res) {
       files = data || []
       totalCount = count || 0
       
-      console.log('✅ PRODUÇÃO - DADOS REAIS OBTIDOS com sucesso:', {
+      // CORREÇÃO CRÍTICA: Gerar URLs corretas do S3 para arquivos reais
+      files = files.map(file => {
+        let correctedS3Key = file.s3_key
+        let previewUrl = file.preview_url
+        
+        // Corrigir chave S3 se tiver prefixo incorreto
+        if (correctedS3Key && correctedS3Key.startsWith('supabase/')) {
+          correctedS3Key = correctedS3Key.replace('supabase/', '')
+        }
+        
+        // Gerar URL direta do S3 se não existir preview_url
+        if (!previewUrl && correctedS3Key) {
+          previewUrl = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${correctedS3Key}`
+        }
+        
+        return {
+          ...file,
+          s3_key: correctedS3Key,
+          preview_url: previewUrl
+        }
+      })
+      
+      console.log('✅ PRODUÇÃO - DADOS REAIS OBTIDOS e URLs CORRIGIDAS:', {
         arquivos: files.length,
         totalCount,
         primeiroArquivo: files[0] ? {
@@ -236,11 +258,9 @@ export default async function handler(req, res) {
           filename: files[0].original_filename,
           type: files[0].file_type,
           received_at: files[0].received_at,
-          s3_key: files[0].s3_key
-        } : 'nenhum',
-        ultimoArquivo: files[files.length - 1] ? {
-          id: files[files.length - 1].id,
-          filename: files[files.length - 1].original_filename
+          s3_key_original: data[0]?.s3_key,
+          s3_key_corrigida: files[0].s3_key,
+          preview_url: files[0].preview_url
         } : 'nenhum'
       })
     }
