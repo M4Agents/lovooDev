@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Layout } from '../components/Layout'
 import { FolderExplorer } from '../components/MediaLibrary/FolderExplorer'
 import { FileGrid } from '../components/MediaLibrary/FileGrid'
 import { FileUpload } from '../components/MediaLibrary/FileUpload'
@@ -18,7 +17,6 @@ import {
   FolderPlus,
   Grid3X3,
   List,
-  Filter,
   SortAsc,
   SortDesc,
   RefreshCw
@@ -209,19 +207,16 @@ export const MediaLibrary: React.FC = () => {
 
   if (!company) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <p className="text-gray-500">Carregando informações da empresa...</p>
-          </div>
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <p className="text-gray-500">Carregando informações da empresa...</p>
         </div>
-      </Layout>
+      </div>
     )
   }
 
   return (
-    <Layout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -448,6 +443,5 @@ export const MediaLibrary: React.FC = () => {
           />
         )}
       </div>
-    </Layout>
-  )
+    )
 }
