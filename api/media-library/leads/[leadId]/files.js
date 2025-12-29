@@ -58,17 +58,11 @@ export default async function handler(req, res) {
       file_type, 
       page = '1', 
       limit = '20',
-      search = ''
+      search = '',
+      folder_id = null
     } = req.query
 
     // Validações básicas
-    if (!leadId) {
-      return res.status(400).json({
-        error: 'Lead ID obrigatório',
-        message: 'Parâmetro leadId é necessário'
-      })
-    }
-
     if (!company_id) {
       return res.status(400).json({
         error: 'Company ID obrigatório', 
@@ -81,33 +75,71 @@ export default async function handler(req, res) {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
-    console.log('📱 PRODUÇÃO - Buscando arquivos para lead:', { 
+    console.log('📱 PRODUÇÃO - Buscando arquivos:', { 
       leadId, 
       company_id, 
       file_type, 
       page: pageNum, 
       limit: limitNum,
       search,
+      folder_id,
       timestamp: new Date().toISOString(),
       supabaseConfigured: !!supabase
     })
 
     // =====================================================
-    // BUSCAR DADOS NA TABELA (se existir)
+    // LÓGICA CONDICIONAL: PASTA CHAT vs LEAD ESPECÍFICO
     // =====================================================
 
     let files = []
     let totalCount = 0
+
+    // Verificar se é pasta Chat (buscar ID da pasta Chat)
+    let isChatFolder = false
+    if (folder_id) {
+      console.log('🔍 Verificando se é pasta Chat...')
+      const { data: folderData } = await supabase
+        .from('company_folders')
+        .select('path, name')
+        .eq('id', folder_id)
+        .eq('company_id', company_id)
+        .single()
+      
+      if (folderData && folderData.path === '/chat') {
+        isChatFolder = true
+        console.log('💬 PASTA CHAT DETECTADA - Buscando TODAS as mídias da empresa')
+      }
+    }
 
     console.log('🔍 Buscando dados reais na tabela lead_media_unified...')
     
     // Construir query base
     let query = supabase
       .from('lead_media_unified')
-      .select('*', { count: 'exact' })
+      .select(`
+        id, original_filename, file_type, mime_type, file_size, 
+        s3_key, preview_url, received_at, lead_id,
+        ${isChatFolder ? 'leads!inner(name, phone)' : ''}
+      `, { count: 'exact' })
       .eq('company_id', company_id)
-      .eq('lead_id', leadId)
-      .order('received_at', { ascending: false })
+
+    if (isChatFolder) {
+      // PASTA CHAT: Buscar TODAS as mídias de TODOS os leads da empresa
+      query = query.eq('folder_id', folder_id)
+      console.log('💬 Query para PASTA CHAT - todas as mídias da empresa')
+    } else {
+      // LEAD ESPECÍFICO: Buscar apenas mídias daquele lead
+      if (!leadId) {
+        return res.status(400).json({
+          error: 'Lead ID obrigatório',
+          message: 'Parâmetro leadId é necessário para consulta específica de lead'
+        })
+      }
+      query = query.eq('lead_id', leadId)
+      console.log('👤 Query para LEAD ESPECÍFICO:', leadId)
+    }
+
+    query = query.order('received_at', { ascending: false })
 
     // Filtrar por tipo se especificado
     if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
