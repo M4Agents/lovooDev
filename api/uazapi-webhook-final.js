@@ -453,6 +453,38 @@ async function processMessage(payload) {
             if (s3Result.success) {
               console.error('✅ AWS S3 DIRETO: Upload concluído com sucesso!');
               
+              // 💬 SALVAR NA PASTA CHAT - NOVA FUNCIONALIDADE
+              try {
+                console.error('💬 PASTA CHAT: Salvando mídia na biblioteca...');
+                
+                // Determinar tipo de arquivo
+                const fileType = contentType.startsWith('image/') ? 'image' :
+                               contentType.startsWith('video/') ? 'video' :
+                               contentType.startsWith('audio/') ? 'audio' : 'document';
+                
+                // Salvar na pasta Chat usando função do banco
+                const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
+                  p_company_id: company.id,
+                  p_lead_id: contact.lead_id,
+                  p_s3_key: s3Result.data.s3Key,
+                  p_original_filename: fileName,
+                  p_file_type: fileType,
+                  p_mime_type: contentType,
+                  p_file_size: finalBuffer.length,
+                  p_preview_url: null, // Será preenchido com signed URL depois
+                  p_source_message_id: message.id,
+                  p_source_conversation_id: conversation.id
+                });
+                
+                if (mediaError) {
+                  console.error('⚠️ PASTA CHAT: Erro ao salvar na biblioteca:', mediaError);
+                } else {
+                  console.error('✅ PASTA CHAT: Mídia salva na biblioteca com ID:', mediaRecord);
+                }
+              } catch (chatError) {
+                console.error('⚠️ PASTA CHAT: Erro na integração:', chatError);
+              }
+              
               // Gerar signed URL permanente (mesmo sistema do frontend)
               console.error('🔗 AWS S3 DIRETO: Gerando signed URL...');
               const signedUrlResult = await S3Storage.generateSignedUrl(

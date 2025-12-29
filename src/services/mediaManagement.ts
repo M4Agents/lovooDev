@@ -16,6 +16,7 @@ export interface MediaFolder extends CompanyFolder {
   children?: MediaFolder[]
   file_count: number
   total_size: number
+  is_system_folder?: boolean
 }
 
 export interface MediaFileExtended extends MediaFile {
