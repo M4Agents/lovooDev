@@ -84,23 +84,14 @@ export const MediaLibrary: React.FC = () => {
       const isChatFolder = state.currentFolder?.name === 'Chat' || state.currentFolder?.path === '/chat'
       
       if (isChatFolder) {
-        console.log('💬 FRONTEND: Detectou pasta Chat, usando API específica')
-        try {
-          filesData = await mediaManagement.getLeadMediaFiles(undefined, company.id, {
-            search: state.searchQuery,
-            fileType: state.filterType === 'all' ? undefined : state.filterType as any,
-            folderId: state.currentFolder.id
-          })
-        } catch (error) {
-          console.error('❌ Erro na API da pasta Chat, usando fallback:', error)
-          // Fallback para pasta Chat: usar API de pastas normal
-          filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
-            search: state.searchQuery,
-            sortBy: state.sortBy,
-            sortOrder: state.sortOrder,
-            fileType: state.filterType === 'all' ? undefined : state.filterType
-          })
-        }
+        console.log('💬 FRONTEND: Detectou pasta Chat, usando fallback direto')
+        // Para pasta Chat, sempre usar API normal (fallback direto)
+        filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+          search: state.searchQuery,
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
+          fileType: state.filterType === 'all' ? undefined : state.filterType
+        })
       } else if (state.currentFolder) {
         // Outras pastas: usar API normal
         filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
@@ -119,10 +110,19 @@ export const MediaLibrary: React.FC = () => {
         })
       }
 
+      // CORREÇÃO CRÍTICA: Verificar se filesData existe e tem estrutura correta
+      const files = filesData?.files || []
+      console.log('📊 FRONTEND: Dados processados:', {
+        filesDataExists: !!filesData,
+        filesArray: Array.isArray(files),
+        filesCount: files.length,
+        isChatFolder
+      })
+
       setState(prev => ({
         ...prev,
         folders,
-        files: filesData.files,
+        files: files,
         loading: false
       }))
 
