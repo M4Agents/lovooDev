@@ -225,13 +225,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       }
 
       // Aguardar todos os uploads terminarem e verificar se pelo menos um foi bem-sucedido
-      const hasSuccess = uploadFiles.some(f => f.status === 'success')
-      
-      if (hasSuccess) {
-        setTimeout(() => {
-          onComplete() // Chama refresh automático da lista
-        }, 1000)
-      }
+      // Precisamos verificar o estado atualizado após todos os uploads
+      setTimeout(() => {
+        setUploadFiles(prev => {
+          const hasSuccess = prev.some(f => f.status === 'success')
+          
+          if (hasSuccess) {
+            console.log('✅ Upload bem-sucedido, chamando onComplete...')
+            onComplete() // Chama refresh automático da lista
+          } else {
+            console.log('❌ Nenhum upload bem-sucedido')
+          }
+          
+          return prev
+        })
+      }, 500)
 
     } catch (error) {
       console.error('Erro no upload em lote:', error)
