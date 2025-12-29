@@ -79,6 +79,13 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
 // =====================================================
 
 export default async function handler(req, res) {
+  console.log('🚀 PRODUÇÃO - API files.js CHAMADA:', {
+    method: req.method,
+    url: req.url,
+    query: req.query,
+    timestamp: new Date().toISOString()
+  })
+
   // Apenas GET permitido
   if (req.method !== 'GET') {
     return res.status(405).json({ 
@@ -117,13 +124,15 @@ export default async function handler(req, res) {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
-    console.log('📱 Buscando arquivos para lead:', { 
+    console.log('📱 PRODUÇÃO - Buscando arquivos para lead:', { 
       leadId, 
       company_id, 
       file_type, 
       page: pageNum, 
       limit: limitNum,
-      search 
+      search,
+      timestamp: new Date().toISOString(),
+      supabaseConfigured: !!supabase
     })
 
     // =====================================================
@@ -219,14 +228,19 @@ export default async function handler(req, res) {
       files = data || []
       totalCount = count || 0
       
-      console.log('✅ DADOS REAIS OBTIDOS com sucesso:', {
+      console.log('✅ PRODUÇÃO - DADOS REAIS OBTIDOS com sucesso:', {
         arquivos: files.length,
         totalCount,
         primeiroArquivo: files[0] ? {
           id: files[0].id,
           filename: files[0].original_filename,
           type: files[0].file_type,
-          received_at: files[0].received_at
+          received_at: files[0].received_at,
+          s3_key: files[0].s3_key
+        } : 'nenhum',
+        ultimoArquivo: files[files.length - 1] ? {
+          id: files[files.length - 1].id,
+          filename: files[files.length - 1].original_filename
         } : 'nenhum'
       })
     }
