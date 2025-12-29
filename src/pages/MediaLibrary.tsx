@@ -111,7 +111,19 @@ export const MediaLibrary: React.FC = () => {
       }
 
       // CORREÇÃO CRÍTICA: Verificar se filesData existe e tem estrutura correta
-      const files = filesData?.files || []
+      let files = filesData?.files || []
+      
+      // FILTRO ESPECÍFICO PARA PASTA CHAT: Mostrar apenas mídias do WhatsApp
+      if (isChatFolder && Array.isArray(files)) {
+        const originalCount = files.length
+        files = files.filter(file => file.s3_key && file.s3_key.startsWith('clientes/'))
+        console.log('🔍 FRONTEND: Filtro pasta Chat aplicado:', {
+          originalCount,
+          filteredCount: files.length,
+          removedCount: originalCount - files.length
+        })
+      }
+      
       console.log('📊 FRONTEND: Dados processados:', {
         filesDataExists: !!filesData,
         filesArray: Array.isArray(files),
