@@ -189,31 +189,18 @@ export default async function handler(req, res) {
 
         folders = data || []
 
-        // Se não há pastas, criar as padrão
+        // Se não há pastas, retornar array vazio (não criar pastas mock)
         if (folders.length === 0) {
-          console.log('📁 Criando pastas padrão para empresa')
-          const defaultFolders = generateMockFolders(company_id)
-          
-          const { data: insertedFolders, error: insertError } = await supabase
-            .from('company_folders')
-            .insert(defaultFolders.map(folder => ({
-              company_id: folder.company_id,
-              name: folder.name,
-              path: folder.path,
-              parent_path: folder.parent_path,
-              icon: folder.icon,
-              description: folder.description
-            })))
-            .select()
-
-          if (!insertError && insertedFolders) {
-            folders = insertedFolders
-          }
+          console.log('📁 Nenhuma pasta encontrada para empresa:', company_id)
+          folders = []
+        } else {
+          console.log('✅ PASTAS REAIS encontradas:', folders.length)
         }
 
       } catch (dbError) {
-        console.log('⚠️ Erro ao acessar banco, usando dados mock:', dbError.message)
-        folders = generateMockFolders(company_id)
+        console.error('❌ Erro ao acessar banco de pastas:', dbError.message)
+        // Retornar array vazio em vez de dados mock
+        folders = []
       }
 
       return res.status(200).json({

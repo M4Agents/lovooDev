@@ -95,20 +95,23 @@ export default async function handler(req, res) {
     }
 
     // =====================================================
-    // FALLBACK: DADOS MOCK PARA DESENVOLVIMENTO
+    // FALLBACK: DADOS MOCK APENAS SE NECESSÁRIO
     // =====================================================
 
     if (mediaSummary.total === 0) {
-      // Simular dados baseados no leadId para consistência
+      console.log('⚠️ Nenhum dado real encontrado, usando fallback mock mínimo')
+      // Fallback mínimo apenas se realmente não houver dados
       const mockData = {
-        images: Math.floor(Math.random() * 50) + 10,
-        videos: Math.floor(Math.random() * 20) + 5,
-        audios: Math.floor(Math.random() * 100) + 20,
-        documents: Math.floor(Math.random() * 40) + 10
+        images: 0,
+        videos: 0,
+        audios: 0,
+        documents: 0,
+        total: 0
       }
       
-      mockData.total = mockData.images + mockData.videos + mockData.audios + mockData.documents
       mediaSummary = mockData
+    } else {
+      console.log('✅ DADOS REAIS encontrados no summary:', mediaSummary)
     }
 
     console.log('✅ Resumo de mídia obtido:', mediaSummary)

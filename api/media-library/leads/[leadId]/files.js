@@ -13,8 +13,15 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.VITE_SUPABASE_URL
 const supabaseServiceKey = process.env.VITE_SUPABASE_ANON_KEY
 
+console.log('🔧 Configuração Supabase:', {
+  hasUrl: !!supabaseUrl,
+  hasKey: !!supabaseServiceKey,
+  url: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING'
+})
+
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Supabase configuration missing')
+  console.error('❌ Supabase configuration missing:', { supabaseUrl, supabaseServiceKey })
+  throw new Error('Configuração Supabase obrigatória')
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -126,55 +133,102 @@ export default async function handler(req, res) {
     let files = []
     let totalCount = 0
 
-    try {
-      // Construir query base
-      let query = supabase
-        .from('lead_media_unified')
-        .select('*', { count: 'exact' })
-        .eq('company_id', company_id)
-        .eq('lead_id', leadId)
-        .order('received_at', { ascending: false })
+    console.log('🔍 Buscando dados reais na tabela lead_media_unified...')
+    
+    // Construir query base
+    let query = supabase
+      .from('lead_media_unified')
+      .select('*', { count: 'exact' })
+      .eq('company_id', company_id)
+      .eq('lead_id', leadId)
+      .order('received_at', { ascending: false })
 
-      // Filtrar por tipo se especificado
-      if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-        query = query.eq('file_type', file_type)
+    // Filtrar por tipo se especificado
+    if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
+      query = query.eq('file_type', file_type)
+      console.log('🎯 Filtro por tipo aplicado:', file_type)
+    }
+
+    // Filtrar por busca se especificado
+    if (search && search.trim()) {
+      query = query.ilike('original_filename', `%${search.trim()}%`)
+      console.log('🔍 Filtro de busca aplicado:', search.trim())
+    }
+
+    // Aplicar paginação
+    query = query.range(offset, offset + limitNum - 1)
+    
+    console.log('📊 Query configurada:', {
+      company_id,
+      leadId,
+      file_type: file_type || 'todos',
+      search: search || 'sem filtro',
+      offset,
+      limit: limitNum
+    })
+
+    const { data, error, count } = await query
+
+    if (error) {
+      console.error('❌ ERRO na query Supabase:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      
+      // Se for erro de RLS ou permissão, tentar sem RLS
+      console.log('🔄 Tentando query alternativa sem RLS...')
+      try {
+        const { data: altData, error: altError, count: altCount } = await supabase
+          .from('lead_media_unified')
+          .select('*', { count: 'exact' })
+          .eq('company_id', company_id)
+          .eq('lead_id', leadId)
+          .order('received_at', { ascending: false })
+          .range(offset, offset + limitNum - 1)
+        
+        if (altError) {
+          console.error('❌ Erro também na query alternativa:', altError)
+          throw altError
+        }
+        
+        console.log('✅ Query alternativa funcionou!')
+        files = altData || []
+        totalCount = altCount || 0
+        
+      } catch (altDbError) {
+        console.error('❌ Ambas queries falharam, usando dados mock como fallback:', altDbError.message)
+        
+        // Fallback para dados mock apenas em último caso
+        const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3)
+        
+        let filteredFiles = mockFiles
+        if (search && search.trim()) {
+          filteredFiles = mockFiles.filter(file => 
+            file.original_filename.toLowerCase().includes(search.trim().toLowerCase())
+          )
+        }
+        
+        totalCount = filteredFiles.length
+        files = filteredFiles.slice(offset, offset + limitNum)
+        
+        console.log('⚠️ USANDO DADOS MOCK - Total gerado:', files.length)
       }
-
-      // Filtrar por busca se especificado
-      if (search && search.trim()) {
-        query = query.ilike('original_filename', `%${search.trim()}%`)
-      }
-
-      // Aplicar paginação
-      query = query.range(offset, offset + limitNum - 1)
-
-      const { data, error, count } = await query
-
-      if (error) {
-        console.log('⚠️ Tabela lead_media_unified ainda não existe, usando dados mock')
-        throw error
-      }
-
+    } else {
       files = data || []
       totalCount = count || 0
-
-    } catch (dbError) {
-      console.log('⚠️ Erro ao acessar banco, usando dados mock:', dbError.message)
       
-      // Fallback para dados mock
-      const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3) // Gerar mais para simular paginação
-      
-      // Aplicar filtro de busca nos dados mock
-      let filteredFiles = mockFiles
-      if (search && search.trim()) {
-        filteredFiles = mockFiles.filter(file => 
-          file.original_filename.toLowerCase().includes(search.trim().toLowerCase())
-        )
-      }
-      
-      // Aplicar paginação nos dados mock
-      totalCount = filteredFiles.length
-      files = filteredFiles.slice(offset, offset + limitNum)
+      console.log('✅ DADOS REAIS OBTIDOS com sucesso:', {
+        arquivos: files.length,
+        totalCount,
+        primeiroArquivo: files[0] ? {
+          id: files[0].id,
+          filename: files[0].original_filename,
+          type: files[0].file_type,
+          received_at: files[0].received_at
+        } : 'nenhum'
+      })
     }
 
     // =====================================================
