@@ -4,6 +4,7 @@
 // API para listar arquivos de uma pasta
 
 import { createClient } from '@supabase/supabase-js'
+import { generatePresignedUrl } from '../utils/s3-presigned.js'
 
 // Configuração do Supabase
 const supabaseUrl = process.env.VITE_SUPABASE_URL
@@ -99,7 +100,8 @@ export default async function handler(req, res) {
       })
     }
 
-    const files = (data || []).map(file => {
+    // Processar arquivos e gerar presigned URLs
+    const files = await Promise.all((data || []).map(async (file) => {
       let correctedS3Key = file.s3_key
       let previewUrl = file.preview_url
 
@@ -108,9 +110,15 @@ export default async function handler(req, res) {
         correctedS3Key = correctedS3Key.replace('supabase/', '')
       }
 
-      // Gerar URL direta do S3 se não existir preview_url
+      // Gerar presigned URL segura se não existir preview_url
       if (!previewUrl && correctedS3Key) {
-        previewUrl = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${correctedS3Key}`
+        try {
+          previewUrl = await generatePresignedUrl(correctedS3Key, 3600) // 1 hora de validade
+          console.log('✅ Presigned URL gerada para:', file.original_filename)
+        } catch (error) {
+          console.error('❌ Erro ao gerar presigned URL para:', file.original_filename, error.message)
+          previewUrl = null // Manter null se não conseguir gerar
+        }
       }
 
       return {
@@ -131,7 +139,7 @@ export default async function handler(req, res) {
         tags: [],
         is_favorite: false
       }
-    })
+    }))
 
     const totalCount = count || 0
     const totalPages = Math.ceil(totalCount / limitNum)
