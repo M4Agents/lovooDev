@@ -27,52 +27,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // =====================================================
-// HELPER: GERAR DADOS MOCK
+// DADOS MOCK REMOVIDOS - APENAS DADOS REAIS
 // =====================================================
-
-const generateMockFiles = (leadId, fileType = null, limit = 20) => {
-  const types = fileType ? [fileType] : ['image', 'video', 'audio', 'document']
-  const mockFiles = []
-  
-  const fileNames = {
-    image: ['produto_foto.jpg', 'banner_promocao.png', 'logo_empresa.webp', 'catalogo_visual.jpg'],
-    video: ['demo_produto.mp4', 'apresentacao.mov', 'tutorial.avi', 'depoimento.mp4'],
-    audio: ['audio_whatsapp.ogg', 'gravacao_reuniao.mp3', 'podcast_episodio.wav'],
-    document: ['contrato.pdf', 'proposta_comercial.docx', 'planilha_precos.xlsx', 'manual_usuario.pdf']
-  }
-  
-  const mimeTypes = {
-    image: ['image/jpeg', 'image/png', 'image/webp'],
-    video: ['video/mp4', 'video/mov', 'video/avi'],
-    audio: ['audio/ogg', 'audio/mp3', 'audio/wav'],
-    document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
-  }
-  
-  for (let i = 0; i < limit; i++) {
-    const type = types[Math.floor(Math.random() * types.length)]
-    const names = fileNames[type]
-    const mimes = mimeTypes[type]
-    
-    const file = {
-      id: `mock_${leadId}_${type}_${i}`,
-      original_filename: names[Math.floor(Math.random() * names.length)],
-      file_type: type,
-      mime_type: mimes[Math.floor(Math.random() * mimes.length)],
-      file_size: Math.floor(Math.random() * 10000000) + 100000, // 100KB - 10MB
-      s3_key: `biblioteca/leads/${leadId}/${type}s/mock_file_${i}`,
-      thumbnail_s3_key: type === 'image' || type === 'video' ? `thumbnails/mock_thumb_${i}.webp` : null,
-      preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/mock_preview_${i}`,
-      received_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // Últimos 30 dias
-      source_message_id: `msg_${Math.floor(Math.random() * 1000000)}`,
-      created_at: new Date().toISOString()
-    }
-    
-    mockFiles.push(file)
-  }
-  
-  // Ordenar por data de recebimento (mais recentes primeiro)
-  return mockFiles.sort((a, b) => new Date(b.received_at) - new Date(a.received_at))
-}
+// Função generateMockFiles removida - sistema agora usa apenas dados reais
 
 // =====================================================
 // HANDLER PRINCIPAL
@@ -207,22 +164,13 @@ export default async function handler(req, res) {
         totalCount = altCount || 0
         
       } catch (altDbError) {
-        console.error('❌ Ambas queries falharam, usando dados mock como fallback:', altDbError.message)
+        console.error('❌ Ambas queries falharam, retornando lista vazia:', altDbError.message)
         
-        // Fallback para dados mock apenas em último caso
-        const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3)
+        // Retornar lista vazia - SEM fallback mock
+        files = []
+        totalCount = 0
         
-        let filteredFiles = mockFiles
-        if (search && search.trim()) {
-          filteredFiles = mockFiles.filter(file => 
-            file.original_filename.toLowerCase().includes(search.trim().toLowerCase())
-          )
-        }
-        
-        totalCount = filteredFiles.length
-        files = filteredFiles.slice(offset, offset + limitNum)
-        
-        console.log('⚠️ USANDO DADOS MOCK - Total gerado:', files.length)
+        console.log('✅ PRODUÇÃO - Retornando lista vazia (sem dados mock)')
       }
     } else {
       files = data || []

@@ -91,25 +91,15 @@ export default async function handler(req, res) {
         }
       }
     } catch (dbError) {
-      console.log('⚠️ Erro ao acessar banco, usando dados mock:', dbError.message)
+      console.log('⚠️ Erro ao acessar banco, retornando zeros:', dbError.message)
     }
 
     // =====================================================
-    // FALLBACK: DADOS MOCK APENAS SE NECESSÁRIO
+    // APENAS DADOS REAIS - SEM FALLBACK MOCK
     // =====================================================
 
     if (mediaSummary.total === 0) {
-      console.log('⚠️ Nenhum dado real encontrado, usando fallback mock mínimo')
-      // Fallback mínimo apenas se realmente não houver dados
-      const mockData = {
-        images: 0,
-        videos: 0,
-        audios: 0,
-        documents: 0,
-        total: 0
-      }
-      
-      mediaSummary = mockData
+      console.log('✅ PRODUÇÃO - Nenhum arquivo encontrado, retornando zeros reais')
     } else {
       console.log('✅ DADOS REAIS encontrados no summary:', mediaSummary)
     }
