@@ -453,14 +453,31 @@ async function processMessage(payload) {
             if (s3Result.success) {
               console.error('✅ AWS S3 DIRETO: Upload concluído com sucesso!');
               
-              // 💬 SALVAR NA PASTA CHAT - NOVA FUNCIONALIDADE
+              // 💬 SALVAR NA PASTA CHAT - CORREÇÃO CRÍTICA
               try {
-                console.error('💬 PASTA CHAT: Salvando mídia na biblioteca...');
+                console.error('💬 PASTA CHAT: Iniciando salvamento na biblioteca...');
+                console.error('💬 DADOS:', {
+                  company_id: company.id,
+                  lead_id: contact.lead_id,
+                  s3_key: s3Result.data.s3Key,
+                  filename: fileName,
+                  contentType: contentType
+                });
                 
                 // Determinar tipo de arquivo
                 const fileType = contentType.startsWith('image/') ? 'image' :
                                contentType.startsWith('video/') ? 'video' :
                                contentType.startsWith('audio/') ? 'audio' : 'document';
+                
+                console.error('💬 CHAMANDO save_chat_media com parâmetros:', {
+                  p_company_id: company.id,
+                  p_lead_id: contact.lead_id,
+                  p_s3_key: s3Result.data.s3Key,
+                  p_original_filename: fileName,
+                  p_file_type: fileType,
+                  p_mime_type: contentType,
+                  p_file_size: finalBuffer.length
+                });
                 
                 // Salvar na pasta Chat usando função do banco
                 const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
@@ -477,12 +494,22 @@ async function processMessage(payload) {
                 });
                 
                 if (mediaError) {
-                  console.error('⚠️ PASTA CHAT: Erro ao salvar na biblioteca:', mediaError);
+                  console.error('❌ PASTA CHAT: ERRO CRÍTICO ao salvar na biblioteca:', {
+                    error: mediaError,
+                    message: mediaError.message,
+                    details: mediaError.details,
+                    hint: mediaError.hint,
+                    code: mediaError.code
+                  });
                 } else {
-                  console.error('✅ PASTA CHAT: Mídia salva na biblioteca com ID:', mediaRecord);
+                  console.error('✅ PASTA CHAT: SUCESSO! Mídia salva na biblioteca com ID:', mediaRecord);
                 }
               } catch (chatError) {
-                console.error('⚠️ PASTA CHAT: Erro na integração:', chatError);
+                console.error('❌ PASTA CHAT: EXCEÇÃO na integração:', {
+                  error: chatError,
+                  message: chatError.message,
+                  stack: chatError.stack
+                });
               }
               
               // Gerar signed URL permanente (mesmo sistema do frontend)
