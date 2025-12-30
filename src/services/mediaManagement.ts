@@ -348,7 +348,7 @@ class MediaManagementService {
               
               try {
                 // Importar S3Storage para buscar arquivos reais
-                const { S3Storage } = await import('../aws/s3Storage.js')
+                const { S3Storage } = await import('./aws/s3Storage.js')
                 const prefix = `clientes/${companyId}/whatsapp/`
                 const s3Result = await S3Storage.listObjects(companyId, prefix)
                 
