@@ -358,11 +358,11 @@ class MediaManagementService {
                 const day = String(fileDate.getDate()).padStart(2, '0')
                 
                 const fileTypes = [
-                  { ext: 'jpg', type: 'image', mime: 'image/jpeg' },
-                  { ext: 'png', type: 'image', mime: 'image/png' },
-                  { ext: 'mp4', type: 'video', mime: 'video/mp4' },
-                  { ext: 'mp3', type: 'audio', mime: 'audio/mpeg' },
-                  { ext: 'pdf', type: 'document', mime: 'application/pdf' }
+                  { ext: 'jpg', type: 'image' as const, mime: 'image/jpeg', preview: `https://picsum.photos/400/300?random=${i}` },
+                  { ext: 'png', type: 'image' as const, mime: 'image/png', preview: `https://picsum.photos/400/300?random=${i + 100}` },
+                  { ext: 'mp4', type: 'video' as const, mime: 'video/mp4', preview: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4' },
+                  { ext: 'mp3', type: 'audio' as const, mime: 'audio/mpeg', preview: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
+                  { ext: 'pdf', type: 'document' as const, mime: 'application/pdf', preview: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
                 ]
                 
                 const fileType = fileTypes[i % fileTypes.length]
@@ -375,23 +375,18 @@ class MediaManagementService {
                   file_type: fileType.type,
                   mime_type: fileType.mime,
                   file_size: Math.floor(Math.random() * 500000) + 50000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/${year}/${month}/${day}/${messageId}/file_${i}.${fileType.ext}`,
+                  preview_url: fileType.preview,
                   received_at: fileDate.toISOString(),
                   created_at: fileDate.toISOString(),
                   source: 'whatsapp_s3_simulated'
                 })
               }
 
-              const pageNum = parseInt(page)
-              const limitNum = parseInt(limit)
+              const pageNum = parseInt(page.toString())
+              const limitNum = parseInt(limit.toString())
               const offset = (pageNum - 1) * limitNum
               const paginatedFiles = chatFiles.slice(offset, offset + limitNum)
               
-              const stats = chatFiles.reduce((acc: any, file: any) => {
-                acc[file.file_type] = (acc[file.file_type] || 0) + 1
-                acc.total = (acc.total || 0) + 1
-                return acc
-              }, {})
 
               console.log('✅ PASTA CHAT S3: Retornando', paginatedFiles.length, 'de', chatFiles.length, 'arquivos simulados')
 
@@ -404,15 +399,8 @@ class MediaManagementService {
                   totalPages: Math.ceil(chatFiles.length / limitNum),
                   hasNext: offset + limitNum < chatFiles.length,
                   hasPrev: pageNum > 1
-                },
-                stats: {
-                  total: stats.total || 0,
-                  image: stats.image || 0,
-                  video: stats.video || 0,
-                  audio: stats.audio || 0,
-                  document: stats.document || 0
                 }
-              }
+              } as any
             } else {
               console.log('📁 Pasta não é Chat:', currentFolder?.name || 'não encontrada')
             }
