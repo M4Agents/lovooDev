@@ -84,14 +84,36 @@ export const MediaLibrary: React.FC = () => {
       const isChatFolder = state.currentFolder?.name === 'Chat' || state.currentFolder?.path === '/chat'
       
       if (isChatFolder) {
-        console.log('💬 FRONTEND: Detectou pasta Chat, usando fallback direto')
-        // Para pasta Chat, sempre usar API normal (fallback direto)
-        filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
-          search: state.searchQuery,
-          sortBy: state.sortBy,
-          sortOrder: state.sortOrder,
-          fileType: state.filterType === 'all' ? undefined : state.filterType
-        })
+        console.log('💬 FRONTEND: Detectou pasta Chat, usando nova API S3 direta')
+        try {
+          // Usar nova API de listagem S3 direta para pasta Chat
+          const response = await fetch(`/api/media-library/chat/files?page=1&limit=1000`, {
+            method: 'GET',
+            headers: {
+              // 'Authorization': `Bearer ${user?.accessToken}`, // Token não disponível no User type
+              'Content-Type': 'application/json'
+            }
+          })
+          
+          if (response.ok) {
+            filesData = await response.json()
+            console.log('✅ FRONTEND: Dados obtidos da nova API S3:', {
+              totalFiles: filesData.stats?.total || 0,
+              returnedFiles: filesData.files?.length || 0
+            })
+          } else {
+            throw new Error(`Erro na API S3: ${response.status}`)
+          }
+        } catch (error) {
+          console.error('❌ FRONTEND: Erro na nova API S3, usando fallback:', error)
+          // Fallback para API antiga se nova falhar
+          filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
+            search: state.searchQuery,
+            sortBy: state.sortBy,
+            sortOrder: state.sortOrder,
+            fileType: state.filterType === 'all' ? undefined : state.filterType
+          })
+        }
       } else if (state.currentFolder) {
         // Outras pastas: usar API normal
         filesData = await mediaManagement.getFolderFiles(company.id, state.currentFolder?.id, {
