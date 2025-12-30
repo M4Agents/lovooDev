@@ -564,7 +564,7 @@ async function processMessage(payload) {
           
           console.error('💬 BIBLIOTECA: Chamando save_chat_media...', {
             p_company_id: company.id,
-            p_lead_id: 0, // 0 para pasta Chat genérica (smallint)
+            p_lead_id: null, // NULL para pasta Chat genérica (compatível com UUID e smallint)
             p_s3_key: s3Key,
             p_original_filename: originalFilename,
             p_file_type: fileType
@@ -573,7 +573,7 @@ async function processMessage(payload) {
           // Salvar na biblioteca usando função do banco (SEM lead_id específico)
           const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
             p_company_id: company.id,
-            p_lead_id: 0, // 0 para pasta Chat genérica - todas as mídias da empresa (smallint)
+            p_lead_id: null, // NULL para pasta Chat genérica - todas as mídias da empresa (compatível com ambos os tipos)
             p_s3_key: s3Key,
             p_original_filename: originalFilename,
             p_file_type: fileType,
