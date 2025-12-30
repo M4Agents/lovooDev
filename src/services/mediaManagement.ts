@@ -344,10 +344,35 @@ class MediaManagementService {
             console.log('📁 Pasta atual encontrada:', currentFolder)
             
             if (currentFolder && (currentFolder.name === 'Chat' || currentFolder.path === '/chat')) {
-              console.log('💬 PASTA CHAT DETECTADA! Buscando arquivos reais do S3')
+              console.log('💬 PASTA CHAT DETECTADA! Buscando arquivos S3 diretamente')
               
-              // Chamar API real de company/files que lista arquivos S3 reais
-              apiUrl = `/api/media-library/company/files?${params.toString()}`
+              try {
+                // Buscar arquivos S3 diretamente sem API externa
+                const s3Response = await fetch('/api/s3-media/list-files', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    company_id: companyId,
+                    prefix: `clientes/${companyId}/`,
+                    page: page.toString(),
+                    limit: limit.toString()
+                  })
+                })
+
+                if (s3Response.ok) {
+                  const s3Data = await s3Response.json()
+                  console.log('✅ PASTA CHAT S3: Dados obtidos diretamente', s3Data)
+                  return s3Data
+                } else {
+                  console.log('⚠️ Erro na busca S3 direta, usando fallback')
+                  throw new Error(`S3 API error: ${s3Response.status}`)
+                }
+              } catch (s3Error: any) {
+                console.log('⚠️ Erro S3 direto, usando API padrão:', s3Error.message)
+                // Fallback para API padrão se S3 direto falhar
+              }
             } else {
               console.log('📁 Pasta não é Chat:', currentFolder?.name || 'não encontrada')
             }
