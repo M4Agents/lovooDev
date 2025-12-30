@@ -346,7 +346,7 @@ class MediaManagementService {
             if (currentFolder && (currentFolder.name === 'Chat' || currentFolder.path === '/chat')) {
               console.log('💬 PASTA CHAT DETECTADA! Retornando dados S3 mock diretamente')
               
-              // Retornar dados S3 mock diretamente sem chamar API externa
+              // Retornar dados S3 mock com URLs de placeholder funcionais
               const chatMockFiles = [
                 {
                   id: 'chat_s3_1',
@@ -355,10 +355,10 @@ class MediaManagementService {
                   file_type: 'image',
                   mime_type: 'image/jpeg',
                   file_size: 150000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image1.jpg`,
+                  preview_url: 'https://picsum.photos/400/300?random=1',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_2',
@@ -367,10 +367,10 @@ class MediaManagementService {
                   file_type: 'image',
                   mime_type: 'image/jpeg',
                   file_size: 200000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image2.jpg`,
+                  preview_url: 'https://picsum.photos/400/300?random=2',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_3',
@@ -379,10 +379,10 @@ class MediaManagementService {
                   file_type: 'video',
                   mime_type: 'video/mp4',
                   file_size: 500000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/video1.mp4`,
+                  preview_url: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_4',
@@ -391,10 +391,10 @@ class MediaManagementService {
                   file_type: 'audio',
                   mime_type: 'audio/ogg',
                   file_size: 80000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/audio1.ogg`,
+                  preview_url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_5',
@@ -403,10 +403,10 @@ class MediaManagementService {
                   file_type: 'document',
                   mime_type: 'application/pdf',
                   file_size: 300000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/document1.pdf`,
+                  preview_url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_6',
@@ -415,10 +415,10 @@ class MediaManagementService {
                   file_type: 'image',
                   mime_type: 'image/jpeg',
                   file_size: 180000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image3.jpg`,
+                  preview_url: 'https://picsum.photos/400/300?random=3',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_7',
@@ -427,10 +427,10 @@ class MediaManagementService {
                   file_type: 'image',
                   mime_type: 'image/jpeg',
                   file_size: 220000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image4.jpg`,
+                  preview_url: 'https://picsum.photos/400/300?random=4',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 },
                 {
                   id: 'chat_s3_8',
@@ -439,10 +439,10 @@ class MediaManagementService {
                   file_type: 'video',
                   mime_type: 'video/mp4',
                   file_size: 750000,
-                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/video2.mp4`,
+                  preview_url: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_2mb.mp4',
                   received_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
-                  source: 'whatsapp_s3_direct'
+                  source: 'whatsapp_s3_placeholder'
                 }
               ]
 
