@@ -292,13 +292,27 @@ class MediaManagementService {
           
           if (folderCheckResponse.ok) {
             const foldersData = await folderCheckResponse.json()
-            const chatFolder = foldersData.data?.find((f: any) => 
+            console.log('🔍 Estrutura de pastas recebida:', foldersData)
+            
+            // Verificar diferentes estruturas possíveis da resposta
+            let folders = []
+            if (Array.isArray(foldersData)) {
+              folders = foldersData
+            } else if (foldersData.data && Array.isArray(foldersData.data)) {
+              folders = foldersData.data
+            } else if (foldersData.folders && Array.isArray(foldersData.folders)) {
+              folders = foldersData.folders
+            }
+            
+            const chatFolder = folders.find((f: any) => 
               (f.name === 'Chat' || f.path === '/chat') && f.id === folderId
             )
             
             if (chatFolder) {
               console.log('💬 PASTA CHAT DETECTADA - Usando API de company/files')
               apiUrl = `/api/media-library/company/files?${params.toString()}`
+            } else {
+              console.log('📁 Pasta encontrada mas não é Chat:', folderId)
             }
           }
         } catch (folderCheckError: any) {
