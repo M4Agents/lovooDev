@@ -453,33 +453,35 @@ export class S3Storage {
         });
       }
 
-      // Process objects
+      // Process objects - filtro simplificado para capturar mais arquivos
       const objects = response.Contents
         .filter(obj => {
           if (!obj.Key || obj.Key === prefix) return false;
           
-          // Log objeto sendo processado
-          console.log(`🔍 Processando objeto: ${obj.Key}`);
-          
           const filename = obj.Key.split('/').pop();
-          if (!filename) {
-            console.log(`  ❌ Sem filename: ${obj.Key}`);
-            return false;
-          }
+          if (!filename) return false;
           
+          // Filtro mais amplo - aceitar qualquer arquivo com extensão
           const ext = filename.split('.').pop()?.toLowerCase();
-          const isValidExt = ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif',
-                        'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg',
-                        'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr',
-                        'pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
+          if (!ext) return false;
           
-          if (!isValidExt) {
-            console.log(`  ❌ Extensão inválida: ${ext} para ${filename}`);
-            return false;
-          }
+          // Lista expandida de extensões incluindo formatos WhatsApp
+          const validExtensions = [
+            // Imagens
+            'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif', 'avif',
+            // Vídeos
+            'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg', 'm4v', 'f4v',
+            // Áudios
+            'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr', 'opus',
+            // Documentos
+            'pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx',
+            // Outros formatos possíveis
+            'json', 'xml', 'csv'
+          ];
           
-          console.log(`  ✅ Arquivo válido: ${filename} (${ext})`);
-          return true;
+          const isValid = validExtensions.includes(ext);
+          console.log(`${isValid ? '✅' : '❌'} ${filename} (${ext})`);
+          return isValid;
         })
         .map(obj => {
           const filename = obj.Key!.split('/').pop()!;
