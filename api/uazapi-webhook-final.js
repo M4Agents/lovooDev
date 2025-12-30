@@ -562,32 +562,23 @@ async function processMessage(payload) {
           
           const originalFilename = s3Key.split('/').pop();
           
-          console.error('💬 BIBLIOTECA: Chamando save_chat_media...', {
-            p_company_id: company.id,
-            p_lead_id: null, // NULL para pasta Chat genérica (compatível com UUID e smallint)
-            p_s3_key: s3Key,
-            p_original_filename: originalFilename,
-            p_file_type: fileType
-          });
+          // NOVA ABORDAGEM: Não sincronizar com banco - pasta Chat usa listagem S3 direta
+          console.error('💬 BIBLIOTECA: Nova abordagem implementada - pasta Chat lista S3 diretamente');
+          console.error('💬 BIBLIOTECA: Mídia salva no S3 e será listada automaticamente pela nova API');
+          console.error('💬 BIBLIOTECA: Removendo dependência de sincronização via banco de dados');
           
-          // Salvar na biblioteca usando função do banco (SEM lead_id específico)
-          const { data: mediaRecord, error: mediaError } = await supabase.rpc('save_chat_media', {
-            p_company_id: company.id,
-            p_lead_id: null, // NULL para pasta Chat genérica - todas as mídias da empresa (compatível com ambos os tipos)
-            p_s3_key: s3Key,
-            p_original_filename: originalFilename,
-            p_file_type: fileType,
-            p_mime_type: message.content?.mimetype || 'application/octet-stream',
-            p_file_size: message.content?.fileLength || 0,
-            p_preview_url: finalMediaUrl,
-            p_source_message_id: savedMessageId, // Usar UUID válido retornado pela função SECURITY DEFINER
-            p_source_conversation_id: conversationId
-          });
+          // Simular sucesso para não quebrar o fluxo
+          const mediaRecord = { 
+            id: 's3_direct_' + Date.now(),
+            s3_key: s3Key,
+            source: 's3_direct_listing'
+          };
+          const mediaError = null;
           
           if (mediaError) {
             console.error('❌ BIBLIOTECA: Erro ao salvar:', mediaError);
           } else {
-            console.error('✅ BIBLIOTECA: Mídia sincronizada com ID (pasta Chat genérica):', mediaRecord);
+            console.error('✅ BIBLIOTECA: Mídia disponível via listagem S3 direta:', mediaRecord);
           }
         } else {
           console.error('⚠️ BIBLIOTECA: S3 key inválida ou não é mídia do WhatsApp:', s3Key);

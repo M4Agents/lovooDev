@@ -145,9 +145,42 @@ export default async function handler(req, res) {
     console.log('🔍 DEBUG: isChatFolder =', isChatFolder, 'leadId =', leadId)
 
     if (isChatFolder) {
-      // PASTA CHAT: Buscar mídias da pasta 'clientes' no S3 (WhatsApp)
-      query = query.like('s3_key', 'clientes/%')
-      console.log('💬 Query para PASTA CHAT - mídias da pasta clientes/ (WhatsApp)')
+      // PASTA CHAT: Redirecionar para novo endpoint de listagem S3 direta
+      console.log('💬 PASTA CHAT DETECTADA - Redirecionando para listagem S3 direta')
+      
+      try {
+        // Fazer chamada interna para o novo endpoint de Chat
+        const chatApiUrl = `${req.headers.host}/api/media-library/chat/files?page=${pageNum}&limit=${limitNum}`
+        
+        // Repassar headers de autorização
+        const authHeader = req.headers.authorization
+        
+        const chatResponse = await fetch(`http://${chatApiUrl}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (!chatResponse.ok) {
+          throw new Error(`Erro na API de Chat: ${chatResponse.status}`)
+        }
+        
+        const chatData = await chatResponse.json()
+        console.log('✅ Dados obtidos da API de Chat S3:', {
+          totalFiles: chatData.stats?.total || 0,
+          returnedFiles: chatData.files?.length || 0
+        })
+        
+        return res.status(200).json(chatData)
+        
+      } catch (chatError) {
+        console.error('❌ Erro ao chamar API de Chat S3:', chatError)
+        // Fallback para método antigo se novo falhar
+        query = query.like('s3_key', 'clientes/%')
+        console.log('💬 FALLBACK: Usando método antigo para pasta Chat')
+      }
       console.log('🔍 DEBUG: Aplicando filtro S3: s3_key LIKE clientes/%')
       
       // CORREÇÃO CRÍTICA: Forçar filtro adicional para garantir
