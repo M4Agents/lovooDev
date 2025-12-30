@@ -350,9 +350,9 @@ class MediaManagementService {
                 // Importar S3Storage para buscar arquivos reais
                 const { S3Storage } = await import('./aws/s3Storage.js')
                 
-                // Busca recursiva direta no prefixo principal WhatsApp
-                const prefix = `clientes/${companyId}/whatsapp/`
-                console.log('🔍 Busca recursiva S3 no prefixo:', prefix)
+                // Busca mais ampla para descobrir estrutura real dos arquivos
+                const prefix = `clientes/${companyId}/`
+                console.log('🔍 Busca ampla S3 para descobrir estrutura:', prefix)
                 
                 const s3Result = await S3Storage.listObjects(companyId, prefix)
                 
@@ -384,7 +384,7 @@ class MediaManagementService {
                 console.error('❌ ERRO S3 CRÍTICO:', s3Error.message)
                 console.error('❌ Stack trace:', s3Error.stack)
                 console.error('❌ Company ID:', companyId)
-                console.error('❌ Prefix buscado:', `clientes/${companyId}/whatsapp/`)
+                console.error('❌ Prefix buscado:', `clientes/${companyId}/`)
                 
                 // SEM FALLBACK - APENAS DADOS REAIS
                 // Retornar vazio se S3 falhar - NUNCA dados simulados
