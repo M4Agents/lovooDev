@@ -350,32 +350,11 @@ class MediaManagementService {
                 // Importar S3Storage para buscar arquivos reais
                 const { S3Storage } = await import('./aws/s3Storage.js')
                 
-                // Tentar múltiplos prefixos para encontrar arquivos WhatsApp
-                const prefixes = [
-                  `clientes/${companyId}/whatsapp/`,
-                  `clientes/${companyId}/`,
-                  `${companyId}/whatsapp/`,
-                  `${companyId}/`
-                ]
+                // Busca recursiva direta no prefixo principal WhatsApp
+                const prefix = `clientes/${companyId}/whatsapp/`
+                console.log('🔍 Busca recursiva S3 no prefixo:', prefix)
                 
-                console.log('🔍 Tentando múltiplos prefixos S3:', prefixes)
-                
-                let s3Result: any = null
-                
-                for (const prefix of prefixes) {
-                  console.log(`🔍 Testando prefix: ${prefix}`)
-                  try {
-                    const testResult = await S3Storage.listObjects(companyId, prefix)
-                    if (testResult.success && testResult.data && testResult.data.length > 0) {
-                      s3Result = testResult
-                      console.log(`✅ Arquivos encontrados com prefix: ${prefix} - Total: ${testResult.data.length}`)
-                      break
-                    }
-                  } catch (prefixError) {
-                    console.log(`⚠️ Erro com prefix ${prefix}:`, prefixError)
-                    continue
-                  }
-                }
+                const s3Result = await S3Storage.listObjects(companyId, prefix)
                 
                 if (s3Result && s3Result.success && s3Result.data) {
                   const chatFiles = s3Result.data
@@ -398,7 +377,7 @@ class MediaManagementService {
                     }
                   } as any
                 } else {
-                  console.log('⚠️ Nenhum arquivo S3 encontrado em todos os prefixos testados')
+                  console.log('⚠️ Nenhum arquivo S3 encontrado no prefixo WhatsApp')
                   throw new Error('Nenhum arquivo S3 encontrado')
                 }
               } catch (s3Error: any) {

@@ -416,14 +416,26 @@ export class S3Storage {
         bucket: credentials.bucket
       });
 
-      // List objects
+      // List objects recursively (sem Delimiter para buscar em todas as subpastas)
       const listCommand = new ListObjectsV2Command({
         Bucket: credentials.bucket,
         Prefix: prefix,
-        MaxKeys: 1000
-      });
+        MaxKeys: 5000 // Aumentar limite para capturar mais arquivos
+      })
 
-      const response = await s3Client.send(listCommand);
+      console.log('📋 Comando S3 ListObjects:', {
+        Bucket: credentials.bucket,
+        Prefix: prefix,
+        MaxKeys: 5000
+      })
+
+      const response = await s3Client.send(listCommand)
+      
+      console.log('📊 Resposta S3 raw:', {
+        KeyCount: response.KeyCount,
+        IsTruncated: response.IsTruncated,
+        ContentsLength: response.Contents?.length || 0
+      });
       
       if (!response.Contents) {
         console.log('📁 Nenhum objeto encontrado para prefix:', prefix);
@@ -433,16 +445,41 @@ export class S3Storage {
         };
       }
 
+      // Log primeiros objetos encontrados para debug
+      if (response.Contents.length > 0) {
+        console.log('📁 Primeiros 5 objetos S3 encontrados:');
+        response.Contents.slice(0, 5).forEach((obj, index) => {
+          console.log(`  ${index + 1}. ${obj.Key} (${obj.Size} bytes, ${obj.LastModified})`);
+        });
+      }
+
       // Process objects
       const objects = response.Contents
-        .filter(obj => obj.Key && obj.Key !== prefix)
         .filter(obj => {
-          const filename = obj.Key!.split('/').pop();
-          const ext = filename?.split('.').pop()?.toLowerCase();
-          return ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif',
+          if (!obj.Key || obj.Key === prefix) return false;
+          
+          // Log objeto sendo processado
+          console.log(`🔍 Processando objeto: ${obj.Key}`);
+          
+          const filename = obj.Key.split('/').pop();
+          if (!filename) {
+            console.log(`  ❌ Sem filename: ${obj.Key}`);
+            return false;
+          }
+          
+          const ext = filename.split('.').pop()?.toLowerCase();
+          const isValidExt = ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif',
                         'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg',
                         'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr',
                         'pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
+          
+          if (!isValidExt) {
+            console.log(`  ❌ Extensão inválida: ${ext} para ${filename}`);
+            return false;
+          }
+          
+          console.log(`  ✅ Arquivo válido: ${filename} (${ext})`);
+          return true;
         })
         .map(obj => {
           const filename = obj.Key!.split('/').pop()!;
