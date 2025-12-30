@@ -180,6 +180,7 @@ export default async function handler(req, res) {
       console.log('💬 Query para PASTA CHAT - mídias WhatsApp específicas da empresa')
       console.log('🔍 DEBUG: Aplicando filtro S3 específico:', whatsappPrefix)
       console.log('🔍 DEBUG: Estrutura capturada: clientes/{company_id}/whatsapp/{ano}/{mes}/{dia}/')
+      console.log('🚀 DEPLOY FORÇADO: Filtro WhatsApp hierárquico ativo')
       
       // Garantir que não pega arquivos de outras empresas
       query = query.not('s3_key', 'like', 'biblioteca/%')
