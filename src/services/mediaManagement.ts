@@ -276,13 +276,17 @@ class MediaManagementService {
         params.append('search', search.trim())
       }
 
-      // CORREÇÃO PASTA CHAT: Verificar se é pasta Chat e usar API específica
+      // CORREÇÃO PASTA CHAT: Detectar pasta Chat diretamente e usar API específica
       let apiUrl = `${this.baseUrl}/files/list?${params.toString()}`
       
+      // ABORDAGEM SIMPLIFICADA: Verificar se folderId corresponde à pasta Chat
+      // Buscar todas as pastas e verificar se o folderId atual é da pasta Chat
       if (folderId) {
-        // Verificar se é pasta Chat - usar nova API de company/files
         try {
-          const folderCheckResponse = await fetch(
+          console.log('🔍 Verificando se pasta é Chat, folderId:', folderId)
+          
+          // Buscar hierarquia de pastas para verificar se é Chat
+          const foldersResponse = await fetch(
             `${this.baseUrl}/folders/hierarchy?company_id=${companyId}`,
             {
               method: 'GET',
@@ -290,33 +294,39 @@ class MediaManagementService {
             }
           )
           
-          if (folderCheckResponse.ok) {
-            const foldersData = await folderCheckResponse.json()
-            console.log('🔍 Estrutura de pastas recebida:', foldersData)
+          if (foldersResponse.ok) {
+            const foldersData = await foldersResponse.json()
+            console.log('📁 Dados de pastas recebidos:', foldersData)
             
-            // Verificar diferentes estruturas possíveis da resposta
-            let folders = []
+            // Extrair array de pastas da resposta
+            let foldersList = []
             if (Array.isArray(foldersData)) {
-              folders = foldersData
+              foldersList = foldersData
             } else if (foldersData.data && Array.isArray(foldersData.data)) {
-              folders = foldersData.data
+              foldersList = foldersData.data
             } else if (foldersData.folders && Array.isArray(foldersData.folders)) {
-              folders = foldersData.folders
+              foldersList = foldersData.folders
+            } else {
+              console.log('⚠️ Estrutura de pastas não reconhecida, tentando propriedades:', Object.keys(foldersData))
             }
             
-            const chatFolder = folders.find((f: any) => 
-              (f.name === 'Chat' || f.path === '/chat') && f.id === folderId
-            )
+            console.log('📂 Lista de pastas extraída:', foldersList)
             
-            if (chatFolder) {
-              console.log('💬 PASTA CHAT DETECTADA - Usando API de company/files')
+            // Procurar pasta Chat pelo ID
+            const currentFolder = foldersList.find((folder: any) => folder.id === folderId)
+            console.log('📁 Pasta atual encontrada:', currentFolder)
+            
+            if (currentFolder && (currentFolder.name === 'Chat' || currentFolder.path === '/chat')) {
+              console.log('💬 PASTA CHAT DETECTADA! Usando API de company/files')
               apiUrl = `/api/media-library/company/files?${params.toString()}`
             } else {
-              console.log('📁 Pasta encontrada mas não é Chat:', folderId)
+              console.log('📁 Pasta não é Chat:', currentFolder?.name || 'não encontrada')
             }
+          } else {
+            console.log('⚠️ Erro ao buscar pastas:', foldersResponse.status)
           }
-        } catch (folderCheckError: any) {
-          console.log('⚠️ Erro ao verificar pasta Chat, usando API padrão:', folderCheckError.message)
+        } catch (error: any) {
+          console.log('⚠️ Erro na verificação de pasta Chat:', error.message)
         }
       }
 
