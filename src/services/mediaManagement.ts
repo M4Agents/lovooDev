@@ -354,9 +354,27 @@ class MediaManagementService {
                 const response = await fetch(`${this.baseUrl}/files/list?company_id=${companyId}&folder_id=${folderId}&page=${page}&limit=${limit}`)
                 
                 if (response.ok) {
-                  const data = await response.json()
-                  console.log('✅ PASTA CHAT BANCO: Dados obtidos do banco', data)
-                  return data
+                  const apiResponse = await response.json()
+                  console.log('✅ PASTA CHAT BANCO: Resposta da API', apiResponse)
+                  
+                  // Extrair dados do formato da API para formato esperado pelo frontend
+                  if (apiResponse.success && apiResponse.data) {
+                    const formattedResponse = {
+                      files: apiResponse.data.files || [],
+                      pagination: {
+                        page: apiResponse.data.pagination?.page || 1,
+                        limit: apiResponse.data.pagination?.limit || 20,
+                        total: apiResponse.data.pagination?.totalCount || 0,
+                        totalPages: apiResponse.data.pagination?.totalPages || 0,
+                        hasNext: apiResponse.data.pagination?.hasNextPage || false,
+                        hasPrev: apiResponse.data.pagination?.hasPrevPage || false
+                      }
+                    }
+                    console.log('✅ PASTA CHAT FORMATADO:', formattedResponse)
+                    return formattedResponse
+                  }
+                  
+                  return apiResponse
                 }
                 
                 throw new Error(`API error: ${response.status}`)
