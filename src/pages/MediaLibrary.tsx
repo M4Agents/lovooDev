@@ -83,12 +83,9 @@ export const MediaLibrary: React.FC = () => {
       // CORREÇÃO CRÍTICA: Verificar se é pasta Chat especificamente
       const isChatFolder = state.currentFolder?.name === 'Chat' || state.currentFolder?.path === '/chat'
       
-      console.log('🔍 DEBUG PASTA:', {
-        currentFolder: state.currentFolder,
-        folderName: state.currentFolder?.name,
-        folderPath: state.currentFolder?.path,
-        isChatFolder
-      })
+      if (isChatFolder) {
+        console.log('🔍 CHAT FOLDER DETECTED')
+      }
       
       if (isChatFolder) {
         console.log('💬 FRONTEND: Detectou pasta Chat, usando nova API S3 direta')
