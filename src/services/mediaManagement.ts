@@ -349,10 +349,35 @@ class MediaManagementService {
               try {
                 // Importar S3Storage para buscar arquivos reais
                 const { S3Storage } = await import('./aws/s3Storage.js')
-                const prefix = `clientes/${companyId}/whatsapp/`
-                const s3Result = await S3Storage.listObjects(companyId, prefix)
                 
-                if (s3Result.success && s3Result.data) {
+                // Tentar múltiplos prefixos para encontrar arquivos WhatsApp
+                const prefixes = [
+                  `clientes/${companyId}/whatsapp/`,
+                  `clientes/${companyId}/`,
+                  `${companyId}/whatsapp/`,
+                  `${companyId}/`
+                ]
+                
+                console.log('🔍 Tentando múltiplos prefixos S3:', prefixes)
+                
+                let s3Result: any = null
+                
+                for (const prefix of prefixes) {
+                  console.log(`🔍 Testando prefix: ${prefix}`)
+                  try {
+                    const testResult = await S3Storage.listObjects(companyId, prefix)
+                    if (testResult.success && testResult.data && testResult.data.length > 0) {
+                      s3Result = testResult
+                      console.log(`✅ Arquivos encontrados com prefix: ${prefix} - Total: ${testResult.data.length}`)
+                      break
+                    }
+                  } catch (prefixError) {
+                    console.log(`⚠️ Erro com prefix ${prefix}:`, prefixError)
+                    continue
+                  }
+                }
+                
+                if (s3Result && s3Result.success && s3Result.data) {
                   const chatFiles = s3Result.data
                   const pageNum = parseInt(page.toString())
                   const limitNum = parseInt(limit.toString())
@@ -373,58 +398,26 @@ class MediaManagementService {
                     }
                   } as any
                 } else {
-                  console.log('⚠️ Erro S3 ou nenhum arquivo encontrado, usando fallback')
-                  throw new Error(s3Result.error || 'Nenhum arquivo S3 encontrado')
+                  console.log('⚠️ Nenhum arquivo S3 encontrado em todos os prefixos testados')
+                  throw new Error('Nenhum arquivo S3 encontrado')
                 }
               } catch (s3Error: any) {
-                console.log('❌ Erro ao buscar S3 real:', s3Error.message, '- usando fallback com dados simulados')
+                console.error('❌ ERRO S3 CRÍTICO:', s3Error.message)
+                console.error('❌ Stack trace:', s3Error.stack)
+                console.error('❌ Company ID:', companyId)
+                console.error('❌ Prefix buscado:', `clientes/${companyId}/whatsapp/`)
                 
-                // FALLBACK: Retornar dados simulados quando S3 falhar
-                const fallbackFiles = []
-                const baseDate = new Date()
-                
-                for (let i = 1; i <= 20; i++) {
-                  const fileDate = new Date(baseDate.getTime() - (i * 24 * 60 * 60 * 1000))
-                  const fileTypes = [
-                    { ext: 'jpg', type: 'image' as const, preview: `https://picsum.photos/400/300?random=${i}` },
-                    { ext: 'png', type: 'image' as const, preview: `https://picsum.photos/400/300?random=${i + 100}` },
-                    { ext: 'mp4', type: 'video' as const, preview: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4' },
-                    { ext: 'mp3', type: 'audio' as const, preview: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
-                    { ext: 'pdf', type: 'document' as const, preview: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
-                  ]
-                  
-                  const fileType = fileTypes[i % fileTypes.length]
-                  
-                  fallbackFiles.push({
-                    id: `fallback_chat_${i}`,
-                    s3_key: `clientes/${companyId}/whatsapp/fallback/file_${i}.${fileType.ext}`,
-                    original_filename: `chat_fallback_${i}.${fileType.ext}`,
-                    file_type: fileType.type,
-                    mime_type: fileType.ext === 'jpg' ? 'image/jpeg' : `${fileType.type}/${fileType.ext}`,
-                    file_size: Math.floor(Math.random() * 500000) + 50000,
-                    preview_url: fileType.preview,
-                    received_at: fileDate.toISOString(),
-                    created_at: fileDate.toISOString(),
-                    source: 'whatsapp_s3_fallback'
-                  })
-                }
-
-                const pageNum = parseInt(page.toString())
-                const limitNum = parseInt(limit.toString())
-                const offset = (pageNum - 1) * limitNum
-                const paginatedFiles = fallbackFiles.slice(offset, offset + limitNum)
-                
-                console.log('✅ PASTA CHAT FALLBACK: Retornando', paginatedFiles.length, 'de', fallbackFiles.length, 'arquivos simulados')
-
+                // SEM FALLBACK - APENAS DADOS REAIS
+                // Retornar vazio se S3 falhar - NUNCA dados simulados
                 return {
-                  files: paginatedFiles,
+                  files: [],
                   pagination: {
-                    page: pageNum,
-                    limit: limitNum,
-                    total: fallbackFiles.length,
-                    totalPages: Math.ceil(fallbackFiles.length / limitNum),
-                    hasNext: offset + limitNum < fallbackFiles.length,
-                    hasPrev: pageNum > 1
+                    page: 1,
+                    limit: 20,
+                    total: 0,
+                    totalPages: 0,
+                    hasNext: false,
+                    hasPrev: false
                   }
                 } as any
               }
