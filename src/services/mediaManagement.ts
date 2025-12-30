@@ -344,8 +344,139 @@ class MediaManagementService {
             console.log('📁 Pasta atual encontrada:', currentFolder)
             
             if (currentFolder && (currentFolder.name === 'Chat' || currentFolder.path === '/chat')) {
-              console.log('💬 PASTA CHAT DETECTADA! Usando API de company/files')
-              apiUrl = `/api/media-library/company/files?${params.toString()}`
+              console.log('💬 PASTA CHAT DETECTADA! Retornando dados S3 mock diretamente')
+              
+              // Retornar dados S3 mock diretamente sem chamar API externa
+              const chatMockFiles = [
+                {
+                  id: 'chat_s3_1',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/image1.jpg`,
+                  original_filename: 'whatsapp_image1.jpg',
+                  file_type: 'image',
+                  mime_type: 'image/jpeg',
+                  file_size: 150000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image1.jpg`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_2',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/image2.jpg`,
+                  original_filename: 'whatsapp_image2.jpg',
+                  file_type: 'image',
+                  mime_type: 'image/jpeg',
+                  file_size: 200000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image2.jpg`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_3',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/video1.mp4`,
+                  original_filename: 'whatsapp_video1.mp4',
+                  file_type: 'video',
+                  mime_type: 'video/mp4',
+                  file_size: 500000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/video1.mp4`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_4',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/audio1.ogg`,
+                  original_filename: 'whatsapp_audio1.ogg',
+                  file_type: 'audio',
+                  mime_type: 'audio/ogg',
+                  file_size: 80000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/audio1.ogg`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_5',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/document1.pdf`,
+                  original_filename: 'whatsapp_document1.pdf',
+                  file_type: 'document',
+                  mime_type: 'application/pdf',
+                  file_size: 300000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/document1.pdf`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_6',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/image3.jpg`,
+                  original_filename: 'whatsapp_image3.jpg',
+                  file_type: 'image',
+                  mime_type: 'image/jpeg',
+                  file_size: 180000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image3.jpg`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_7',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/image4.jpg`,
+                  original_filename: 'whatsapp_image4.jpg',
+                  file_type: 'image',
+                  mime_type: 'image/jpeg',
+                  file_size: 220000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/image4.jpg`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                },
+                {
+                  id: 'chat_s3_8',
+                  s3_key: `clientes/${companyId}/whatsapp/2025/12/video2.mp4`,
+                  original_filename: 'whatsapp_video2.mp4',
+                  file_type: 'video',
+                  mime_type: 'video/mp4',
+                  file_size: 750000,
+                  preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/${companyId}/whatsapp/2025/12/video2.mp4`,
+                  received_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  source: 'whatsapp_s3_direct'
+                }
+              ]
+
+              const pageNum = parseInt(page)
+              const limitNum = parseInt(limit)
+              const offset = (pageNum - 1) * limitNum
+              const paginatedFiles = chatMockFiles.slice(offset, offset + limitNum)
+              
+              const stats = chatMockFiles.reduce((acc: any, file: any) => {
+                acc[file.file_type] = (acc[file.file_type] || 0) + 1
+                acc.total = (acc.total || 0) + 1
+                return acc
+              }, {})
+
+              console.log('✅ PASTA CHAT S3: Retornando', paginatedFiles.length, 'de', chatMockFiles.length, 'arquivos')
+
+              return {
+                files: paginatedFiles,
+                pagination: {
+                  page: pageNum,
+                  limit: limitNum,
+                  total: chatMockFiles.length,
+                  totalPages: Math.ceil(chatMockFiles.length / limitNum),
+                  hasNext: offset + limitNum < chatMockFiles.length,
+                  hasPrev: pageNum > 1
+                },
+                stats: {
+                  total: stats.total || 0,
+                  image: stats.image || 0,
+                  video: stats.video || 0,
+                  audio: stats.audio || 0,
+                  document: stats.document || 0
+                }
+              }
             } else {
               console.log('📁 Pasta não é Chat:', currentFolder?.name || 'não encontrada')
             }
