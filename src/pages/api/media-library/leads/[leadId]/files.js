@@ -174,12 +174,14 @@ export default async function handler(req, res) {
     console.log('🔍 DEBUG: isChatFolder =', isChatFolder, 'leadId =', leadId)
 
     if (isChatFolder) {
-      // PASTA CHAT: Buscar mídias da pasta 'clientes' no S3 (WhatsApp)
-      query = query.like('s3_key', 'clientes/%')
-      console.log('💬 Query para PASTA CHAT - mídias da pasta clientes/ (WhatsApp)')
-      console.log('🔍 DEBUG: Aplicando filtro S3: s3_key LIKE clientes/%')
+      // PASTA CHAT: Buscar mídias específicas do WhatsApp desta empresa
+      const whatsappPrefix = `clientes/${company_id}/whatsapp/%`
+      query = query.like('s3_key', whatsappPrefix)
+      console.log('💬 Query para PASTA CHAT - mídias WhatsApp específicas da empresa')
+      console.log('🔍 DEBUG: Aplicando filtro S3 específico:', whatsappPrefix)
+      console.log('🔍 DEBUG: Estrutura capturada: clientes/{company_id}/whatsapp/{ano}/{mes}/{dia}/')
       
-      // CORREÇÃO CRÍTICA: Forçar filtro adicional para garantir
+      // Garantir que não pega arquivos de outras empresas
       query = query.not('s3_key', 'like', 'biblioteca/%')
       console.log('🔍 DEBUG: Filtro adicional: NOT s3_key LIKE biblioteca/%')
     } else {
