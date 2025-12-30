@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     const command = new ListObjectsV2Command({
       Bucket: credentials.bucket,
       Prefix: prefix,
-      MaxKeys: 1000
+      MaxKeys: 5000
     })
 
     const response = await s3Client.send(command)
@@ -64,7 +64,10 @@ export default async function handler(req, res) {
       .filter(obj => {
         const filename = obj.Key.split('/').pop()
         const ext = filename?.split('.').pop()?.toLowerCase()
-        return ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'avi', 'mov', 'mp3', 'wav', 'pdf'].includes(ext)
+        return ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif',
+                      'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg',
+                      'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr',
+                      'pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)
       })
       .map(obj => {
         const filename = obj.Key.split('/').pop()

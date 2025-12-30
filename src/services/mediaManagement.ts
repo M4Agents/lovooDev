@@ -355,7 +355,7 @@ class MediaManagementService {
                   },
                   body: JSON.stringify({
                     company_id: companyId,
-                    prefix: `clientes/${companyId}/`,
+                    prefix: `clientes/${companyId}/whatsapp/`,
                     page: page.toString(),
                     limit: limit.toString()
                   })
