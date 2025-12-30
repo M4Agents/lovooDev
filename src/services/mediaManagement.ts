@@ -298,7 +298,7 @@ class MediaManagementService {
             const foldersData = await foldersResponse.json()
             console.log('📁 Dados de pastas recebidos:', foldersData)
             
-            // Extrair array de pastas da resposta
+            // Extrair array de pastas da resposta - verificação abrangente
             let foldersList = []
             if (Array.isArray(foldersData)) {
               foldersList = foldersData
@@ -307,7 +307,34 @@ class MediaManagementService {
             } else if (foldersData.folders && Array.isArray(foldersData.folders)) {
               foldersList = foldersData.folders
             } else {
-              console.log('⚠️ Estrutura de pastas não reconhecida, tentando propriedades:', Object.keys(foldersData))
+              // Tentar todas as propriedades possíveis
+              console.log('⚠️ Estrutura não reconhecida, propriedades:', Object.keys(foldersData))
+              
+              // Procurar qualquer propriedade que seja um array
+              for (const key of Object.keys(foldersData)) {
+                if (Array.isArray(foldersData[key])) {
+                  console.log(`✅ Array encontrado na propriedade '${key}':`, foldersData[key])
+                  foldersList = foldersData[key]
+                  break
+                }
+              }
+              
+              // Se não encontrou array, tentar propriedades aninhadas
+              if (foldersList.length === 0) {
+                for (const key of Object.keys(foldersData)) {
+                  const value = foldersData[key]
+                  if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    for (const subKey of Object.keys(value)) {
+                      if (Array.isArray(value[subKey])) {
+                        console.log(`✅ Array encontrado em '${key}.${subKey}':`, value[subKey])
+                        foldersList = value[subKey]
+                        break
+                      }
+                    }
+                  }
+                  if (foldersList.length > 0) break
+                }
+              }
             }
             
             console.log('📂 Lista de pastas extraída:', foldersList)
