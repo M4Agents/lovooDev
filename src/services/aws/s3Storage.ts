@@ -2,7 +2,7 @@
 // Created: 2025-12-22
 // Purpose: Upload, download and signed URL operations for S3
 
-import { PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { S3ClientFactory } from './s3Client.js';
 import { CredentialsManager } from './credentialsManager.js';
@@ -381,6 +381,134 @@ export class S3Storage {
         return 'application/pdf';
       default:
         return 'application/octet-stream';
+    }
+  }
+
+  /**
+   * List objects in S3 with prefix
+   */
+  static async listObjects(companyId: string, prefix: string): Promise<S3OperationResult<any[]>> {
+    try {
+      // Get S3 client
+      const clientResult = await S3ClientFactory.getClient(companyId);
+      if (!clientResult.success || !clientResult.data) {
+        return {
+          success: false,
+          error: clientResult.error || 'Erro ao obter S3 client'
+        };
+      }
+
+      // Get credentials for bucket info
+      const credentialsResult = await CredentialsManager.getCredentials(companyId);
+      if (!credentialsResult.success || !credentialsResult.data) {
+        return {
+          success: false,
+          error: credentialsResult.error || 'Erro ao obter credenciais'
+        };
+      }
+
+      const credentials = credentialsResult.data;
+      const s3Client = clientResult.data;
+
+      console.log('🔍 S3Storage.listObjects - Listando objetos:', {
+        companyId,
+        prefix,
+        bucket: credentials.bucket
+      });
+
+      // List objects
+      const listCommand = new ListObjectsV2Command({
+        Bucket: credentials.bucket,
+        Prefix: prefix,
+        MaxKeys: 1000
+      });
+
+      const response = await s3Client.send(listCommand);
+      
+      if (!response.Contents) {
+        console.log('📁 Nenhum objeto encontrado para prefix:', prefix);
+        return {
+          success: true,
+          data: []
+        };
+      }
+
+      // Process objects
+      const objects = response.Contents
+        .filter(obj => obj.Key && obj.Key !== prefix)
+        .filter(obj => {
+          const filename = obj.Key!.split('/').pop();
+          const ext = filename?.split('.').pop()?.toLowerCase();
+          return ext && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif',
+                        'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg',
+                        'mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr',
+                        'pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
+        })
+        .map(obj => {
+          const filename = obj.Key!.split('/').pop()!;
+          const ext = filename.split('.').pop()?.toLowerCase();
+          
+          let fileType = 'document';
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tiff', 'ico', 'heic', 'heif'].includes(ext!)) {
+            fileType = 'image';
+          } else if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', '3gp', 'mpg', 'mpeg'].includes(ext!)) {
+            fileType = 'video';
+          } else if (['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr'].includes(ext!)) {
+            fileType = 'audio';
+          }
+
+          return {
+            id: `s3_real_${obj.Key!.replace(/[^a-zA-Z0-9]/g, '_')}`,
+            s3_key: obj.Key!,
+            original_filename: filename,
+            file_type: fileType,
+            mime_type: (() => {
+              switch (ext) {
+                case 'jpg':
+                case 'jpeg':
+                  return 'image/jpeg';
+                case 'png':
+                  return 'image/png';
+                case 'gif':
+                  return 'image/gif';
+                case 'webp':
+                  return 'image/webp';
+                case 'mp4':
+                  return 'video/mp4';
+                case 'mp3':
+                  return 'audio/mpeg';
+                case 'ogg':
+                  return 'audio/ogg';
+                case 'wav':
+                  return 'audio/wav';
+                case 'pdf':
+                  return 'application/pdf';
+                default:
+                  return 'application/octet-stream';
+              }
+            })(),
+            file_size: obj.Size || 0,
+            preview_url: `https://${credentials.bucket}.s3.${credentials.region}.amazonaws.com/${obj.Key}`,
+            received_at: obj.LastModified?.toISOString() || new Date().toISOString(),
+            created_at: obj.LastModified?.toISOString() || new Date().toISOString(),
+            source: 'whatsapp_s3_real'
+          };
+        });
+
+      console.log('✅ S3Storage.listObjects - Objetos processados:', objects.length);
+
+      return {
+        success: true,
+        data: objects
+      };
+
+    } catch (error: any) {
+      console.error('❌ Erro ao listar objetos S3:', error);
+      return {
+        success: false,
+        error: `Erro ao listar objetos S3: ${error.message}`,
+        details: error
+      };
     }
   }
 }

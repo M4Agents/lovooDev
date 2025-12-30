@@ -344,63 +344,53 @@ class MediaManagementService {
             console.log('📁 Pasta atual encontrada:', currentFolder)
             
             if (currentFolder && (currentFolder.name === 'Chat' || currentFolder.path === '/chat')) {
-              console.log('💬 PASTA CHAT DETECTADA! Retornando dados S3 simulados com mais arquivos')
+              console.log('💬 PASTA CHAT DETECTADA! Buscando arquivos REAIS do S3')
               
-              // Gerar dados S3 simulados baseados na estrutura real do WhatsApp
-              const chatFiles = []
-              const baseDate = new Date()
-              
-              // Simular arquivos de diferentes tipos e datas
-              for (let i = 1; i <= 50; i++) {
-                const fileDate = new Date(baseDate.getTime() - (i * 24 * 60 * 60 * 1000)) // i dias atrás
-                const year = fileDate.getFullYear()
-                const month = String(fileDate.getMonth() + 1).padStart(2, '0')
-                const day = String(fileDate.getDate()).padStart(2, '0')
+              try {
+                // Importar S3Storage para buscar arquivos reais
+                const { S3Storage } = await import('../aws/s3Storage.js')
+                const prefix = `clientes/${companyId}/whatsapp/`
+                const s3Result = await S3Storage.listObjects(companyId, prefix)
                 
-                const fileTypes = [
-                  { ext: 'jpg', type: 'image' as const, mime: 'image/jpeg', preview: `https://picsum.photos/400/300?random=${i}` },
-                  { ext: 'png', type: 'image' as const, mime: 'image/png', preview: `https://picsum.photos/400/300?random=${i + 100}` },
-                  { ext: 'mp4', type: 'video' as const, mime: 'video/mp4', preview: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4' },
-                  { ext: 'mp3', type: 'audio' as const, mime: 'audio/mpeg', preview: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
-                  { ext: 'pdf', type: 'document' as const, mime: 'application/pdf', preview: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
-                ]
-                
-                const fileType = fileTypes[i % fileTypes.length]
-                const messageId = `msg_${Date.now()}_${i}`
-                
-                chatFiles.push({
-                  id: `chat_whatsapp_${i}`,
-                  s3_key: `clientes/${companyId}/whatsapp/${year}/${month}/${day}/${messageId}/file_${i}.${fileType.ext}`,
-                  original_filename: `whatsapp_file_${i}.${fileType.ext}`,
-                  file_type: fileType.type,
-                  mime_type: fileType.mime,
-                  file_size: Math.floor(Math.random() * 500000) + 50000,
-                  preview_url: fileType.preview,
-                  received_at: fileDate.toISOString(),
-                  created_at: fileDate.toISOString(),
-                  source: 'whatsapp_s3_simulated'
-                })
-              }
+                if (s3Result.success && s3Result.data) {
+                  const chatFiles = s3Result.data
+                  const pageNum = parseInt(page.toString())
+                  const limitNum = parseInt(limit.toString())
+                  const offset = (pageNum - 1) * limitNum
+                  const paginatedFiles = chatFiles.slice(offset, offset + limitNum)
+                  
+                  console.log('✅ PASTA CHAT S3 REAL: Retornando', paginatedFiles.length, 'de', chatFiles.length, 'arquivos reais')
 
-              const pageNum = parseInt(page.toString())
-              const limitNum = parseInt(limit.toString())
-              const offset = (pageNum - 1) * limitNum
-              const paginatedFiles = chatFiles.slice(offset, offset + limitNum)
-              
-
-              console.log('✅ PASTA CHAT S3: Retornando', paginatedFiles.length, 'de', chatFiles.length, 'arquivos simulados')
-
-              return {
-                files: paginatedFiles,
-                pagination: {
-                  page: pageNum,
-                  limit: limitNum,
-                  total: chatFiles.length,
-                  totalPages: Math.ceil(chatFiles.length / limitNum),
-                  hasNext: offset + limitNum < chatFiles.length,
-                  hasPrev: pageNum > 1
+                  return {
+                    files: paginatedFiles,
+                    pagination: {
+                      page: pageNum,
+                      limit: limitNum,
+                      total: chatFiles.length,
+                      totalPages: Math.ceil(chatFiles.length / limitNum),
+                      hasNext: offset + limitNum < chatFiles.length,
+                      hasPrev: pageNum > 1
+                    }
+                  } as any
+                } else {
+                  console.log('⚠️ Erro S3 ou nenhum arquivo encontrado, usando fallback')
+                  throw new Error(s3Result.error || 'Nenhum arquivo S3 encontrado')
                 }
-              } as any
+              } catch (s3Error: any) {
+                console.log('❌ Erro ao buscar S3 real:', s3Error.message)
+                // Em caso de erro, retornar resposta vazia
+                return {
+                  files: [],
+                  pagination: {
+                    page: 1,
+                    limit: 20,
+                    total: 0,
+                    totalPages: 0,
+                    hasNext: false,
+                    hasPrev: false
+                  }
+                } as any
+              }
             } else {
               console.log('📁 Pasta não é Chat:', currentFolder?.name || 'não encontrada')
             }
