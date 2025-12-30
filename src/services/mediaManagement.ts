@@ -276,15 +276,42 @@ class MediaManagementService {
         params.append('search', search.trim())
       }
 
-      const response = await fetch(
-        `${this.baseUrl}/files/list?${params.toString()}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
+      // CORREÇÃO PASTA CHAT: Verificar se é pasta Chat e usar API específica
+      let apiUrl = `${this.baseUrl}/files/list?${params.toString()}`
+      
+      if (folderId) {
+        // Verificar se é pasta Chat - usar nova API de company/files
+        try {
+          const folderCheckResponse = await fetch(
+            `${this.baseUrl}/folders/hierarchy?company_id=${companyId}`,
+            {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
+            }
+          )
+          
+          if (folderCheckResponse.ok) {
+            const foldersData = await folderCheckResponse.json()
+            const chatFolder = foldersData.data?.find((f: any) => 
+              (f.name === 'Chat' || f.path === '/chat') && f.id === folderId
+            )
+            
+            if (chatFolder) {
+              console.log('💬 PASTA CHAT DETECTADA - Usando API de company/files')
+              apiUrl = `/api/media-library/company/files?${params.toString()}`
+            }
           }
+        } catch (folderCheckError: any) {
+          console.log('⚠️ Erro ao verificar pasta Chat, usando API padrão:', folderCheckError.message)
         }
-      )
+      }
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
