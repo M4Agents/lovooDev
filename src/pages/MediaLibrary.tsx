@@ -91,7 +91,7 @@ export const MediaLibrary: React.FC = () => {
         console.log('💬 FRONTEND: Detectou pasta Chat, usando nova API S3 direta')
         try {
           // Usar nova API de listagem S3 direta para pasta Chat
-          const response = await fetch(`/api/media-library/chat/files?page=1&limit=1000`, {
+          const response = await fetch(`/api/chat-files?page=1&limit=1000`, {
             method: 'GET',
             headers: {
               // 'Authorization': `Bearer ${user?.accessToken}`, // Token não disponível no User type
