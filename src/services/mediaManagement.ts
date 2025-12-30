@@ -347,47 +347,24 @@ class MediaManagementService {
               console.log('💬 PASTA CHAT DETECTADA! Buscando arquivos REAIS do S3')
               
               try {
-                // Importar S3Storage para buscar arquivos reais
-                const { S3Storage } = await import('./aws/s3Storage.js')
+                // SOLUÇÃO ALTERNATIVA: Buscar no banco lead_media_unified
+                // já que s3:ListBucket não está autorizado
+                console.log('🔍 Buscando arquivos Chat no banco lead_media_unified')
                 
-                // Busca mais ampla para descobrir estrutura real dos arquivos
-                const prefix = `clientes/${companyId}/`
-                console.log('🔍 Busca ampla S3 para descobrir estrutura:', prefix)
+                const response = await fetch(`${this.baseUrl}/files/list?company_id=${companyId}&folder_id=${folderId}&page=${page}&limit=${limit}`)
                 
-                const s3Result = await S3Storage.listObjects(companyId, prefix)
-                
-                if (s3Result && s3Result.success && s3Result.data) {
-                  const chatFiles = s3Result.data
-                  const pageNum = parseInt(page.toString())
-                  const limitNum = parseInt(limit.toString())
-                  const offset = (pageNum - 1) * limitNum
-                  const paginatedFiles = chatFiles.slice(offset, offset + limitNum)
-                  
-                  console.log('✅ PASTA CHAT S3 REAL: Retornando', paginatedFiles.length, 'de', chatFiles.length, 'arquivos reais')
-
-                  return {
-                    files: paginatedFiles,
-                    pagination: {
-                      page: pageNum,
-                      limit: limitNum,
-                      total: chatFiles.length,
-                      totalPages: Math.ceil(chatFiles.length / limitNum),
-                      hasNext: offset + limitNum < chatFiles.length,
-                      hasPrev: pageNum > 1
-                    }
-                  } as any
-                } else {
-                  console.log('⚠️ Nenhum arquivo S3 encontrado no prefixo WhatsApp')
-                  throw new Error('Nenhum arquivo S3 encontrado')
+                if (response.ok) {
+                  const data = await response.json()
+                  console.log('✅ PASTA CHAT BANCO: Dados obtidos do banco', data)
+                  return data
                 }
-              } catch (s3Error: any) {
-                console.error('❌ ERRO S3 CRÍTICO:', s3Error.message)
-                console.error('❌ Stack trace:', s3Error.stack)
-                console.error('❌ Company ID:', companyId)
-                console.error('❌ Prefix buscado:', `clientes/${companyId}/`)
                 
-                // SEM FALLBACK - APENAS DADOS REAIS
-                // Retornar vazio se S3 falhar - NUNCA dados simulados
+                throw new Error(`API error: ${response.status}`)
+              } catch (error: any) {
+                console.error('❌ ERRO ao buscar arquivos Chat:', error.message)
+                console.error('❌ Company ID:', companyId)
+                
+                // Retornar vazio se falhar - APENAS dados reais
                 return {
                   files: [],
                   pagination: {
