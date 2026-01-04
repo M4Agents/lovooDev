@@ -506,8 +506,8 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
             <h3 className="text-lg font-semibold mb-4">Nova Pasta</h3>
-            {/* VERSÃO CORRIGIDA COM SUBPASTAS - 04/01/2026 12:21 */}
-            <div className="text-xs text-gray-400 mb-2">v2.0 - Subpastas Ativas</div>
+            {/* VERSÃO FINAL SUBPASTAS - 04/01/2026 12:25 - FORÇA DEPLOY */}
+            <div className="text-xs text-blue-600 mb-2 font-medium">✅ v3.0 - Sistema de Subpastas Ativo</div>
             
             <div className="space-y-4">
               {/* Nome da pasta */}
@@ -530,10 +530,10 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
                 />
               </div>
 
-              {/* Pasta pai */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pasta pai (opcional)
+              {/* Pasta pai - CAMPO OBRIGATÓRIO PARA SUBPASTAS */}
+              <div style={{ backgroundColor: '#f8f9fa', padding: '8px', borderRadius: '6px', border: '1px solid #e9ecef' }}>
+                <label className="block text-sm font-medium text-blue-700 mb-2">
+                  📁 Pasta pai (opcional) - Para criar subpastas
                 </label>
                 <select
                   value={newFolderParentId || ''}
