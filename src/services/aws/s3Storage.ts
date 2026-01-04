@@ -130,7 +130,7 @@ export class S3Storage {
         bucket: credentials.bucket,
         key: s3Key,
         etag: uploadResult.ETag,
-        location: uploadResult.Location
+        location: `https://${credentials.bucket}.s3.${credentials.region}.amazonaws.com/${s3Key}`
       });
 
       return {
