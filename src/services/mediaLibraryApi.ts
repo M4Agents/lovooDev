@@ -35,7 +35,7 @@ export interface CompanyFolder {
   company_id: string
   name: string
   path: string
-  parent_path?: string
+  parent_id?: string | null
   icon: string
   description?: string
   file_count?: number
@@ -45,6 +45,7 @@ export interface CompanyFolder {
 export interface PaginationInfo {
   page: number
   limit: number
+  total: number
   totalCount: number
   totalPages: number
   hasNextPage: boolean
@@ -173,7 +174,10 @@ class MediaLibraryApiService {
             page: 1,
             limit: 20,
             total: 0,
-            totalPages: 0
+            totalCount: 0,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPrevPage: false
           }
         }
       }
@@ -324,7 +328,7 @@ class MediaLibraryApiService {
     companyId: string,
     folderData: {
       name: string
-      parent_path?: string
+      parent_id?: string | null
       icon?: string
       description?: string
     }

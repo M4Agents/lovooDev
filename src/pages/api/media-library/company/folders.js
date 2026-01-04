@@ -33,111 +33,73 @@ try {
 }
 
 // =====================================================
-// HELPER: GERAR PASTAS MOCK
+// HELPER: GERAR PASTAS PADRÃO
 // =====================================================
 
-const generateMockFolders = (companyId) => {
+const generateDefaultFolders = (companyId) => {
   return [
     {
-      id: `folder_${companyId}_1`,
       company_id: companyId,
       name: 'Marketing',
       path: '/marketing',
-      parent_path: null,
+      parent_id: null,
       icon: '📢',
-      description: 'Materiais de marketing e campanhas',
-      file_count: 234,
-      created_at: new Date().toISOString()
+      description: 'Materiais de marketing e campanhas'
     },
     {
-      id: `folder_${companyId}_2`,
-      company_id: companyId,
-      name: 'Banners',
-      path: '/marketing/banners',
-      parent_path: '/marketing',
-      icon: '🎨',
-      description: 'Banners promocionais',
-      file_count: 89,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: `folder_${companyId}_3`,
-      company_id: companyId,
-      name: 'Vídeos Promocionais',
-      path: '/marketing/videos',
-      parent_path: '/marketing',
-      icon: '🎬',
-      description: 'Vídeos para campanhas',
-      file_count: 45,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: `folder_${companyId}_4`,
       company_id: companyId,
       name: 'Produtos',
       path: '/produtos',
-      parent_path: null,
+      parent_id: null,
       icon: '📦',
-      description: 'Imagens e documentos de produtos',
-      file_count: 156,
-      created_at: new Date().toISOString()
+      description: 'Imagens e documentos de produtos'
     },
     {
-      id: `folder_${companyId}_5`,
-      company_id: companyId,
-      name: 'Fotos',
-      path: '/produtos/fotos',
-      parent_path: '/produtos',
-      icon: '📷',
-      description: 'Fotografias dos produtos',
-      file_count: 98,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: `folder_${companyId}_6`,
-      company_id: companyId,
-      name: 'Catálogos',
-      path: '/produtos/catalogos',
-      parent_path: '/produtos',
-      icon: '📋',
-      description: 'Catálogos em PDF',
-      file_count: 58,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: `folder_${companyId}_7`,
       company_id: companyId,
       name: 'Documentos',
       path: '/documentos',
-      parent_path: null,
+      parent_id: null,
       icon: '📄',
-      description: 'Documentos gerais da empresa',
-      file_count: 89,
-      created_at: new Date().toISOString()
+      description: 'Documentos gerais da empresa'
     },
     {
-      id: `folder_${companyId}_8`,
       company_id: companyId,
-      name: 'Contratos',
-      path: '/documentos/contratos',
-      parent_path: '/documentos',
+      name: 'Templates',
+      path: '/templates',
+      parent_id: null,
       icon: '📋',
-      description: 'Modelos de contratos',
-      file_count: 34,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: `folder_${companyId}_9`,
-      company_id: companyId,
-      name: 'Orçamentos',
-      path: '/documentos/orcamentos',
-      parent_path: '/documentos',
-      icon: '💰',
-      description: 'Templates de orçamentos',
-      file_count: 55,
-      created_at: new Date().toISOString()
+      description: 'Templates e modelos reutilizáveis'
     }
   ]
+}
+
+// =====================================================
+// HELPER: CALCULAR PATH HIERÁRQUICO
+// =====================================================
+
+const calculateFolderPath = async (parentId, folderName, companyId) => {
+  if (!parentId) {
+    // Pasta raiz
+    return `/${folderName.toLowerCase().replace(/\s+/g, '_')}`
+  }
+
+  try {
+    // Buscar pasta pai para construir path hierárquico
+    const { data: parentFolder, error } = await supabase
+      .from('company_folders')
+      .select('path')
+      .eq('id', parentId)
+      .eq('company_id', companyId)
+      .single()
+
+    if (error || !parentFolder) {
+      throw new Error('Pasta pai não encontrada')
+    }
+
+    return `${parentFolder.path}/${folderName.toLowerCase().replace(/\s+/g, '_')}`
+  } catch (error) {
+    throw new Error(`Erro ao calcular path: ${error.message}`)
+  }
 }
 
 // =====================================================
@@ -192,18 +154,11 @@ export default async function handler(req, res) {
         // Se não há pastas, criar as padrão
         if (folders.length === 0) {
           console.log('📁 Criando pastas padrão para empresa')
-          const defaultFolders = generateMockFolders(company_id)
+          const defaultFolders = generateDefaultFolders(company_id)
           
           const { data: insertedFolders, error: insertError } = await supabase
             .from('company_folders')
-            .insert(defaultFolders.map(folder => ({
-              company_id: folder.company_id,
-              name: folder.name,
-              path: folder.path,
-              parent_path: folder.parent_path,
-              icon: folder.icon,
-              description: folder.description
-            })))
+            .insert(defaultFolders)
             .select()
 
           if (!insertError && insertedFolders) {
@@ -212,8 +167,8 @@ export default async function handler(req, res) {
         }
 
       } catch (dbError) {
-        console.log('⚠️ Erro ao acessar banco, usando dados mock:', dbError.message)
-        folders = generateMockFolders(company_id)
+        console.log('⚠️ Erro ao acessar banco, retornando lista vazia:', dbError.message)
+        folders = []
       }
 
       return res.status(200).json({
@@ -231,7 +186,7 @@ export default async function handler(req, res) {
     // =====================================================
 
     if (req.method === 'POST') {
-      const { name, parent_path, icon, description } = req.body
+      const { name, parent_id, icon, description } = req.body
 
       if (!name || !name.trim()) {
         return res.status(400).json({
@@ -240,19 +195,36 @@ export default async function handler(req, res) {
         })
       }
 
-      // Gerar path baseado no parent_path
-      const path = parent_path ? `${parent_path}/${name.toLowerCase().replace(/\s+/g, '_')}` : `/${name.toLowerCase().replace(/\s+/g, '_')}`
-
-      console.log('📁 Criando nova pasta:', { name, path, parent_path })
+      console.log('📁 Criando nova pasta:', { name, parent_id, company_id })
 
       try {
+        // Calcular path hierárquico
+        const path = await calculateFolderPath(parent_id, name.trim(), company_id)
+
+        // Verificar se já existe pasta com mesmo nome no mesmo nível
+        const { data: existingFolder } = await supabase
+          .from('company_folders')
+          .select('id')
+          .eq('company_id', company_id)
+          .eq('name', name.trim())
+          .eq('parent_id', parent_id || null)
+          .single()
+
+        if (existingFolder) {
+          return res.status(400).json({
+            error: 'Pasta já existe',
+            message: 'Já existe uma pasta com este nome neste local'
+          })
+        }
+
+        // Criar nova pasta
         const { data, error } = await supabase
           .from('company_folders')
           .insert({
             company_id,
             name: name.trim(),
             path,
-            parent_path: parent_path || null,
+            parent_id: parent_id || null,
             icon: icon || '📁',
             description: description || ''
           })
@@ -262,6 +234,8 @@ export default async function handler(req, res) {
         if (error) {
           throw error
         }
+
+        console.log('✅ Pasta criada com sucesso:', data.name, 'Path:', data.path)
 
         return res.status(201).json({
           success: true,

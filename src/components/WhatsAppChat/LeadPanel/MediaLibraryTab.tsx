@@ -39,10 +39,15 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('')
   const [showNewFolderModal, setShowNewFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderParentId, setNewFolderParentId] = useState<string | null>(null)
+  const [newFolderDescription, setNewFolderDescription] = useState('')
+  const [newFolderIcon, setNewFolderIcon] = useState('📁')
   const [uploading, setUploading] = useState(false)
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+  const [breadcrumb, setBreadcrumb] = useState<CompanyFolder[]>([])
 
   // =====================================================
-  // BUSCAR DADOS (MOCK INICIAL)
+  // BUSCAR DADOS E HELPERS
   // =====================================================
 
   const fetchMediaData = async () => {
@@ -78,6 +83,71 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helper para organizar pastas em estrutura hierárquica
+  const organizeHierarchicalFolders = (folders: CompanyFolder[]): CompanyFolder[] => {
+    const rootFolders = folders.filter(folder => !folder.parent_id)
+    const childFolders = folders.filter(folder => folder.parent_id)
+    
+    const addChildren = (folder: CompanyFolder): CompanyFolder & { children?: CompanyFolder[] } => {
+      const children = childFolders
+        .filter(child => child.parent_id === folder.id)
+        .map(addChildren)
+      
+      return children.length > 0 ? { ...folder, children } : folder
+    }
+    
+    return rootFolders.map(addChildren)
+  }
+
+  // Helper para renderizar pasta com indentação
+  const renderFolderWithIndentation = (
+    folder: CompanyFolder & { children?: CompanyFolder[] }, 
+    level: number = 0
+  ): React.ReactNode[] => {
+    const elements: React.ReactNode[] = []
+    
+    // Renderizar pasta atual
+    elements.push(
+      <div 
+        key={folder.id}
+        className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors ${
+          level > 0 ? 'ml-' + (level * 4) : ''
+        }`}
+        style={{ marginLeft: level * 16 }} // Indentação manual para melhor controle
+        onClick={() => handleFolderClick(folder)}
+      >
+        <div className="flex items-center space-x-3">
+          <span className="text-lg">{folder.icon}</span>
+          <div>
+            <div className="font-medium text-gray-900">{folder.name}</div>
+            <div className="text-xs text-gray-500">
+              {folder.file_count || 0} arquivos • {folder.description}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          {folder.children && folder.children.length > 0 && (
+            <span className="text-xs text-gray-400">
+              {folder.children.length} subpasta{folder.children.length > 1 ? 's' : ''}
+            </span>
+          )}
+          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    )
+    
+    // Renderizar subpastas recursivamente
+    if (folder.children) {
+      folder.children.forEach(child => {
+        elements.push(...renderFolderWithIndentation(child, level + 1))
+      })
+    }
+    
+    return elements
   }
 
   useEffect(() => {
@@ -167,6 +237,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const handleNewFolderClick = () => {
     setShowNewFolderModal(true)
     setNewFolderName('')
+    setNewFolderParentId(currentFolderId) // Usar pasta atual como pai por padrão
+    setNewFolderDescription('')
+    setNewFolderIcon('📁')
   }
 
   const handleCreateFolder = async () => {
@@ -183,12 +256,16 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     try {
       await mediaLibraryApi.createFolder(companyId, {
         name: newFolderName.trim(),
-        description: `Pasta criada pelo usuário`,
-        icon: '📁'
+        parent_id: newFolderParentId,
+        description: newFolderDescription || `Pasta criada pelo usuário`,
+        icon: newFolderIcon
       })
       
       setShowNewFolderModal(false)
       setNewFolderName('')
+      setNewFolderParentId(null)
+      setNewFolderDescription('')
+      setNewFolderIcon('📁')
       
       // Recarregar pastas
       await fetchMediaData()
@@ -199,8 +276,29 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   }
 
   const handleFolderClick = (folder: CompanyFolder) => {
-    console.log('📁 Pasta clicada:', folder.name)
-    // TODO: Implementar navegação para dentro da pasta
+    console.log('📁 Navegando para pasta:', folder.name)
+    setCurrentFolderId(folder.id)
+    
+    // Atualizar breadcrumb
+    const newBreadcrumb = [...breadcrumb, folder]
+    setBreadcrumb(newBreadcrumb)
+    
+    // Recarregar dados para mostrar conteúdo da pasta
+    fetchMediaData()
+  }
+
+  const handleBreadcrumbClick = (index: number) => {
+    if (index === -1) {
+      // Voltar para raiz
+      setCurrentFolderId(null)
+      setBreadcrumb([])
+    } else {
+      // Navegar para pasta específica no breadcrumb
+      const targetFolder = breadcrumb[index]
+      setCurrentFolderId(targetFolder.id)
+      setBreadcrumb(breadcrumb.slice(0, index + 1))
+    }
+    fetchMediaData()
   }
 
   // =====================================================
@@ -346,26 +444,11 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
               <div>Nenhuma pasta criada ainda</div>
             </div>
           ) : (
-            companyFolders.map(folder => (
-              <div 
-                key={folder.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
-                onClick={() => handleFolderClick(folder)}
-              >
-                <div className="flex items-center space-x-3">
-                  <span className="text-lg">{folder.icon}</span>
-                  <div>
-                    <div className="font-medium text-gray-900">{folder.name}</div>
-                    <div className="text-xs text-gray-500">
-                      {folder.file_count || 0} arquivos • {folder.description}
-                    </div>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            ))
+            <div className="space-y-1">
+              {organizeHierarchicalFolders(companyFolders).map(folder => 
+                renderFolderWithIndentation(folder)
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -392,32 +475,115 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         </button>
       </div>
 
+      {/* Breadcrumb de Navegação */}
+      {breadcrumb.length > 0 && (
+        <div className="flex items-center space-x-2 text-sm text-gray-600 border-b border-gray-200 pb-2 mb-4">
+          <button
+            onClick={() => handleBreadcrumbClick(-1)}
+            className="hover:text-blue-600 transition-colors"
+          >
+            📁 Raiz
+          </button>
+          {breadcrumb.map((folder, index) => (
+            <React.Fragment key={folder.id}>
+              <span className="text-gray-400">/</span>
+              <button
+                onClick={() => handleBreadcrumbClick(index)}
+                className="hover:text-blue-600 transition-colors"
+              >
+                {folder.icon} {folder.name}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
       {/* Modal Nova Pasta */}
       {showNewFolderModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
             <h3 className="text-lg font-semibold mb-4">Nova Pasta</h3>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nome da pasta
-              </label>
-              <input
-                type="text"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Digite o nome da pasta..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleCreateFolder()
-                  }
-                }}
-              />
+            <div className="space-y-4">
+              {/* Nome da pasta */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome da pasta
+                </label>
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="Digite o nome da pasta..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && newFolderName.trim()) {
+                      handleCreateFolder()
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Pasta pai */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pasta pai (opcional)
+                </label>
+                <select
+                  value={newFolderParentId || ''}
+                  onChange={(e) => setNewFolderParentId(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">📁 Raiz (sem pasta pai)</option>
+                  {companyFolders
+                    .filter(folder => folder.parent_id === null) // Apenas pastas raiz por enquanto
+                    .map(folder => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.icon} {folder.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Ícone */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ícone
+                </label>
+                <div className="flex space-x-2">
+                  {['📁', '📂', '📢', '📦', '📄', '📋', '🎨', '🎬', '📷', '💰'].map(icon => (
+                    <button
+                      key={icon}
+                      onClick={() => setNewFolderIcon(icon)}
+                      className={`p-2 text-lg rounded-lg border-2 transition-colors ${
+                        newFolderIcon === icon
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descrição (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newFolderDescription}
+                  onChange={(e) => setNewFolderDescription(e.target.value)}
+                  placeholder="Descreva o conteúdo da pasta..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
             
-            <div className="flex space-x-3">
+            <div className="flex space-x-3 mt-6">
               <button
                 onClick={() => setShowNewFolderModal(false)}
                 className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
