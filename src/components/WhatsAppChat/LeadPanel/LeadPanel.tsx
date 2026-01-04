@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
-import MediaLibraryTab from './MediaLibraryTab'
+import MediaLibraryTabV5 from './MediaLibraryTabV5'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -278,7 +278,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             onUpdate={fetchData}
           />
         ) : (
-          <MediaLibraryTab
+          <MediaLibraryTabV5
             conversationId={conversationId}
             companyId={companyId}
             leadId={contact?.id}
