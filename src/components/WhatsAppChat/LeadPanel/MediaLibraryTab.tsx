@@ -1,7 +1,8 @@
 // =====================================================
-// MEDIA LIBRARY TAB - COMPONENTE ISOLADO
+// MEDIA LIBRARY TAB - COMPONENTE ISOLADO - v4.0 SUBPASTAS
 // =====================================================
 // Nova aba para biblioteca de mídia na sidebar direita
+// VERSÃO 4.0 - SISTEMA DE SUBPASTAS IMPLEMENTADO - 04/01/2026 12:35
 // Implementação cautelosa sem quebrar sistema existente
 
 import React, { useState, useEffect } from 'react'
@@ -505,9 +506,20 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       {showNewFolderModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
-            <h3 className="text-lg font-semibold mb-4">Nova Pasta</h3>
-            {/* VERSÃO FINAL SUBPASTAS - 04/01/2026 12:25 - FORÇA DEPLOY */}
-            <div className="text-xs text-blue-600 mb-2 font-medium">✅ v3.0 - Sistema de Subpastas Ativo</div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Nova Pasta</h3>
+              <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
+                🚀 v4.0 FINAL - 12:35
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <div className="text-sm text-blue-800 font-medium">
+                ✅ Sistema de Subpastas Implementado - Versão 4.0
+              </div>
+              <div className="text-xs text-blue-600 mt-1">
+                Agora você pode criar pastas dentro de outras pastas
+              </div>
+            </div>
             
             <div className="space-y-4">
               {/* Nome da pasta */}
@@ -530,11 +542,17 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
                 />
               </div>
 
-              {/* Pasta pai - CAMPO OBRIGATÓRIO PARA SUBPASTAS */}
-              <div style={{ backgroundColor: '#f8f9fa', padding: '8px', borderRadius: '6px', border: '1px solid #e9ecef' }}>
-                <label className="block text-sm font-medium text-blue-700 mb-2">
-                  📁 Pasta pai (opcional) - Para criar subpastas
-                </label>
+              {/* CAMPO PASTA PAI - FUNCIONALIDADE DE SUBPASTAS */}
+              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-orange-200 rounded-lg p-4">
+                <div className="flex items-center mb-2">
+                  <span className="text-lg mr-2">🎯</span>
+                  <label className="block text-sm font-bold text-orange-800">
+                    PASTA PAI (OPCIONAL) - CRIAR SUBPASTA
+                  </label>
+                </div>
+                <div className="text-xs text-orange-600 mb-2">
+                  Selecione uma pasta existente para criar uma subpasta dentro dela
+                </div>
                 <select
                   value={newFolderParentId || ''}
                   onChange={(e) => setNewFolderParentId(e.target.value || null)}
