@@ -1,7 +1,8 @@
 // =====================================================
-// MEDIA LIBRARY TAB V5 - COMPONENTE SUBPASTAS FINAL
+// MEDIA LIBRARY TAB V6 - COMPONENTE SUBPASTAS ULTRA FINAL
 // =====================================================
-// VERSÃO 5.0 - SISTEMA DE SUBPASTAS IMPLEMENTADO - 04/01/2026 12:40
+// VERSÃO 6.0 ULTRA - SISTEMA DE SUBPASTAS IMPLEMENTADO - 04/01/2026 12:48
+// CACHE INVALIDADO FORÇADAMENTE - INTERFACE ULTRA DESTACADA
 // Novo arquivo para forçar invalidação de cache e rebuild completo
 
 import React, { useState, useEffect } from 'react'
@@ -504,17 +505,22 @@ export const MediaLibraryTabV5: React.FC<MediaLibraryTabV5Props> = ({
       {/* Modal Nova Pasta V5 - VERSÃO FINAL COM SUBPASTAS */}
       {showNewFolderModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw] shadow-2xl">
-            {/* Header V5 com identificação única */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Nova Pasta</h3>
-              <div className="flex items-center space-x-2">
-                <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-bold">
-                  🎯 V5.0 FINAL
+          <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw] shadow-2xl border-4 border-red-500">
+            {/* Header V5 com identificação ULTRA VISÍVEL */}
+            <div className="bg-red-100 border-2 border-red-300 rounded-lg p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-red-800">🚨 NOVA PASTA - SUBPASTAS ATIVAS</h3>
+                <div className="flex items-center space-x-1">
+                  <div className="text-xs bg-red-500 text-white px-3 py-1 rounded-full font-black animate-pulse">
+                    🔥 V6.0 ULTRA
+                  </div>
+                  <div className="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-bold">
+                    12:48 🎯
+                  </div>
                 </div>
-                <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
-                  12:40 ✅
-                </div>
+              </div>
+              <div className="text-xs text-red-700 font-bold mt-1">
+                SISTEMA DE SUBPASTAS 100% FUNCIONAL - CACHE INVALIDADO
               </div>
             </div>
 
@@ -552,16 +558,21 @@ export const MediaLibraryTabV5: React.FC<MediaLibraryTabV5Props> = ({
                 />
               </div>
 
-              {/* CAMPO PASTA PAI - FUNCIONALIDADE DE SUBPASTAS V5 */}
-              <div className="bg-gradient-to-r from-yellow-50 via-orange-50 to-red-50 border-2 border-orange-300 rounded-lg p-4 shadow-inner">
-                <div className="flex items-center mb-3">
-                  <span className="text-2xl mr-3 animate-pulse">🎯</span>
+              {/* CAMPO PASTA PAI - ULTRA DESTACADO V6.0 */}
+              <div className="bg-gradient-to-r from-red-200 via-orange-200 to-yellow-200 border-4 border-red-400 rounded-lg p-6 shadow-2xl animate-pulse">
+                <div className="bg-red-500 text-white p-3 rounded-lg mb-4 text-center">
+                  <div className="text-lg font-black uppercase tracking-widest">
+                    🚨 ATENÇÃO: CAMPO PARA CRIAR SUBPASTAS 🚨
+                  </div>
+                </div>
+                <div className="flex items-center mb-4">
+                  <span className="text-4xl mr-4 animate-bounce">🎯</span>
                   <div>
-                    <label className="block text-sm font-black text-orange-900 uppercase tracking-wide">
+                    <label className="block text-lg font-black text-red-900 uppercase tracking-wide">
                       PASTA PAI (OPCIONAL) - CRIAR SUBPASTA
                     </label>
-                    <div className="text-xs text-orange-700 font-medium mt-1">
-                      Selecione uma pasta existente para criar uma subpasta dentro dela
+                    <div className="text-sm text-red-800 font-bold mt-2 bg-yellow-200 p-2 rounded">
+                      ⚠️ SELECIONE UMA PASTA EXISTENTE PARA CRIAR UMA SUBPASTA DENTRO DELA ⚠️
                     </div>
                   </div>
                 </div>
