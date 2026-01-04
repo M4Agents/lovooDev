@@ -235,6 +235,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   }
 
   const handleNewFolderClick = () => {
+    console.log('🔍 DEBUG: Abrindo modal Nova Pasta')
+    console.log('🔍 DEBUG: companyFolders:', companyFolders)
+    console.log('🔍 DEBUG: currentFolderId:', currentFolderId)
     setShowNewFolderModal(true)
     setNewFolderName('')
     setNewFolderParentId(currentFolderId) // Usar pasta atual como pai por padrão
@@ -503,7 +506,8 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
             <h3 className="text-lg font-semibold mb-4">Nova Pasta</h3>
-            {/* VERSÃO ATUALIZADA COM SUBPASTAS - 04/01/2026 */}
+            {/* VERSÃO CORRIGIDA COM SUBPASTAS - 04/01/2026 12:21 */}
+            <div className="text-xs text-gray-400 mb-2">v2.0 - Subpastas Ativas</div>
             
             <div className="space-y-4">
               {/* Nome da pasta */}
@@ -537,13 +541,17 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">📁 Raiz (sem pasta pai)</option>
-                  {companyFolders
-                    .filter(folder => folder.parent_id === null) // Apenas pastas raiz por enquanto
-                    .map(folder => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.icon} {folder.name}
-                      </option>
-                    ))}
+                  {companyFolders && companyFolders.length > 0 ? (
+                    companyFolders
+                      .filter(folder => folder.parent_id === null || !folder.parent_id)
+                      .map(folder => (
+                        <option key={folder.id} value={folder.id}>
+                          {folder.icon} {folder.name}
+                        </option>
+                      ))
+                  ) : (
+                    <option disabled>Carregando pastas...</option>
+                  )}
                 </select>
               </div>
 
