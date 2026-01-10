@@ -491,6 +491,11 @@ export const MediaLibrary: React.FC = () => {
           <FileUpload
             companyId={company.id}
             currentFolderId={state.currentFolder?.id}
+            companyFolders={state.folders.map(folder => ({
+              id: folder.id,
+              name: folder.name,
+              icon: folder.icon || '📁'
+            }))}
             onClose={() => setShowUploadModal(false)}
             onComplete={handleUploadComplete}
           />
