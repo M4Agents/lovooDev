@@ -222,13 +222,17 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           
           console.log('🔍 Payload para organização:', payload)
           
-          // Chamar API para mover arquivo para pasta selecionada
-          const organizeResponse = await fetch('/api/media-library/organize-file', {
+          // Usar API upload-to-folder existente para organização
+          const organizeFormData = new FormData()
+          organizeFormData.append('company_id', companyId)
+          organizeFormData.append('folder_id', selectedFolderId)
+          organizeFormData.append('organize_existing_file', 'true')
+          organizeFormData.append('existing_file_id', uploadResult.id)
+          organizeFormData.append('existing_s3_key', uploadResult.s3_key)
+          
+          const organizeResponse = await fetch('/api/media-library/upload-to-folder', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
+            body: organizeFormData
           })
 
           console.log('🔍 Response status:', organizeResponse.status)

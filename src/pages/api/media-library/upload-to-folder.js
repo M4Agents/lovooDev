@@ -163,6 +163,9 @@ export default async function handler(req, res) {
     
     const companyId = Array.isArray(fields.company_id) ? fields.company_id[0] : fields.company_id
     const folderId = Array.isArray(fields.folder_id) ? fields.folder_id[0] : fields.folder_id
+    const organizeExisting = Array.isArray(fields.organize_existing_file) ? fields.organize_existing_file[0] : fields.organize_existing_file
+    const existingFileId = Array.isArray(fields.existing_file_id) ? fields.existing_file_id[0] : fields.existing_file_id
+    const existingS3Key = Array.isArray(fields.existing_s3_key) ? fields.existing_s3_key[0] : fields.existing_s3_key
     
     if (!companyId) {
       return res.status(400).json({
@@ -174,8 +177,123 @@ export default async function handler(req, res) {
     console.log('📤 Upload solicitado:', { 
       company_id: companyId, 
       folder_id: folderId,
+      organize_existing: organizeExisting,
+      existing_file_id: existingFileId,
       files_count: Object.keys(files).length
     })
+
+    // Se for organização de arquivo existente
+    if (organizeExisting === 'true') {
+      console.log('🔄 ORGANIZANDO ARQUIVO EXISTENTE:', existingFileId)
+      
+      if (!existingFileId || !existingS3Key) {
+        return res.status(400).json({
+          error: 'Parâmetros obrigatórios para organização',
+          message: 'existing_file_id e existing_s3_key são necessários'
+        })
+      }
+
+      // Buscar informações da pasta
+      let folderName = null
+      try {
+        const { data: folderData } = await supabase
+          .from('company_folders')
+          .select('name')
+          .eq('id', folderId)
+          .eq('company_id', companyId)
+          .single()
+        
+        if (folderData) {
+          folderName = folderData.name.toLowerCase()
+          console.log('📂 Organizando para pasta:', folderName)
+        } else {
+          throw new Error('Pasta não encontrada')
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar pasta:', error.message)
+        return res.status(404).json({
+          error: 'Pasta não encontrada',
+          message: 'folder_id não existe para esta empresa'
+        })
+      }
+
+      // Extrair nome do arquivo do S3 key original
+      const fileName = existingS3Key.split('/').pop()
+      const newS3Key = `biblioteca/companies/${companyId}/${folderName}/${fileName}`
+      
+      console.log('📁 Movendo arquivo:', existingS3Key, '→', newS3Key)
+
+      try {
+        // Copiar arquivo para novo local
+        const { data: copyData, error: copyError } = await supabase.storage
+          .from('aws-lovoocrm-media')
+          .copy(existingS3Key, newS3Key)
+        
+        if (copyError) {
+          console.error('❌ Erro ao copiar:', copyError)
+          // Fallback: download + upload
+          const { data: downloadData, error: downloadError } = await supabase.storage
+            .from('aws-lovoocrm-media')
+            .download(existingS3Key)
+          
+          if (!downloadError) {
+            const { error: uploadError } = await supabase.storage
+              .from('aws-lovoocrm-media')
+              .upload(newS3Key, downloadData, { upsert: true })
+            
+            if (uploadError) {
+              throw new Error(`Erro no upload: ${uploadError.message}`)
+            }
+          }
+        }
+
+        // Atualizar metadados no banco
+        const { data: updatedFile, error: updateError } = await supabase
+          .from('company_media_library')
+          .update({
+            folder_id: folderId,
+            s3_key: newS3Key,
+            preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${newS3Key}`,
+            organized_at: new Date().toISOString()
+          })
+          .eq('id', existingFileId)
+          .eq('company_id', companyId)
+          .select()
+          .single()
+
+        if (updateError) {
+          console.error('❌ Erro ao atualizar metadados:', updateError)
+        }
+
+        // Remover arquivo original
+        try {
+          await supabase.storage.from('aws-lovoocrm-media').remove([existingS3Key])
+          console.log('✅ Arquivo original removido')
+        } catch (removeError) {
+          console.warn('⚠️ Não foi possível remover arquivo original')
+        }
+
+        console.log('🎉 Arquivo organizado com sucesso!')
+
+        return res.status(200).json({
+          success: true,
+          message: `Arquivo organizado na pasta ${folderName}`,
+          data: {
+            file_id: existingFileId,
+            old_s3_path: existingS3Key,
+            new_s3_path: newS3Key,
+            folder_name: folderName
+          }
+        })
+
+      } catch (organizeError) {
+        console.error('❌ Erro na organização:', organizeError)
+        return res.status(500).json({
+          error: 'Erro na organização',
+          message: organizeError.message
+        })
+      }
+    }
 
     // Buscar informações da pasta
     let folderName = null
