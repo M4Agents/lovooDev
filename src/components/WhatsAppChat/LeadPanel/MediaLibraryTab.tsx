@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { mediaLibraryApi, MediaSummary, MediaFile, CompanyFolder } from '../../../services/mediaLibraryApi'
-import { UploadModal } from './MediaLibraryTab-upload-modal'
+import { UploadModalV2 } from './MediaLibraryTab-upload-modal-v2'
 
 // =====================================================
 // INTERFACES
@@ -843,8 +843,8 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         </div>
       )}
 
-      {/* Modal de Upload com Seletor de Pasta */}
-      <UploadModal
+      {/* Modal de Upload com Seletor de Pasta - V2 CACHE BYPASS */}
+      <UploadModalV2
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         companyFolders={companyFolders}
