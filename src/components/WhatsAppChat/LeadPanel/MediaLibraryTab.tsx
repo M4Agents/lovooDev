@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { mediaLibraryApi, MediaSummary, MediaFile, CompanyFolder } from '../../../services/mediaLibraryApi'
+import { UploadModal } from './MediaLibraryTab-upload-modal'
 
 // =====================================================
 // INTERFACES
@@ -48,6 +49,9 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const [breadcrumb, setBreadcrumb] = useState<CompanyFolder[]>([])
   const [chatMedia, setChatMedia] = useState<MediaFile[]>([])
   const [loadingChatMedia, setLoadingChatMedia] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
 
   // =====================================================
   // BUSCAR DADOS E HELPERS
@@ -205,26 +209,34 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   }
 
   const handleUploadClick = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.multiple = true
-    input.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt'
-    input.onchange = handleFileSelect
-    input.click()
+    setShowUploadModal(true)
+    setSelectedFiles([])
+    setSelectedFolderId(null)
   }
 
-  const handleFileSelect = async (event: Event) => {
-    const target = event.target as HTMLInputElement
-    const files = target.files
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
     if (!files || files.length === 0) return
+    
+    setSelectedFiles(Array.from(files))
+  }
+
+  const handleUploadSubmit = async () => {
+    if (selectedFiles.length === 0 || !selectedFolderId) {
+      alert('Selecione os arquivos e a pasta de destino')
+      return
+    }
 
     setUploading(true)
     try {
-      for (const file of Array.from(files)) {
-        await uploadFile(file)
+      for (const file of selectedFiles) {
+        await uploadFileToFolder(file, selectedFolderId)
       }
       // Recarregar dados após upload
       await fetchMediaData()
+      setShowUploadModal(false)
+      setSelectedFiles([])
+      setSelectedFolderId(null)
     } catch (error) {
       console.error('❌ Erro no upload:', error)
       alert('Erro ao fazer upload dos arquivos. Tente novamente.')
@@ -233,7 +245,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     }
   }
 
-  const uploadFile = async (file: File) => {
+  const uploadFileToFolder = async (file: File, folderId: string) => {
     // Validações
     const maxSizes = {
       image: 25 * 1024 * 1024, // 25MB
@@ -247,6 +259,35 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
 
     if (file.size > maxSize) {
       throw new Error(`Arquivo ${file.name} excede o tamanho máximo permitido`)
+    }
+
+    // Criar FormData para upload
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('company_id', companyId)
+    formData.append('folder_id', folderId)
+
+    // Chamar API de upload para pasta específica
+    const response = await fetch('/api/media-library/upload-to-folder', {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!response.ok) {
+      throw new Error(`Erro no upload: ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ Upload realizado:', result)
+    return result
+  }
+
+  const getFileType = (mimeType: string): string => {
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType.startsWith('video/')) return 'video'
+    if (mimeType.startsWith('audio/')) return 'audio'
+    return 'document'
+  }
     }
 
     // TODO: Implementar upload real para AWS S3
@@ -801,6 +842,15 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Upload com Seletor de Pasta */}
+      <UploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        companyFolders={companyFolders}
+        companyId={companyId}
+        onUploadSuccess={fetchMediaData}
+      />
 
     </div>
   )
