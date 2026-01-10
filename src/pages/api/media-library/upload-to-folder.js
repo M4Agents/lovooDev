@@ -47,38 +47,37 @@ const uploadToS3Subfolder = async (companyId, folderName, file, fileName) => {
     
     console.log('📂 Caminho S3 de destino:', s3Key)
     
-    // SIMULAÇÃO: Upload real para S3
-    /*
-    const S3Storage = require('../services/aws/s3Storage')
+    // Upload real para S3 usando Supabase Storage
     const fileBuffer = fs.readFileSync(file.filepath)
     
-    const uploadResult = await S3Storage.uploadToS3(companyId, s3Key, fileBuffer, {
-      ContentType: file.mimetype,
-      Metadata: {
-        'original-filename': fileName,
-        'uploaded-by': 'media-library',
-        'folder': folderName || 'root',
-        'uploaded-at': new Date().toISOString()
-      }
-    })
+    console.log('📤 Fazendo upload real para S3:', s3Key)
     
-    return {
-      success: true,
-      s3_key: s3Key,
-      s3_url: uploadResult.url,
-      file_size: file.size,
-      mime_type: file.mimetype
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('aws-lovoocrm-media')
+      .upload(s3Key, fileBuffer, {
+        contentType: file.mimetype,
+        metadata: {
+          'original-filename': fileName,
+          'uploaded-by': 'media-library',
+          'folder': folderName || 'root',
+          'uploaded-at': new Date().toISOString()
+        }
+      })
+    
+    if (uploadError) {
+      console.error('❌ Erro no upload S3:', uploadError)
+      throw new Error(`Erro no upload S3: ${uploadError.message}`)
     }
-    */
     
-    // SIMULAÇÃO: Retornar dados como se upload foi bem-sucedido
+    console.log('✅ Upload S3 bem-sucedido:', uploadData.path)
+    
     return {
       success: true,
       s3_key: s3Key,
       s3_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${s3Key}`,
       file_size: file.size,
       mime_type: file.mimetype,
-      simulated: true
+      upload_path: uploadData.path
     }
     
   } catch (error) {
@@ -112,8 +111,7 @@ const saveFileMetadata = async (companyId, folderId, uploadResult, originalFilen
       created_at: new Date().toISOString()
     }
     
-    // SIMULAÇÃO: Salvar na tabela company_media_library
-    /*
+    // Salvar metadados reais na tabela company_media_library
     const { data, error } = await supabase
       .from('company_media_library')
       .insert([fileMetadata])
@@ -121,17 +119,13 @@ const saveFileMetadata = async (companyId, folderId, uploadResult, originalFilen
       .single()
     
     if (error) {
-      throw error
+      console.error('❌ Erro ao salvar metadados:', error)
+      throw new Error(`Erro ao salvar metadados: ${error.message}`)
     }
+    
+    console.log('✅ Metadados salvos no banco:', data.id)
     
     return data
-    */
-    
-    // SIMULAÇÃO: Retornar dados como se foi salvo
-    return {
-      id: `file_${Date.now()}`,
-      ...fileMetadata
-    }
     
   } catch (error) {
     console.error('❌ Erro ao salvar metadados:', error)
