@@ -210,48 +210,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
         
         try {
-          // Testar se API existe primeiro
-          console.log('🔍 Testando se API organize-file existe...')
+          console.log('🔥 USANDO API MEDIA-MANAGEMENT PARA ORGANIZAÇÃO')
+          console.log('📁 Organizando arquivo ID:', uploadResult.id, 'para pasta:', selectedFolderId)
           
-          const payload = {
-            file_id: uploadResult.id,
-            company_id: companyId,
-            folder_id: selectedFolderId,
-            original_s3_key: uploadResult.s3_key
-          }
+          // Usar API media-management que sabemos que funciona
+          const organizedFile = await mediaManagement.organizeFile(
+            companyId, 
+            uploadResult.id, 
+            selectedFolderId
+          )
           
-          console.log('🔍 Payload para organização:', payload)
+          console.log('🎉 SUCESSO! Arquivo organizado via media-management:', organizedFile.id)
+          console.log('📂 Nova localização:', organizedFile.s3_key)
           
-          // Usar API upload-to-folder existente para organização
-          const organizeFormData = new FormData()
-          organizeFormData.append('company_id', companyId)
-          organizeFormData.append('folder_id', selectedFolderId)
-          organizeFormData.append('organize_existing_file', 'true')
-          organizeFormData.append('existing_file_id', uploadResult.id)
-          organizeFormData.append('existing_s3_key', uploadResult.s3_key)
-          
-          const organizeResponse = await fetch('/api/media-library/upload-to-folder', {
-            method: 'POST',
-            body: organizeFormData
-          })
-
-          console.log('🔍 Response status:', organizeResponse.status)
-          console.log('🔍 Response statusText:', organizeResponse.statusText)
-
-          if (organizeResponse.ok) {
-            const organizeData = await organizeResponse.json()
-            console.log('🎉 SUCESSO! Arquivo organizado:', organizeData.data?.new_s3_path)
-            console.log('🎉 Dados completos da organização:', organizeData)
-          } else {
-            const errorData = await organizeResponse.text()
-            console.error('❌ FALHA na organização - Status:', organizeResponse.status)
-            console.error('❌ FALHA na organização - Error:', errorData)
-            console.warn('⚠️ Arquivo permanece na estrutura temporal')
-          }
         } catch (organizeError: any) {
-          console.error('❌ ERRO CRÍTICO na organização:', organizeError)
-          console.error('❌ Stack trace:', organizeError?.stack)
-          console.log('📁 Arquivo salvo na estrutura temporal, organização falhou')
+          console.error('❌ ERRO na organização via media-management:', organizeError)
+          console.warn('⚠️ Arquivo permanece na estrutura temporal')
+          console.log('📁 Upload foi bem-sucedido, organização falhou:', organizeError.message)
         }
       } else {
         console.log('📋 Nenhuma pasta selecionada, arquivo fica na estrutura temporal')

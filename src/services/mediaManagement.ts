@@ -517,6 +517,41 @@ class MediaManagementService {
   }
 
   /**
+   * Organizar arquivo para pasta específica
+   */
+  async organizeFile(companyId: string, fileId: string, folderId: string): Promise<MediaFileExtended> {
+    try {
+      console.log('📁 Organizando arquivo para pasta:', { fileId, folderId })
+
+      const response = await fetch(
+        `${this.baseUrl}/files/organize?company_id=${companyId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            file_id: fileId, 
+            folder_id: folderId 
+          })
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('✅ Arquivo organizado:', data.data)
+      return data.data
+
+    } catch (error) {
+      console.error('❌ Erro ao organizar arquivo:', error)
+      throw error
+    }
+  }
+
+  /**
    * Excluir arquivo
    */
   async deleteFile(companyId: string, fileId: string): Promise<boolean> {
