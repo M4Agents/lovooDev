@@ -204,7 +204,7 @@ class MediaLibraryApiService {
       }
 
       const response = await fetch(
-        `${this.baseUrl}/leads/${leadId || 'undefined'}/files?${params.toString()}`,
+        `${this.baseUrl}/leads/${leadId || 'undefined'}/files-rebuild-force?${params.toString()}`,
         {
           method: 'GET',
           headers: {
