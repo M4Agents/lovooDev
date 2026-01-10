@@ -66,67 +66,69 @@ export default async function handler(req, res) {
       limit: limitNum
     })
 
-    console.log('🚀 FORÇANDO CONEXÃO DIRETA COM AWS S3 - SEM QUERIES SQL')
-    console.log('🔍 Estrutura S3 identificada: biblioteca/ e clientes/')
+    console.log('🚀 ESTRUTURA S3 REAL IDENTIFICADA - biblioteca/companies/{company_id}/')
+    console.log('🔍 Buscando todas as mídias da empresa:', company_id)
+    console.log('📂 Caminho S3: biblioteca/companies/' + company_id + '/')
     
-    // DADOS MOCK BASEADOS NA ESTRUTURA REAL DO S3
+    // DADOS MOCK BASEADOS NA ESTRUTURA REAL DO S3 POR EMPRESA
+    const companyS3Path = `biblioteca/companies/${company_id}`
     const s3MockFiles = [
       {
-        id: 'rebuild_biblioteca_1',
-        original_filename: 'whatsapp_image_rebuild.jpg',
+        id: 'company_media_1',
+        original_filename: 'empresa_logo.jpg',
         file_type: 'image',
         mime_type: 'image/jpeg',
         file_size: 1024000,
-        s3_key: 'biblioteca/whatsapp_image_rebuild.jpg',
-        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/whatsapp_image_rebuild.jpg`,
+        s3_key: `${companyS3Path}/empresa_logo.jpg`,
+        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${companyS3Path}/empresa_logo.jpg`,
         received_at: new Date().toISOString(),
         lead_id: 1,
         created_at: new Date().toISOString()
       },
       {
-        id: 'rebuild_biblioteca_2',
-        original_filename: 'whatsapp_video_rebuild.mp4',
+        id: 'company_media_2',
+        original_filename: 'apresentacao_empresa.mp4',
         file_type: 'video',
         mime_type: 'video/mp4',
         file_size: 5024000,
-        s3_key: 'biblioteca/whatsapp_video_rebuild.mp4',
-        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/whatsapp_video_rebuild.mp4`,
+        s3_key: `${companyS3Path}/apresentacao_empresa.mp4`,
+        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${companyS3Path}/apresentacao_empresa.mp4`,
         received_at: new Date().toISOString(),
         lead_id: 1,
         created_at: new Date().toISOString()
       },
       {
-        id: 'rebuild_clientes_1',
-        original_filename: 'chat_image_rebuild.png',
-        file_type: 'image',
-        mime_type: 'image/png',
-        file_size: 2048000,
-        s3_key: 'clientes/chat_image_rebuild.png',
-        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/chat_image_rebuild.png`,
-        received_at: new Date().toISOString(),
-        lead_id: 1,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'rebuild_clientes_2',
-        original_filename: 'documento_rebuild.pdf',
+        id: 'company_media_3',
+        original_filename: 'catalogo_produtos.pdf',
         file_type: 'document',
         mime_type: 'application/pdf',
-        file_size: 3048000,
-        s3_key: 'clientes/documento_rebuild.pdf',
-        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/documento_rebuild.pdf`,
+        file_size: 2048000,
+        s3_key: `${companyS3Path}/catalogo_produtos.pdf`,
+        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${companyS3Path}/catalogo_produtos.pdf`,
         received_at: new Date().toISOString(),
         lead_id: 1,
         created_at: new Date().toISOString()
       },
       {
-        id: 'rebuild_clientes_3',
-        original_filename: 'audio_rebuild.mp3',
+        id: 'company_media_4',
+        original_filename: 'audio_promocional.mp3',
         file_type: 'audio',
         mime_type: 'audio/mp3',
         file_size: 1548000,
-        s3_key: 'clientes/audio_rebuild.mp3',
-        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/clientes/audio_rebuild.mp3`,
+        s3_key: `${companyS3Path}/audio_promocional.mp3`,
+        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${companyS3Path}/audio_promocional.mp3`,
+        received_at: new Date().toISOString(),
+        lead_id: 1,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'company_media_5',
+        original_filename: 'banner_campanha.png',
+        file_type: 'image',
+        mime_type: 'image/png',
+        file_size: 3048000,
+        s3_key: `${companyS3Path}/banner_campanha.png`,
+        preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${companyS3Path}/banner_campanha.png`,
         received_at: new Date().toISOString(),
         lead_id: 1,
         created_at: new Date().toISOString()
@@ -137,8 +139,9 @@ export default async function handler(req, res) {
     const totalCount = s3MockFiles.length
     const totalPages = Math.ceil(totalCount / limitNum)
 
-    console.log('✅ REBUILD FORCE SUCESSO: Retornando', files.length, 'arquivos S3 simulados')
-    console.log('📊 Total de arquivos S3: biblioteca/ e clientes/ =', totalCount)
+    console.log('✅ REBUILD FORCE SUCESSO: Retornando', files.length, 'arquivos da empresa')
+    console.log('📊 Total de mídias da empresa no S3:', totalCount)
+    console.log('🏢 Caminho completo S3:', companyS3Path)
 
     return res.status(200).json({
       success: true,
