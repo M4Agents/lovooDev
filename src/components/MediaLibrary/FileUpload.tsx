@@ -4,6 +4,7 @@
 // Componente para upload múltiplo com drag & drop
 
 import React, { useState, useRef, useCallback } from 'react'
+import { mediaManagement, FileUploadData } from '../../services/mediaManagement'
 import {
   Upload,
   X,
@@ -183,28 +184,40 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         )
       }, 200)
 
-      // Usar selectedFolderId se disponível, senão currentFolderId
-      const folderId = selectedFolderId || currentFolderId
+      // OPÇÃO A: Fallback para API antiga quando pasta não selecionada
       
-      if (!folderId) {
-        throw new Error('Pasta de destino é obrigatória')
-      }
+      if (selectedFolderId) {
+        // NOVO: Usar API upload-to-folder quando pasta for selecionada
+        console.log('🔥 UPLOAD ORGANIZADO - Pasta selecionada:', selectedFolderId)
+        
+        const formData = new FormData()
+        formData.append('file', uploadFile.file)
+        formData.append('company_id', companyId)
+        formData.append('folder_id', selectedFolderId)
 
-      // Usar API upload-to-folder para estrutura por pastas
-      const formData = new FormData()
-      formData.append('file', uploadFile.file)
-      formData.append('company_id', companyId)
-      formData.append('folder_id', folderId)
+        const response = await fetch('/api/media-library/upload-to-folder', {
+          method: 'POST',
+          body: formData
+        })
 
-      console.log('🔥 UPLOAD PARA PASTA - Enviando para:', folderId)
+        if (!response.ok) {
+          throw new Error(`Erro no upload organizado: ${response.statusText}`)
+        }
+        
+        console.log('✅ Upload organizado bem-sucedido para pasta:', selectedFolderId)
+        
+      } else {
+        // FALLBACK: Usar API antiga que funcionava quando pasta não selecionada
+        console.log('🔄 FALLBACK - Usando API antiga (sem pasta selecionada)')
+        
+        const uploadData: FileUploadData = {
+          file: uploadFile.file,
+          folder_id: currentFolderId
+        }
 
-      const response = await fetch('/api/media-library/upload-to-folder', {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!response.ok) {
-        throw new Error(`Erro no upload: ${response.statusText}`)
+        await mediaManagement.uploadFile(companyId, uploadData)
+        
+        console.log('✅ Upload fallback bem-sucedido (API antiga)')
       }
 
       clearInterval(progressInterval)
