@@ -66,20 +66,46 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
 
       console.log('📊 Carregando dados da biblioteca de mídia...')
       
+      // Buscar pastas da empresa primeiro
+      const folders = await mediaLibraryApi.getCompanyFolders(companyId)
+      setCompanyFolders(folders)
+      
       // Buscar resumo de mídias do lead
       const summary = await mediaLibraryApi.getLeadMediaSummary(leadId, companyId)
       setMediaSummary(summary)
       
-      // Buscar arquivos recentes (primeiros 5)
-      const recentFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
-        page: 1,
-        limit: 5
-      })
-      setRecentMedia(recentFiles.files)
-      
-      // Buscar pastas da empresa
-      const folders = await mediaLibraryApi.getCompanyFolders(companyId)
-      setCompanyFolders(folders)
+      // Buscar arquivos recentes do S3 (primeiros 5)
+      try {
+        console.log('📱 Buscando arquivos do S3 para exibição visual...')
+        
+        // Tentar buscar da pasta Chat que tem os dados reais do S3
+        const chatFolder = folders.find(folder => folder.name.toLowerCase() === 'chat')
+        if (chatFolder) {
+          console.log('💬 Pasta Chat encontrada, buscando arquivos do S3...')
+          const chatFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+            page: 1,
+            limit: 5,
+            folderId: chatFolder.id
+          })
+          setRecentMedia(chatFiles.files)
+          console.log('✅ Arquivos do S3 carregados para interface:', chatFiles.files.length)
+        } else {
+          console.log('⚠️ Pasta Chat não encontrada, usando busca geral')
+          // Fallback: buscar arquivos gerais
+          const recentFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+            page: 1,
+            limit: 5
+          })
+          setRecentMedia(recentFiles.files)
+        }
+      } catch (s3Error) {
+        console.log('⚠️ Erro ao buscar S3, usando fallback:', s3Error)
+        const recentFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+          page: 1,
+          limit: 5
+        })
+        setRecentMedia(recentFiles.files)
+      }
       
     } catch (error) {
       console.error('❌ Erro ao carregar dados da biblioteca:', error)
