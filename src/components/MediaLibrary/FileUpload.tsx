@@ -4,7 +4,6 @@
 // Componente para upload múltiplo com drag & drop
 
 import React, { useState, useRef, useCallback } from 'react'
-import { mediaManagement, FileUploadData } from '../../services/mediaManagement'
 import {
   Upload,
   X,
@@ -184,12 +183,29 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         )
       }, 200)
 
-      const uploadData: FileUploadData = {
-        file: uploadFile.file,
-        folder_id: currentFolderId
+      // Usar selectedFolderId se disponível, senão currentFolderId
+      const folderId = selectedFolderId || currentFolderId
+      
+      if (!folderId) {
+        throw new Error('Pasta de destino é obrigatória')
       }
 
-      await mediaManagement.uploadFile(companyId, uploadData)
+      // Usar API upload-to-folder para estrutura por pastas
+      const formData = new FormData()
+      formData.append('file', uploadFile.file)
+      formData.append('company_id', companyId)
+      formData.append('folder_id', folderId)
+
+      console.log('🔥 UPLOAD PARA PASTA - Enviando para:', folderId)
+
+      const response = await fetch('/api/media-library/upload-to-folder', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erro no upload: ${response.statusText}`)
+      }
 
       clearInterval(progressInterval)
       
