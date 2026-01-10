@@ -74,6 +74,10 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
 // =====================================================
 
 export default async function handler(req, res) {
+  // LOG IDENTIFICADOR DE DEPLOY - FORÇAR ATUALIZAÇÃO
+  console.log('🔥 DEPLOY FORÇADO - 2026-01-10 08:54 - CORREÇÕES SQL ATIVAS')
+  console.log('✅ VERSÃO CORRIGIDA: UUID/smallint fix + sintaxe SQL')
+  
   // Apenas GET permitido
   if (req.method !== 'GET') {
     return res.status(405).json({ 
