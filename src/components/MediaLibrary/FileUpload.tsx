@@ -201,10 +201,35 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       
       console.log('✅ Upload bem-sucedido com API antiga:', uploadResult.id)
       
-      // TODO: Implementar organização por pasta DEPOIS do upload
+      // ORGANIZAÇÃO POR PASTA: Mover arquivo para pasta selecionada após upload
       if (selectedFolderId) {
-        console.log('📋 TODO: Mover arquivo para pasta', selectedFolderId, 'após upload bem-sucedido')
-        // Futura implementação: mover arquivo para pasta selecionada
+        console.log('📁 ORGANIZANDO: Movendo arquivo para pasta', selectedFolderId)
+        
+        try {
+          // Chamar API para mover arquivo para pasta selecionada
+          const organizeResponse = await fetch('/api/media-library/organize-file', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              file_id: uploadResult.id,
+              company_id: companyId,
+              folder_id: selectedFolderId,
+              original_s3_key: uploadResult.s3_key
+            })
+          })
+
+          if (organizeResponse.ok) {
+            const organizeData = await organizeResponse.json()
+            console.log('✅ Arquivo organizado com sucesso:', organizeData.new_s3_path)
+          } else {
+            console.warn('⚠️ Falha na organização, arquivo permanece na estrutura temporal')
+          }
+        } catch (organizeError) {
+          console.warn('⚠️ Erro na organização:', organizeError.message)
+          console.log('📁 Arquivo salvo na estrutura temporal, organização pode ser feita depois')
+        }
       }
 
       clearInterval(progressInterval)
