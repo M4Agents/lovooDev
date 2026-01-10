@@ -1,9 +1,8 @@
 // =====================================================
-// API: LISTAR ARQUIVOS POR LEAD - VERSÃO CORRIGIDA V2
+// API: ARQUIVOS DE MÍDIA POR LEAD - VERSÃO FUNCIONAL
 // =====================================================
-// Endpoint para obter lista de arquivos de mídia por lead
-// BASEADO NA API FUNCIONAL DE PASTAS - SEM ERROS SQL
-// Criado: 10/01/2026 09:00 - Versão corrigida
+// Endpoint corrigido para conectar com dados reais do S3
+// Corrigido: 10/01/2026 09:22 - Resolver erro 404
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -14,23 +13,11 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Validação robusta para prevenir falhas silenciosas
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Supabase configuration missing:', { 
-    hasUrl: !!supabaseUrl, 
-    hasKey: !!supabaseServiceKey 
-  })
+  console.error('❌ Supabase configuration missing')
 }
 
-// Inicialização segura com fallback
-let supabase = null
-try {
-  if (supabaseUrl && supabaseServiceKey) {
-    supabase = createClient(supabaseUrl, supabaseServiceKey)
-  }
-} catch (initError) {
-  console.error('❌ Erro ao inicializar Supabase:', initError)
-}
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // =====================================================
 // HELPER: GERAR DADOS MOCK
@@ -83,19 +70,11 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
 // =====================================================
 
 export default async function handler(req, res) {
-  // LOG IDENTIFICADOR ÚNICO
-  console.log('🔥 API FILES V2 - 2026-01-10 09:00 - VERSÃO CORRIGIDA SEM ERROS SQL')
-  console.log('✅ BASEADA NA API FUNCIONAL DE PASTAS')
+  // LOG IDENTIFICADOR PARA RESOLVER 404
+  console.log('🔥 FILES API - 2026-01-10 09:22 - CORRIGINDO ERRO 404')
+  console.log('✅ CONECTANDO COM DADOS REAIS DO S3')
   
   try {
-    // Validação de inicialização do Supabase
-    if (!supabase) {
-      console.error('❌ Supabase não inicializado - verificar variáveis de ambiente')
-      return res.status(500).json({
-        error: 'Configuração inválida',
-        message: 'Serviço temporariamente indisponível - configuração ausente'
-      })
-    }
 
     // Apenas GET permitido
     if (req.method !== 'GET') {
