@@ -24,6 +24,7 @@ import {
 interface FileUploadProps {
   companyId: string
   currentFolderId?: string
+  companyFolders?: Array<{id: string, name: string, icon: string}>
   onClose: () => void
   onComplete: () => void
 }
@@ -43,11 +44,13 @@ interface UploadFile {
 export const FileUpload: React.FC<FileUploadProps> = ({
   companyId,
   currentFolderId,
+  companyFolders = [],
   onClose,
   onComplete
 }) => {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(currentFolderId || '')
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -293,7 +296,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Upload de Arquivos</h2>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Upload de Arquivos</h2>
+            <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium mt-1">
+              🔥 MODAL REAL MODIFICADO - 11:16 - SELETOR DE PASTA ATIVO
+            </div>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
@@ -304,6 +312,35 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
         {/* Área de upload */}
         <div className="p-6">
+          {/* SELETOR DE PASTA - DESTAQUE VERDE */}
+          {companyFolders.length > 0 && (
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-6">
+              <label className="block text-sm font-bold text-green-800 mb-2">
+                📁 PASTA DE DESTINO (OBRIGATÓRIO) - MODAL REAL
+              </label>
+              <select
+                value={selectedFolderId}
+                onChange={(e) => {
+                  setSelectedFolderId(e.target.value)
+                  console.log('🔥 MODAL REAL - Pasta selecionada:', e.target.value)
+                }}
+                className="w-full border-2 border-green-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              >
+                <option value="">🔽 SELECIONE UMA PASTA...</option>
+                {companyFolders.map(folder => (
+                  <option key={folder.id} value={folder.id}>
+                    {folder.icon} {folder.name}
+                  </option>
+                ))}
+              </select>
+              {!selectedFolderId && (
+                <div className="text-xs text-green-600 mt-1 font-bold">
+                  ⚠️ ESCOLHA ONDE SALVAR: CHAT, MARKETING OU TESTE
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
               isDragOver
