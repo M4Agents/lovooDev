@@ -1,12 +1,10 @@
 // =====================================================
-// API: LISTAR ARQUIVOS POR LEAD - INTEGRAÇÃO AWS S3
+// API: LISTAR ARQUIVOS POR LEAD
 // =====================================================
 // Endpoint para obter lista de arquivos de mídia por lead
 // Com paginação e filtros por tipo
-// ATUALIZADO: Integração com AWS S3 real - 10/01/2026
 
 import { createClient } from '@supabase/supabase-js'
-import { S3Storage } from '../../../../services/aws/s3Storage.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE
@@ -161,109 +159,74 @@ export default async function handler(req, res) {
       console.log('⚠️ folder_id não fornecido - usando lógica de lead específico')
     }
 
-    // =====================================================
-    // INTEGRAÇÃO AWS S3 REAL - NOVA IMPLEMENTAÇÃO
-    // =====================================================
+    console.log('🔍 Buscando dados reais na tabela lead_media_unified...')
+    
+    // Construir query base
+    let query = supabase
+      .from('lead_media_unified')
+      .select(`
+        id, original_filename, file_type, mime_type, file_size, 
+        s3_key, preview_url, received_at, lead_id,
+        ${isChatFolder ? 'leads!inner(name, phone)' : ''}
+      `, { count: 'exact' })
+      .eq('company_id', company_id)
 
-    try {
-      console.log('🚀 AWS S3 INTEGRAÇÃO: Buscando mídias reais do S3...')
+    console.log('🔍 DEBUG: isChatFolder =', isChatFolder, 'leadId =', leadId)
+
+    if (isChatFolder) {
+      // PASTA CHAT: Buscar mídias específicas do WhatsApp desta empresa
+      const whatsappPrefix = `clientes/${company_id}/whatsapp/%`
+      query = query.like('s3_key', whatsappPrefix)
+      console.log('💬 Query para PASTA CHAT - mídias WhatsApp específicas da empresa')
+      console.log('🔍 DEBUG: Aplicando filtro S3 específico:', whatsappPrefix)
+      console.log('🔍 DEBUG: Estrutura capturada: clientes/{company_id}/whatsapp/{ano}/{mes}/{dia}/')
+      console.log('🚀 DEPLOY FORÇADO: Filtro WhatsApp hierárquico ativo')
       
-      if (isChatFolder) {
-        // PASTA CHAT: Buscar mídias direto do S3
-        console.log('💬 PASTA CHAT DETECTADA: Buscando mídias do S3 com prefix clientes/')
-        
-        const s3Prefix = `clientes/${company_id}/whatsapp/`
-        console.log('🔍 S3 Prefix para busca:', s3Prefix)
-        
-        const s3Result = await S3Storage.listObjects(company_id, s3Prefix)
-        
-        if (s3Result.success && s3Result.data) {
-          console.log('✅ S3 SUCESSO: Encontradas', s3Result.data.length, 'mídias')
-          
-          let s3Files = s3Result.data
-          
-          // Filtrar por tipo se especificado
-          if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-            s3Files = s3Files.filter(file => file.file_type === file_type)
-            console.log('🔍 Filtro por tipo aplicado:', file_type, '- Restaram:', s3Files.length)
-          }
-          
-          // Filtrar por busca se especificado
-          if (search && search.trim()) {
-            s3Files = s3Files.filter(file => 
-              file.original_filename.toLowerCase().includes(search.trim().toLowerCase())
-            )
-            console.log('🔍 Filtro por busca aplicado:', search, '- Restaram:', s3Files.length)
-          }
-          
-          // Aplicar paginação
-          totalCount = s3Files.length
-          files = s3Files.slice(offset, offset + limitNum)
-          
-          console.log('📊 Paginação aplicada:', {
-            total: totalCount,
-            offset,
-            limit: limitNum,
-            returned: files.length
-          })
-          
-        } else {
-          console.log('❌ S3 ERRO:', s3Result.error)
-          throw new Error(s3Result.error || 'Erro ao buscar mídias do S3')
-        }
-        
-      } else {
-        // LEAD ESPECÍFICO: Buscar na tabela lead_media_unified
-        console.log('👤 LEAD ESPECÍFICO: Buscando na tabela lead_media_unified...')
-        
-        if (!leadId) {
-          return res.status(400).json({
-            error: 'Lead ID obrigatório',
-            message: 'Parâmetro leadId é necessário para consulta específica de lead'
-          })
-        }
-        
-        let query = supabase
-          .from('lead_media_unified')
-          .select(`
-            id, original_filename, file_type, mime_type, file_size, 
-            s3_key, preview_url, received_at, lead_id
-          `, { count: 'exact' })
-          .eq('company_id', company_id)
-          .eq('lead_id', leadId)
-          .order('received_at', { ascending: false })
+      // Garantir que não pega arquivos de outras empresas
+      query = query.not('s3_key', 'like', 'biblioteca/%')
+      console.log('🔍 DEBUG: Filtro adicional: NOT s3_key LIKE biblioteca/%')
+    } else {
+      // LEAD ESPECÍFICO: Buscar apenas mídias daquele lead
+      if (!leadId) {
+        return res.status(400).json({
+          error: 'Lead ID obrigatório',
+          message: 'Parâmetro leadId é necessário para consulta específica de lead'
+        })
+      }
+      query = query.eq('lead_id', leadId)
+      console.log('👤 Query para LEAD ESPECÍFICO:', leadId)
+    }
 
-        // Filtrar por tipo se especificado
-        if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-          query = query.eq('file_type', file_type)
-        }
+    query = query.order('received_at', { ascending: false })
 
-        // Filtrar por busca se especificado
-        if (search && search.trim()) {
-          query = query.ilike('original_filename', `%${search.trim()}%`)
-        }
-
-        // Aplicar paginação
-        query = query.range(offset, offset + limitNum - 1)
-
-        const { data, error, count } = await query
-
-        if (error) {
-          console.log('⚠️ Erro na tabela lead_media_unified:', error.message)
-          throw error
-        }
-
-        files = data || []
-        totalCount = count || 0
-        
-        console.log('✅ SUPABASE SUCESSO: Encontradas', files.length, 'mídias para lead', leadId)
+      // Filtrar por tipo se especificado
+      if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
+        query = query.eq('file_type', file_type)
       }
 
+      // Filtrar por busca se especificado
+      if (search && search.trim()) {
+        query = query.ilike('original_filename', `%${search.trim()}%`)
+      }
+
+      // Aplicar paginação
+      query = query.range(offset, offset + limitNum - 1)
+
+      const { data, error, count } = await query
+
+      if (error) {
+        console.log('⚠️ Tabela lead_media_unified ainda não existe, usando dados mock')
+        throw error
+      }
+
+      files = data || []
+      totalCount = count || 0
+
     } catch (dbError) {
-      console.log('⚠️ Erro ao buscar mídias, usando fallback para dados mock:', dbError.message)
+      console.log('⚠️ Erro ao acessar banco, usando dados mock:', dbError.message)
       
-      // Fallback para dados mock apenas em caso de erro
-      const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3)
+      // Fallback para dados mock
+      const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3) // Gerar mais para simular paginação
       
       // Aplicar filtro de busca nos dados mock
       let filteredFiles = mockFiles
@@ -276,8 +239,6 @@ export default async function handler(req, res) {
       // Aplicar paginação nos dados mock
       totalCount = filteredFiles.length
       files = filteredFiles.slice(offset, offset + limitNum)
-      
-      console.log('📦 FALLBACK MOCK: Retornando', files.length, 'arquivos mock')
     }
 
     // =====================================================

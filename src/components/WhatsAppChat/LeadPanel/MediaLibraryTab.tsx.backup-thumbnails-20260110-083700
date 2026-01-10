@@ -46,8 +46,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const [uploading, setUploading] = useState(false)
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [breadcrumb, setBreadcrumb] = useState<CompanyFolder[]>([])
-  const [chatMedia, setChatMedia] = useState<MediaFile[]>([])
-  const [loadingChatMedia, setLoadingChatMedia] = useState(false)
 
   // =====================================================
   // BUSCAR DADOS E HELPERS
@@ -281,27 +279,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     }
   }
 
-  const fetchChatMedia = async (folderId: string) => {
-    try {
-      setLoadingChatMedia(true)
-      console.log('💬 Buscando mídias da pasta Chat via API...')
-      
-      const response = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
-        page: 1,
-        limit: 50,
-        folderId: folderId
-      })
-      
-      setChatMedia(response.files)
-      console.log('✅ Mídias da pasta Chat carregadas:', response.files.length)
-    } catch (error) {
-      console.error('❌ Erro ao carregar mídias da pasta Chat:', error)
-      setChatMedia([])
-    } finally {
-      setLoadingChatMedia(false)
-    }
-  }
-
   const handleFolderClick = (folder: CompanyFolder) => {
     console.log('📁 Navegando para pasta:', folder.name)
     setCurrentFolderId(folder.id)
@@ -309,11 +286,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     // Atualizar breadcrumb
     const newBreadcrumb = [...breadcrumb, folder]
     setBreadcrumb(newBreadcrumb)
-    
-    // Se for pasta Chat, buscar mídias específicas
-    if (folder.name.toLowerCase() === 'chat') {
-      fetchChatMedia(folder.id)
-    }
     
     // Recarregar dados para mostrar conteúdo da pasta
     fetchMediaData()
@@ -414,7 +386,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           </div>
         </div>
 
-        {/* Grid visual de thumbnails */}
+        {/* Lista de arquivos recentes */}
         <div className="space-y-2">
           <h5 className="text-xs font-medium text-gray-600 uppercase tracking-wide">
             Recebidos Recentemente
@@ -426,156 +398,41 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
               <div>Nenhuma mídia recebida ainda</div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
               {recentMedia.map(file => (
                 <div 
                   key={file.id}
-                  className="relative group bg-gray-50 rounded-lg overflow-hidden hover:bg-gray-100 cursor-pointer transition-all duration-200 hover:shadow-md"
+                  className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
                   onClick={() => handleFileClick(file)}
                 >
-                  {/* Thumbnail da imagem */}
-                  <div className="aspect-square relative">
-                    {file.file_type === 'image' ? (
-                      <img
-                        src={file.preview_url || file.s3_key ? `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${file.s3_key}` : '/placeholder-image.png'}
-                        alt={file.original_filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback para ícone se imagem não carregar
-                          e.currentTarget.style.display = 'none'
-                          const nextElement = e.currentTarget.nextElementSibling as HTMLElement
-                          if (nextElement) {
-                            nextElement.style.display = 'flex'
-                          }
-                        }}
-                      />
-                    ) : null}
-                    
-                    {/* Fallback para ícone quando não é imagem ou erro */}
-                    <div 
-                      className={`w-full h-full flex items-center justify-center ${file.file_type === 'image' ? 'hidden' : 'flex'}`}
-                      style={{ display: file.file_type === 'image' ? 'none' : 'flex' }}
-                    >
-                      <div className="text-4xl opacity-60">
-                        {mediaLibraryApi.getFileIcon(file.file_type, file.mime_type)}
-                      </div>
-                    </div>
-                    
-                    {/* Overlay com tipo de arquivo */}
-                    <div className="absolute top-1 left-1">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-black bg-opacity-60 text-white">
-                        {file.file_type.toUpperCase()}
-                      </span>
-                    </div>
-                    
-                    {/* Overlay hover com ações */}
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSendToChat(file)
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      >
-                        📤 Enviar
-                      </button>
-                    </div>
+                  <div className="text-lg">
+                    {mediaLibraryApi.getFileIcon(file.file_type, file.mime_type)}
                   </div>
                   
-                  {/* Info do arquivo */}
-                  <div className="p-2">
-                    <p className="text-xs font-medium text-gray-900 truncate">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
                       {file.original_filename}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {mediaLibraryApi.formatFileSize(file.file_size)}
+                      {mediaLibraryApi.formatFileSize(file.file_size)} • {mediaLibraryApi.formatRelativeDate(file.received_at)}
                     </p>
                   </div>
+                  
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleSendToChat(file)
+                    }}
+                    className="text-blue-600 hover:text-blue-800 text-xs"
+                  >
+                    Enviar
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
-
-      {/* Mídias da Pasta Chat - Exibição Visual */}
-      {currentFolderId && chatMedia.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700 flex items-center">
-            <span className="mr-2">💬</span>
-            Mídias do WhatsApp ({chatMedia.length})
-          </h4>
-          
-          {loadingChatMedia ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              <span className="ml-2 text-sm text-gray-600">Carregando mídias...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {chatMedia.slice(0, 12).map(file => (
-                <div 
-                  key={file.id}
-                  className="relative group bg-gray-50 rounded-lg overflow-hidden hover:bg-gray-100 cursor-pointer transition-all duration-200 hover:shadow-md"
-                  onClick={() => handleFileClick(file)}
-                >
-                  <div className="aspect-square relative">
-                    {file.file_type === 'image' ? (
-                      <img
-                        src={file.preview_url || `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${file.s3_key}`}
-                        alt={file.original_filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                          const nextElement = e.currentTarget.nextElementSibling as HTMLElement
-                          if (nextElement) {
-                            nextElement.style.display = 'flex'
-                          }
-                        }}
-                      />
-                    ) : null}
-                    
-                    <div 
-                      className={`w-full h-full flex items-center justify-center ${file.file_type === 'image' ? 'hidden' : 'flex'}`}
-                      style={{ display: file.file_type === 'image' ? 'none' : 'flex' }}
-                    >
-                      <div className="text-2xl opacity-60">
-                        {mediaLibraryApi.getFileIcon(file.file_type, file.mime_type)}
-                      </div>
-                    </div>
-                    
-                    <div className="absolute top-1 left-1">
-                      <span className="inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-black bg-opacity-60 text-white">
-                        {file.file_type.toUpperCase()}
-                      </span>
-                    </div>
-                    
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSendToChat(file)
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      >
-                        📤
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {chatMedia.length > 12 && (
-            <div className="text-center">
-              <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                Ver mais {chatMedia.length - 12} mídias
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Biblioteca da Empresa */}
       <div className="space-y-3">
