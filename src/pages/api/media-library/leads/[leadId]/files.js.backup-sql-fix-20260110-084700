@@ -223,78 +223,40 @@ export default async function handler(req, res) {
           })
         }
         
-        // CORREÇÃO: Verificar se leadId é UUID ou ID numérico
-        console.log('🔍 Analisando leadId recebido:', leadId, 'tipo:', typeof leadId)
-        
-        let numericLeadId = null
-        
-        // Se leadId é um UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-        if (leadId && leadId.includes('-') && leadId.length === 36) {
-          console.log('📋 LeadId é UUID, tentando buscar ID numérico correspondente...')
-          
-          // Tentar buscar na tabela chat_contacts que pode ter mapeamento
-          const { data: contactData, error: contactError } = await supabase
-            .from('chat_contacts')
-            .select('id, name')
-            .eq('company_id', company_id)
-            .limit(1)
-          
-          if (contactData && contactData.length > 0) {
-            console.log('💬 Dados de contato encontrados, mas UUID não mapeado diretamente')
-          }
-          
-          // Como não há mapeamento direto, retornar lista vazia graciosamente
-          console.log('⚠️ UUID não pode ser mapeado para ID numérico, retornando lista vazia')
-          files = []
-          totalCount = 0
-        } else {
-          // Se leadId é numérico, usar diretamente
-          numericLeadId = parseInt(leadId)
-          console.log('🔢 LeadId é numérico:', numericLeadId)
+        let query = supabase
+          .from('lead_media_unified')
+          .select(`
+            id, original_filename, file_type, mime_type, file_size, 
+            s3_key, preview_url, received_at, lead_id
+          `, { count: 'exact' })
+          .eq('company_id', company_id)
+          .eq('lead_id', leadId)
+          .order('received_at', { ascending: false })
+
+        // Filtrar por tipo se especificado
+        if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
+          query = query.eq('file_type', file_type)
         }
-        
-        if (numericLeadId && !isNaN(numericLeadId)) {
-          console.log('✅ Usando lead_id numérico:', numericLeadId)
-          
-          let query = supabase
-            .from('lead_media_unified')
-            .select(`
-              id, original_filename, file_type, mime_type, file_size, 
-              s3_key, preview_url, received_at, lead_id
-            `, { count: 'exact' })
-            .eq('company_id', company_id)
-            .eq('lead_id', numericLeadId)
-            .order('received_at', { ascending: false })
 
-          // Filtrar por tipo se especificado
-          if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-            query = query.eq('file_type', file_type)
-          }
-
-          // Filtrar por busca se especificado
-          if (search && search.trim()) {
-            query = query.ilike('original_filename', `%${search.trim()}%`)
-          }
-
-          // Aplicar paginação
-          query = query.range(offset, offset + limitNum - 1)
-
-          const { data, error, count } = await query
-
-          if (error) {
-            console.log('⚠️ Erro na tabela lead_media_unified:', error.message)
-            throw error
-          }
-
-          files = data || []
-          totalCount = count || 0
-          
-          console.log('✅ SUPABASE SUCESSO: Encontradas', files.length, 'mídias para lead_id', numericLeadId)
-        } else {
-          console.log('⚠️ Lead_id não é válido, retornando lista vazia')
-          files = []
-          totalCount = 0
+        // Filtrar por busca se especificado
+        if (search && search.trim()) {
+          query = query.ilike('original_filename', `%${search.trim()}%`)
         }
+
+        // Aplicar paginação
+        query = query.range(offset, offset + limitNum - 1)
+
+        const { data, error, count } = await query
+
+        if (error) {
+          console.log('⚠️ Erro na tabela lead_media_unified:', error.message)
+          throw error
+        }
+
+        files = data || []
+        totalCount = count || 0
+        
+        console.log('✅ SUPABASE SUCESSO: Encontradas', files.length, 'mídias para lead', leadId)
       }
 
     } catch (dbError) {
