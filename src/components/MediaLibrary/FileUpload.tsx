@@ -184,40 +184,27 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         )
       }, 200)
 
-      // OPÇÃO A: Fallback para API antiga quando pasta não selecionada
+      // OPÇÃO 1: SEMPRE usar API antiga que funcionava perfeitamente
+      console.log('🔄 USANDO API ANTIGA QUE FUNCIONAVA - Upload garantido')
       
       if (selectedFolderId) {
-        // NOVO: Usar API upload-to-folder quando pasta for selecionada
-        console.log('🔥 UPLOAD ORGANIZADO - Pasta selecionada:', selectedFolderId)
-        
-        const formData = new FormData()
-        formData.append('file', uploadFile.file)
-        formData.append('company_id', companyId)
-        formData.append('folder_id', selectedFolderId)
+        console.log('📁 Pasta selecionada para organização posterior:', selectedFolderId)
+      }
+      
+      const uploadData: FileUploadData = {
+        file: uploadFile.file,
+        folder_id: currentFolderId,
+        tags: selectedFolderId ? [`pasta:${selectedFolderId}`] : undefined
+      }
 
-        const response = await fetch('/api/media-library/upload-to-folder', {
-          method: 'POST',
-          body: formData
-        })
-
-        if (!response.ok) {
-          throw new Error(`Erro no upload organizado: ${response.statusText}`)
-        }
-        
-        console.log('✅ Upload organizado bem-sucedido para pasta:', selectedFolderId)
-        
-      } else {
-        // FALLBACK: Usar API antiga que funcionava quando pasta não selecionada
-        console.log('🔄 FALLBACK - Usando API antiga (sem pasta selecionada)')
-        
-        const uploadData: FileUploadData = {
-          file: uploadFile.file,
-          folder_id: currentFolderId
-        }
-
-        await mediaManagement.uploadFile(companyId, uploadData)
-        
-        console.log('✅ Upload fallback bem-sucedido (API antiga)')
+      const uploadResult = await mediaManagement.uploadFile(companyId, uploadData)
+      
+      console.log('✅ Upload bem-sucedido com API antiga:', uploadResult.id)
+      
+      // TODO: Implementar organização por pasta DEPOIS do upload
+      if (selectedFolderId) {
+        console.log('📋 TODO: Mover arquivo para pasta', selectedFolderId, 'após upload bem-sucedido')
+        // Futura implementação: mover arquivo para pasta selecionada
       }
 
       clearInterval(progressInterval)
