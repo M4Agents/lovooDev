@@ -1,13 +1,12 @@
 // =====================================================
-// MEDIA LIBRARY TAB - COMPONENTE ISOLADO - v4.0 SUBPASTAS
+// MEDIA LIBRARY TAB - MODAL INLINE CACHE BYPASS
 // =====================================================
 // Nova aba para biblioteca de mídia na sidebar direita
-// VERSÃO 4.0 - SISTEMA DE SUBPASTAS IMPLEMENTADO - 04/01/2026 12:35
-// Implementação cautelosa sem quebrar sistema existente
+// VERSÃO 5.0 - MODAL INLINE - 10/01/2026 10:40
+// SOLUÇÃO DEFINITIVA: Modal inline para contornar cache Vercel
 
 import React, { useState, useEffect } from 'react'
 import { mediaLibraryApi, MediaSummary, MediaFile, CompanyFolder } from '../../../services/mediaLibraryApi'
-import { UploadModalV2 } from './MediaLibraryTab-upload-modal-v2'
 
 // =====================================================
 // INTERFACES
@@ -52,6 +51,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [uploadingInline, setUploadingInline] = useState(false)
 
   // =====================================================
   // BUSCAR DADOS E HELPERS
@@ -843,14 +843,204 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         </div>
       )}
 
-      {/* Modal de Upload com Seletor de Pasta - V2 CACHE BYPASS */}
-      <UploadModalV2
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        companyFolders={companyFolders}
-        companyId={companyId}
-        onUploadSuccess={fetchMediaData}
-      />
+      {/* MODAL INLINE - SOLUÇÃO DEFINITIVA CACHE BYPASS - 10/01/2026 10:40 */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Upload de Arquivos</h3>
+                <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-medium mt-1">
+                  🔥 MODAL INLINE V5.0 - 10:40 - CACHE BYPASS DEFINITIVO
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* SELETOR DE PASTA - DESTAQUE MÁXIMO */}
+              <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+                <label className="block text-sm font-bold text-red-800 mb-2">
+                  📁 PASTA DE DESTINO (OBRIGATÓRIO) - INLINE V5.0
+                </label>
+                <select
+                  value={selectedFolderId || ''}
+                  onChange={(e) => {
+                    setSelectedFolderId(e.target.value)
+                    console.log('🔥 INLINE V5.0 - Pasta selecionada:', e.target.value)
+                  }}
+                  className="w-full border-2 border-red-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                >
+                  <option value="">🔽 SELECIONE UMA PASTA...</option>
+                  {companyFolders.map(folder => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.icon} {folder.name}
+                    </option>
+                  ))}
+                </select>
+                {!selectedFolderId && (
+                  <div className="text-xs text-red-600 mt-1 font-bold">
+                    ⚠️ ESCOLHA ONDE SALVAR: CHAT, MARKETING OU TESTE
+                  </div>
+                )}
+              </div>
+
+              {/* Seletor de Arquivos */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📤 Arquivos
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-400 transition-colors">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                    onChange={(e) => {
+                      const files = e.target.files
+                      if (files && files.length > 0) {
+                        setSelectedFiles(Array.from(files))
+                        console.log('🔥 INLINE V5.0 - Arquivos selecionados:', files.length)
+                      }
+                    }}
+                    className="hidden"
+                    id="file-upload-inline-v5"
+                  />
+                  <label htmlFor="file-upload-inline-v5" className="cursor-pointer">
+                    <div className="text-gray-400 mb-2">
+                      <svg className="w-8 h-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-600 font-medium">
+                      Clique para selecionar arquivos ou arraste aqui
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Imagens, vídeos, áudios e documentos
+                    </p>
+                  </label>
+                </div>
+              </div>
+
+              {/* Lista de Arquivos Selecionados */}
+              {selectedFiles.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    📋 Arquivos selecionados ({selectedFiles.length})
+                  </h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg">
+                            {file.type.startsWith('image/') ? '🖼️' : 
+                             file.type.startsWith('video/') ? '🎥' : 
+                             file.type.startsWith('audio/') ? '🎵' : '📄'}
+                          </span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 truncate max-w-32">
+                              {file.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedFiles(files => files.filter((_, i) => i !== index))
+                          }}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Botões */}
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                disabled={uploadingInline}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (selectedFiles.length === 0) {
+                    alert('Selecione pelo menos um arquivo')
+                    return
+                  }
+                  if (!selectedFolderId) {
+                    alert('Selecione a pasta de destino')
+                    return
+                  }
+
+                  console.log('🚀 INLINE V5.0 - Iniciando upload:', {
+                    files: selectedFiles.length,
+                    folder: selectedFolderId,
+                    company: companyId
+                  })
+
+                  setUploadingInline(true)
+                  try {
+                    for (const file of selectedFiles) {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      formData.append('company_id', companyId)
+                      formData.append('folder_id', selectedFolderId)
+
+                      const response = await fetch('/api/media-library/upload-to-folder', {
+                        method: 'POST',
+                        body: formData
+                      })
+
+                      if (!response.ok) {
+                        throw new Error(`Erro no upload: ${response.statusText}`)
+                      }
+                    }
+                    
+                    fetchMediaData()
+                    setShowUploadModal(false)
+                    setSelectedFiles([])
+                    setSelectedFolderId(null)
+                    console.log('✅ INLINE V5.0 - Upload concluído com sucesso')
+                  } catch (error) {
+                    console.error('❌ INLINE V5.0 - Erro no upload:', error)
+                    alert('Erro ao fazer upload dos arquivos. Tente novamente.')
+                  } finally {
+                    setUploadingInline(false)
+                  }
+                }}
+                disabled={uploadingInline || selectedFiles.length === 0 || !selectedFolderId}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingInline ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Enviando...</span>
+                  </div>
+                ) : (
+                  `🔥 ENVIAR V5.0 ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
