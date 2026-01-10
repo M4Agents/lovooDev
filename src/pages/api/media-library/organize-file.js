@@ -148,8 +148,8 @@ const updateFileMetadata = async (fileId, companyId, folderId, newS3Key, newS3Ur
 // =====================================================
 
 export default async function handler(req, res) {
-  console.log('📁 ORGANIZE FILE - 2026-01-10 12:20 - ORGANIZAÇÃO PÓS-UPLOAD')
-  console.log('✅ MOVENDO ARQUIVO PARA PASTA SELECIONADA')
+  console.log('📁 ORGANIZE FILE - 2026-01-10 12:34 - ORGANIZAÇÃO PÓS-UPLOAD - REDEPLOY FORÇADO')
+  console.log('✅ MOVENDO ARQUIVO PARA PASTA SELECIONADA - API ATIVA')
   
   if (req.method !== 'POST') {
     return res.status(405).json({ 
