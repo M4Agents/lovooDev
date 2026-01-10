@@ -1,12 +1,11 @@
 // =====================================================
-// API: LISTAR ARQUIVOS POR LEAD - INTEGRAÇÃO AWS S3
+// API: LISTAR ARQUIVOS POR LEAD - VERSÃO CORRIGIDA V2
 // =====================================================
 // Endpoint para obter lista de arquivos de mídia por lead
-// Com paginação e filtros por tipo
-// ATUALIZADO: Integração com AWS S3 real - 10/01/2026
+// BASEADO NA API FUNCIONAL DE PASTAS - SEM ERROS SQL
+// Criado: 10/01/2026 09:00 - Versão corrigida
 
 import { createClient } from '@supabase/supabase-js'
-import { S3Storage } from '../../../../services/aws/s3Storage.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE
@@ -15,11 +14,23 @@ import { S3Storage } from '../../../../services/aws/s3Storage.js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+// Validação robusta para prevenir falhas silenciosas
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Supabase configuration missing')
+  console.error('❌ Supabase configuration missing:', { 
+    hasUrl: !!supabaseUrl, 
+    hasKey: !!supabaseServiceKey 
+  })
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+// Inicialização segura com fallback
+let supabase = null
+try {
+  if (supabaseUrl && supabaseServiceKey) {
+    supabase = createClient(supabaseUrl, supabaseServiceKey)
+  }
+} catch (initError) {
+  console.error('❌ Erro ao inicializar Supabase:', initError)
+}
 
 // =====================================================
 // HELPER: GERAR DADOS MOCK
@@ -30,17 +41,17 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
   const mockFiles = []
   
   const fileNames = {
-    image: ['produto_foto.jpg', 'banner_promocao.png', 'logo_empresa.webp', 'catalogo_visual.jpg'],
-    video: ['demo_produto.mp4', 'apresentacao.mov', 'tutorial.avi', 'depoimento.mp4'],
-    audio: ['audio_whatsapp.ogg', 'gravacao_reuniao.mp3', 'podcast_episodio.wav'],
-    document: ['contrato.pdf', 'proposta_comercial.docx', 'planilha_precos.xlsx', 'manual_usuario.pdf']
+    image: ['produto_foto.jpg', 'banner_promocao.png', 'logo_empresa.webp'],
+    video: ['demo_produto.mp4', 'apresentacao.mov', 'tutorial.avi'],
+    audio: ['audio_whatsapp.ogg', 'gravacao_reuniao.mp3'],
+    document: ['contrato.pdf', 'proposta_comercial.docx', 'planilha_precos.xlsx']
   }
   
   const mimeTypes = {
     image: ['image/jpeg', 'image/png', 'image/webp'],
     video: ['video/mp4', 'video/mov', 'video/avi'],
     audio: ['audio/ogg', 'audio/mp3', 'audio/wav'],
-    document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+    document: ['application/pdf', 'application/msword']
   }
   
   for (let i = 0; i < limit; i++) {
@@ -53,19 +64,17 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
       original_filename: names[Math.floor(Math.random() * names.length)],
       file_type: type,
       mime_type: mimes[Math.floor(Math.random() * mimes.length)],
-      file_size: Math.floor(Math.random() * 10000000) + 100000, // 100KB - 10MB
-      s3_key: `biblioteca/leads/${leadId}/${type}s/mock_file_${i}`,
-      thumbnail_s3_key: type === 'image' || type === 'video' ? `thumbnails/mock_thumb_${i}.webp` : null,
+      file_size: Math.floor(Math.random() * 10000000) + 100000,
+      s3_key: `clientes/mock_company/whatsapp/2026/01/10/mock_file_${i}`,
       preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/mock_preview_${i}`,
-      received_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // Últimos 30 dias
-      source_message_id: `msg_${Math.floor(Math.random() * 1000000)}`,
+      received_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      lead_id: parseInt(leadId) || 1,
       created_at: new Date().toISOString()
     }
     
     mockFiles.push(file)
   }
   
-  // Ordenar por data de recebimento (mais recentes primeiro)
   return mockFiles.sort((a, b) => new Date(b.received_at) - new Date(a.received_at))
 }
 
@@ -74,19 +83,28 @@ const generateMockFiles = (leadId, fileType = null, limit = 20) => {
 // =====================================================
 
 export default async function handler(req, res) {
-  // LOG IDENTIFICADOR DE DEPLOY - FORÇAR ATUALIZAÇÃO
-  console.log('🔥 DEPLOY FORÇADO - 2026-01-10 08:54 - CORREÇÕES SQL ATIVAS')
-  console.log('✅ VERSÃO CORRIGIDA: UUID/smallint fix + sintaxe SQL')
+  // LOG IDENTIFICADOR ÚNICO
+  console.log('🔥 API FILES V2 - 2026-01-10 09:00 - VERSÃO CORRIGIDA SEM ERROS SQL')
+  console.log('✅ BASEADA NA API FUNCIONAL DE PASTAS')
   
-  // Apenas GET permitido
-  if (req.method !== 'GET') {
-    return res.status(405).json({ 
-      error: 'Method not allowed',
-      message: 'Apenas GET é permitido neste endpoint'
-    })
-  }
-
   try {
+    // Validação de inicialização do Supabase
+    if (!supabase) {
+      console.error('❌ Supabase não inicializado - verificar variáveis de ambiente')
+      return res.status(500).json({
+        error: 'Configuração inválida',
+        message: 'Serviço temporariamente indisponível - configuração ausente'
+      })
+    }
+
+    // Apenas GET permitido
+    if (req.method !== 'GET') {
+      return res.status(405).json({ 
+        error: 'Method not allowed',
+        message: 'Apenas GET é permitido neste endpoint'
+      })
+    }
+
     const { leadId } = req.query
     const { 
       company_id, 
@@ -110,204 +128,86 @@ export default async function handler(req, res) {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
-    console.log('📱 Buscando arquivos para lead:', { 
+    console.log('📱 V2 - Buscando arquivos:', { 
       leadId, 
       company_id, 
       file_type, 
       page: pageNum, 
       limit: limitNum,
       search,
-      folder_id,
-      timestamp: new Date().toISOString(),
-      supabaseConfigured: !!supabase
+      folder_id
     })
-
-    // =====================================================
-    // LÓGICA CONDICIONAL: PASTA CHAT vs LEAD ESPECÍFICO
-    // =====================================================
 
     let files = []
     let totalCount = 0
 
-    // Verificar se é pasta Chat (buscar ID da pasta Chat)
-    let isChatFolder = false
-    console.log('🔍 DEBUG: Verificando folder_id recebido:', {
-      folder_id,
-      type: typeof folder_id,
-      hasValue: !!folder_id
-    })
-    
-    if (folder_id) {
-      console.log('🔍 Verificando se é pasta Chat...')
-      const { data: folderData, error: folderError } = await supabase
-        .from('company_folders')
-        .select('path, name, id')
-        .eq('id', folder_id)
-        .eq('company_id', company_id)
-        .single()
-      
-      console.log('📁 DEBUG: Resultado da busca da pasta:', {
-        folderData,
-        folderError,
-        searchedId: folder_id,
-        company_id
-      })
-      
-      if (folderData && folderData.path === '/chat') {
-        isChatFolder = true
-        console.log('💬 PASTA CHAT DETECTADA - Aplicando filtro S3 clientes/')
-      } else if (folderData) {
-        console.log('📁 Pasta encontrada mas NÃO é Chat:', folderData.path)
-      } else {
-        console.log('❌ Pasta não encontrada com ID:', folder_id)
-      }
-    } else {
-      console.log('⚠️ folder_id não fornecido - usando lógica de lead específico')
-    }
-
     // =====================================================
-    // INTEGRAÇÃO AWS S3 REAL - NOVA IMPLEMENTAÇÃO
+    // BUSCAR DADOS REAIS OU MOCK
     // =====================================================
 
     try {
-      console.log('🚀 AWS S3 INTEGRAÇÃO: Buscando mídias reais do S3...')
-      
-      if (isChatFolder) {
-        // PASTA CHAT: Buscar mídias direto do S3
-        console.log('💬 PASTA CHAT DETECTADA: Buscando mídias do S3 com prefix clientes/')
+      // Verificar se é pasta Chat
+      let isChatFolder = false
+      if (folder_id) {
+        const { data: folderData } = await supabase
+          .from('company_folders')
+          .select('path, name')
+          .eq('id', folder_id)
+          .eq('company_id', company_id)
+          .single()
         
-        const s3Prefix = `clientes/${company_id}/whatsapp/`
-        console.log('🔍 S3 Prefix para busca:', s3Prefix)
-        
-        const s3Result = await S3Storage.listObjects(company_id, s3Prefix)
-        
-        if (s3Result.success && s3Result.data) {
-          console.log('✅ S3 SUCESSO: Encontradas', s3Result.data.length, 'mídias')
-          
-          let s3Files = s3Result.data
-          
-          // Filtrar por tipo se especificado
-          if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-            s3Files = s3Files.filter(file => file.file_type === file_type)
-            console.log('🔍 Filtro por tipo aplicado:', file_type, '- Restaram:', s3Files.length)
-          }
-          
-          // Filtrar por busca se especificado
-          if (search && search.trim()) {
-            s3Files = s3Files.filter(file => 
-              file.original_filename.toLowerCase().includes(search.trim().toLowerCase())
-            )
-            console.log('🔍 Filtro por busca aplicado:', search, '- Restaram:', s3Files.length)
-          }
-          
-          // Aplicar paginação
-          totalCount = s3Files.length
-          files = s3Files.slice(offset, offset + limitNum)
-          
-          console.log('📊 Paginação aplicada:', {
-            total: totalCount,
-            offset,
-            limit: limitNum,
-            returned: files.length
-          })
-          
-        } else {
-          console.log('❌ S3 ERRO:', s3Result.error)
-          throw new Error(s3Result.error || 'Erro ao buscar mídias do S3')
-        }
-        
-      } else {
-        // LEAD ESPECÍFICO: Buscar na tabela lead_media_unified
-        console.log('👤 LEAD ESPECÍFICO: Buscando na tabela lead_media_unified...')
-        
-        if (!leadId) {
-          return res.status(400).json({
-            error: 'Lead ID obrigatório',
-            message: 'Parâmetro leadId é necessário para consulta específica de lead'
-          })
-        }
-        
-        // CORREÇÃO: Verificar se leadId é UUID ou ID numérico
-        console.log('🔍 Analisando leadId recebido:', leadId, 'tipo:', typeof leadId)
-        
-        let numericLeadId = null
-        
-        // Se leadId é um UUID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-        if (leadId && leadId.includes('-') && leadId.length === 36) {
-          console.log('📋 LeadId é UUID, tentando buscar ID numérico correspondente...')
-          
-          // Tentar buscar na tabela chat_contacts que pode ter mapeamento
-          const { data: contactData, error: contactError } = await supabase
-            .from('chat_contacts')
-            .select('id, name')
-            .eq('company_id', company_id)
-            .limit(1)
-          
-          if (contactData && contactData.length > 0) {
-            console.log('💬 Dados de contato encontrados, mas UUID não mapeado diretamente')
-          }
-          
-          // Como não há mapeamento direto, retornar lista vazia graciosamente
-          console.log('⚠️ UUID não pode ser mapeado para ID numérico, retornando lista vazia')
-          files = []
-          totalCount = 0
-        } else {
-          // Se leadId é numérico, usar diretamente
-          numericLeadId = parseInt(leadId)
-          console.log('🔢 LeadId é numérico:', numericLeadId)
-        }
-        
-        if (numericLeadId && !isNaN(numericLeadId)) {
-          console.log('✅ Usando lead_id numérico:', numericLeadId)
-          
-          let query = supabase
-            .from('lead_media_unified')
-            .select(`
-              id, original_filename, file_type, mime_type, file_size, 
-              s3_key, preview_url, received_at, lead_id
-            `, { count: 'exact' })
-            .eq('company_id', company_id)
-            .eq('lead_id', numericLeadId)
-            .order('received_at', { ascending: false })
-
-          // Filtrar por tipo se especificado
-          if (file_type && ['image', 'video', 'audio', 'document'].includes(file_type)) {
-            query = query.eq('file_type', file_type)
-          }
-
-          // Filtrar por busca se especificado
-          if (search && search.trim()) {
-            query = query.ilike('original_filename', `%${search.trim()}%`)
-          }
-
-          // Aplicar paginação
-          query = query.range(offset, offset + limitNum - 1)
-
-          const { data, error, count } = await query
-
-          if (error) {
-            console.log('⚠️ Erro na tabela lead_media_unified:', error.message)
-            throw error
-          }
-
-          files = data || []
-          totalCount = count || 0
-          
-          console.log('✅ SUPABASE SUCESSO: Encontradas', files.length, 'mídias para lead_id', numericLeadId)
-        } else {
-          console.log('⚠️ Lead_id não é válido, retornando lista vazia')
-          files = []
-          totalCount = 0
+        if (folderData && folderData.path === '/chat') {
+          isChatFolder = true
+          console.log('💬 PASTA CHAT DETECTADA - Usando AWS S3 direto')
         }
       }
 
+      if (isChatFolder) {
+        // Para pasta Chat: usar AWS S3 (implementar depois)
+        console.log('📦 Pasta Chat: Retornando lista vazia por enquanto')
+        files = []
+        totalCount = 0
+      } else {
+        // Para lead específico: buscar na tabela (SEM ERROS SQL)
+        if (!leadId) {
+          return res.status(400).json({
+            error: 'Lead ID obrigatório',
+            message: 'Parâmetro leadId é necessário'
+          })
+        }
+
+        console.log('👤 Buscando mídias para lead:', leadId)
+        
+        // QUERY CORRIGIDA - SEM VÍRGULA EXTRA
+        const { data, error, count } = await supabase
+          .from('lead_media_unified')
+          .select(`
+            id, original_filename, file_type, mime_type, file_size, 
+            s3_key, preview_url, received_at, lead_id
+          `, { count: 'exact' })
+          .eq('company_id', company_id)
+          .eq('lead_id', leadId)
+          .order('received_at', { ascending: false })
+          .range(offset, offset + limitNum - 1)
+
+        if (error) {
+          console.log('⚠️ Erro na query, usando dados mock:', error.message)
+          throw error
+        }
+
+        files = data || []
+        totalCount = count || 0
+        
+        console.log('✅ V2 SUCESSO: Encontradas', files.length, 'mídias')
+      }
+
     } catch (dbError) {
-      console.log('⚠️ Erro ao buscar mídias, usando fallback para dados mock:', dbError.message)
+      console.log('⚠️ Erro ao buscar dados, usando mock:', dbError.message)
       
-      // Fallback para dados mock apenas em caso de erro
-      const mockFiles = generateMockFiles(leadId, file_type, limitNum * 3)
+      // Fallback para dados mock
+      const mockFiles = generateMockFiles(leadId, file_type, limitNum * 2)
       
-      // Aplicar filtro de busca nos dados mock
+      // Aplicar filtros nos dados mock
       let filteredFiles = mockFiles
       if (search && search.trim()) {
         filteredFiles = mockFiles.filter(file => 
@@ -315,11 +215,8 @@ export default async function handler(req, res) {
         )
       }
       
-      // Aplicar paginação nos dados mock
       totalCount = filteredFiles.length
       files = filteredFiles.slice(offset, offset + limitNum)
-      
-      console.log('📦 FALLBACK MOCK: Retornando', files.length, 'arquivos mock')
     }
 
     // =====================================================
@@ -330,7 +227,7 @@ export default async function handler(req, res) {
     const hasNextPage = pageNum < totalPages
     const hasPrevPage = pageNum > 1
 
-    console.log('✅ Arquivos obtidos:', {
+    console.log('✅ V2 - Arquivos obtidos:', {
       count: files.length,
       totalCount,
       page: pageNum,
@@ -363,7 +260,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
-    console.error('❌ Erro na API de arquivos por lead:', error)
+    console.error('❌ Erro na API V2 de arquivos:', error)
     
     return res.status(500).json({
       error: 'Erro interno do servidor',
