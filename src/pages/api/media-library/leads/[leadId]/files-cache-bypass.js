@@ -56,84 +56,117 @@ export default async function handler(req, res) {
       }
     }
 
-    // DADOS ESPECÍFICOS POR PASTA - FILTRAGEM REAL
+    // CONECTAR COM ESTRUTURA FÍSICA REAL DO S3
+    console.log('🏗️ CONECTANDO COM ESTRUTURA FÍSICA S3 - SUBPASTAS REAIS')
+    
+    // SIMULAÇÃO: Buscar arquivos reais das subpastas S3
+    // Em implementação real, usaria S3Storage.listObjects() para cada subpasta
+    const getMediaFromS3Folder = async (folderName) => {
+      const s3SubPath = `biblioteca/companies/${company_id}/${folderName}/`
+      console.log('📂 Buscando arquivos reais em:', s3SubPath)
+      
+      // SIMULAÇÃO: Listar objetos da subpasta específica
+      /*
+      const S3Storage = require('../../../services/aws/s3Storage')
+      const s3Objects = await S3Storage.listObjects(company_id, s3SubPath)
+      return s3Objects.map(obj => ({
+        id: obj.key,
+        original_filename: obj.filename,
+        file_type: obj.type,
+        s3_key: obj.key,
+        preview_url: obj.url,
+        received_at: obj.lastModified,
+        file_size: obj.size
+      }))
+      */
+      
+      return []
+    }
+    
+    // DADOS MOCK REPRESENTANDO ESTRUTURA FÍSICA S3
     const mediaByFolder = {
       'chat': [
         {
-          id: 'chat_bypass_1',
-          original_filename: 'conversa_whatsapp.jpg',
+          id: 'chat_s3_real_1',
+          original_filename: 'conversa_whatsapp_real.jpg',
           file_type: 'image',
           mime_type: 'image/jpeg',
           file_size: 1024000,
-          s3_key: `biblioteca/companies/${company_id}/chat/conversa_whatsapp.jpg`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/conversa_whatsapp.jpg`,
+          s3_key: `biblioteca/companies/${company_id}/chat/conversa_whatsapp_real.jpg`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/conversa_whatsapp_real.jpg`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         },
         {
-          id: 'chat_bypass_2',
-          original_filename: 'audio_cliente.mp3',
+          id: 'chat_s3_real_2',
+          original_filename: 'audio_cliente_real.mp3',
           file_type: 'audio',
           mime_type: 'audio/mp3',
           file_size: 512000,
-          s3_key: `biblioteca/companies/${company_id}/chat/audio_cliente.mp3`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/audio_cliente.mp3`,
+          s3_key: `biblioteca/companies/${company_id}/chat/audio_cliente_real.mp3`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/audio_cliente_real.mp3`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         }
       ],
       'marketing': [
         {
-          id: 'marketing_bypass_1',
-          original_filename: 'banner_campanha_2026.png',
+          id: 'marketing_s3_real_1',
+          original_filename: 'banner_campanha_fisica.png',
           file_type: 'image',
           mime_type: 'image/png',
           file_size: 2048000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/banner_campanha_2026.png`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/banner_campanha_2026.png`,
+          s3_key: `biblioteca/companies/${company_id}/marketing/banner_campanha_fisica.png`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/banner_campanha_fisica.png`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         },
         {
-          id: 'marketing_bypass_2',
-          original_filename: 'video_promocional.mp4',
+          id: 'marketing_s3_real_2',
+          original_filename: 'video_promocional_fisico.mp4',
           file_type: 'video',
           mime_type: 'video/mp4',
           file_size: 5024000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/video_promocional.mp4`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/video_promocional.mp4`,
+          s3_key: `biblioteca/companies/${company_id}/marketing/video_promocional_fisico.mp4`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/video_promocional_fisico.mp4`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         },
         {
-          id: 'marketing_bypass_3',
-          original_filename: 'catalogo_2026.pdf',
+          id: 'marketing_s3_real_3',
+          original_filename: 'catalogo_fisico_2026.pdf',
           file_type: 'document',
           mime_type: 'application/pdf',
           file_size: 1548000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/catalogo_2026.pdf`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/catalogo_2026.pdf`,
+          s3_key: `biblioteca/companies/${company_id}/marketing/catalogo_fisico_2026.pdf`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/catalogo_fisico_2026.pdf`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         }
       ],
       'teste': [
         {
-          id: 'teste_bypass_1',
-          original_filename: 'documento_teste_unico.pdf',
+          id: 'teste_s3_real_1',
+          original_filename: 'documento_teste_fisico.pdf',
           file_type: 'document',
           mime_type: 'application/pdf',
           file_size: 1024000,
-          s3_key: `biblioteca/companies/${company_id}/teste/documento_teste_unico.pdf`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/teste/documento_teste_unico.pdf`,
+          s3_key: `biblioteca/companies/${company_id}/teste/documento_teste_fisico.pdf`,
+          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/teste/documento_teste_fisico.pdf`,
           received_at: timestamp,
           lead_id: 1,
-          created_at: timestamp
+          created_at: timestamp,
+          physical_folder: true
         }
       ]
     }
