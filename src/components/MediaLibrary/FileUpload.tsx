@@ -187,9 +187,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       // OPÇÃO 1: SEMPRE usar API antiga que funcionava perfeitamente
       console.log('🔄 USANDO API ANTIGA QUE FUNCIONAVA - Upload garantido')
       
-      if (selectedFolderId) {
-        console.log('📁 Pasta selecionada para organização posterior:', selectedFolderId)
-      }
+      // DEBUG EXTENSIVO
+      console.log('🔍 DEBUG COMPLETO - selectedFolderId:', selectedFolderId)
+      console.log('🔍 DEBUG COMPLETO - companyId:', companyId)
+      console.log('🔍 DEBUG COMPLETO - currentFolderId:', currentFolderId)
+      console.log('🔍 DEBUG COMPLETO - arquivo:', uploadFile.file.name)
       
       const uploadData: FileUploadData = {
         file: uploadFile.file,
@@ -200,36 +202,55 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       const uploadResult = await mediaManagement.uploadFile(companyId, uploadData)
       
       console.log('✅ Upload bem-sucedido com API antiga:', uploadResult.id)
+      console.log('🔍 DEBUG - uploadResult completo:', uploadResult)
+      console.log('🔍 DEBUG - uploadResult.s3_key:', uploadResult.s3_key)
       
       // ORGANIZAÇÃO POR PASTA: Mover arquivo para pasta selecionada após upload
       if (selectedFolderId) {
-        console.log('📁 ORGANIZANDO: Movendo arquivo para pasta', selectedFolderId)
+        console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
         
         try {
+          // Testar se API existe primeiro
+          console.log('🔍 Testando se API organize-file existe...')
+          
+          const payload = {
+            file_id: uploadResult.id,
+            company_id: companyId,
+            folder_id: selectedFolderId,
+            original_s3_key: uploadResult.s3_key
+          }
+          
+          console.log('🔍 Payload para organização:', payload)
+          
           // Chamar API para mover arquivo para pasta selecionada
           const organizeResponse = await fetch('/api/media-library/organize-file', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              file_id: uploadResult.id,
-              company_id: companyId,
-              folder_id: selectedFolderId,
-              original_s3_key: uploadResult.s3_key
-            })
+            body: JSON.stringify(payload)
           })
+
+          console.log('🔍 Response status:', organizeResponse.status)
+          console.log('🔍 Response statusText:', organizeResponse.statusText)
 
           if (organizeResponse.ok) {
             const organizeData = await organizeResponse.json()
-            console.log('✅ Arquivo organizado com sucesso:', organizeData.new_s3_path)
+            console.log('🎉 SUCESSO! Arquivo organizado:', organizeData.data?.new_s3_path)
+            console.log('🎉 Dados completos da organização:', organizeData)
           } else {
-            console.warn('⚠️ Falha na organização, arquivo permanece na estrutura temporal')
+            const errorData = await organizeResponse.text()
+            console.error('❌ FALHA na organização - Status:', organizeResponse.status)
+            console.error('❌ FALHA na organização - Error:', errorData)
+            console.warn('⚠️ Arquivo permanece na estrutura temporal')
           }
-        } catch (organizeError) {
-          console.warn('⚠️ Erro na organização:', organizeError.message)
-          console.log('📁 Arquivo salvo na estrutura temporal, organização pode ser feita depois')
+        } catch (organizeError: any) {
+          console.error('❌ ERRO CRÍTICO na organização:', organizeError)
+          console.error('❌ Stack trace:', organizeError?.stack)
+          console.log('📁 Arquivo salvo na estrutura temporal, organização falhou')
         }
+      } else {
+        console.log('📋 Nenhuma pasta selecionada, arquivo fica na estrutura temporal')
       }
 
       clearInterval(progressInterval)

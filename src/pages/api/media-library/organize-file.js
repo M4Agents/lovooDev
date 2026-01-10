@@ -36,17 +36,56 @@ const moveFileInS3 = async (companyId, folderName, originalS3Key, fileName) => {
     
     console.log('📂 Novo caminho S3:', newS3Key)
     
-    // Mover arquivo usando Supabase Storage
-    const { data: moveData, error: moveError } = await supabase.storage
+    // Primeiro, copiar arquivo para novo local
+    const { data: copyData, error: copyError } = await supabase.storage
       .from('aws-lovoocrm-media')
-      .move(originalS3Key, newS3Key)
+      .copy(originalS3Key, newS3Key)
     
-    if (moveError) {
-      console.error('❌ Erro ao mover arquivo no S3:', moveError)
-      throw new Error(`Erro ao mover arquivo: ${moveError.message}`)
+    if (copyError) {
+      console.error('❌ Erro ao copiar arquivo no S3:', copyError)
+      // Se copy falhar, tentar criar pasta e upload direto
+      console.log('🔄 Tentando criar pasta e fazer upload direto...')
+      
+      // Buscar arquivo original
+      const { data: downloadData, error: downloadError } = await supabase.storage
+        .from('aws-lovoocrm-media')
+        .download(originalS3Key)
+      
+      if (downloadError) {
+        throw new Error(`Erro ao baixar arquivo original: ${downloadError.message}`)
+      }
+      
+      // Upload para novo local
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('aws-lovoocrm-media')
+        .upload(newS3Key, downloadData, {
+          upsert: true,
+          contentType: downloadData.type
+        })
+      
+      if (uploadError) {
+        throw new Error(`Erro ao fazer upload para nova pasta: ${uploadError.message}`)
+      }
+      
+      console.log('✅ Arquivo copiado via download/upload para:', newS3Key)
+    } else {
+      console.log('✅ Arquivo copiado com sucesso no S3:', newS3Key)
     }
     
-    console.log('✅ Arquivo movido com sucesso no S3:', newS3Key)
+    // Tentar remover arquivo original (opcional, se falhar não é crítico)
+    try {
+      const { error: removeError } = await supabase.storage
+        .from('aws-lovoocrm-media')
+        .remove([originalS3Key])
+      
+      if (removeError) {
+        console.warn('⚠️ Não foi possível remover arquivo original:', removeError.message)
+      } else {
+        console.log('✅ Arquivo original removido:', originalS3Key)
+      }
+    } catch (removeErr) {
+      console.warn('⚠️ Erro ao remover arquivo original (não crítico):', removeErr.message)
+    }
     
     return {
       success: true,
