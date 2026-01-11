@@ -218,8 +218,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         const data = await response.json()
         uploadResult = data.data
         
-        console.log('✅ Upload + organização automática concluído:', uploadResult.id)
-        console.log('📂 Arquivo organizado em:', uploadResult.s3_key)
+        console.log('✅ Upload + organização virtual concluído:', uploadResult.id)
+        console.log('📁 Arquivo físico em:', uploadResult.s3_key)
+        console.log('📂 Organização virtual:', uploadResult.folder_name)
+        console.log('🚀 Otimizado para escala SaaS - sem movimentação física no S3')
         
       } else {
         // Upload normal sem organização
@@ -236,9 +238,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       console.log('🔍 DEBUG - uploadResult completo:', uploadResult)
       console.log('🔍 DEBUG - uploadResult.s3_key:', uploadResult.s3_key)
       
-      // Organização já foi feita automaticamente na API se pasta foi selecionada
+      // Organização virtual já foi feita na API se pasta foi selecionada
       if (selectedFolderId) {
-        console.log('✅ Organização automática concluída na API')
+        console.log('✅ Organização virtual concluída - otimizada para escala SaaS')
+        console.log('📁 Arquivo permanece na estrutura temporal no S3')
+        console.log('📂 Organização via metadados no banco de dados')
       } else {
         console.log('📋 Nenhuma pasta selecionada, arquivo fica na estrutura temporal')
       }
