@@ -221,6 +221,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         console.log('✅ Upload + organização virtual concluído:', uploadResult.id)
         console.log('📁 Arquivo físico em:', uploadResult.s3_key)
         console.log('📂 Organização virtual:', uploadResult.folder_name)
+        console.log('🆔 DEBUG - folder_id enviado:', selectedFolderId)
+        console.log('🆔 DEBUG - folder_id no resultado:', uploadResult.folder_id)
+        console.log('📋 DEBUG - uploadResult completo:', JSON.stringify(uploadResult, null, 2))
         console.log('🔒 Sistema seguro - sem dependência de MCP ou credenciais temporárias')
         console.log('🚀 Otimizado para escala SaaS - funciona mesmo após expiração de credenciais')
         

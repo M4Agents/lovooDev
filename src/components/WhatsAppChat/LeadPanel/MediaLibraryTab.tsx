@@ -78,29 +78,34 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       const summary = await mediaLibraryApi.getLeadMediaSummary(leadId, companyId)
       setMediaSummary(summary)
       
-      // Buscar arquivos recentes do S3 (primeiros 5)
+      // Buscar arquivos da pasta atual selecionada
       try {
-        console.log('📱 Buscando arquivos do S3 para exibição visual...')
+        console.log('📱 Buscando arquivos para exibição visual...')
+        console.log('🆔 DEBUG - currentFolderId:', currentFolderId)
         
-        // Tentar buscar da pasta Chat que tem os dados reais do S3
-        const chatFolder = folders.find(folder => folder.name.toLowerCase() === 'chat')
-        if (chatFolder) {
-          console.log('💬 Pasta Chat encontrada, buscando arquivos do S3...')
-          const chatFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+        // Se há pasta selecionada, buscar arquivos específicos dessa pasta
+        if (currentFolderId) {
+          const currentFolder = folders.find(folder => folder.id === currentFolderId)
+          console.log('📂 Pasta atual selecionada:', currentFolder?.name)
+          console.log('🔍 Buscando arquivos da pasta:', currentFolderId)
+          
+          const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
             page: 1,
-            limit: 5,
-            folderId: chatFolder.id
+            limit: 20,
+            folderId: currentFolderId
           })
-          setRecentMedia(chatFiles.files)
-          console.log('✅ Arquivos do S3 carregados para interface:', chatFiles.files.length)
+          setRecentMedia(folderFiles.files)
+          console.log('✅ Arquivos da pasta carregados:', folderFiles.files.length)
+          console.log('📋 DEBUG - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
         } else {
-          console.log('⚠️ Pasta Chat não encontrada, usando busca geral')
-          // Fallback: buscar arquivos gerais
+          console.log('📋 Nenhuma pasta selecionada, buscando arquivos gerais')
+          // Buscar arquivos gerais quando não há pasta selecionada
           const recentFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
             page: 1,
             limit: 5
           })
           setRecentMedia(recentFiles.files)
+          console.log('✅ Arquivos gerais carregados:', recentFiles.files.length)
         }
       } catch (s3Error) {
         console.log('⚠️ Erro ao buscar S3, usando fallback:', s3Error)
@@ -280,21 +285,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     const result = await response.json()
     console.log('✅ Upload realizado:', result)
     return result
-  }
-
-  const getFileType = (mimeType: string): string => {
-    if (mimeType.startsWith('image/')) return 'image'
-    if (mimeType.startsWith('video/')) return 'video'
-    if (mimeType.startsWith('audio/')) return 'audio'
-    return 'document'
-  }
-    }
-
-    // TODO: Implementar upload real para AWS S3
-    console.log('📤 Uploading file:', file.name, 'Type:', fileType, 'Size:', file.size)
-    
-    // Simular upload por enquanto
-    await new Promise(resolve => setTimeout(resolve, 1000))
   }
 
   const getFileType = (mimeType: string): string => {
