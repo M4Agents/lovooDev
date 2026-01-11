@@ -176,13 +176,14 @@ export default async function handler(req, res) {
                         uploadResult.mime_type?.startsWith('video/') ? 'video' :
                         uploadResult.mime_type?.startsWith('audio/') ? 'audio' : 'document'
         
-        console.log('🔄 Executando INSERT na tabela lead_media_unified...')
+        console.log('🔄 Executando UPSERT na tabela lead_media_unified...')
         console.log('📊 Dados: arquivo_id =', uploadResult.id, ', folder_id =', folderId)
+        console.log('🔧 DEBUG - Projeto M4_digital, usando UPSERT para evitar conflitos')
         
-        // Inserir registro na tabela lead_media_unified com folder_id
+        // UPSERT registro na tabela lead_media_unified com folder_id
         const { data, error } = await supabase
           .from('lead_media_unified')
-          .insert({
+          .upsert({
             id: uploadResult.id,
             company_id: companyId,
             s3_key: uploadResult.s3_key,
@@ -195,6 +196,8 @@ export default async function handler(req, res) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             folder_id: folderId
+          }, {
+            onConflict: 'id'
           })
         
         if (error) {
