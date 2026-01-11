@@ -35,6 +35,8 @@ export default async function handler(req, res) {
     const offset = (pageNum - 1) * limitNum
 
     console.log('📱 CACHE BYPASS - Parâmetros:', { company_id, folder_id, page: pageNum, limit: limitNum })
+    console.log('🆔 DEBUG - folder_id recebido na API:', folder_id)
+    console.log('🔍 DEBUG - Tipo do folder_id:', typeof folder_id)
 
     // BUSCAR INFORMAÇÕES DA PASTA
     let folderName = null
@@ -111,6 +113,8 @@ export default async function handler(req, res) {
     
     if (folder_id && folderName) {
       console.log('🔍 Filtrando arquivos por pasta:', folderName)
+      console.log('🆔 DEBUG - folder_id para filtrar:', folder_id)
+      console.log('📊 DEBUG - Total de arquivos antes da filtragem:', allFiles.length)
       
       // Filtrar arquivos que foram organizados para esta pasta específica
       filteredFiles = allFiles.filter(file => {
@@ -118,8 +122,9 @@ export default async function handler(req, res) {
         const isInFolder = file.folder_id === folder_id
         
         console.log(`📂 Arquivo ${file.original_filename}:`, {
-          folder_id: file.folder_id,
+          file_folder_id: file.folder_id,
           target_folder_id: folder_id,
+          types: `${typeof file.folder_id} vs ${typeof folder_id}`,
           match: file.folder_id === folder_id,
           isInFolder: isInFolder ? 'INCLUÍDO' : 'EXCLUÍDO'
         })
@@ -128,8 +133,13 @@ export default async function handler(req, res) {
       })
       
       console.log('✅ Arquivos filtrados para pasta', folderName + ':', filteredFiles.length)
+      console.log('📋 DEBUG - Arquivos após filtragem:', filteredFiles.map(f => f.original_filename))
+    } else if (folder_id && !folderName) {
+      console.log('⚠️ folder_id fornecido mas folderName não encontrado:', folder_id)
+      filteredFiles = []
     } else {
       console.log('📋 Sem filtro de pasta - retornando todos os arquivos')
+      console.log('🆔 DEBUG - folder_id não fornecido:', folder_id)
     }
     
     // DADOS MOCK COMO FALLBACK (apenas se não houver arquivos reais)

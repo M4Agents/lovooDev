@@ -88,6 +88,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           const currentFolder = folders.find(folder => folder.id === currentFolderId)
           console.log('📂 Pasta atual selecionada:', currentFolder?.name)
           console.log('🔍 Buscando arquivos da pasta:', currentFolderId)
+          console.log('🆔 DEBUG - Enviando folderId para API:', currentFolderId)
           
           const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
             page: 1,
@@ -97,6 +98,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           setRecentMedia(folderFiles.files)
           console.log('✅ Arquivos da pasta carregados:', folderFiles.files.length)
           console.log('📋 DEBUG - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
+          console.log('🔍 DEBUG - Filtragem por pasta aplicada para:', currentFolder?.name)
         } else {
           console.log('📋 Nenhuma pasta selecionada, buscando arquivos gerais')
           // Buscar arquivos gerais quando não há pasta selecionada
