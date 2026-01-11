@@ -134,13 +134,16 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
         return
       }
 
+      console.log('🔥 CACHE BYPASS V2 - fetchMediaDataForFolder EXECUTANDO 🔥')
       console.log('📂 Carregando dados específicos da pasta:', folderName)
-      console.log('🆔 DEBUG - folderId recebido:', folderId)
+      console.log('🆔 DEBUG V2 - folderId recebido:', folderId)
+      console.log('⏰ Timestamp único:', new Date().toISOString())
       
       // Buscar arquivos específicos da pasta selecionada
       try {
-        console.log('🔍 Buscando arquivos da pasta específica:', folderId)
-        console.log('🆔 DEBUG - Enviando folderId DIRETO para API:', folderId)
+        console.log('🔍 CACHE BYPASS - Buscando arquivos da pasta específica:', folderId)
+        console.log('🆔 DEBUG V2 - Enviando folderId DIRETO para API:', folderId)
+        console.log('🔧 VERSÃO CORRIGIDA - Parâmetros:', { leadId, companyId, folderId })
         
         const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
           page: 1,
@@ -148,9 +151,10 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
           folderId: folderId
         })
         setRecentMedia(folderFiles.files)
-        console.log('✅ Arquivos da pasta carregados:', folderFiles.files.length)
-        console.log('📋 DEBUG - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
-        console.log('🔍 DEBUG - Filtragem por pasta aplicada para:', folderName)
+        console.log('✅ CACHE BYPASS V2 - Arquivos da pasta carregados:', folderFiles.files.length)
+        console.log('📋 DEBUG V2 - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
+        console.log('🔍 DEBUG V2 - Filtragem por pasta aplicada para:', folderName)
+        console.log('🎯 RESULTADO ESPERADO - Pasta', folderName, 'deve mostrar apenas seus arquivos')
         
       } catch (folderError) {
         console.error('❌ Erro ao buscar arquivos da pasta:', folderError)
@@ -401,8 +405,10 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
   }
 
   const handleFolderClick = (folder: CompanyFolder) => {
+    console.log('🔥🔥🔥 CACHE BYPASS TOTAL - 2026-01-11 11:54 🔥🔥🔥')
     console.log('📁 Navegando para pasta:', folder.name)
-    console.log('🆔 DEBUG - Definindo currentFolderId para:', folder.id)
+    console.log('🆔 DEBUG V2 - Definindo currentFolderId para:', folder.id)
+    console.log('🔧 VERSÃO CORRIGIDA - fetchMediaDataForFolder será chamada')
     setCurrentFolderId(folder.id)
     
     // Atualizar breadcrumb
@@ -415,6 +421,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     }
     
     // Recarregar dados para mostrar conteúdo da pasta ESPECÍFICA
+    console.log('🚀 CHAMANDO fetchMediaDataForFolder com:', { folderId: folder.id, folderName: folder.name })
     fetchMediaDataForFolder(folder.id, folder.name)
   }
 
@@ -423,13 +430,14 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       // Voltar para raiz
       setCurrentFolderId(null)
       setBreadcrumb([])
+      fetchMediaData() // Buscar dados gerais
     } else {
       // Navegar para pasta específica no breadcrumb
       const targetFolder = breadcrumb[index]
       setCurrentFolderId(targetFolder.id)
       setBreadcrumb(breadcrumb.slice(0, index + 1))
+      fetchMediaDataForFolder(targetFolder.id, targetFolder.name)
     }
-    fetchMediaDataForFolder(targetFolder.id, targetFolder.name)
   }
 
   // =====================================================
