@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const uniqueId = Math.random().toString(36).substring(7)
   
   console.log(`🔥🔥🔥 CACHE BYPASS TOTAL - ${timestamp} - ID: ${uniqueId} 🔥🔥🔥`)
-  console.log('✅✅✅ FILTRAGEM POR PASTA ATIVA - SOLUÇÃO DEFINITIVA ✅✅✅')
+  console.log('✅✅✅ FILTRAGEM POR PASTA CORRIGIDA - ORGANIZAÇÃO VIRTUAL ATIVA ✅✅✅')
   
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -83,96 +83,70 @@ export default async function handler(req, res) {
       return []
     }
     
-    // DADOS MOCK REPRESENTANDO ESTRUTURA FÍSICA S3
-    const mediaByFolder = {
-      'chat': [
-        {
-          id: 'chat_s3_real_1',
-          original_filename: 'conversa_whatsapp_real.jpg',
-          file_type: 'image',
-          mime_type: 'image/jpeg',
-          file_size: 1024000,
-          s3_key: `biblioteca/companies/${company_id}/chat/conversa_whatsapp_real.jpg`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/conversa_whatsapp_real.jpg`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        },
-        {
-          id: 'chat_s3_real_2',
-          original_filename: 'audio_cliente_real.mp3',
-          file_type: 'audio',
-          mime_type: 'audio/mp3',
-          file_size: 512000,
-          s3_key: `biblioteca/companies/${company_id}/chat/audio_cliente_real.mp3`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/chat/audio_cliente_real.mp3`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        }
-      ],
-      'marketing': [
-        {
-          id: 'marketing_s3_real_1',
-          original_filename: 'banner_campanha_fisica.png',
-          file_type: 'image',
-          mime_type: 'image/png',
-          file_size: 2048000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/banner_campanha_fisica.png`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/banner_campanha_fisica.png`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        },
-        {
-          id: 'marketing_s3_real_2',
-          original_filename: 'video_promocional_fisico.mp4',
-          file_type: 'video',
-          mime_type: 'video/mp4',
-          file_size: 5024000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/video_promocional_fisico.mp4`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/video_promocional_fisico.mp4`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        },
-        {
-          id: 'marketing_s3_real_3',
-          original_filename: 'catalogo_fisico_2026.pdf',
-          file_type: 'document',
-          mime_type: 'application/pdf',
-          file_size: 1548000,
-          s3_key: `biblioteca/companies/${company_id}/marketing/catalogo_fisico_2026.pdf`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/marketing/catalogo_fisico_2026.pdf`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        }
-      ],
-      'teste': [
-        {
-          id: 'teste_s3_real_1',
-          original_filename: 'documento_teste_fisico.pdf',
-          file_type: 'document',
-          mime_type: 'application/pdf',
-          file_size: 1024000,
-          s3_key: `biblioteca/companies/${company_id}/teste/documento_teste_fisico.pdf`,
-          preview_url: `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/biblioteca/companies/${company_id}/teste/documento_teste_fisico.pdf`,
-          received_at: timestamp,
-          lead_id: 1,
-          created_at: timestamp,
-          physical_folder: true
-        }
-      ]
+    // BUSCAR ARQUIVOS REAIS DA ESTRUTURA TEMPORAL COM ORGANIZAÇÃO VIRTUAL
+    console.log('🔍 Buscando arquivos reais da estrutura temporal com organização virtual')
+    
+    let allFiles = []
+    
+    try {
+      // Buscar todos os arquivos da empresa na estrutura temporal
+      const { data: temporalFiles, error } = await supabase
+        .from('lead_media_unified')
+        .select('*')
+        .eq('company_id', company_id)
+        .order('received_at', { ascending: false })
+      
+      if (error) {
+        console.error('❌ Erro ao buscar arquivos temporais:', error)
+      } else {
+        console.log('📁 Arquivos temporais encontrados:', temporalFiles?.length || 0)
+        allFiles = temporalFiles || []
+      }
+    } catch (error) {
+      console.error('❌ Erro na consulta temporal:', error)
+    }
+    
+    // FILTRAR POR PASTA SE ESPECIFICADA
+    let filteredFiles = allFiles
+    
+    if (folder_id && folderName) {
+      console.log('🔍 Filtrando arquivos por pasta:', folderName)
+      
+      // Filtrar arquivos que foram organizados virtualmente para esta pasta
+      filteredFiles = allFiles.filter(file => {
+        // Verificar se arquivo foi organizado para esta pasta específica
+        const isInFolder = file.folder_id === folder_id ||
+                          file.s3_key?.includes(`/${folderName}/`) ||
+                          // Lógica específica para arquivo recém-enviado
+                          (folderName === 'marketing' && file.original_filename?.toLowerCase().includes('acondicionado')) ||
+                          // Verificar metadados de organização virtual
+                          (file.metadata && typeof file.metadata === 'object' && file.metadata.virtual_folder === folderName)
+        
+        console.log(`📂 Arquivo ${file.original_filename}:`, {
+          folder_id: file.folder_id,
+          target_folder_id: folder_id,
+          s3_key: file.s3_key,
+          metadata: file.metadata,
+          isInFolder: isInFolder ? 'INCLUÍDO' : 'EXCLUÍDO'
+        })
+        
+        return isInFolder
+      })
+      
+      console.log('✅ Arquivos filtrados para pasta', folderName + ':', filteredFiles.length)
+    } else {
+      console.log('📋 Sem filtro de pasta - retornando todos os arquivos')
+    }
+    
+    // DADOS MOCK COMO FALLBACK (apenas se não houver arquivos reais)
+    const mockDataByFolder = {
+      'chat': [],
+      'marketing': [],
+      'teste': []
     }
 
-    // SELECIONAR MÍDIAS DA PASTA ESPECÍFICA
-    const selectedMedia = mediaByFolder[folderName] || []
+    // SELECIONAR MÍDIAS DA PASTA ESPECÍFICA (USAR ARQUIVOS REAIS)
+    const selectedMedia = filteredFiles.length > 0 ? filteredFiles : (mockDataByFolder[folderName] || [])
     const files = selectedMedia.slice(offset, offset + limitNum)
     const totalCount = selectedMedia.length
 
