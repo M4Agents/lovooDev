@@ -193,55 +193,52 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       console.log('🔍 DEBUG COMPLETO - currentFolderId:', currentFolderId)
       console.log('🔍 DEBUG COMPLETO - arquivo:', uploadFile.file.name)
       
-      const uploadData: FileUploadData = {
-        file: uploadFile.file,
-        folder_id: currentFolderId,
-        tags: selectedFolderId ? [`pasta:${selectedFolderId}`] : undefined
-      }
+      // Declarar variável uploadResult
+      let uploadResult: any
+      
+      // Se pasta selecionada, usar upload com organização automática
+      if (selectedFolderId) {
+        console.log('🔄 Upload com organização automática para pasta:', selectedFolderId)
+        
+        const formData = new FormData()
+        formData.append('file', uploadFile.file)
+        formData.append('company_id', companyId)
+        formData.append('folder_id', selectedFolderId)
+        formData.append('organize_to_folder', 'true')
+        
+        const response = await fetch('/api/media-management/files/upload', {
+          method: 'POST',
+          body: formData
+        })
 
-      const uploadResult = await mediaManagement.uploadFile(companyId, uploadData)
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        uploadResult = data.data
+        
+        console.log('✅ Upload + organização automática concluído:', uploadResult.id)
+        console.log('📂 Arquivo organizado em:', uploadResult.s3_key)
+        
+      } else {
+        // Upload normal sem organização
+        const uploadData: FileUploadData = {
+          file: uploadFile.file,
+          folder_id: currentFolderId,
+          tags: undefined
+        }
+
+        uploadResult = await mediaManagement.uploadFile(companyId, uploadData)
+      }
       
       console.log('✅ Upload bem-sucedido com API antiga:', uploadResult.id)
       console.log('🔍 DEBUG - uploadResult completo:', uploadResult)
       console.log('🔍 DEBUG - uploadResult.s3_key:', uploadResult.s3_key)
       
-      // ORGANIZAÇÃO POR PASTA: Mover arquivo para pasta selecionada após upload
+      // Organização já foi feita automaticamente na API se pasta foi selecionada
       if (selectedFolderId) {
-        console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
-        
-        try {
-          console.log('🔥 ORGANIZANDO VIA API BACKEND SEGURA')
-          console.log('📁 Organizando arquivo ID:', uploadResult.id, 'para pasta:', selectedFolderId)
-          
-          // Usar API backend com credenciais seguras
-          const response = await fetch('/api/s3-organize', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              company_id: companyId,
-              file_id: uploadResult.id,
-              folder_id: selectedFolderId
-            })
-          })
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            throw new Error(`HTTP ${response.status}: ${errorText}`)
-          }
-
-          const organizedFile = await response.json()
-          
-          console.log('🎉 SUCESSO! Arquivo organizado via API backend:', organizedFile.data?.id)
-          console.log('📂 Nova localização:', organizedFile.data?.s3_key)
-          console.log('🔗 URL do arquivo:', organizedFile.data?.preview_url)
-          
-        } catch (organizeError: any) {
-          console.error('❌ ERRO na organização via API backend:', organizeError)
-          console.warn('⚠️ Arquivo permanece na estrutura temporal')
-          console.log('📁 Upload foi bem-sucedido, organização falhou:', organizeError.message)
-        }
+        console.log('✅ Organização automática concluída na API')
       } else {
         console.log('📋 Nenhuma pasta selecionada, arquivo fica na estrutura temporal')
       }
