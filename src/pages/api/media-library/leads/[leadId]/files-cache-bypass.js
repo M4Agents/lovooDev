@@ -112,21 +112,15 @@ export default async function handler(req, res) {
     if (folder_id && folderName) {
       console.log('🔍 Filtrando arquivos por pasta:', folderName)
       
-      // Filtrar arquivos que foram organizados virtualmente para esta pasta
+      // Filtrar arquivos que foram organizados para esta pasta específica
       filteredFiles = allFiles.filter(file => {
-        // Verificar se arquivo foi organizado para esta pasta específica
-        const isInFolder = file.folder_id === folder_id ||
-                          file.s3_key?.includes(`/${folderName}/`) ||
-                          // Lógica específica para arquivo recém-enviado
-                          (folderName === 'marketing' && file.original_filename?.toLowerCase().includes('acondicionado')) ||
-                          // Verificar metadados de organização virtual
-                          (file.metadata && typeof file.metadata === 'object' && file.metadata.virtual_folder === folderName)
+        // FILTRAGEM CORRIGIDA: usar apenas folder_id do banco
+        const isInFolder = file.folder_id === folder_id
         
         console.log(`📂 Arquivo ${file.original_filename}:`, {
           folder_id: file.folder_id,
           target_folder_id: folder_id,
-          s3_key: file.s3_key,
-          metadata: file.metadata,
+          match: file.folder_id === folder_id,
           isInFolder: isInFolder ? 'INCLUÍDO' : 'EXCLUÍDO'
         })
         
