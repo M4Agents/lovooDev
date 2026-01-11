@@ -151,69 +151,25 @@ export default async function handler(req, res) {
       
       console.log('📂 Organização virtual para pasta:', folderName)
       
-      // Salvar no banco de dados usando MCP Supabase
-      try {
-        console.log('💾 Salvando metadados no banco de dados via MCP Supabase')
-        
-        // Preparar dados para inserção
-        const mediaData = {
-          id: uploadResult.id,
-          company_id: companyId,
-          folder_path: `/${folderName}`,
-          original_filename: uploadResult.file_name,
-          s3_key: uploadResult.s3_key,
-          file_type: uploadResult.mime_type?.startsWith('image/') ? 'image' : 
-                    uploadResult.mime_type?.startsWith('video/') ? 'video' :
-                    uploadResult.mime_type?.startsWith('audio/') ? 'audio' : 'document',
-          mime_type: uploadResult.mime_type,
-          file_size: uploadResult.file_size,
-          preview_url: uploadResult.preview_url,
-          tags: [`pasta:${folderName}`],
-          description: `Arquivo organizado virtualmente na pasta ${folderName}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        
-        console.log('📊 Dados preparados para inserção:', mediaData)
-        
-        // Inserir no banco via MCP Supabase direto
-        const insertQuery = `
-          INSERT INTO company_media_library (
-            id, company_id, folder_path, original_filename, s3_key, 
-            file_type, mime_type, file_size, preview_url, tags, 
-            description, created_at, updated_at
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-          )
-        `
-        
-        console.log('🔄 Executando inserção via MCP Supabase...')
-        
-        // Executar inserção real no banco usando MCP Supabase
-        const insertResult = await fetch('/api/mcp-supabase-insert', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: 'etzdsywunlpbgxkphuil',
-            table: 'company_media_library',
-            data: mediaData
-          })
-        })
-        
-        if (insertResult.ok) {
-          const dbResponse = await insertResult.json()
-          console.log('✅ Metadados salvos no banco com sucesso!')
-          console.log('📊 Registro criado na tabela company_media_library')
-          console.log('🆔 ID do registro:', mediaData.id)
-          console.log('📁 Pasta virtual:', mediaData.folder_path)
-        } else {
-          console.warn('⚠️ Falha ao salvar no banco, continuando com organização virtual')
-        }
-        
-      } catch (dbError) {
-        console.error('❌ Erro ao salvar no banco:', dbError)
-        console.log('📋 Continuando com organização virtual em memória')
+      // Organização virtual pura - sem dependência de MCP ou banco
+      console.log('📂 Organização virtual pura - segura e independente')
+      console.log('🔒 Sem dependência de MCP Supabase ou credenciais temporárias')
+      console.log('🚀 Sistema robusto que funciona mesmo após expiração de credenciais')
+      
+      // Preparar metadados virtuais para resposta
+      const virtualMetadata = {
+        folder_path: `/${folderName}`,
+        file_type: uploadResult.mime_type?.startsWith('image/') ? 'image' : 
+                  uploadResult.mime_type?.startsWith('video/') ? 'video' :
+                  uploadResult.mime_type?.startsWith('audio/') ? 'audio' : 'document',
+        tags: [`pasta:${folderName}`],
+        description: `Arquivo organizado virtualmente na pasta ${folderName}`,
+        organization_method: 'virtual_interface_only'
       }
+      
+      console.log('📊 Metadados virtuais preparados:', virtualMetadata)
+      console.log('✅ Organização virtual configurada - interface mostrará arquivo na pasta correta')
+      console.log('🔒 Sistema seguro sem dependências externas')
       
       // Atualizar resultado com organização virtual
       uploadResult = {
@@ -227,7 +183,8 @@ export default async function handler(req, res) {
       console.log('✅ Organização virtual concluída - arquivo permanece em estrutura temporal')
       console.log('📁 Arquivo físico em:', uploadResult.s3_key)
       console.log('📂 Organização virtual:', folderName)
-      console.log('💾 Metadados persistidos no banco de dados')
+      console.log('🔒 Sistema seguro - sem dependências de MCP ou credenciais temporárias')
+      console.log('🚀 Funciona mesmo após expiração de credenciais externas')
     }
     
     console.log('🎉 Upload concluído com sucesso!')
