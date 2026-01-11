@@ -210,18 +210,29 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
         
         try {
-          console.log('🔥 USANDO API MEDIA-MANAGEMENT PARA ORGANIZAÇÃO')
+          console.log('🔥 USANDO ENDPOINT NA RAIZ PARA ORGANIZAÇÃO')
           console.log('📁 Organizando arquivo ID:', uploadResult.id, 'para pasta:', selectedFolderId)
           
-          // Usar API media-management que sabemos que funciona
-          const organizedFile = await mediaManagement.organizeFile(
-            companyId, 
-            uploadResult.id, 
-            selectedFolderId
-          )
+          // Usar endpoint na raiz para eliminar problemas de roteamento
+          const response = await fetch(`/api/organize-file?company_id=${companyId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              file_id: uploadResult.id,
+              folder_id: selectedFolderId
+            })
+          })
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+
+          const organizedFile = await response.json()
           
-          console.log('🎉 SUCESSO! Arquivo organizado via media-management:', organizedFile.id)
-          console.log('📂 Nova localização:', organizedFile.s3_key)
+          console.log('🎉 SUCESSO! Arquivo organizado via endpoint raiz:', organizedFile.data?.id)
+          console.log('📂 Nova localização:', organizedFile.data?.s3_key)
           
         } catch (organizeError: any) {
           console.error('❌ ERRO na organização via media-management:', organizeError)
