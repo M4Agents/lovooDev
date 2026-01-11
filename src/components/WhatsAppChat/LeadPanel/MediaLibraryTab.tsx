@@ -125,6 +125,45 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     }
   }
 
+  const fetchMediaDataForFolder = async (folderId: string, folderName: string) => {
+    try {
+      setLoading(true)
+      
+      if (!companyId) {
+        console.log('⚠️ companyId não disponível ainda')
+        return
+      }
+
+      console.log('📂 Carregando dados específicos da pasta:', folderName)
+      console.log('🆔 DEBUG - folderId recebido:', folderId)
+      
+      // Buscar arquivos específicos da pasta selecionada
+      try {
+        console.log('🔍 Buscando arquivos da pasta específica:', folderId)
+        console.log('🆔 DEBUG - Enviando folderId DIRETO para API:', folderId)
+        
+        const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+          page: 1,
+          limit: 20,
+          folderId: folderId
+        })
+        setRecentMedia(folderFiles.files)
+        console.log('✅ Arquivos da pasta carregados:', folderFiles.files.length)
+        console.log('📋 DEBUG - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
+        console.log('🔍 DEBUG - Filtragem por pasta aplicada para:', folderName)
+        
+      } catch (folderError) {
+        console.error('❌ Erro ao buscar arquivos da pasta:', folderError)
+        setRecentMedia([])
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados da pasta:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Helper para organizar pastas em estrutura hierárquica
   const organizeHierarchicalFolders = (folders: CompanyFolder[]): CompanyFolder[] => {
     const rootFolders = folders.filter(folder => !folder.parent_id)
@@ -363,6 +402,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
 
   const handleFolderClick = (folder: CompanyFolder) => {
     console.log('📁 Navegando para pasta:', folder.name)
+    console.log('🆔 DEBUG - Definindo currentFolderId para:', folder.id)
     setCurrentFolderId(folder.id)
     
     // Atualizar breadcrumb
@@ -374,8 +414,8 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       fetchChatMedia(folder.id)
     }
     
-    // Recarregar dados para mostrar conteúdo da pasta
-    fetchMediaData()
+    // Recarregar dados para mostrar conteúdo da pasta ESPECÍFICA
+    fetchMediaDataForFolder(folder.id, folder.name)
   }
 
   const handleBreadcrumbClick = (index: number) => {
@@ -389,7 +429,7 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       setCurrentFolderId(targetFolder.id)
       setBreadcrumb(breadcrumb.slice(0, index + 1))
     }
-    fetchMediaData()
+    fetchMediaDataForFolder(targetFolder.id, targetFolder.name)
   }
 
   // =====================================================
