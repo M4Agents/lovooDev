@@ -210,70 +210,35 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
         
         try {
-          console.log('🔥 ORGANIZANDO NO FRONTEND - AWS SDK DIRETO')
+          console.log('🔥 ORGANIZANDO VIA API BACKEND SEGURA')
           console.log('📁 Organizando arquivo ID:', uploadResult.id, 'para pasta:', selectedFolderId)
           
-          // Importar AWS SDK dinamicamente
-          const { S3Client, CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3')
-          
-          // Configurar cliente S3
-          const s3Client = new S3Client({
-            region: 'sa-east-1',
-            credentials: {
-              accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || '',
-              secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || ''
-            }
-          })
-          
-          const bucketName = 'aws-lovoocrm-media'
-          
-          // Determinar pasta de destino
-          let folderName = 'marketing' // padrão
-          if (selectedFolderId.toLowerCase().includes('marketing') || selectedFolderId.includes('fc701f27')) {
-            folderName = 'marketing'
-          } else if (selectedFolderId.toLowerCase().includes('chat')) {
-            folderName = 'chat'
-          } else if (selectedFolderId.toLowerCase().includes('teste')) {
-            folderName = 'teste'
-          }
-          
-          console.log('📂 Pasta de destino:', folderName)
-          
-          // Extrair nome do arquivo do S3 key
-          const fileName = uploadResult.s3_key.split('/').pop()
-          const newS3Key = `biblioteca/companies/${companyId}/${folderName}/${fileName}`
-          
-          console.log('📁 Movendo de:', uploadResult.s3_key)
-          console.log('📁 Para:', newS3Key)
-          
-          // Copiar arquivo para nova localização
-          const copyCommand = new CopyObjectCommand({
-            Bucket: bucketName,
-            CopySource: `${bucketName}/${uploadResult.s3_key}`,
-            Key: newS3Key
-          })
-          
-          await s3Client.send(copyCommand)
-          console.log('✅ Arquivo copiado com sucesso!')
-          
-          // Remover arquivo original
-          try {
-            const deleteCommand = new DeleteObjectCommand({
-              Bucket: bucketName,
-              Key: uploadResult.s3_key
+          // Usar API backend com credenciais seguras
+          const response = await fetch('/api/s3-organize', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              company_id: companyId,
+              file_id: uploadResult.id,
+              folder_id: selectedFolderId
             })
-            
-            await s3Client.send(deleteCommand)
-            console.log('✅ Arquivo original removido!')
-          } catch (deleteError) {
-            console.warn('⚠️ Não foi possível remover arquivo original:', deleteError)
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`HTTP ${response.status}: ${errorText}`)
           }
+
+          const organizedFile = await response.json()
           
-          console.log('🎉 SUCESSO! Arquivo organizado no frontend via AWS SDK')
-          console.log('📂 Nova localização:', newS3Key)
+          console.log('🎉 SUCESSO! Arquivo organizado via API backend:', organizedFile.data?.id)
+          console.log('📂 Nova localização:', organizedFile.data?.s3_key)
+          console.log('🔗 URL do arquivo:', organizedFile.data?.preview_url)
           
         } catch (organizeError: any) {
-          console.error('❌ ERRO na organização via AWS SDK:', organizeError)
+          console.error('❌ ERRO na organização via API backend:', organizeError)
           console.warn('⚠️ Arquivo permanece na estrutura temporal')
           console.log('📁 Upload foi bem-sucedido, organização falhou:', organizeError.message)
         }
