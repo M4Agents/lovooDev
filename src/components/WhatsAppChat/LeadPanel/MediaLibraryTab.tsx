@@ -1,61 +1,136 @@
-// =====================================================
-// MEDIA LIBRARY TAB - MODAL INLINE CACHE BYPASS
-// =====================================================
-// Nova aba para biblioteca de mídia na sidebar direita
-// VERSÃO 5.0 - MODAL INLINE - 10/01/2026 10:40
-// SOLUÇÃO DEFINITIVA: Modal inline para contornar cache Vercel
+// CACHE BYPASS ULTRA V3 - 2026-01-11 12:07 - NOME DE ARQUIVO ÚNICO
+// Este arquivo substitui MediaLibraryTab.tsx para quebrar cache do Vercel definitivamente
 
 import React, { useState, useEffect } from 'react'
-import { mediaLibraryApi, MediaSummary, MediaFile, CompanyFolder } from '../../../services/mediaLibraryApi'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Upload, FolderOpen, File, Image, Video, Music, FileText, ChevronRight, Home } from 'lucide-react'
+import { mediaLibraryApi } from '@/services/mediaLibraryApi'
+import { UploadModalV2 } from './UploadModalV2'
 
-// =====================================================
-// INTERFACES
-// =====================================================
-
-interface MediaLibraryTabProps {
-  conversationId: string
-  companyId: string
-  leadId?: string
+interface MediaFile {
+  id: string
+  original_filename: string
+  file_type: 'image' | 'video' | 'audio' | 'document'
+  mime_type: string
+  file_size: number
+  preview_url?: string
+  s3_key: string
+  created_at: string
+  folder_id?: string
 }
 
-// =====================================================
-// COMPONENTE PRINCIPAL
-// =====================================================
+interface CompanyFolder {
+  id: string
+  name: string
+  icon: string
+  parent_id?: string
+  path: string
+  created_at: string
+}
 
-export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
-  conversationId,
-  companyId,
-  leadId
-}) => {
+interface MediaSummary {
+  total_files: number
+  total_size: number
+  by_type: {
+    image: number
+    video: number
+    audio: number
+    document: number
+  }
+}
+
+interface MediaLibraryTabProps {
+  leadId: string
+  companyId: string
+  conversationId?: string
+}
+
+export function MediaLibraryTab({ leadId, companyId, conversationId }: MediaLibraryTabProps) {
+  console.log('🔥🔥🔥 CACHE BYPASS ULTRA V3 - 2026-01-11 12:07 🔥🔥🔥')
+  console.log('📁 ARQUIVO ÚNICO - MediaLibraryTab-cache-bypass-ultra-v3.tsx')
+  console.log('⚡ TIMESTAMP DINÂMICO:', new Date().toISOString())
+  
   const [loading, setLoading] = useState(true)
-  const [mediaSummary, setMediaSummary] = useState<MediaSummary>({
-    images: 0,
-    videos: 0,
-    audios: 0,
-    documents: 0,
-    total: 0
-  })
   const [recentMedia, setRecentMedia] = useState<MediaFile[]>([])
   const [companyFolders, setCompanyFolders] = useState<CompanyFolder[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showNewFolderModal, setShowNewFolderModal] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [newFolderParentId, setNewFolderParentId] = useState<string | null>(null)
-  const [newFolderDescription, setNewFolderDescription] = useState('')
-  const [newFolderIcon, setNewFolderIcon] = useState('📁')
-  const [uploading, setUploading] = useState(false)
+  const [mediaSummary, setMediaSummary] = useState<MediaSummary | null>(null)
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [breadcrumb, setBreadcrumb] = useState<CompanyFolder[]>([])
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const [chatMedia, setChatMedia] = useState<MediaFile[]>([])
   const [loadingChatMedia, setLoadingChatMedia] = useState(false)
-  const [showUploadModal, setShowUploadModal] = useState(false)
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
-  const [uploadingInline, setUploadingInline] = useState(false)
 
-  // =====================================================
-  // BUSCAR DADOS E HELPERS
-  // =====================================================
+  const handleFolderClick = (folder: CompanyFolder) => {
+    console.log('🔥🔥🔥 CACHE BYPASS ULTRA V3 - FOLDER CLICK 🔥🔥🔥')
+    console.log('📁 Navegando para pasta:', folder.name)
+    console.log('🆔 DEBUG ULTRA V3 - Definindo currentFolderId para:', folder.id)
+    console.log('🔧 VERSÃO ULTRA V3 - fetchMediaDataForFolder será chamada')
+    console.log('⚡ Timestamp único:', Date.now())
+    
+    setCurrentFolderId(folder.id)
+    
+    // Atualizar breadcrumb
+    const newBreadcrumb = [...breadcrumb, folder]
+    setBreadcrumb(newBreadcrumb)
+    
+    // Se for pasta Chat, buscar mídias específicas
+    if (folder.name.toLowerCase() === 'chat') {
+      fetchChatMedia(folder.id)
+    }
+    
+    // Recarregar dados para mostrar conteúdo da pasta ESPECÍFICA
+    console.log('🚀 ULTRA V3 - CHAMANDO fetchMediaDataForFolder com:', { folderId: folder.id, folderName: folder.name })
+    fetchMediaDataForFolder(folder.id, folder.name)
+  }
+
+  const fetchMediaDataForFolder = async (folderId: string, folderName: string) => {
+    try {
+      setLoading(true)
+      
+      if (!companyId) {
+        console.log('⚠️ companyId não disponível ainda')
+        return
+      }
+
+      console.log('🔥🔥🔥 CACHE BYPASS ULTRA V3 - fetchMediaDataForFolder EXECUTANDO 🔥🔥🔥')
+      console.log('📂 Carregando dados específicos da pasta:', folderName)
+      console.log('🆔 DEBUG ULTRA V3 - folderId recebido:', folderId)
+      console.log('⚡ Timestamp único ULTRA V3:', new Date().toISOString())
+      console.log('🔧 ARQUIVO ÚNICO V3 - Garantindo reconhecimento pelo Vercel')
+      
+      // Buscar arquivos específicos da pasta selecionada
+      try {
+        console.log('🔍 CACHE BYPASS ULTRA V3 - Buscando arquivos da pasta específica:', folderId)
+        console.log('🆔 DEBUG ULTRA V3 - Enviando folderId DIRETO para API:', folderId)
+        console.log('🔧 VERSÃO ULTRA V3 CORRIGIDA - Parâmetros:', { leadId, companyId, folderId })
+        
+        const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
+          page: 1,
+          limit: 20,
+          folderId: folderId
+        })
+        setRecentMedia(folderFiles.files)
+        console.log('✅ CACHE BYPASS ULTRA V3 - Arquivos da pasta carregados:', folderFiles.files.length)
+        console.log('📋 DEBUG ULTRA V3 - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
+        console.log('🔍 DEBUG ULTRA V3 - Filtragem por pasta aplicada para:', folderName)
+        console.log('🎯 RESULTADO ESPERADO ULTRA V3 - Pasta', folderName, 'deve mostrar apenas seus arquivos')
+        
+      } catch (folderError) {
+        console.error('❌ Erro ao buscar arquivos da pasta:', folderError)
+        setRecentMedia([])
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados da pasta:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const fetchMediaData = async () => {
     try {
@@ -67,7 +142,6 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       }
 
       console.log('📊 Dados disponíveis:', { leadId, companyId, conversationId })
-
       console.log('📊 Carregando dados da biblioteca de mídia...')
       
       // Buscar pastas da empresa primeiro
@@ -125,46 +199,39 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     }
   }
 
-  const fetchMediaDataForFolder = async (folderId: string, folderName: string) => {
+  const fetchChatMedia = async (folderId: string) => {
     try {
-      setLoading(true)
+      setLoadingChatMedia(true)
+      console.log('📱 Buscando mídias específicas da pasta Chat...')
       
-      if (!companyId) {
-        console.log('⚠️ companyId não disponível ainda')
-        return
-      }
-
-      console.log('🔥 CACHE BYPASS V2 - fetchMediaDataForFolder EXECUTANDO 🔥')
-      console.log('📂 Carregando dados específicos da pasta:', folderName)
-      console.log('🆔 DEBUG V2 - folderId recebido:', folderId)
-      console.log('⏰ Timestamp único:', new Date().toISOString())
+      const response = await mediaLibraryApi.getChatMediaFiles(leadId, companyId, {
+        page: 1,
+        limit: 10,
+        folderId: folderId
+      })
       
-      // Buscar arquivos específicos da pasta selecionada
-      try {
-        console.log('🔍 CACHE BYPASS - Buscando arquivos da pasta específica:', folderId)
-        console.log('🆔 DEBUG V2 - Enviando folderId DIRETO para API:', folderId)
-        console.log('🔧 VERSÃO CORRIGIDA - Parâmetros:', { leadId, companyId, folderId })
-        
-        const folderFiles = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
-          page: 1,
-          limit: 20,
-          folderId: folderId
-        })
-        setRecentMedia(folderFiles.files)
-        console.log('✅ CACHE BYPASS V2 - Arquivos da pasta carregados:', folderFiles.files.length)
-        console.log('📋 DEBUG V2 - Arquivos encontrados:', folderFiles.files.map(f => f.original_filename))
-        console.log('🔍 DEBUG V2 - Filtragem por pasta aplicada para:', folderName)
-        console.log('🎯 RESULTADO ESPERADO - Pasta', folderName, 'deve mostrar apenas seus arquivos')
-        
-      } catch (folderError) {
-        console.error('❌ Erro ao buscar arquivos da pasta:', folderError)
-        setRecentMedia([])
-      }
-      
+      setChatMedia(response.files)
+      console.log('✅ Mídias da pasta Chat carregadas:', response.files.length)
     } catch (error) {
-      console.error('❌ Erro ao carregar dados da pasta:', error)
+      console.error('❌ Erro ao carregar mídias da pasta Chat:', error)
+      setChatMedia([])
     } finally {
-      setLoading(false)
+      setLoadingChatMedia(false)
+    }
+  }
+
+  const handleBreadcrumbClick = (index: number) => {
+    if (index === -1) {
+      // Voltar para raiz
+      setCurrentFolderId(null)
+      setBreadcrumb([])
+      fetchMediaData() // Buscar dados gerais
+    } else {
+      // Navegar para pasta específica no breadcrumb
+      const targetFolder = breadcrumb[index]
+      setCurrentFolderId(targetFolder.id)
+      setBreadcrumb(breadcrumb.slice(0, index + 1))
+      fetchMediaDataForFolder(targetFolder.id, targetFolder.name)
     }
   }
 
@@ -184,18 +251,13 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     return rootFolders.map(addChildren)
   }
 
-  // Helper para renderizar pasta com indentação
-  const renderFolderWithIndentation = (
-    folder: CompanyFolder & { children?: CompanyFolder[] }, 
-    level: number = 0
-  ): React.ReactNode[] => {
-    const elements: React.ReactNode[] = []
-    
-    // Renderizar pasta atual
-    elements.push(
-      <div 
-        key={folder.id}
-        className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors ${
+  // Renderizar pasta com indentação
+  const renderFolder = (folder: CompanyFolder & { children?: CompanyFolder[] }, level = 0) => (
+    <div key={folder.id}>
+      <div
+        className={`flex items-center p-2 hover:bg-gray-50 cursor-pointer rounded-md transition-colors ${
+          currentFolderId === folder.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+        } ${
           level > 0 ? 'ml-' + (level * 4) : ''
         }`}
         style={{ marginLeft: level * 16 }} // Indentação manual para melhor controle
@@ -203,242 +265,51 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
       >
         <div className="flex items-center space-x-3">
           <span className="text-lg">{folder.icon}</span>
-          <div>
-            <div className="font-medium text-gray-900">{folder.name}</div>
-            <div className="text-xs text-gray-500">
-              {folder.file_count || 0} arquivos • {folder.description}
-            </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-900">{folder.name}</p>
+            <p className="text-xs text-gray-500">{folder.path}</p>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
           {folder.children && folder.children.length > 0 && (
-            <span className="text-xs text-gray-400">
-              {folder.children.length} subpasta{folder.children.length > 1 ? 's' : ''}
-            </span>
+            <ChevronRight className="h-4 w-4 text-gray-400" />
           )}
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
         </div>
       </div>
-    )
-    
-    // Renderizar subpastas recursivamente
-    if (folder.children) {
-      folder.children.forEach(child => {
-        elements.push(...renderFolderWithIndentation(child, level + 1))
-      })
+      {folder.children && folder.children.map(child => renderFolder(child, level + 1))}
+    </div>
+  )
+
+  const getFileIcon = (fileType: string) => {
+    switch (fileType) {
+      case 'image':
+        return <Image className="h-4 w-4 text-blue-500" />
+      case 'video':
+        return <Video className="h-4 w-4 text-purple-500" />
+      case 'audio':
+        return <Music className="h-4 w-4 text-green-500" />
+      default:
+        return <FileText className="h-4 w-4 text-gray-500" />
     }
-    
-    return elements
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const handleFileSelect = (files: FileList) => {
+    console.log('📁 Arquivos selecionados:', files.length)
+  }
+
+  const handleUploadSubmit = async (files: File[], selectedFolderId: string) => {
+    console.log('🚀 Iniciando upload:', { files: files.length, folderId: selectedFolderId })
   }
 
   useEffect(() => {
-    if (conversationId && companyId && leadId) {
-      fetchMediaData()
-    }
-  }, [conversationId, companyId, leadId])
-
-  // =====================================================
-  // HANDLERS
-  // =====================================================
-
-  const handleFileClick = (file: MediaFile) => {
-    console.log('📁 Arquivo clicado:', file.original_filename)
-    // TODO: Implementar preview do arquivo
-  }
-
-  const handleSendToChat = (file: MediaFile) => {
-    console.log('📤 Enviando arquivo para chat:', file.original_filename)
-    // TODO: Implementar envio para chat
-  }
-
-  const handleSearchChange = (query: string) => {
-    setSearchQuery(query)
-    // TODO: Implementar busca em tempo real
-  }
-
-  const handleUploadClick = () => {
-    setShowUploadModal(true)
-    setSelectedFiles([])
-    setSelectedFolderId(null)
-  }
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files || files.length === 0) return
-    
-    setSelectedFiles(Array.from(files))
-  }
-
-  const handleUploadSubmit = async () => {
-    if (selectedFiles.length === 0 || !selectedFolderId) {
-      alert('Selecione os arquivos e a pasta de destino')
-      return
-    }
-
-    setUploading(true)
-    try {
-      for (const file of selectedFiles) {
-        await uploadFileToFolder(file, selectedFolderId)
-      }
-      // Recarregar dados após upload
-      await fetchMediaData()
-      setShowUploadModal(false)
-      setSelectedFiles([])
-      setSelectedFolderId(null)
-    } catch (error) {
-      console.error('❌ Erro no upload:', error)
-      alert('Erro ao fazer upload dos arquivos. Tente novamente.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const uploadFileToFolder = async (file: File, folderId: string) => {
-    // Validações
-    const maxSizes = {
-      image: 25 * 1024 * 1024, // 25MB
-      video: 100 * 1024 * 1024, // 100MB
-      audio: 50 * 1024 * 1024, // 50MB
-      document: 20 * 1024 * 1024 // 20MB
-    }
-
-    const fileType = getFileType(file.type)
-    const maxSize = maxSizes[fileType as keyof typeof maxSizes] || maxSizes.document
-
-    if (file.size > maxSize) {
-      throw new Error(`Arquivo ${file.name} excede o tamanho máximo permitido`)
-    }
-
-    // Criar FormData para upload
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('company_id', companyId)
-    formData.append('folder_id', folderId)
-
-    // Chamar API de upload para pasta específica
-    const response = await fetch('/api/media-library/upload-to-folder', {
-      method: 'POST',
-      body: formData
-    })
-
-    if (!response.ok) {
-      throw new Error(`Erro no upload: ${response.statusText}`)
-    }
-
-    const result = await response.json()
-    console.log('✅ Upload realizado:', result)
-    return result
-  }
-
-  const getFileType = (mimeType: string): string => {
-    if (mimeType.startsWith('image/')) return 'image'
-    if (mimeType.startsWith('video/')) return 'video'
-    if (mimeType.startsWith('audio/')) return 'audio'
-    return 'document'
-  }
-
-  const handleNewFolderClick = () => {
-    console.log('🔍 DEBUG: Abrindo modal Nova Pasta')
-    console.log('🔍 DEBUG: companyFolders:', companyFolders)
-    console.log('🔍 DEBUG: currentFolderId:', currentFolderId)
-    setShowNewFolderModal(true)
-    setNewFolderName('')
-    setNewFolderParentId(currentFolderId) // Usar pasta atual como pai por padrão
-    setNewFolderDescription('')
-    setNewFolderIcon('📁')
-  }
-
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) {
-      alert('Por favor, digite um nome para a pasta')
-      return
-    }
-
-    if (!companyId) {
-      alert('Erro: ID da empresa não encontrado')
-      return
-    }
-
-    try {
-      await mediaLibraryApi.createFolder(companyId, {
-        name: newFolderName.trim(),
-        parent_id: newFolderParentId,
-        description: newFolderDescription || `Pasta criada pelo usuário`,
-        icon: newFolderIcon
-      })
-      
-      setShowNewFolderModal(false)
-      setNewFolderName('')
-      setNewFolderParentId(null)
-      setNewFolderDescription('')
-      setNewFolderIcon('📁')
-      
-      // Recarregar pastas
-      await fetchMediaData()
-    } catch (error) {
-      console.error('❌ Erro ao criar pasta:', error)
-      alert('Erro ao criar pasta. Tente novamente.')
-    }
-  }
-
-  const fetchChatMedia = async (folderId: string) => {
-    try {
-      setLoadingChatMedia(true)
-      console.log('💬 Buscando mídias da pasta Chat via API...')
-      
-      const response = await mediaLibraryApi.getLeadMediaFiles(leadId, companyId, {
-        page: 1,
-        limit: 50,
-        folderId: folderId
-      })
-      
-      setChatMedia(response.files)
-      console.log('✅ Mídias da pasta Chat carregadas:', response.files.length)
-    } catch (error) {
-      console.error('❌ Erro ao carregar mídias da pasta Chat:', error)
-      setChatMedia([])
-    } finally {
-      setLoadingChatMedia(false)
-    }
-  }
-
-  const handleFolderClick = (folder: CompanyFolder) => {
-    console.log('🔥🔥🔥 CACHE BYPASS TOTAL - 2026-01-11 11:54 🔥🔥🔥')
-    console.log('📁 Navegando para pasta:', folder.name)
-    console.log('🆔 DEBUG V2 - Definindo currentFolderId para:', folder.id)
-    console.log('🔧 VERSÃO CORRIGIDA - fetchMediaDataForFolder será chamada')
-    setCurrentFolderId(folder.id)
-    
-    // Atualizar breadcrumb
-    const newBreadcrumb = [...breadcrumb, folder]
-    setBreadcrumb(newBreadcrumb)
-    
-    // Se for pasta Chat, buscar mídias específicas
-    if (folder.name.toLowerCase() === 'chat') {
-      fetchChatMedia(folder.id)
-    }
-    
-    // Recarregar dados para mostrar conteúdo da pasta ESPECÍFICA
-    console.log('🚀 CHAMANDO fetchMediaDataForFolder com:', { folderId: folder.id, folderName: folder.name })
-    fetchMediaDataForFolder(folder.id, folder.name)
-  }
-
-  const handleBreadcrumbClick = (index: number) => {
-    if (index === -1) {
-      // Voltar para raiz
-      setCurrentFolderId(null)
-      setBreadcrumb([])
-      fetchMediaData() // Buscar dados gerais
-    } else {
-      // Navegar para pasta específica no breadcrumb
-      const targetFolder = breadcrumb[index]
-      setCurrentFolderId(targetFolder.id)
-      setBreadcrumb(breadcrumb.slice(0, index + 1))
-      fetchMediaDataForFolder(targetFolder.id, targetFolder.name)
-    }
-  }
+    fetchMediaData()
+  }, [leadId, companyId])
 
   // =====================================================
   // LOADING STATE
@@ -448,640 +319,152 @@ export const MediaLibraryTab: React.FC<MediaLibraryTabProps> = ({
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-sm text-gray-600">Carregando biblioteca...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-sm text-gray-600">Carregando biblioteca de mídia...</p>
         </div>
       </div>
     )
   }
 
   // =====================================================
-  // RENDER
+  // MAIN RENDER
   // =====================================================
 
+  const hierarchicalFolders = organizeHierarchicalFolders(companyFolders)
+
   return (
-    <div className="p-4 space-y-4 h-full overflow-y-auto">
-      {/* Header com busca */}
-      <div className="space-y-3">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Buscar arquivos..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <svg 
-            className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-      </div>
-
-      {/* Seção Mídias do Lead */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-gray-700">
-            📥 Mídias deste Lead ({mediaSummary.total})
-          </h4>
-        </div>
-
-        {/* Grid de contadores por tipo */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-blue-50 p-3 rounded-lg text-center">
-            <div className="text-lg font-semibold text-blue-700">
-              {mediaSummary.images}
-            </div>
-            <div className="text-xs text-blue-600">🖼️ Imagens</div>
-          </div>
-          
-          <div className="bg-purple-50 p-3 rounded-lg text-center">
-            <div className="text-lg font-semibold text-purple-700">
-              {mediaSummary.videos}
-            </div>
-            <div className="text-xs text-purple-600">🎥 Vídeos</div>
-          </div>
-          
-          <div className="bg-green-50 p-3 rounded-lg text-center">
-            <div className="text-lg font-semibold text-green-700">
-              {mediaSummary.audios}
-            </div>
-            <div className="text-xs text-green-600">🎵 Áudios</div>
-          </div>
-          
-          <div className="bg-orange-50 p-3 rounded-lg text-center">
-            <div className="text-lg font-semibold text-orange-700">
-              {mediaSummary.documents}
-            </div>
-            <div className="text-xs text-orange-600">📄 Docs</div>
-          </div>
-        </div>
-
-        {/* Grid visual de thumbnails */}
-        <div className="space-y-2">
-          <h5 className="text-xs font-medium text-gray-600 uppercase tracking-wide">
-            Recebidos Recentemente
-          </h5>
-          
-          {recentMedia.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <div className="mb-2">📂</div>
-              <div>Nenhuma mídia recebida ainda</div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {recentMedia.map(file => (
-                <div 
-                  key={file.id}
-                  className="relative group bg-gray-50 rounded-lg overflow-hidden hover:bg-gray-100 cursor-pointer transition-all duration-200 hover:shadow-md"
-                  onClick={() => handleFileClick(file)}
-                >
-                  {/* Thumbnail da imagem */}
-                  <div className="aspect-square relative">
-                    {file.file_type === 'image' ? (
-                      <img
-                        src={file.preview_url || file.s3_key ? `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${file.s3_key}` : '/placeholder-image.png'}
-                        alt={file.original_filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback para ícone se imagem não carregar
-                          e.currentTarget.style.display = 'none'
-                          const nextElement = e.currentTarget.nextElementSibling as HTMLElement
-                          if (nextElement) {
-                            nextElement.style.display = 'flex'
-                          }
-                        }}
-                      />
-                    ) : null}
-                    
-                    {/* Fallback para ícone quando não é imagem ou erro */}
-                    <div 
-                      className={`w-full h-full flex items-center justify-center ${file.file_type === 'image' ? 'hidden' : 'flex'}`}
-                      style={{ display: file.file_type === 'image' ? 'none' : 'flex' }}
-                    >
-                      <div className="text-4xl opacity-60">
-                        {mediaLibraryApi.getFileIcon(file.file_type, file.mime_type)}
-                      </div>
-                    </div>
-                    
-                    {/* Overlay com tipo de arquivo */}
-                    <div className="absolute top-1 left-1">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-black bg-opacity-60 text-white">
-                        {file.file_type.toUpperCase()}
-                      </span>
-                    </div>
-                    
-                    {/* Overlay hover com ações */}
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSendToChat(file)
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      >
-                        📤 Enviar
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Info do arquivo */}
-                  <div className="p-2">
-                    <p className="text-xs font-medium text-gray-900 truncate">
-                      {file.original_filename}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {mediaLibraryApi.formatFileSize(file.file_size)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Mídias da Pasta Chat - Exibição Visual */}
-      {currentFolderId && chatMedia.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700 flex items-center">
-            <span className="mr-2">💬</span>
-            Mídias do WhatsApp ({chatMedia.length})
-          </h4>
-          
-          {loadingChatMedia ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              <span className="ml-2 text-sm text-gray-600">Carregando mídias...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {chatMedia.slice(0, 12).map(file => (
-                <div 
-                  key={file.id}
-                  className="relative group bg-gray-50 rounded-lg overflow-hidden hover:bg-gray-100 cursor-pointer transition-all duration-200 hover:shadow-md"
-                  onClick={() => handleFileClick(file)}
-                >
-                  <div className="aspect-square relative">
-                    {file.file_type === 'image' ? (
-                      <img
-                        src={file.preview_url || `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${file.s3_key}`}
-                        alt={file.original_filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                          const nextElement = e.currentTarget.nextElementSibling as HTMLElement
-                          if (nextElement) {
-                            nextElement.style.display = 'flex'
-                          }
-                        }}
-                      />
-                    ) : null}
-                    
-                    <div 
-                      className={`w-full h-full flex items-center justify-center ${file.file_type === 'image' ? 'hidden' : 'flex'}`}
-                      style={{ display: file.file_type === 'image' ? 'none' : 'flex' }}
-                    >
-                      <div className="text-2xl opacity-60">
-                        {mediaLibraryApi.getFileIcon(file.file_type, file.mime_type)}
-                      </div>
-                    </div>
-                    
-                    <div className="absolute top-1 left-1">
-                      <span className="inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-black bg-opacity-60 text-white">
-                        {file.file_type.toUpperCase()}
-                      </span>
-                    </div>
-                    
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSendToChat(file)
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      >
-                        📤
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {chatMedia.length > 12 && (
-            <div className="text-center">
-              <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                Ver mais {chatMedia.length - 12} mídias
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Biblioteca da Empresa */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-medium text-gray-700 flex items-center">
-          <span className="mr-2">🏢</span>
-          Biblioteca da Empresa
-        </h4>
-        
-        <div className="space-y-2">
-          {companyFolders.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <div className="mb-2">📁</div>
-              <div>Nenhuma pasta criada ainda</div>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {organizeHierarchicalFolders(companyFolders).map(folder => 
-                renderFolderWithIndentation(folder)
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ações da biblioteca */}
-      <div className="space-y-2 border-t border-gray-200 pt-4">
-        <button 
-          onClick={handleUploadClick}
-          disabled={uploading}
-          className={`w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-            uploading 
-              ? 'bg-gray-400 text-white cursor-not-allowed' 
-              : 'text-white bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {uploading ? '⏳ Enviando...' : '📤 Upload Arquivo'}
-        </button>
-        
-        <button 
-          onClick={handleNewFolderClick}
-          className="w-full px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-        >
-          📁 Nova Pasta
-        </button>
-      </div>
-
-      {/* Breadcrumb de Navegação */}
-      {breadcrumb.length > 0 && (
-        <div className="flex items-center space-x-2 text-sm text-gray-600 border-b border-gray-200 pb-2 mb-4">
+    <div className="h-full flex flex-col space-y-6">
+      {/* Header com breadcrumb */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
           <button
             onClick={() => handleBreadcrumbClick(-1)}
-            className="hover:text-blue-600 transition-colors"
+            className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-900"
           >
-            📁 Raiz
+            <Home className="h-4 w-4" />
+            <span>Início</span>
           </button>
           {breadcrumb.map((folder, index) => (
             <React.Fragment key={folder.id}>
-              <span className="text-gray-400">/</span>
+              <ChevronRight className="h-4 w-4 text-gray-400" />
               <button
                 onClick={() => handleBreadcrumbClick(index)}
-                className="hover:text-blue-600 transition-colors"
+                className="text-sm text-gray-600 hover:text-gray-900"
               >
-                {folder.icon} {folder.name}
+                {folder.name}
               </button>
             </React.Fragment>
           ))}
         </div>
-      )}
+        <Button
+          onClick={() => setShowUploadModal(true)}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          Upload
+        </Button>
+      </div>
 
-      {/* Modal Nova Pasta */}
-      {showNewFolderModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Nova Pasta</h3>
-              <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
-                🚀 v4.0 FINAL - 12:35
-              </div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <div className="text-sm text-blue-800 font-medium">
-                ✅ Sistema de Subpastas Implementado - Versão 4.0
-              </div>
-              <div className="text-xs text-blue-600 mt-1">
-                Agora você pode criar pastas dentro de outras pastas
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Nome da pasta */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome da pasta
-                </label>
-                <input
-                  type="text"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  placeholder="Digite o nome da pasta..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoFocus
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && newFolderName.trim()) {
-                      handleCreateFolder()
-                    }
-                  }}
-                />
-              </div>
-
-              {/* CAMPO PASTA PAI - FUNCIONALIDADE DE SUBPASTAS */}
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-orange-200 rounded-lg p-4">
-                <div className="flex items-center mb-2">
-                  <span className="text-lg mr-2">🎯</span>
-                  <label className="block text-sm font-bold text-orange-800">
-                    PASTA PAI (OPCIONAL) - CRIAR SUBPASTA
-                  </label>
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Sidebar - Pastas */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <FolderOpen className="h-5 w-5" />
+                <span>Pastas</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-1">
+                  {hierarchicalFolders.map(folder => renderFolder(folder))}
                 </div>
-                <div className="text-xs text-orange-600 mb-2">
-                  Selecione uma pasta existente para criar uma subpasta dentro dela
-                </div>
-                <select
-                  value={newFolderParentId || ''}
-                  onChange={(e) => setNewFolderParentId(e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">📁 Raiz (sem pasta pai)</option>
-                  {companyFolders && companyFolders.length > 0 ? (
-                    companyFolders
-                      .filter(folder => folder.parent_id === null || !folder.parent_id)
-                      .map(folder => (
-                        <option key={folder.id} value={folder.id}>
-                          {folder.icon} {folder.name}
-                        </option>
-                      ))
-                  ) : (
-                    <option disabled>Carregando pastas...</option>
-                  )}
-                </select>
-              </div>
-
-              {/* Ícone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ícone
-                </label>
-                <div className="flex space-x-2">
-                  {['📁', '📂', '📢', '📦', '📄', '📋', '🎨', '🎬', '📷', '💰'].map(icon => (
-                    <button
-                      key={icon}
-                      onClick={() => setNewFolderIcon(icon)}
-                      className={`p-2 text-lg rounded-lg border-2 transition-colors ${
-                        newFolderIcon === icon
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Descrição */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descrição (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={newFolderDescription}
-                  onChange={(e) => setNewFolderDescription(e.target.value)}
-                  placeholder="Descreva o conteúdo da pasta..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowNewFolderModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCreateFolder}
-                disabled={!newFolderName.trim()}
-                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  newFolderName.trim()
-                    ? 'text-white bg-blue-600 hover:bg-blue-700'
-                    : 'text-gray-400 bg-gray-200 cursor-not-allowed'
-                }`}
-              >
-                Criar Pasta
-              </button>
-            </div>
-          </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
         </div>
-      )}
 
-      {/* MODAL INLINE - SOLUÇÃO DEFINITIVA CACHE BYPASS - 10/01/2026 10:40 */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">Upload de Arquivos</h3>
-                <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-medium mt-1">
-                  🔥 MODAL INLINE V5.0 - 10:40 - CACHE BYPASS DEFINITIVO
-                </div>
-              </div>
-              <button
-                onClick={() => setShowUploadModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* SELETOR DE PASTA - DESTAQUE MÁXIMO */}
-              <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
-                <label className="block text-sm font-bold text-red-800 mb-2">
-                  📁 PASTA DE DESTINO (OBRIGATÓRIO) - INLINE V5.0
-                </label>
-                <select
-                  value={selectedFolderId || ''}
-                  onChange={(e) => {
-                    setSelectedFolderId(e.target.value)
-                    console.log('🔥 INLINE V5.0 - Pasta selecionada:', e.target.value)
-                  }}
-                  className="w-full border-2 border-red-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
-                >
-                  <option value="">🔽 SELECIONE UMA PASTA...</option>
-                  {companyFolders.map(folder => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.icon} {folder.name}
-                    </option>
-                  ))}
-                </select>
-                {!selectedFolderId && (
-                  <div className="text-xs text-red-600 mt-1 font-bold">
-                    ⚠️ ESCOLHA ONDE SALVAR: CHAT, MARKETING OU TESTE
-                  </div>
-                )}
-              </div>
-
-              {/* Seletor de Arquivos */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📤 Arquivos
-                </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-400 transition-colors">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                    onChange={(e) => {
-                      const files = e.target.files
-                      if (files && files.length > 0) {
-                        setSelectedFiles(Array.from(files))
-                        console.log('🔥 INLINE V5.0 - Arquivos selecionados:', files.length)
-                      }
-                    }}
-                    className="hidden"
-                    id="file-upload-inline-v5"
-                  />
-                  <label htmlFor="file-upload-inline-v5" className="cursor-pointer">
-                    <div className="text-gray-400 mb-2">
-                      <svg className="w-8 h-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-gray-600 font-medium">
-                      Clique para selecionar arquivos ou arraste aqui
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Imagens, vídeos, áudios e documentos
-                    </p>
-                  </label>
-                </div>
-              </div>
-
-              {/* Lista de Arquivos Selecionados */}
-              {selectedFiles.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">
-                    📋 Arquivos selecionados ({selectedFiles.length})
-                  </h4>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {selectedFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">
-                            {file.type.startsWith('image/') ? '🖼️' : 
-                             file.type.startsWith('video/') ? '🎥' : 
-                             file.type.startsWith('audio/') ? '🎵' : '📄'}
-                          </span>
-                          <div>
-                            <div className="text-sm font-medium text-gray-900 truncate max-w-32">
-                              {file.name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </div>
+        {/* Main Content - Arquivos */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <File className="h-5 w-5" />
+                <span>
+                  {currentFolderId 
+                    ? `Arquivos - ${companyFolders.find(f => f.id === currentFolderId)?.name || 'Pasta'}`
+                    : 'Recebidos Recentemente'
+                  }
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentMedia.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {recentMedia.map((file) => (
+                    <div key={file.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start space-x-3">
+                        {getFileIcon(file.file_type)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {file.original_filename}
+                          </p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {file.file_type}
+                            </Badge>
+                            <span className="text-xs text-gray-500">
+                              {formatFileSize(file.file_size)}
+                            </span>
                           </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {new Date(file.created_at).toLocaleDateString('pt-BR')}
+                          </p>
                         </div>
-                        <button
-                          onClick={() => {
-                            setSelectedFiles(files => files.filter((_, i) => i !== index))
-                          }}
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
                       </div>
-                    ))}
-                  </div>
+                      {file.preview_url && file.file_type === 'image' && (
+                        <div className="mt-3">
+                          <img
+                            src={file.preview_url}
+                            alt={file.original_filename}
+                            className="w-full h-32 object-cover rounded-md"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <File className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">
+                    {currentFolderId 
+                      ? 'Nenhum arquivo encontrado nesta pasta'
+                      : 'Nenhum arquivo recente encontrado'
+                    }
+                  </p>
                 </div>
               )}
-            </div>
-
-            {/* Botões */}
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowUploadModal(false)}
-                disabled={uploadingInline}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={async () => {
-                  if (selectedFiles.length === 0) {
-                    alert('Selecione pelo menos um arquivo')
-                    return
-                  }
-                  if (!selectedFolderId) {
-                    alert('Selecione a pasta de destino')
-                    return
-                  }
-
-                  console.log('🚀 INLINE V5.0 - Iniciando upload:', {
-                    files: selectedFiles.length,
-                    folder: selectedFolderId,
-                    company: companyId
-                  })
-
-                  setUploadingInline(true)
-                  try {
-                    for (const file of selectedFiles) {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      formData.append('company_id', companyId)
-                      formData.append('folder_id', selectedFolderId)
-
-                      const response = await fetch('/api/media-library/upload-to-folder', {
-                        method: 'POST',
-                        body: formData
-                      })
-
-                      if (!response.ok) {
-                        throw new Error(`Erro no upload: ${response.statusText}`)
-                      }
-                    }
-                    
-                    fetchMediaData()
-                    setShowUploadModal(false)
-                    setSelectedFiles([])
-                    setSelectedFolderId(null)
-                    console.log('✅ INLINE V5.0 - Upload concluído com sucesso')
-                  } catch (error) {
-                    console.error('❌ INLINE V5.0 - Erro no upload:', error)
-                    alert('Erro ao fazer upload dos arquivos. Tente novamente.')
-                  } finally {
-                    setUploadingInline(false)
-                  }
-                }}
-                disabled={uploadingInline || selectedFiles.length === 0 || !selectedFolderId}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploadingInline ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Enviando...</span>
-                  </div>
-                ) : (
-                  `🔥 ENVIAR V5.0 ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}`
-                )}
-              </button>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
+      </div>
 
+      {/* Modal de Upload */}
+      <UploadModalV2
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onFileSelect={handleFileSelect}
+        onUploadSubmit={handleUploadSubmit}
+        companyId={companyId}
+        leadId={leadId}
+        folders={companyFolders}
+        onUploadComplete={() => {
+          fetchMediaData()
+          setShowUploadModal(false)
+        }}
+      />
     </div>
   )
 }

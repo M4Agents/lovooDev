@@ -180,23 +180,34 @@ export default async function handler(req, res) {
         console.log('📊 Dados: arquivo_id =', uploadResult.id, ', folder_id =', folderId)
         console.log('🔧 DEBUG - Projeto M4_digital, usando UPSERT para evitar conflitos')
         
+        // DEBUG: Verificar dados antes do UPSERT
+        console.log('🔧 DEBUG UPSERT - Dados que serão enviados:')
+        console.log('📊 ID:', uploadResult.id)
+        console.log('🏢 Company ID:', companyId)
+        console.log('📁 Folder ID:', folderId)
+        console.log('📄 Filename:', uploadResult.file_name)
+        
         // UPSERT registro na tabela lead_media_unified com folder_id
+        const upsertData = {
+          id: uploadResult.id,
+          company_id: companyId,
+          s3_key: uploadResult.s3_key,
+          original_filename: uploadResult.file_name,
+          file_type: fileType,
+          mime_type: uploadResult.mime_type,
+          file_size: uploadResult.file_size,
+          preview_url: uploadResult.preview_url,
+          received_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          folder_id: folderId
+        }
+        
+        console.log('🔧 DEBUG UPSERT - Objeto completo:', JSON.stringify(upsertData, null, 2))
+        
         const { data, error } = await supabase
           .from('lead_media_unified')
-          .upsert({
-            id: uploadResult.id,
-            company_id: companyId,
-            s3_key: uploadResult.s3_key,
-            original_filename: uploadResult.file_name,
-            file_type: fileType,
-            mime_type: uploadResult.mime_type,
-            file_size: uploadResult.file_size,
-            preview_url: uploadResult.preview_url,
-            received_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            folder_id: folderId
-          }, {
+          .upsert(upsertData, {
             onConflict: 'id'
           })
         
@@ -213,6 +224,15 @@ export default async function handler(req, res) {
         
         console.log('✅ folder_id salvo no banco com sucesso!')
         console.log('📊 Registro criado na tabela lead_media_unified:', data)
+        console.log('🔧 DEBUG UPSERT - Resposta do Supabase:', JSON.stringify(data, null, 2))
+        
+        // Verificar se folder_id foi realmente salvo
+        if (data && data.length > 0 && data[0].folder_id) {
+          console.log('✅ CONFIRMADO - folder_id salvo:', data[0].folder_id)
+        } else {
+          console.log('❌ PROBLEMA - folder_id não foi salvo ou está null')
+          console.log('🔧 DEBUG - Dados retornados:', data)
+        }
         
       } catch (dbError) {
         console.error('❌ Erro na persistência:', dbError)
