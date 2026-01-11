@@ -4,7 +4,22 @@
 // API de upload que funciona + organização opcional
 
 import formidable from 'formidable'
+import { uploadToTemporal } from '../../../services/aws/s3Storage.js'
+import { createClient } from '@supabase/supabase-js'
 import AWS from 'aws-sdk'
+
+// =====================================================
+// CONFIGURAÇÃO SUPABASE
+// =====================================================
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('❌ Supabase configuration missing')
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // =====================================================
 // CONFIGURAÇÃO AWS S3
@@ -151,57 +166,58 @@ export default async function handler(req, res) {
       
       console.log('📂 Organização virtual para pasta:', folderName)
       
-      // Persistência real no banco usando MCP Supabase
-      console.log('💾 Salvando folder_id no banco via MCP Supabase')
-      console.log('🔗 Conectando com projeto M4_digital:', 'etzdsywunlpbgxkphuil')
+      // Persistência real no banco usando Supabase Client
+      console.log('💾 Salvando folder_id no banco via Supabase Client')
+      console.log('🔗 Conectando com projeto M4_digital')
       
       try {
-        // Inserir registro na tabela lead_media_unified com folder_id
-        const insertQuery = `
-          INSERT INTO lead_media_unified (
-            id, company_id, s3_key, original_filename, file_type, mime_type, 
-            file_size, preview_url, received_at, created_at, updated_at, folder_id
-          ) VALUES (
-            '${uploadResult.id}',
-            '${companyId}',
-            '${uploadResult.s3_key}',
-            '${uploadResult.file_name}',
-            '${uploadResult.mime_type?.startsWith('image/') ? 'image' : 
-              uploadResult.mime_type?.startsWith('video/') ? 'video' :
-              uploadResult.mime_type?.startsWith('audio/') ? 'audio' : 'document'}',
-            '${uploadResult.mime_type}',
-            ${uploadResult.file_size},
-            '${uploadResult.preview_url}',
-            now(),
-            now(),
-            now(),
-            '${folderId}'
-          )
-        `
+        // Determinar tipo de arquivo
+        const fileType = uploadResult.mime_type?.startsWith('image/') ? 'image' : 
+                        uploadResult.mime_type?.startsWith('video/') ? 'video' :
+                        uploadResult.mime_type?.startsWith('audio/') ? 'audio' : 'document'
         
         console.log('🔄 Executando INSERT na tabela lead_media_unified...')
         console.log('📊 Dados: arquivo_id =', uploadResult.id, ', folder_id =', folderId)
         
-        // Executar via MCP Supabase
-        const { data, error } = await fetch('/api/mcp-execute-sql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: 'etzdsywunlpbgxkphuil',
-            query: insertQuery
+        // Inserir registro na tabela lead_media_unified com folder_id
+        const { data, error } = await supabase
+          .from('lead_media_unified')
+          .insert({
+            id: uploadResult.id,
+            company_id: companyId,
+            s3_key: uploadResult.s3_key,
+            original_filename: uploadResult.file_name,
+            file_type: fileType,
+            mime_type: uploadResult.mime_type,
+            file_size: uploadResult.file_size,
+            preview_url: uploadResult.preview_url,
+            received_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            folder_id: folderId
           })
-        })
         
         if (error) {
           console.error('❌ Erro ao inserir no banco:', error)
-        } else {
-          console.log('✅ folder_id salvo no banco com sucesso!')
-          console.log('📊 Registro criado na tabela lead_media_unified')
+          console.error('📋 Detalhes do erro:', error.message)
+          return res.status(500).json({
+            success: false,
+            error: 'Database error',
+            message: 'Erro ao salvar metadados no banco',
+            details: error.message
+          })
         }
+        
+        console.log('✅ folder_id salvo no banco com sucesso!')
+        console.log('📊 Registro criado na tabela lead_media_unified:', data)
         
       } catch (dbError) {
         console.error('❌ Erro na persistência:', dbError)
-        console.log('📋 Continuando com organização virtual em memória')
+        return res.status(500).json({
+          success: false,
+          error: 'Database connection error',
+          message: 'Erro na conexão com banco de dados'
+        })
       }
       
       // Preparar metadados virtuais para resposta
@@ -216,8 +232,8 @@ export default async function handler(req, res) {
       }
       
       console.log('📊 Metadados virtuais preparados:', virtualMetadata)
-      console.log('✅ Organização virtual + persistência no banco configurada')
-      console.log('💾 folder_id persistido na tabela lead_media_unified')
+      console.log('✅ Organização virtual + persistência real no banco configurada')
+      console.log('💾 folder_id persistido na tabela lead_media_unified via Supabase Client')
       
       // Atualizar resultado com organização virtual
       uploadResult = {
