@@ -210,32 +210,70 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         console.log('🔥🔥🔥 INICIANDO ORGANIZAÇÃO - PASTA SELECIONADA:', selectedFolderId)
         
         try {
-          console.log('🔥 USANDO ENDPOINT NA RAIZ PARA ORGANIZAÇÃO')
+          console.log('🔥 ORGANIZANDO NO FRONTEND - AWS SDK DIRETO')
           console.log('📁 Organizando arquivo ID:', uploadResult.id, 'para pasta:', selectedFolderId)
           
-          // Usar endpoint na raiz para eliminar problemas de roteamento
-          const response = await fetch(`/api/organize-file?company_id=${companyId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              file_id: uploadResult.id,
-              folder_id: selectedFolderId
-            })
-          })
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-          }
-
-          const organizedFile = await response.json()
+          // Importar AWS SDK dinamicamente
+          const { S3Client, CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3')
           
-          console.log('🎉 SUCESSO! Arquivo organizado via endpoint raiz:', organizedFile.data?.id)
-          console.log('📂 Nova localização:', organizedFile.data?.s3_key)
+          // Configurar cliente S3
+          const s3Client = new S3Client({
+            region: 'sa-east-1',
+            credentials: {
+              accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || '',
+              secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || ''
+            }
+          })
+          
+          const bucketName = 'aws-lovoocrm-media'
+          
+          // Determinar pasta de destino
+          let folderName = 'marketing' // padrão
+          if (selectedFolderId.toLowerCase().includes('marketing') || selectedFolderId.includes('fc701f27')) {
+            folderName = 'marketing'
+          } else if (selectedFolderId.toLowerCase().includes('chat')) {
+            folderName = 'chat'
+          } else if (selectedFolderId.toLowerCase().includes('teste')) {
+            folderName = 'teste'
+          }
+          
+          console.log('📂 Pasta de destino:', folderName)
+          
+          // Extrair nome do arquivo do S3 key
+          const fileName = uploadResult.s3_key.split('/').pop()
+          const newS3Key = `biblioteca/companies/${companyId}/${folderName}/${fileName}`
+          
+          console.log('📁 Movendo de:', uploadResult.s3_key)
+          console.log('📁 Para:', newS3Key)
+          
+          // Copiar arquivo para nova localização
+          const copyCommand = new CopyObjectCommand({
+            Bucket: bucketName,
+            CopySource: `${bucketName}/${uploadResult.s3_key}`,
+            Key: newS3Key
+          })
+          
+          await s3Client.send(copyCommand)
+          console.log('✅ Arquivo copiado com sucesso!')
+          
+          // Remover arquivo original
+          try {
+            const deleteCommand = new DeleteObjectCommand({
+              Bucket: bucketName,
+              Key: uploadResult.s3_key
+            })
+            
+            await s3Client.send(deleteCommand)
+            console.log('✅ Arquivo original removido!')
+          } catch (deleteError) {
+            console.warn('⚠️ Não foi possível remover arquivo original:', deleteError)
+          }
+          
+          console.log('🎉 SUCESSO! Arquivo organizado no frontend via AWS SDK')
+          console.log('📂 Nova localização:', newS3Key)
           
         } catch (organizeError: any) {
-          console.error('❌ ERRO na organização via media-management:', organizeError)
+          console.error('❌ ERRO na organização via AWS SDK:', organizeError)
           console.warn('⚠️ Arquivo permanece na estrutura temporal')
           console.log('📁 Upload foi bem-sucedido, organização falhou:', organizeError.message)
         }
