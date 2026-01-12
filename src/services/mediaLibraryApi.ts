@@ -295,10 +295,10 @@ class MediaLibraryApiService {
    */
   async getCompanyFolders(companyId: string): Promise<CompanyFolder[]> {
     try {
-      console.log('📁 Buscando pastas da empresa:', companyId)
+      console.log('📁 V2 - Buscando pastas da empresa:', companyId)
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders-v2-cache-bypass?company_id=${companyId}`,
         {
           method: 'GET',
           headers: {
@@ -341,10 +341,10 @@ class MediaLibraryApiService {
     }
   ): Promise<CompanyFolder> {
     try {
-      console.log('📁 Criando nova pasta:', folderData)
+      console.log('📁 V2 - Criando nova pasta:', folderData)
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders-v2-cache-bypass?company_id=${companyId}`,
         {
           method: 'POST',
           headers: {
@@ -386,10 +386,10 @@ class MediaLibraryApiService {
     }
   ): Promise<CompanyFolder> {
     try {
-      console.log('✏️ Editando pasta:', { folderId, folderData })
+      console.log('✏️ V2 - Editando pasta:', { folderId, folderData })
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders-v2-cache-bypass?company_id=${companyId}`,
         {
           method: 'PUT',
           headers: {
@@ -430,10 +430,10 @@ class MediaLibraryApiService {
     folderId: string
   ): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      console.log('🗑️ Excluindo pasta:', { folderId, companyId })
+      console.log('🗑️ V2 - Excluindo pasta:', { folderId, companyId })
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders-v2-cache-bypass?company_id=${companyId}`,
         {
           method: 'DELETE',
           headers: {
