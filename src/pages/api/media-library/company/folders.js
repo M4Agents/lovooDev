@@ -107,6 +107,10 @@ const calculateFolderPath = async (parentId, folderName, companyId) => {
 // =====================================================
 
 export default async function handler(req, res) {
+  // Log para confirmar versão atualizada - 12/01/2026 10:50
+  console.log('🔄 API FOLDERS ATUALIZADA - PUT/DELETE DISPONÍVEIS - 12/01/2026 10:50')
+  console.log(`📡 Método: ${req.method} - Company: ${req.query.company_id}`)
+  
   try {
     // Validação de inicialização do Supabase
     if (!supabase) {
