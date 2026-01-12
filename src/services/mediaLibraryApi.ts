@@ -178,7 +178,13 @@ class MediaLibraryApiService {
             totalPages: 0,
             hasNextPage: false,
             hasPrevPage: false
-          }
+          },
+          filters: {
+            leadId: leadId || '',
+            file_type: 'all',
+            search: ''
+          },
+          lastUpdated: new Date().toISOString()
         }
       }
 
@@ -264,6 +270,7 @@ class MediaLibraryApiService {
         pagination: {
           page: 1,
           limit: 20,
+          total: 0,
           totalCount: 0,
           totalPages: 0,
           hasNextPage: false,
@@ -363,6 +370,114 @@ class MediaLibraryApiService {
     } catch (error) {
       console.error('❌ Erro ao criar pasta:', error)
       throw error
+    }
+  }
+
+  /**
+   * Editar pasta existente
+   */
+  async editFolder(
+    companyId: string,
+    folderId: string,
+    folderData: {
+      name: string
+      icon?: string
+      description?: string
+    }
+  ): Promise<CompanyFolder> {
+    try {
+      console.log('✏️ Editando pasta:', { folderId, folderData })
+
+      const response = await fetch(
+        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            folder_id: folderId,
+            ...folderData
+          })
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.message || 'Erro ao editar pasta')
+      }
+
+      console.log('✅ Pasta editada:', data.data)
+      return data.data
+
+    } catch (error) {
+      console.error('❌ Erro ao editar pasta:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Excluir pasta (apenas se estiver vazia)
+   */
+  async deleteFolder(
+    companyId: string,
+    folderId: string
+  ): Promise<{ success: boolean; message: string; details?: any }> {
+    try {
+      console.log('🗑️ Excluindo pasta:', { folderId, companyId })
+
+      const response = await fetch(
+        `${this.baseUrl}/company/folders?company_id=${companyId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            folder_id: folderId
+          })
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // Retornar detalhes do erro para tratamento específico
+        return {
+          success: false,
+          message: data.message || `HTTP ${response.status}: ${response.statusText}`,
+          details: data.details || null
+        }
+      }
+
+      if (!data.success) {
+        return {
+          success: false,
+          message: data.message || 'Erro ao excluir pasta',
+          details: data.details || null
+        }
+      }
+
+      console.log('✅ Pasta excluída:', data.message)
+      return {
+        success: true,
+        message: data.message,
+        details: data.data || null
+      }
+
+    } catch (error) {
+      console.error('❌ Erro ao excluir pasta:', error)
+      return {
+        success: false,
+        message: 'Erro de conexão ao excluir pasta',
+        details: null
+      }
     }
   }
 

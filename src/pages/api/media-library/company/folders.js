@@ -254,12 +254,237 @@ export default async function handler(req, res) {
     }
 
     // =====================================================
+    // PUT: EDITAR PASTA EXISTENTE
+    // =====================================================
+
+    if (req.method === 'PUT') {
+      const { folder_id, name, icon, description } = req.body
+
+      if (!folder_id) {
+        return res.status(400).json({
+          error: 'Folder ID obrigatório',
+          message: 'O ID da pasta é obrigatório para edição'
+        })
+      }
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({
+          error: 'Nome obrigatório',
+          message: 'O nome da pasta é obrigatório'
+        })
+      }
+
+      console.log('✏️ Editando pasta:', { folder_id, name, company_id })
+
+      try {
+        // Verificar se pasta existe e pertence à empresa
+        const { data: existingFolder, error: fetchError } = await supabase
+          .from('company_folders')
+          .select('*')
+          .eq('id', folder_id)
+          .eq('company_id', company_id)
+          .single()
+
+        if (fetchError || !existingFolder) {
+          return res.status(404).json({
+            error: 'Pasta não encontrada',
+            message: 'Pasta não existe ou não pertence a esta empresa'
+          })
+        }
+
+        // Verificar se já existe pasta com mesmo nome no mesmo nível (exceto a própria pasta)
+        const { data: duplicateFolder } = await supabase
+          .from('company_folders')
+          .select('id')
+          .eq('company_id', company_id)
+          .eq('name', name.trim())
+          .eq('parent_id', existingFolder.parent_id || null)
+          .neq('id', folder_id)
+          .single()
+
+        if (duplicateFolder) {
+          return res.status(400).json({
+            error: 'Nome já existe',
+            message: 'Já existe uma pasta com este nome neste local'
+          })
+        }
+
+        // Recalcular path se nome mudou
+        let newPath = existingFolder.path
+        if (name.trim() !== existingFolder.name) {
+          newPath = await calculateFolderPath(existingFolder.parent_id, name.trim(), company_id)
+        }
+
+        // Atualizar pasta
+        const { data, error } = await supabase
+          .from('company_folders')
+          .update({
+            name: name.trim(),
+            path: newPath,
+            icon: icon || existingFolder.icon,
+            description: description !== undefined ? description : existingFolder.description,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', folder_id)
+          .eq('company_id', company_id)
+          .select()
+          .single()
+
+        if (error) {
+          throw error
+        }
+
+        console.log('✅ Pasta editada com sucesso:', data.name, 'Path:', data.path)
+
+        return res.status(200).json({
+          success: true,
+          data: data,
+          message: 'Pasta editada com sucesso'
+        })
+
+      } catch (dbError) {
+        console.error('❌ Erro ao editar pasta:', dbError)
+        
+        return res.status(500).json({
+          error: 'Erro ao editar pasta',
+          message: dbError.message || 'Erro interno do servidor'
+        })
+      }
+    }
+
+    // =====================================================
+    // DELETE: EXCLUIR PASTA COM VALIDAÇÕES
+    // =====================================================
+
+    if (req.method === 'DELETE') {
+      const { folder_id } = req.body
+
+      if (!folder_id) {
+        return res.status(400).json({
+          error: 'Folder ID obrigatório',
+          message: 'O ID da pasta é obrigatório para exclusão'
+        })
+      }
+
+      console.log('🗑️ Tentando excluir pasta:', { folder_id, company_id })
+
+      try {
+        // Verificar se pasta existe e pertence à empresa
+        const { data: existingFolder, error: fetchError } = await supabase
+          .from('company_folders')
+          .select('*')
+          .eq('id', folder_id)
+          .eq('company_id', company_id)
+          .single()
+
+        if (fetchError || !existingFolder) {
+          return res.status(404).json({
+            error: 'Pasta não encontrada',
+            message: 'Pasta não existe ou não pertence a esta empresa'
+          })
+        }
+
+        // Verificar se pasta tem subpastas
+        const { data: subfolders, error: subfoldersError } = await supabase
+          .from('company_folders')
+          .select('id, name')
+          .eq('company_id', company_id)
+          .eq('parent_id', folder_id)
+
+        if (subfoldersError) {
+          throw subfoldersError
+        }
+
+        if (subfolders && subfolders.length > 0) {
+          return res.status(400).json({
+            error: 'Pasta contém subpastas',
+            message: `Não é possível excluir. A pasta contém ${subfolders.length} subpasta(s)`,
+            details: {
+              type: 'has_subfolders',
+              count: subfolders.length,
+              subfolders: subfolders.map(f => f.name)
+            }
+          })
+        }
+
+        // Verificar se pasta tem arquivos na company_media_library
+        const { data: companyFiles, error: companyFilesError } = await supabase
+          .from('company_media_library')
+          .select('id, original_filename')
+          .eq('company_id', company_id)
+          .eq('folder_id', folder_id)
+
+        if (companyFilesError) {
+          console.warn('⚠️ Erro ao verificar company_media_library:', companyFilesError)
+        }
+
+        const companyFilesCount = companyFiles ? companyFiles.length : 0
+
+        // Verificar se pasta tem arquivos na lead_media_unified
+        const { data: leadFiles, error: leadFilesError } = await supabase
+          .from('lead_media_unified')
+          .select('id, original_filename')
+          .eq('company_id', company_id)
+          .eq('folder_id', folder_id)
+
+        if (leadFilesError) {
+          console.warn('⚠️ Erro ao verificar lead_media_unified:', leadFilesError)
+        }
+
+        const leadFilesCount = leadFiles ? leadFiles.length : 0
+        const totalFiles = companyFilesCount + leadFilesCount
+
+        if (totalFiles > 0) {
+          return res.status(400).json({
+            error: 'Pasta contém arquivos',
+            message: `Não é possível excluir. A pasta contém ${totalFiles} arquivo(s)`,
+            details: {
+              type: 'has_files',
+              total_files: totalFiles,
+              company_files: companyFilesCount,
+              lead_files: leadFilesCount
+            }
+          })
+        }
+
+        // Pasta está vazia, pode excluir
+        const { error: deleteError } = await supabase
+          .from('company_folders')
+          .delete()
+          .eq('id', folder_id)
+          .eq('company_id', company_id)
+
+        if (deleteError) {
+          throw deleteError
+        }
+
+        console.log('✅ Pasta excluída com sucesso:', existingFolder.name)
+
+        return res.status(200).json({
+          success: true,
+          message: `Pasta "${existingFolder.name}" excluída com sucesso`,
+          data: {
+            deleted_folder: existingFolder
+          }
+        })
+
+      } catch (dbError) {
+        console.error('❌ Erro ao excluir pasta:', dbError)
+        
+        return res.status(500).json({
+          error: 'Erro ao excluir pasta',
+          message: dbError.message || 'Erro interno do servidor'
+        })
+      }
+    }
+
+    // =====================================================
     // MÉTODO NÃO PERMITIDO
     // =====================================================
 
     return res.status(405).json({
       error: 'Method not allowed',
-      message: 'Apenas GET e POST são permitidos neste endpoint'
+      message: 'Apenas GET, POST, PUT e DELETE são permitidos neste endpoint'
     })
 
   } catch (error) {

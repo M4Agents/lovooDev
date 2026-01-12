@@ -41,6 +41,15 @@ export const MediaLibraryTabNew: React.FC<MediaLibraryTabNewProps> = ({
   const [selectedFilesNew, setSelectedFilesNew] = useState<File[]>([])
   const [selectedFolderIdNew, setSelectedFolderIdNew] = useState<string | null>(null)
   const [uploadingNew, setUploadingNew] = useState(false)
+  
+  // Estados para editar/excluir pastas
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [selectedFolder, setSelectedFolder] = useState<CompanyFolder | null>(null)
+  const [editFolderName, setEditFolderName] = useState('')
+  const [editFolderIcon, setEditFolderIcon] = useState('')
+  const [editFolderDescription, setEditFolderDescription] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   console.log('🔥🔥🔥 COMPONENTE NOVO CARREGADO - 2026-01-10 10:52 🔥🔥🔥')
 
@@ -124,6 +133,81 @@ export const MediaLibraryTabNew: React.FC<MediaLibraryTabNewProps> = ({
 
   const handleSendToChat = (file: MediaFile) => {
     console.log('📤 NOVO - Enviando arquivo para chat:', file.original_filename)
+  }
+
+  // =====================================================
+  // HANDLERS PARA EDITAR/EXCLUIR PASTAS
+  // =====================================================
+
+  const handleEditFolder = (folder: CompanyFolder) => {
+    console.log('✏️ Editando pasta:', folder.name)
+    setSelectedFolder(folder)
+    setEditFolderName(folder.name)
+    setEditFolderIcon(folder.icon)
+    setEditFolderDescription(folder.description || '')
+    setShowEditModal(true)
+  }
+
+  const handleDeleteFolder = (folder: CompanyFolder) => {
+    console.log('🗑️ Tentando excluir pasta:', folder.name)
+    setSelectedFolder(folder)
+    setDeleteError(null)
+    setShowDeleteModal(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!selectedFolder || !editFolderName.trim()) return
+
+    try {
+      console.log('💾 Salvando edição da pasta:', editFolderName)
+      
+      await mediaLibraryApi.editFolder(companyId, selectedFolder.id, {
+        name: editFolderName.trim(),
+        icon: editFolderIcon,
+        description: editFolderDescription
+      })
+
+      // Recarregar lista de pastas
+      await fetchMediaData()
+      
+      // Fechar modal
+      setShowEditModal(false)
+      setSelectedFolder(null)
+      
+      console.log('✅ Pasta editada com sucesso')
+    } catch (error) {
+      console.error('❌ Erro ao editar pasta:', error)
+      alert('Erro ao editar pasta: ' + (error as Error).message)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!selectedFolder) return
+
+    try {
+      console.log('🗑️ Confirmando exclusão da pasta:', selectedFolder.name)
+      
+      const result = await mediaLibraryApi.deleteFolder(companyId, selectedFolder.id)
+      
+      if (result.success) {
+        // Recarregar lista de pastas
+        await fetchMediaData()
+        
+        // Fechar modal
+        setShowDeleteModal(false)
+        setSelectedFolder(null)
+        setDeleteError(null)
+        
+        console.log('✅ Pasta excluída com sucesso')
+      } else {
+        // Mostrar erro específico
+        setDeleteError(result.message)
+        console.log('❌ Não foi possível excluir:', result.message)
+      }
+    } catch (error) {
+      console.error('❌ Erro ao excluir pasta:', error)
+      setDeleteError('Erro de conexão ao excluir pasta')
+    }
   }
 
   if (loading) {
@@ -288,9 +372,9 @@ export const MediaLibraryTabNew: React.FC<MediaLibraryTabNewProps> = ({
             {companyFolders.map(folder => (
               <div
                 key={folder.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 flex-1 cursor-pointer">
                   <span className="text-lg">{folder.icon}</span>
                   <div>
                     <div className="font-medium text-gray-900">{folder.name}</div>
@@ -299,8 +383,36 @@ export const MediaLibraryTabNew: React.FC<MediaLibraryTabNewProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                
+                {/* Botões de ação - aparecem no hover */}
+                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEditFolder(folder)
+                    }}
+                    className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                    title="Editar pasta"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteFolder(folder)
+                    }}
+                    className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                    title="Excluir pasta"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                  
+                  <svg className="w-4 h-4 text-gray-400 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -504,6 +616,165 @@ export const MediaLibraryTabNew: React.FC<MediaLibraryTabNewProps> = ({
                   `🔥 ENVIAR NOVO ${selectedFilesNew.length > 0 ? `(${selectedFilesNew.length})` : ''}`
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO DE PASTA */}
+      {showEditModal && selectedFolder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">✏️ Editar Pasta</h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Nome da pasta */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome da pasta *
+                </label>
+                <input
+                  type="text"
+                  value={editFolderName}
+                  onChange={(e) => setEditFolderName(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Digite o nome da pasta"
+                />
+              </div>
+
+              {/* Ícone da pasta */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ícone
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {['📁', '📂', '📢', '📦', '📄', '📋', '🎨', '🎬', '📷', '💰'].map(icon => (
+                    <button
+                      key={icon}
+                      onClick={() => setEditFolderIcon(icon)}
+                      className={`p-2 text-lg border rounded-md hover:bg-gray-50 ${
+                        editFolderIcon === icon ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                      }`}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descrição
+                </label>
+                <textarea
+                  value={editFolderDescription}
+                  onChange={(e) => setEditFolderDescription(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={2}
+                  placeholder="Descrição opcional da pasta"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={!editFolderName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {showDeleteModal && selectedFolder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">🗑️ Excluir Pasta</h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center space-x-3 mb-3">
+                <span className="text-2xl">{selectedFolder.icon}</span>
+                <div>
+                  <div className="font-medium text-gray-900">{selectedFolder.name}</div>
+                  <div className="text-sm text-gray-500">{selectedFolder.description}</div>
+                </div>
+              </div>
+
+              {deleteError ? (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                  <div className="flex items-start space-x-2">
+                    <svg className="w-5 h-5 text-red-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <div className="text-sm font-medium text-red-800">Não é possível excluir</div>
+                      <div className="text-sm text-red-700 mt-1">{deleteError}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4">
+                  <div className="flex items-start space-x-2">
+                    <svg className="w-5 h-5 text-yellow-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <div>
+                      <div className="text-sm font-medium text-yellow-800">Atenção</div>
+                      <div className="text-sm text-yellow-700 mt-1">
+                        Esta ação não pode ser desfeita. A pasta será excluída permanentemente.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              {!deleteError && (
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                >
+                  Excluir Pasta
+                </button>
+              )}
             </div>
           </div>
         </div>
