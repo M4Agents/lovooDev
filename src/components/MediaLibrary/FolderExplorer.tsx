@@ -11,7 +11,9 @@ import {
   ChevronRight,
   ChevronDown,
   Home,
-  Loader2
+  Loader2,
+  Edit3,
+  Trash2
 } from 'lucide-react'
 
 // =====================================================
@@ -23,6 +25,8 @@ interface FolderExplorerProps {
   currentFolder?: MediaFolder
   onFolderSelect: (folder?: MediaFolder) => void
   loading: boolean
+  onEditFolder?: (folder: MediaFolder) => void
+  onDeleteFolder?: (folder: MediaFolder) => void
 }
 
 interface FolderTreeItemProps {
@@ -33,6 +37,8 @@ interface FolderTreeItemProps {
   onSelect: (folder: MediaFolder) => void
   onToggle: (folderId: string) => void
   children?: MediaFolder[]
+  onEditFolder?: (folder: MediaFolder) => void
+  onDeleteFolder?: (folder: MediaFolder) => void
 }
 
 // =====================================================
@@ -46,14 +52,16 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
   isExpanded,
   onSelect,
   onToggle,
-  children = []
+  children = [],
+  onEditFolder,
+  onDeleteFolder
 }) => {
   const hasChildren = children.length > 0
 
   return (
     <div>
       <div
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors group ${
           isSelected
             ? 'bg-blue-100 text-blue-700'
             : 'text-gray-700 hover:bg-gray-100'
@@ -100,6 +108,37 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
             {folder.file_count}
           </span>
         )}
+
+        {/* Botões de ação - aparecem no hover */}
+        {(onEditFolder || onDeleteFolder) && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onEditFolder && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEditFolder(folder)
+                }}
+                className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                title="Editar pasta"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+            
+            {onDeleteFolder && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteFolder(folder)
+                }}
+                className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                title="Excluir pasta"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Subpastas */}
@@ -115,6 +154,8 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
               onSelect={onSelect}
               expandedFolders={[]} // Será passado pelo container pai
               onToggle={onToggle}
+              onEditFolder={onEditFolder}
+              onDeleteFolder={onDeleteFolder}
             />
           ))}
         </div>
@@ -135,6 +176,8 @@ interface FolderTreeItemContainerProps {
   onSelect: (folder: MediaFolder) => void
   expandedFolders: string[]
   onToggle: (folderId: string) => void
+  onEditFolder?: (folder: MediaFolder) => void
+  onDeleteFolder?: (folder: MediaFolder) => void
 }
 
 const FolderTreeItemContainer: React.FC<FolderTreeItemContainerProps> = ({
@@ -144,7 +187,9 @@ const FolderTreeItemContainer: React.FC<FolderTreeItemContainerProps> = ({
   currentFolder,
   onSelect,
   expandedFolders,
-  onToggle
+  onToggle,
+  onEditFolder,
+  onDeleteFolder
 }) => {
   const isSelected = currentFolder?.id === folder.id
   const isExpanded = expandedFolders.includes(folder.id)
@@ -159,6 +204,8 @@ const FolderTreeItemContainer: React.FC<FolderTreeItemContainerProps> = ({
       onSelect={onSelect}
       onToggle={onToggle}
       children={children}
+      onEditFolder={onEditFolder}
+      onDeleteFolder={onDeleteFolder}
     />
   )
 }
@@ -171,7 +218,9 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   folders,
   currentFolder,
   onFolderSelect,
-  loading
+  loading,
+  onEditFolder,
+  onDeleteFolder
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<string[]>([])
 
@@ -248,6 +297,8 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
               onSelect={handleSelect}
               expandedFolders={expandedFolders}
               onToggle={handleToggle}
+              onEditFolder={onEditFolder}
+              onDeleteFolder={onDeleteFolder}
             />
           ))}
         </div>
