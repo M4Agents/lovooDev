@@ -295,10 +295,10 @@ class MediaLibraryApiService {
    */
   async getCompanyFolders(companyId: string): Promise<CompanyFolder[]> {
     try {
-      console.log('📁 FIX - Buscando pastas da empresa:', companyId)
+      console.log('📁 ORIGINAL - Buscando pastas da empresa:', companyId)
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders-fix?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders?company_id=${companyId}&t=${Date.now()}`,
         {
           method: 'GET',
           headers: {
@@ -341,10 +341,10 @@ class MediaLibraryApiService {
     }
   ): Promise<CompanyFolder> {
     try {
-      console.log('📁 FIX - Criando nova pasta:', folderData)
+      console.log('📁 ORIGINAL - Criando nova pasta:', folderData)
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders-fix?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders?company_id=${companyId}&t=${Date.now()}`,
         {
           method: 'POST',
           headers: {
@@ -386,10 +386,10 @@ class MediaLibraryApiService {
     }
   ): Promise<CompanyFolder> {
     try {
-      console.log('✏️ FIX - Editando pasta:', { folderId, folderData })
+      console.log('✏️ ORIGINAL - Editando pasta:', { folderId, folderData })
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders-fix?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders?company_id=${companyId}&t=${Date.now()}`,
         {
           method: 'PUT',
           headers: {
@@ -430,10 +430,10 @@ class MediaLibraryApiService {
     folderId: string
   ): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      console.log('🗑️ FIX - Excluindo pasta:', { folderId, companyId })
+      console.log('🗑️ ORIGINAL - Excluindo pasta:', { folderId, companyId })
 
       const response = await fetch(
-        `${this.baseUrl}/company/folders-fix?company_id=${companyId}`,
+        `${this.baseUrl}/company/folders?company_id=${companyId}&t=${Date.now()}`,
         {
           method: 'DELETE',
           headers: {
