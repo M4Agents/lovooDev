@@ -206,7 +206,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         formData.append('folder_id', selectedFolderId)
         formData.append('organize_to_folder', 'true')
         
-        const response = await fetch('/api/media-management/files/upload', {
+        const response = await fetch('/api/media-management/files/upload-cache-bypass-final', {
           method: 'POST',
           body: formData
         })
