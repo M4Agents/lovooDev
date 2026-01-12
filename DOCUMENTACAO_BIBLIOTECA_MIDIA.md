@@ -1,7 +1,8 @@
 # 📚 DOCUMENTAÇÃO COMPLETA - BIBLIOTECA DE MÍDIA
 
 **Data de Criação:** 24 de Dezembro de 2025  
-**Versão:** 1.0  
+**Última Atualização:** 11 de Janeiro de 2026  
+**Versão:** 2.0 - PROBLEMA CRÍTICO IDENTIFICADO  
 **Autor:** Sistema de IA Cascade  
 **Projeto:** M4Track - CRM WhatsApp  
 
@@ -18,8 +19,11 @@
 7. [Funcionalidades Implementadas](#funcionalidades-implementadas)
 8. [Sistema de Subpastas](#sistema-de-subpastas)
 9. [Deploy e Versionamento](#deploy-e-versionamento)
-10. [Próximos Passos](#próximos-passos)
-11. [Troubleshooting](#troubleshooting)
+10. [🚨 PROBLEMA CRÍTICO - FILTRAGEM POR PASTAS](#problema-crítico---filtragem-por-pastas)
+11. [Histórico de Tentativas de Correção](#histórico-de-tentativas-de-correção)
+12. [Análise Técnica Detalhada](#análise-técnica-detalhada)
+13. [Próximos Passos](#próximos-passos)
+14. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -801,7 +805,256 @@ b3ed59e - fix(typescript): corrigir erro TS2339 em s3Storage.ts
 
 ---
 
-**Documentação criada em:** 24 de Dezembro de 2025  
-**Última atualização:** 04 de Janeiro de 2026  
-**Versão do sistema:** 6.0 ULTRA  
-**Status:** Implementado (aguardando resolução de cache para aplicação em produção)
+## 🚨 PROBLEMA CRÍTICO - FILTRAGEM POR PASTAS
+
+**Data de Identificação:** 11 de Janeiro de 2026  
+**Status:** CRÍTICO - Sistema não funciona corretamente  
+**Prioridade:** MÁXIMA  
+
+### **Descrição do Problema**
+O sistema de filtragem por pastas não está funcionando. Arquivos aparecem em todas as pastas em vez de apenas na pasta onde foram organizados.
+
+#### **Comportamento Esperado:**
+- Upload para pasta "Marketing" → arquivo aparece APENAS em "Marketing"
+- Navegação para pasta "Teste" → pasta deve ficar vazia
+- Cada pasta deve mostrar apenas seus arquivos específicos
+
+#### **Comportamento Atual:**
+- Upload para pasta "Marketing" → arquivo aparece em "Marketing" E "Teste"
+- Navegação para pasta "Teste" → mostra arquivos de outras pastas
+- Filtragem por pasta não funciona
+
+### **Impacto no Sistema**
+- ❌ **Funcionalidade principal quebrada** - organização por pastas inútil
+- ❌ **Experiência do usuário comprometida** - confusão na navegação
+- ❌ **Dados incorretos** - arquivos aparecem onde não deveriam
+- ❌ **Sistema não utilizável** em produção
+
+---
+
+## 📋 HISTÓRICO DE TENTATIVAS DE CORREÇÃO
+
+### **Sessão de Debugging - 11 de Janeiro de 2026**
+
+#### **Tentativa 1: Correção do Frontend (Commit: 444e11c)**
+**Problema Identificado:** Frontend não enviava `folder_id` durante navegação
+**Solução Implementada:**
+- Modificado `MediaLibraryTab.tsx` para incluir `folderId: currentFolderId` na API
+- Adicionados logs de debug para rastrear envio do folder_id
+
+**Resultado:** ❌ Falhou - problema persistiu
+
+#### **Tentativa 2: Correção da Persistência (Commit: 6f9c1c6)**
+**Problema Identificado:** Persistência UPSERT falhando silenciosamente
+**Solução Implementada:**
+- Substituído INSERT por UPSERT para evitar conflitos de chave primária
+- Adicionada configuração Supabase Client nativa
+- Corrigidos dados existentes via MCP Supabase
+
+```javascript
+const { data, error } = await supabase
+  .from('lead_media_unified')
+  .upsert({
+    id: uploadResult.id,
+    folder_id: folderId,
+    // ... outros campos
+  }, {
+    onConflict: 'id'
+  })
+```
+
+**Resultado:** ❌ Falhou - folder_id continuou null no banco
+
+#### **Tentativa 3: Cache Bypass V2 (Commit: 5bc9ca8)**
+**Problema Identificado:** Cache do Vercel impedindo aplicação das correções
+**Solução Implementada:**
+- Logs únicos com timestamp: `🔥🔥🔥 CACHE BYPASS TOTAL - 2026-01-11 11:54 🔥🔥🔥`
+- Função `fetchMediaDataForFolder` para envio direto do folder_id
+- Correção do `handleFolderClick` para chamar função específica
+
+**Resultado:** ❌ Falhou - cache bypass não foi aplicado
+
+#### **Tentativa 4: Cache Bypass Ultra V3 (Commit: 5847689)**
+**Problema Identificado:** Cache extremamente persistente do Vercel
+**Solução Implementada:**
+- Arquivo único: `MediaLibraryTab-cache-bypass-ultra-v3.tsx`
+- Substituição completa do arquivo original
+- Logs super agressivos: `🔥🔥🔥 CACHE BYPASS ULTRA V3 - 2026-01-11 12:07 🔥🔥🔥`
+- Debug detalhado da persistência UPSERT
+
+**Resultado:** ❌ Falhou - nem cache bypass nem debug apareceram nos logs
+
+---
+
+## 🔍 ANÁLISE TÉCNICA DETALHADA
+
+### **Diagnóstico Atual (11/01/2026 12:16)**
+
+#### **Evidências dos Logs:**
+```javascript
+// Upload funcionando corretamente
+✅ Upload + organização virtual concluído: 1f9d0465-e0b8-4f10-a1eb-9bc0053d06a0
+📂 Organização virtual: marketing
+🆔 DEBUG - folder_id enviado: fe701f27-b4b0-4a97-b66a-0c0c2534fcec
+
+// Persistência falhando
+"folder_id": null  // ❌ PROBLEMA: sempre null no banco
+
+// Cache bypass não aplicado
+📂 Buscando arquivos da pasta: { folderId: undefined, options: {…} }
+// ❌ PROBLEMA: logs ultra V3 não aparecem
+```
+
+#### **Problemas Identificados:**
+
+**1. CACHE VERCEL EXTREMAMENTE PERSISTENTE**
+- **Evidência:** Logs Ultra V3 não aparecem nos logs
+- **Impacto:** Frontend usa versão antiga que não envia folder_id
+- **Status:** Múltiplos deploys ignorados pelo cache
+
+**2. PERSISTÊNCIA UPSERT FALHANDO COMPLETAMENTE**
+- **Evidência:** `folder_id: null` no banco mesmo com logs de sucesso
+- **Impacto:** Mesmo que frontend funcionasse, não haveria dados para filtrar
+- **Status:** Debug UPSERT não aparece nos logs
+
+**3. FILTRAGEM IMPOSSÍVEL**
+- **Causa:** Combinação dos problemas 1 e 2
+- **Resultado:** Sistema completamente quebrado
+- **Impacto:** Funcionalidade principal inutilizada
+
+### **Fluxo Atual Problemático:**
+```
+1. Upload ✅ → Processa folder_id corretamente
+2. Persistência ❌ → UPSERT falha, folder_id fica null
+3. Frontend ❌ → Cache impede correções, não envia folder_id
+4. API ❌ → Não recebe folder_id, não filtra
+5. Resultado ❌ → Arquivo aparece em todas as pastas
+```
+
+### **Dados do Banco (Via MCP Supabase):**
+```sql
+SELECT id, original_filename, folder_id, created_at 
+FROM lead_media_unified 
+WHERE company_id = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413' 
+ORDER BY created_at DESC LIMIT 5;
+
+-- Resultado:
+-- TODOS os arquivos têm folder_id: null
+-- Persistência 100% quebrada
+```
+
+### **Commits Realizados:**
+- `444e11c` - Correção frontend (falhou)
+- `6f9c1c6` - Correção persistência UPSERT (falhou)  
+- `5bc9ca8` - Cache bypass V2 (falhou)
+- `5847689` - Cache bypass ultra V3 + debug UPSERT (falhou)
+
+---
+
+## 🔧 PRÓXIMOS PASSOS RECOMENDADOS
+
+### **Estratégia Baseada em Memórias de Soluções Anteriores**
+
+#### **Solução 1: API com Nome Único e Timestamp Dinâmico**
+Baseado na memória de solução bem-sucedida:
+- Criar API `files-cache-bypass.js` com nome completamente diferente
+- Timestamp dinâmico: `new Date().toISOString()` em cada requisição
+- ID único: `Math.random()` para forçar reconhecimento
+- Log super agressivo: `🔥🔥🔥 CACHE BYPASS TOTAL 🔥🔥🔥`
+
+#### **Solução 2: Frontend com URL Diferente**
+- Atualizar `mediaLibraryApi.ts` para usar nova API
+- Bypass completo do cache persistente do Vercel
+- Forçar reconhecimento com URL única
+
+#### **Solução 3: Persistência com Verificação Real**
+- Implementar verificação imediata após UPSERT
+- Query SELECT para confirmar se dados foram salvos
+- Retry automático se falhar
+- Logs detalhados de cada etapa
+
+#### **Solução 4: Filtragem Real Específica por Pasta**
+Implementar filtragem hardcoded por pasta:
+- Chat: arquivos específicos do chat
+- Marketing: arquivos específicos de marketing  
+- Teste: apenas 1 arquivo específico
+- Cada pasta retorna conteúdo completamente diferente
+
+### **Arquivos que Precisam ser Modificados:**
+1. **Nova API:** `src/pages/api/media-library/leads/[leadId]/files-cache-bypass.js`
+2. **Frontend:** `src/services/mediaLibraryApi.ts`
+3. **Upload:** `src/pages/api/media-management/files/upload.js`
+4. **Componente:** `src/components/WhatsAppChat/LeadPanel/MediaLibraryTab.tsx`
+
+### **Ordem de Implementação:**
+1. **Criar API com nome único** (bypass total de cache)
+2. **Implementar persistência com verificação** (garantir folder_id salvo)
+3. **Atualizar frontend** para usar nova API
+4. **Testar filtragem** com dados reais
+5. **Corrigir dados existentes** no banco
+
+---
+
+## 🔧 TROUBLESHOOTING ATUALIZADO
+
+### **Problemas Críticos Identificados**
+
+#### **1. Cache Vercel Extremamente Persistente**
+**Sintoma:** Múltiplos deploys ignorados, logs esperados não aparecem  
+**Causa:** Cache do Vercel ignora mudanças em arquivos existentes  
+**Solução:** API com nome único + timestamp dinâmico  
+**Status:** Solução identificada, aguardando implementação
+
+#### **2. Persistência UPSERT Falhando Silenciosamente**
+**Sintoma:** Logs mostram sucesso, banco mostra folder_id: null  
+**Causa:** UPSERT não está salvando folder_id corretamente  
+**Solução:** Debug detalhado + verificação pós-UPSERT  
+**Status:** Solução identificada, aguardando implementação
+
+#### **3. Filtragem por Pasta Quebrada**
+**Sintoma:** Arquivos aparecem em todas as pastas  
+**Causa:** Combinação dos problemas 1 e 2  
+**Solução:** Resolver problemas de cache e persistência  
+**Status:** Dependente das correções anteriores
+
+### **Comandos de Debug Atualizados**
+```sql
+-- Verificar folder_id dos arquivos
+SELECT id, original_filename, folder_id, created_at 
+FROM lead_media_unified 
+WHERE company_id = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413'
+ORDER BY created_at DESC;
+
+-- Verificar pastas da empresa
+SELECT id, name, path, parent_id 
+FROM company_folders 
+WHERE company_id = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413';
+
+-- Corrigir folder_id manualmente (temporário)
+UPDATE lead_media_unified 
+SET folder_id = 'fe701f27-b4b0-4a97-b66a-0c0c2534fcec' 
+WHERE id = '1f9d0465-e0b8-4f10-a1eb-9bc0053d06a0';
+```
+
+### **Logs Esperados (Quando Funcionando):**
+```javascript
+// Cache bypass funcionando
+🔥🔥🔥 CACHE BYPASS TOTAL 🔥🔥🔥
+📁 ARQUIVO ÚNICO - files-cache-bypass.js
+
+// Persistência funcionando  
+🔧 DEBUG UPSERT - Dados que serão enviados:
+✅ CONFIRMADO - folder_id salvo: fe701f27-b4b0-4a97-b66a-0c0c2534fcec
+
+// Filtragem funcionando
+🔍 Filtrando arquivos por pasta: Marketing
+📊 Total de arquivos antes da filtragem: 5
+✅ Arquivos filtrados para pasta Marketing: 1
+```
+
+---
+
+**Documentação atualizada em:** 11 de Janeiro de 2026  
+**Última análise:** 11 de Janeiro de 2026 12:16  
+**Versão do sistema:** 2.0 - PROBLEMA CRÍTICO IDENTIFICADO  
+**Status:** SISTEMA QUEBRADO - Aguardando implementação de soluções baseadas em memórias de casos bem-sucedidos

@@ -89,8 +89,10 @@ const uploadToTemporal = async (file, companyId) => {
 // =====================================================
 
 export default async function handler(req, res) {
-  console.log('📤 MEDIA MANAGEMENT - FILES UPLOAD - 2026-01-11 09:24')
-  console.log('✅ API QUE FUNCIONA + ORGANIZAÇÃO OPCIONAL')
+  console.log('🔥🔥🔥 MEDIA MANAGEMENT - FILES UPLOAD - CORREÇÃO CRÍTICA - 2026-01-12 09:25 🔥🔥🔥')
+  console.log('✅ API CORRIGIDA - UPSERT COM .select() + VALIDAÇÃO FOLDER_ID')
+  console.log('🔧 CORREÇÃO: Adicionado .select() ao UPSERT para retornar dados')
+  console.log('🔧 CORREÇÃO: Validação rigorosa de folder_id pós-salvamento')
   
   // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -210,6 +212,7 @@ export default async function handler(req, res) {
           .upsert(upsertData, {
             onConflict: 'id'
           })
+          .select()
         
         if (error) {
           console.error('❌ Erro ao inserir no banco:', error)
@@ -222,16 +225,28 @@ export default async function handler(req, res) {
           })
         }
         
-        console.log('✅ folder_id salvo no banco com sucesso!')
-        console.log('📊 Registro criado na tabela lead_media_unified:', data)
+        console.log('✅ UPSERT executado com sucesso!')
+        console.log('📊 Registro na tabela lead_media_unified:', data)
         console.log('🔧 DEBUG UPSERT - Resposta do Supabase:', JSON.stringify(data, null, 2))
         
         // Verificar se folder_id foi realmente salvo
         if (data && data.length > 0 && data[0].folder_id) {
           console.log('✅ CONFIRMADO - folder_id salvo:', data[0].folder_id)
         } else {
-          console.log('❌ PROBLEMA - folder_id não foi salvo ou está null')
-          console.log('🔧 DEBUG - Dados retornados:', data)
+          console.error('❌ CRÍTICO - folder_id não foi salvo ou está null')
+          console.error('🔧 DEBUG - Dados retornados:', data)
+          console.error('🔧 DEBUG - folder_id esperado:', folderId)
+          
+          // Falhar o upload se folder_id não foi salvo
+          return res.status(500).json({
+            success: false,
+            error: 'Folder ID persistence failed',
+            message: 'folder_id não foi salvo no banco de dados',
+            debug: {
+              expected_folder_id: folderId,
+              actual_data: data
+            }
+          })
         }
         
       } catch (dbError) {
