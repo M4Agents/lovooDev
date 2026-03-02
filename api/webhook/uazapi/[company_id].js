@@ -491,6 +491,32 @@ async function processMessage(payload) {
         console.error('⚠️ EXCEPTION AO PROCESSAR LEAD:', leadException.message);
         // NÃO FALHA - sistema continua funcionando
       }
+
+      // 🔔 CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS
+      // Quando lead responde, cancelar mensagens agendadas se configurado
+      // 🔥 WEBHOOK VERSION: 2026-03-02-17:50 - AUTO-CANCEL ENABLED
+      try {
+        console.log('🔥 WEBHOOK AUTO-CANCEL VERSION: 2026-03-02-17:50 [company_id]');
+        console.log('🔔 VERIFICANDO CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS...');
+        
+        const { data: cancelResult, error: cancelError } = await supabase
+          .rpc('auto_cancel_scheduled_messages_on_reply', {
+            p_conversation_id: conversationId,
+            p_company_id: company.id
+          });
+        
+        if (cancelError) {
+          console.error('❌ ERRO NO CANCELAMENTO AUTOMÁTICO:', cancelError);
+        } else if (cancelResult && cancelResult.cancelled_count > 0) {
+          console.log(`✅ CANCELAMENTO AUTOMÁTICO: ${cancelResult.cancelled_count} mensagem(ns) cancelada(s)`);
+          console.log('📋 IDs cancelados:', cancelResult.cancelled_ids);
+        } else {
+          console.log('ℹ️ CANCELAMENTO AUTOMÁTICO: Nenhuma mensagem para cancelar');
+        }
+      } catch (cancelError) {
+        console.error('❌ EXCEPTION no cancelamento automático:', cancelError);
+        // Não falhar o webhook por causa disso - apenas log
+      }
     }
     
     return { 
