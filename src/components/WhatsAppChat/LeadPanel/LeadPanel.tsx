@@ -1153,53 +1153,51 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           </div>
 
           {/* Cancelamento Automático */}
-          {formData.recurring_type !== 'none' && (
-            <div className="space-y-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.cancel_if_lead_replies || false}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    cancel_if_lead_replies: e.target.checked
-                  }))}
-                  className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  🔔 Cancelar automaticamente se o lead responder
-                </span>
-              </label>
+          <div className="space-y-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.cancel_if_lead_replies || false}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  cancel_if_lead_replies: e.target.checked
+                }))}
+                className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                🔔 Cancelar automaticamente se o lead responder
+              </span>
+            </label>
 
-              {formData.cancel_if_lead_replies && (
-                <div className="ml-6 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={formData.cancel_scope === 'next_only'}
-                      onChange={() => setFormData(prev => ({
-                        ...prev,
-                        cancel_scope: 'next_only'
-                      }))}
-                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Cancelar apenas a próxima mensagem</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={formData.cancel_scope === 'all_future'}
-                      onChange={() => setFormData(prev => ({
-                        ...prev,
-                        cancel_scope: 'all_future'
-                      }))}
-                      className="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500"
-                    />
-                    <span className="text-sm text-gray-700">Cancelar TODAS as mensagens futuras</span>
-                  </label>
-                </div>
-              )}
-            </div>
-          )}
+            {formData.cancel_if_lead_replies && (
+              <div className="ml-6 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={formData.cancel_scope === 'next_only'}
+                    onChange={() => setFormData(prev => ({
+                      ...prev,
+                      cancel_scope: 'next_only'
+                    }))}
+                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Cancelar apenas a próxima mensagem agendada</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={formData.cancel_scope === 'all_future'}
+                    onChange={() => setFormData(prev => ({
+                      ...prev,
+                      cancel_scope: 'all_future'
+                    }))}
+                    className="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500"
+                  />
+                  <span className="text-sm text-gray-700">Cancelar TODAS as mensagens futuras agendadas</span>
+                </label>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
