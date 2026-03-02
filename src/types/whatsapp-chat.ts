@@ -89,9 +89,6 @@ export interface ChatScheduledMessage {
   updated_at: Date
   contact_phone?: string
   contact_name?: string
-  cancel_if_lead_replies?: boolean
-  cancel_scope?: 'next_only' | 'all_future'
-  recurring_parent_id?: string
 }
 
 // =====================================================
@@ -142,8 +139,6 @@ export interface ScheduleMessageForm {
     days_of_week?: number[]
     day_of_month?: number
   }
-  cancel_if_lead_replies?: boolean
-  cancel_scope?: 'next_only' | 'all_future'
 }
 
 export interface ContactInfoForm {

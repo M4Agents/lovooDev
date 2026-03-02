@@ -641,9 +641,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     scheduled_date: '',
     scheduled_time: '',
     timezone: 'America/Sao_Paulo',
-    recurring_type: 'none',
-    cancel_if_lead_replies: false,
-    cancel_scope: 'next_only'
+    recurring_type: 'none'
   })
   
   // Novos estados
@@ -1152,87 +1150,6 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             )}
           </div>
 
-          {/* Opções de Cancelamento Automático */}
-          <div className="space-y-3">
-            {/* Toggle principal: Cancelar se lead responder */}
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.cancel_if_lead_replies || false}
-                  onChange={(e) => setFormData(prev => ({ 
-                    ...prev, 
-                    cancel_if_lead_replies: e.target.checked 
-                  }))}
-                  className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <span className="text-sm font-medium text-blue-900">
-                    🔔 Cancelar automaticamente se o lead responder
-                  </span>
-                  <p className="text-xs text-blue-700 mt-1">
-                    Se ativado, esta mensagem será cancelada automaticamente caso o lead 
-                    envie qualquer mensagem antes do horário programado.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Opção de escopo (apenas se auto-cancel ativo E mensagem recorrente) */}
-            {formData.cancel_if_lead_replies && formData.recurring_type !== 'none' && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <label className="block text-sm font-medium text-yellow-900 mb-2">
-                  ⚙️ Escopo do cancelamento automático
-                </label>
-                <div className="space-y-2">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="cancel_scope"
-                      value="next_only"
-                      checked={formData.cancel_scope === 'next_only'}
-                      onChange={() => setFormData(prev => ({ 
-                        ...prev, 
-                        cancel_scope: 'next_only' 
-                      }))}
-                      className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-yellow-900">
-                        Cancelar apenas a próxima mensagem
-                      </span>
-                      <p className="text-xs text-yellow-700 mt-0.5">
-                        As mensagens futuras da recorrência continuarão agendadas
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="cancel_scope"
-                      value="all_future"
-                      checked={formData.cancel_scope === 'all_future'}
-                      onChange={() => setFormData(prev => ({ 
-                        ...prev, 
-                        cancel_scope: 'all_future' 
-                      }))}
-                      className="mt-0.5 w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-yellow-900">
-                        Cancelar TODAS as mensagens futuras da série
-                      </span>
-                      <p className="text-xs text-yellow-700 mt-0.5">
-                        Toda a série recorrente será cancelada permanentemente
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
@@ -1377,20 +1294,6 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                         📎 Mídia
                       </span>
                     )}
-                    {message.cancel_if_lead_replies && message.status === 'pending' && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                        🔔 Auto-cancelar
-                      </span>
-                    )}
-                    {message.cancel_if_lead_replies && message.status === 'pending' && message.recurring_type !== 'none' && (
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
-                        message.cancel_scope === 'all_future' 
-                          ? 'bg-red-100 text-red-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {message.cancel_scope === 'all_future' ? '🔴 Todas futuras' : '🔵 Apenas próxima'}
-                      </span>
-                    )}
                   </div>
                   
                   {message.status === 'pending' && (
@@ -1416,27 +1319,6 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 <p className="text-xs text-gray-600">
                   {formatDateTime(message.scheduled_for)}
                 </p>
-                
-                {/* Mensagem de cancelamento automático */}
-                {message.status === 'cancelled' && message.error_message?.includes('lead respondeu') && (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                    <div className="flex items-start gap-2">
-                      <span className="text-yellow-600">⚠️</span>
-                      <div className="flex-1 text-yellow-800">
-                        {message.error_message.includes('série recorrente') ? (
-                          <>
-                            <strong>Série cancelada:</strong> Lead respondeu antes do horário. 
-                            Todas as mensagens futuras foram canceladas.
-                          </>
-                        ) : (
-                          <>
-                            <strong>Cancelada:</strong> Lead respondeu antes do horário programado.
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>

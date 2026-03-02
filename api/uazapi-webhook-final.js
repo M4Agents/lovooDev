@@ -602,52 +602,6 @@ async function processMessage(payload) {
         console.error('❌ EXCEPTION na criação automática de lead:', leadCreationError);
         // Não falhar o webhook por causa disso - apenas log
       }
-
-      // 🔔 CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS - 2026-03-02
-      // Quando lead responde, cancelar mensagens agendadas com auto-cancel ativo
-      try {
-        console.log('🔔 VERIFICANDO MENSAGENS AGENDADAS PARA CANCELAMENTO AUTOMÁTICO...');
-        
-        // Buscar conversation_id para este contato
-        const { data: conversations, error: convError } = await supabase
-          .from('chat_conversations')
-          .select('id')
-          .eq('company_id', company.id)
-          .eq('contact_phone', phoneNumber)
-          .limit(1);
-        
-        if (convError) {
-          console.error('❌ Erro ao buscar conversa:', convError);
-        } else if (conversations && conversations.length > 0) {
-          const conversationId = conversations[0].id;
-          console.log('✅ Conversa encontrada:', conversationId);
-          
-          // Chamar função de cancelamento automático
-          const { data: cancelResult, error: cancelError } = await supabase
-            .rpc('auto_cancel_scheduled_messages_on_reply', {
-              p_conversation_id: conversationId,
-              p_company_id: company.id
-            });
-          
-          if (cancelError) {
-            console.error('❌ Erro ao cancelar mensagens agendadas:', cancelError);
-          } else if (cancelResult && cancelResult.length > 0) {
-            const { cancelled_count, cancelled_ids } = cancelResult[0];
-            
-            if (cancelled_count > 0) {
-              console.log(`✅ ${cancelled_count} mensagem(ns) agendada(s) cancelada(s) automaticamente`);
-              console.log(`📋 IDs cancelados:`, cancelled_ids);
-            } else {
-              console.log('ℹ️ Nenhuma mensagem agendada para cancelar');
-            }
-          }
-        } else {
-          console.log('ℹ️ Nenhuma conversa encontrada para este contato');
-        }
-      } catch (autoCancelError) {
-        console.error('❌ EXCEPTION no cancelamento automático:', autoCancelError);
-        // Não falhar o webhook por causa disso - apenas log
-      }
     } else {
       console.log('ℹ️ Mensagem outbound - não cria lead automaticamente');
     }
