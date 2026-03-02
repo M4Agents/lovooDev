@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exemplo Landing Page - M4 Track</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    section {
+      min-height: 100vh;
+      padding: 60px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    #hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-align: center;
+    }
+
+    #hero h1 {
+      font-size: 3.5rem;
+      margin-bottom: 20px;
+      font-weight: 700;
+    }
+
+    #hero p {
+      font-size: 1.5rem;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 18px 40px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 50px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+
+    .btn-secondary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+    }
+
+    #about {
+      background: #f8f9fa;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-top: 40px;
+    }
+
+    .feature-card {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .feature-card h3 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 1.5rem;
+    }
+
+    #services {
+      background: white;
+    }
+
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+
+    .service-item {
+      padding: 20px;
+      border: 2px solid #667eea;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    #testimonials {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+    }
+
+    .testimonial {
+      background: rgba(255,255,255,0.1);
+      padding: 30px;
+      border-radius: 15px;
+      margin: 20px 0;
+      backdrop-filter: blur(10px);
+    }
+
+    #contact {
+      background: #2d3748;
+      color: white;
+    }
+
+    .contact-form {
+      max-width: 600px;
+      margin: 40px auto 0;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #4a5568;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #1a202c;
+      color: white;
+      transition: border-color 0.3s ease;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .form-group textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    h2 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .success-message {
+      display: none;
+      background: #48bb78;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      #hero h1 {
+        font-size: 2rem;
+      }
+
+      #hero p {
+        font-size: 1.2rem;
+      }
+
+      h2 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hero Section -->
+  <section id="hero" data-section="hero">
+    <div class="container">
+      <h1>Transforme Seus Resultados com M4 Track</h1>
+      <p>A plataforma completa de analytics comportamental para suas landing pages</p>
+      <button class="btn btn-primary" id="cta-hero">Começar Agora</button>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section id="about" data-section="about">
+    <div class="container">
+      <h2>Por que escolher M4 Track?</h2>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📊 Analytics Detalhado</h3>
+          <p>Acompanhe cada clique, scroll e interação dos seus visitantes em tempo real.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔥 Heatmaps Visuais</h3>
+          <p>Visualize onde seus usuários estão clicando e otimize suas conversões.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎯 Score de Engajamento</h3>
+          <p>Identifique leads mais qualificados através do comportamento de navegação.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔗 Webhooks Automáticos</h3>
+          <p>Receba dados de conversão diretamente no seu CRM ou sistema.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Services Section -->
+  <section id="services" data-section="services">
+    <div class="container">
+      <h2>Nossos Planos</h2>
+      <div class="services-grid">
+        <div class="service-item">
+          <h3>Basic</h3>
+          <p>Ideal para começar</p>
+          <p style="font-size: 2rem; margin: 20px 0; color: #667eea;">R$ 99</p>
+          <button class="btn btn-secondary" data-cta="plan-basic">Selecionar</button>
+        </div>
+        <div class="service-item">
+          <h3>Pro</h3>
+          <p>Para empresas em crescimento</p>
+          <p style="font-size: 2rem; margin: 20px 0; color: #667eea;">R$ 299</p>
+          <button class="btn btn-secondary" data-cta="plan-pro">Selecionar</button>
+        </div>
+        <div class="service-item">
+          <h3>Enterprise</h3>
+          <p>Solução completa</p>
+          <p style="font-size: 2rem; margin: 20px 0; color: #667eea;">R$ 799</p>
+          <button class="btn btn-secondary" data-cta="plan-enterprise">Selecionar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" data-section="testimonials">
+    <div class="container">
+      <h2>O que nossos clientes dizem</h2>
+      <div class="testimonial">
+        <p>"M4 Track revolucionou como entendemos nossos visitantes. Aumentamos nossa conversão em 45%!"</p>
+        <strong>- Maria Silva, CEO da TechStart</strong>
+      </div>
+      <div class="testimonial">
+        <p>"Os heatmaps nos mostraram exatamente onde estavam os problemas. Ferramenta indispensável!"</p>
+        <strong>- João Santos, Marketing Manager</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section id="contact" data-section="contact">
+    <div class="container">
+      <h2>Entre em Contato</h2>
+      <p style="text-align: center; margin-bottom: 20px;">Preencha o formulário e descubra como podemos ajudar</p>
+      <form class="contact-form" id="contact-form">
+        <div class="form-group">
+          <label for="name">Nome Completo</label>
+          <input type="text" id="name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div class="form-group">
+          <label for="phone">Telefone</label>
+          <input type="tel" id="phone" name="phone" required>
+        </div>
+        <div class="form-group">
+          <label for="company">Empresa</label>
+          <input type="text" id="company" name="company">
+        </div>
+        <div class="form-group">
+          <label for="message">Mensagem</label>
+          <textarea id="message" name="message" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Mensagem</button>
+      </form>
+      <div class="success-message" id="success-message">
+        ✅ Mensagem enviada com sucesso! Entraremos em contato em breve.
+      </div>
+    </div>
+  </section>
+
+  <!-- M4 Track Script -->
+  <!--
+    IMPORTANTE: Substitua 'SEU-TRACKING-CODE' e 'SUA-API-URL' pelos valores reais
+    obtidos no dashboard do M4 Track
+  -->
+  <script src="/m4track.js"></script>
+  <script>
+    // Inicializar M4 Track
+    // Substitua pelos valores reais:
+    const TRACKING_CODE = 'SEU-TRACKING-CODE-AQUI';
+    const API_URL = 'http://localhost:5173'; // ou sua URL de produção
+
+    M4Track.init(TRACKING_CODE, API_URL);
+
+    // Handler do formulário
+    document.getElementById('contact-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const data = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        company: formData.get('company'),
+        message: formData.get('message')
+      };
+
+      // Trackear conversão com M4 Track
+      M4Track.trackConversion(data);
+
+      // Mostrar mensagem de sucesso
+      document.getElementById('success-message').classList.add('show');
+      e.target.reset();
+
+      // Aqui você normalmente enviaria os dados para seu backend
+      console.log('Dados do formulário:', data);
+    });
+
+    // Scroll suave para seção de contato
+    document.getElementById('cta-hero').addEventListener('click', function() {
+      document.getElementById('contact').scrollIntoView({
+        behavior: 'smooth'
+      });
+    });
+  </script>
+</body>
+</html>
