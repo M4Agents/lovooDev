@@ -605,7 +605,9 @@ async function processMessage(payload) {
 
       // 🔔 CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS
       // Quando lead responde, cancelar mensagens agendadas se configurado
+      // 🔥 WEBHOOK VERSION: 2026-03-02-17:40 - AUTO-CANCEL ENABLED
       try {
+        console.log('🔥 WEBHOOK AUTO-CANCEL VERSION: 2026-03-02-17:40');
         console.log('🔔 VERIFICANDO CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS...');
         
         const { data: cancelResult, error: cancelError } = await supabase
