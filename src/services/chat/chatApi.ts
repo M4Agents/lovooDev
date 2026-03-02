@@ -486,7 +486,9 @@ export class ChatApi {
         p_message_type: message.message_type || 'text',
         p_media_url: message.media_url || null,
         p_recurring_type: message.recurring_type || 'none',
-        p_recurring_config: message.recurring_config ? JSON.stringify(message.recurring_config) : '{}'
+        p_recurring_config: message.recurring_config ? JSON.stringify(message.recurring_config) : '{}',
+        p_cancel_if_lead_replies: message.cancel_if_lead_replies || false,
+        p_cancel_scope: message.cancel_scope || 'next_only'
       })
 
       if (error) throw error

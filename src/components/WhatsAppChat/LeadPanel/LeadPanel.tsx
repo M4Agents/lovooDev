@@ -641,7 +641,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     scheduled_date: '',
     scheduled_time: '',
     timezone: 'America/Sao_Paulo',
-    recurring_type: 'none'
+    recurring_type: 'none',
+    cancel_if_lead_replies: false,
+    cancel_scope: 'next_only'
   })
   
   // Novos estados
@@ -1150,6 +1152,55 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             )}
           </div>
 
+          {/* Cancelamento Automático */}
+          {formData.recurring_type !== 'none' && (
+            <div className="space-y-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.cancel_if_lead_replies || false}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    cancel_if_lead_replies: e.target.checked
+                  }))}
+                  className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  🔔 Cancelar automaticamente se o lead responder
+                </span>
+              </label>
+
+              {formData.cancel_if_lead_replies && (
+                <div className="ml-6 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={formData.cancel_scope === 'next_only'}
+                      onChange={() => setFormData(prev => ({
+                        ...prev,
+                        cancel_scope: 'next_only'
+                      }))}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Cancelar apenas a próxima mensagem</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={formData.cancel_scope === 'all_future'}
+                      onChange={() => setFormData(prev => ({
+                        ...prev,
+                        cancel_scope: 'all_future'
+                      }))}
+                      className="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-gray-700">Cancelar TODAS as mensagens futuras</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
@@ -1289,6 +1340,18 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                             message.recurring_type === 'weekly' ? 'Semanal' : 'Mensal'}
                       </span>
                     )}
+                    {message.cancel_if_lead_replies && (
+                      <>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800">
+                          🔔 Auto-Cancel
+                        </span>
+                        {message.cancel_scope === 'all_future' && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
+                            🚫 Todas futuras
+                          </span>
+                        )}
+                      </>
+                    )}
                     {message.media_url && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
                         📎 Mídia
@@ -1319,6 +1382,12 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 <p className="text-xs text-gray-600">
                   {formatDateTime(message.scheduled_for)}
                 </p>
+
+                {message.status === 'cancelled' && message.error_message?.includes('lead respondeu') && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    ℹ️ {message.error_message}
+                  </div>
+                )}
               </div>
             ))}
           </div>
