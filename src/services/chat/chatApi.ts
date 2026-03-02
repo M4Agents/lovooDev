@@ -482,6 +482,7 @@ export class ChatApi {
         p_instance_id: instanceId,
         p_content: message.content,
         p_scheduled_for: scheduledDateTime.toISOString(),
+        p_created_by: userId,
         p_message_type: message.message_type || 'text',
         p_media_url: message.media_url || null,
         p_recurring_type: message.recurring_type || 'none',
