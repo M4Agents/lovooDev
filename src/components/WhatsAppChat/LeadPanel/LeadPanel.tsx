@@ -4,10 +4,13 @@
 // Painel com informações do lead e agendamento
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
 import BibliotecaV2 from './BibliotecaV2'
+import data from '@emoji-mart/data'
+// @ts-ignore - tipos de emoji-mart podem não estar instalados
+import Picker from '@emoji-mart/react'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -655,6 +658,11 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   const [availableInstances, setAvailableInstances] = useState<any[]>([])
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>(instanceId || '')
   const [loadingInstances, setLoadingInstances] = useState(false)
+  
+  // Estados para seletor de emojis
+  const [isEmojiOpen, setIsEmojiOpen] = useState(false)
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Carregar instâncias disponíveis
   useEffect(() => {
@@ -680,6 +688,51 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     
     loadInstances()
   }, [companyId, instanceId])
+
+  // Função para selecionar emoji
+  const handleSelectEmoji = (emoji: string) => {
+    const el = textareaRef.current
+    const value = formData.content
+
+    if (!el) {
+      setFormData(prev => ({ ...prev, content: value + emoji }))
+      return
+    }
+
+    const start = el.selectionStart ?? value.length
+    const end = el.selectionEnd ?? value.length
+
+    const newValue = value.slice(0, start) + emoji + value.slice(end)
+    setFormData(prev => ({ ...prev, content: newValue }))
+
+    // Reposicionar cursor após o emoji
+    requestAnimationFrame(() => {
+      try {
+        el.focus()
+        const caret = start + emoji.length
+        el.setSelectionRange(caret, caret)
+      } catch (error) {
+        console.warn('Erro ao reposicionar cursor após emoji:', error)
+      }
+    })
+  }
+
+  // Click outside para fechar o picker de emoji
+  useEffect(() => {
+    if (!isEmojiOpen) return
+
+    function handleClickOutside(event: MouseEvent) {
+      const pickerEl = emojiPickerRef.current
+      if (pickerEl && !pickerEl.contains(event.target as Node)) {
+        setIsEmojiOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isEmojiOpen])
 
   const handleSchedule = async () => {
     const hasContent = formData.content.trim()
@@ -943,13 +996,43 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
-            <textarea
-              value={formData.content}
-              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Digite a mensagem..."
-            />
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={formData.content}
+                onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Digite a mensagem..."
+              />
+              
+              {/* Botão Emoji */}
+              <button
+                type="button"
+                onClick={() => setIsEmojiOpen((prev) => !prev)}
+                className="absolute right-2 top-2 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Adicionar emoji"
+              >
+                <span role="img" aria-label="Emoji" className="text-xl">
+                  😊
+                </span>
+              </button>
+              
+              {/* Picker de Emoji */}
+              {isEmojiOpen && (
+                <div
+                  ref={emojiPickerRef}
+                  className="absolute bottom-full mb-2 left-0 z-50 shadow-lg"
+                >
+                  <Picker
+                    data={data}
+                    onEmojiSelect={(emoji: any) => handleSelectEmoji(emoji.native)}
+                    locale="pt"
+                    theme="light"
+                  />
+                </div>
+              )}
+            </div>
           </div>
           
           {/* Tipo de Mídia */}
