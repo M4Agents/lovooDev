@@ -289,10 +289,28 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     newStages.splice(dropIndex, 0, draggedStage)
 
     // Atualizar posições
-    const updatedStages = newStages.map((stage, index) => ({
-      id: stage.id,
-      position: index
-    }))
+    const updatedStages = newStages.map((stage, index) => {
+      // Validar e corrigir UUID se necessário
+      let validId = stage.id
+      if (validId && validId.length !== 36) {
+        console.warn(`Invalid UUID length for stage ${stage.name}: ${validId.length} chars`)
+        // Se tiver 35 caracteres, adicionar um caractere no final
+        if (validId.length === 35) {
+          validId = validId + '1'
+          console.log(`Fixed UUID: ${stage.id} -> ${validId}`)
+        }
+        // Se tiver 37 caracteres, remover o último
+        else if (validId.length === 37) {
+          validId = validId.slice(0, 36)
+          console.log(`Fixed UUID: ${stage.id} -> ${validId}`)
+        }
+      }
+      
+      return {
+        id: validId,
+        position: index
+      }
+    })
 
     console.log('Reordering stages:', updatedStages)
     console.log('Funnel ID:', funnel.id)
