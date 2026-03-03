@@ -18,7 +18,8 @@ import {
   Users,
   Crown,
   MessageCircle,
-  FolderOpen
+  FolderOpen,
+  TrendingUp
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 
@@ -81,6 +82,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/chat', icon: MessageCircle, label: 'Chat' },
+    { path: '/sales-funnel', icon: TrendingUp, label: 'Funil de Vendas' },
     { path: '/leads', icon: Users, label: 'Leads' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },

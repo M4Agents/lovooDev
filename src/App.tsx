@@ -12,6 +12,7 @@ import { Leads } from './pages/Leads';
 import { PlansManagement } from './pages/PlansManagement';
 import { MediaLibrary } from './pages/MediaLibrary';
 import Chat from './pages/Chat';
+import SalesFunnel from './pages/SalesFunnel';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
@@ -166,6 +167,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales-funnel"
+        element={
+          <ProtectedRoute>
+            <SalesFunnel />
           </ProtectedRoute>
         }
       />
