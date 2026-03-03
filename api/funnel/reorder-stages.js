@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export default async function handler(req, res) {
   if (req.method !== 'PUT') {
@@ -39,8 +39,11 @@ export default async function handler(req, res) {
 
     if (!supabaseServiceKey) {
       console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not configured');
+      console.error('SOLUTION: Configure SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables');
       return res.status(500).json({ 
-        error: 'Configuração do servidor incompleta'
+        error: 'Configuração do servidor incompleta',
+        message: 'SUPABASE_SERVICE_ROLE_KEY não configurada no Vercel',
+        solution: 'Configure a variável de ambiente SUPABASE_SERVICE_ROLE_KEY no dashboard do Vercel'
       });
     }
 
