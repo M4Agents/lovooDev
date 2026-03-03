@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, Filter, Download, Plus, Sliders } from 'lucide-react'
+import { Filter, Download, Plus, Sliders } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelModal } from '../components/SalesFunnel/CreateFunnelModal'
@@ -19,8 +19,8 @@ import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 
 export default function SalesFunnel() {
   const navigate = useNavigate()
-  const { user } = useAuth()
-  const companyId = user?.user_metadata?.company_id
+  const { user, company } = useAuth()
+  const companyId = company?.id
 
   const {
     funnels,
@@ -157,9 +157,7 @@ export default function SalesFunnel() {
     }
   }
 
-  const handleSettings = () => {
-    navigate('/settings/funnels')
-  }
+  // Removido: botão de configurações - usuário cria funis direto nesta página
 
   if (!companyId) {
     return (
@@ -246,14 +244,6 @@ export default function SalesFunnel() {
             >
               <Download className="w-4 h-4" />
               <span className="text-sm font-medium">Exportar</span>
-            </button>
-
-            <button
-              onClick={handleSettings}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium">Configurar</span>
             </button>
 
             <button
