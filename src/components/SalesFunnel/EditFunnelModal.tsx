@@ -4,8 +4,8 @@
 // Objetivo: Modal para editar funil de vendas existente
 // =====================================================
 
-import { useState, useEffect } from 'react'
-import { X, Loader2, AlertCircle, Trash2, GripVertical } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle } from 'lucide-react'
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
@@ -34,6 +34,18 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [loadingStages, setLoadingStages] = useState(true)
   const [error, setError] = useState<string>()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  // Estados para gerenciamento de etapas
+  const [editingStageId, setEditingStageId] = useState<string | null>(null)
+  const [editingStageName, setEditingStageName] = useState('')
+  const [showAddStage, setShowAddStage] = useState(false)
+  const [newStageName, setNewStageName] = useState('')
+  const [newStageColor, setNewStageColor] = useState('#93C5FD')
+  const [deletingStageId, setDeletingStageId] = useState<string | null>(null)
+  const [moveToStageId, setMoveToStageId] = useState<string>('')
+  const [draggedStage, setDraggedStage] = useState<FunnelStage | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   // Carregar etapas do funil
   useEffect(() => {
@@ -105,6 +117,170 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }
   }
 
+  // Gerenciamento de etapas
+  const handleEditStage = (stage: FunnelStage) => {
+    setEditingStageId(stage.id)
+    setEditingStageName(stage.name)
+    setTimeout(() => editInputRef.current?.focus(), 0)
+  }
+
+  const handleSaveEditStage = async () => {
+    if (!editingStageId || !editingStageName.trim()) return
+
+    try {
+      const response = await fetch('/api/funnel/stages/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage_id: editingStageId,
+          name: editingStageName.trim()
+        })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Erro ao atualizar etapa')
+      }
+
+      await loadStages()
+      setEditingStageId(null)
+      setEditingStageName('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar etapa')
+    }
+  }
+
+  const handleCancelEditStage = () => {
+    setEditingStageId(null)
+    setEditingStageName('')
+  }
+
+  const handleAddStage = async () => {
+    if (!newStageName.trim()) {
+      setError('Nome da etapa é obrigatório')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/funnel/stages/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          funnel_id: funnel.id,
+          name: newStageName.trim(),
+          color: newStageColor
+        })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Erro ao criar etapa')
+      }
+
+      await loadStages()
+      setShowAddStage(false)
+      setNewStageName('')
+      setNewStageColor('#93C5FD')
+      setError(undefined)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar etapa')
+    }
+  }
+
+  const handleDeleteStage = async (stageId: string) => {
+    setDeletingStageId(stageId)
+    setMoveToStageId('')
+  }
+
+  const handleConfirmDeleteStage = async () => {
+    if (!deletingStageId) return
+
+    try {
+      const response = await fetch('/api/funnel/stages/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage_id: deletingStageId,
+          move_to_stage_id: moveToStageId || undefined
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (data.lead_count > 0 && !moveToStageId) {
+          setError(data.message)
+          return
+        }
+        throw new Error(data.error || 'Erro ao deletar etapa')
+      }
+
+      await loadStages()
+      setDeletingStageId(null)
+      setMoveToStageId('')
+      setError(undefined)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao deletar etapa')
+    }
+  }
+
+  const handleDragStart = (stage: FunnelStage) => {
+    setDraggedStage(stage)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }
+
+  const handleDragEnd = async () => {
+    if (!draggedStage || dragOverIndex === null) {
+      setDraggedStage(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const currentIndex = stages.findIndex(s => s.id === draggedStage.id)
+    if (currentIndex === dragOverIndex) {
+      setDraggedStage(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    // Reordenar localmente
+    const newStages = [...stages]
+    newStages.splice(currentIndex, 1)
+    newStages.splice(dragOverIndex, 0, draggedStage)
+
+    // Atualizar posições
+    const updatedStages = newStages.map((stage, index) => ({
+      id: stage.id,
+      position: index
+    }))
+
+    try {
+      const response = await fetch('/api/funnel/stages/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          funnel_id: funnel.id,
+          stages: updatedStages
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao reordenar etapas')
+      }
+
+      await loadStages()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao reordenar etapas')
+    } finally {
+      setDraggedStage(null)
+      setDragOverIndex(null)
+    }
+  }
+
   const handleClose = () => {
     if (!loading) {
       setFormData({
@@ -115,6 +291,9 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       })
       setError(undefined)
       setShowDeleteConfirm(false)
+      setEditingStageId(null)
+      setShowAddStage(false)
+      setDeletingStageId(null)
       onClose()
     }
   }
@@ -211,6 +390,15 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                 <h3 className="text-sm font-medium text-gray-900">
                   Etapas do Funil ({stages.length})
                 </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStage(true)}
+                  disabled={loading || showAddStage}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Plus className="w-4 h-4" />
+                  Adicionar
+                </button>
               </div>
 
               {loadingStages ? (
@@ -218,34 +406,195 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                 </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {/* Form de adicionar etapa */}
+                  {showAddStage && (
+                    <div className="p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="color"
+                          value={newStageColor}
+                          onChange={(e) => setNewStageColor(e.target.value)}
+                          className="w-8 h-8 rounded cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={newStageName}
+                          onChange={(e) => setNewStageName(e.target.value)}
+                          placeholder="Nome da nova etapa..."
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddStage()
+                            if (e.key === 'Escape') {
+                              setShowAddStage(false)
+                              setNewStageName('')
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAddStage}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                        >
+                          <Save className="w-3 h-3" />
+                          Salvar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddStage(false)
+                            setNewStageName('')
+                            setError(undefined)
+                          }}
+                          className="px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de etapas */}
                   {stages.map((stage, index) => (
                     <div
                       key={stage.id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      draggable={!editingStageId && !deletingStageId}
+                      onDragStart={() => handleDragStart(stage)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`
+                        flex items-center gap-3 p-3 rounded-lg border transition-all
+                        ${dragOverIndex === index ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'}
+                        ${draggedStage?.id === stage.id ? 'opacity-50' : ''}
+                        ${!editingStageId && !deletingStageId ? 'cursor-move' : ''}
+                      `}
                     >
-                      <GripVertical className="w-4 h-4 text-gray-400" />
+                      <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       <div
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: stage.color }}
                       />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {stage.name}
-                        </p>
-                        {stage.is_system_stage && (
-                          <p className="text-xs text-gray-500">Etapa do sistema</p>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500">#{index + 1}</span>
+                      
+                      {editingStageId === stage.id ? (
+                        <input
+                          ref={editInputRef}
+                          type="text"
+                          value={editingStageName}
+                          onChange={(e) => setEditingStageName(e.target.value)}
+                          className="flex-1 px-2 py-1 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditStage()
+                            if (e.key === 'Escape') handleCancelEditStage()
+                          }}
+                        />
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {stage.name}
+                          </p>
+                          {stage.is_system_stage && (
+                            <p className="text-xs text-gray-500">Etapa do sistema</p>
+                          )}
+                        </div>
+                      )}
+
+                      <span className="text-xs text-gray-500 flex-shrink-0">#{index + 1}</span>
+
+                      {editingStageId === stage.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={handleSaveEditStage}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Salvar"
+                          >
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditStage}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                            title="Cancelar"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEditStage(stage)}
+                            disabled={!!editingStageId || !!deletingStageId}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          {!stage.is_system_stage && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStage(stage.id)}
+                              disabled={!!editingStageId || !!deletingStageId}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                              title="Deletar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
-              <p className="text-xs text-gray-500 mt-3">
-                💡 Para adicionar, editar ou reordenar etapas, use a interface do funil principal
-              </p>
+              {/* Modal de confirmação de deleção */}
+              {deletingStageId && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm font-medium text-red-900 mb-3">
+                    ⚠️ Confirmar exclusão da etapa
+                  </p>
+                  <p className="text-sm text-red-700 mb-3">
+                    Escolha para onde mover os leads desta etapa:
+                  </p>
+                  <select
+                    value={moveToStageId}
+                    onChange={(e) => setMoveToStageId(e.target.value)}
+                    className="w-full px-3 py-2 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-3"
+                  >
+                    <option value="">Selecione uma etapa...</option>
+                    {stages
+                      .filter(s => s.id !== deletingStageId)
+                      .map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))
+                    }
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmDeleteStage}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                    >
+                      Confirmar Exclusão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeletingStageId(null)
+                        setMoveToStageId('')
+                        setError(undefined)
+                      }}
+                      className="px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </form>
         </div>
