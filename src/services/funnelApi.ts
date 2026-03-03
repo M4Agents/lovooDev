@@ -325,7 +325,7 @@ class FunnelApiService {
         .from('lead_funnel_positions')
         .select(`
           *,
-          lead:leads(
+          lead:leads!inner(
             id,
             name,
             email,
@@ -334,10 +334,12 @@ class FunnelApiService {
             created_at,
             origin,
             status,
-            record_type
+            record_type,
+            deleted_at
           )
         `)
         .eq('funnel_id', funnelId)
+        .is('lead.deleted_at', null)
         .order('position_in_stage', { ascending: true })
       
       if (filter?.stage_id) {
