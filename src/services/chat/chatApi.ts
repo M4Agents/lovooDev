@@ -21,6 +21,9 @@ import type {
 // =====================================================
 
 export class ChatApi {
+  // Expor cliente Supabase para uso direto quando necessário
+  static supabase = supabase
+
   // =====================================================
   // CONVERSAS
   // =====================================================

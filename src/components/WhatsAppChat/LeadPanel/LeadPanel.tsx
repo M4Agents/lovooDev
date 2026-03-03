@@ -356,6 +356,12 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     custom_fields: {}
   })
 
+  // Estados para seletor de instância
+  const [availableInstances, setAvailableInstances] = useState<any[]>([])
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('')
+  const [loadingInstances, setLoadingInstances] = useState(false)
+  const [changingInstance, setChangingInstance] = useState(false)
+
   useEffect(() => {
     if (contact) {
       setFormData({
@@ -371,6 +377,32 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
   }, [contact])
 
+  // Carregar instâncias disponíveis
+  useEffect(() => {
+    const loadInstances = async () => {
+      if (!companyId) return
+      
+      try {
+        setLoadingInstances(true)
+        const instances = await chatApi.getCompanyInstances(companyId)
+        setAvailableInstances(instances)
+        
+        // Pré-selecionar instância atual da conversa
+        if (conversation?.instance_id) {
+          setSelectedInstanceId(conversation.instance_id)
+        } else if (instances.length > 0) {
+          setSelectedInstanceId(instances[0].id)
+        }
+      } catch (error) {
+        console.error('Error loading instances:', error)
+      } finally {
+        setLoadingInstances(false)
+      }
+    }
+    
+    loadInstances()
+  }, [companyId, conversation?.instance_id])
+
   const handleSave = async () => {
     if (!conversation) return
 
@@ -381,6 +413,71 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     } catch (error) {
       console.error('Error updating contact:', error)
     }
+  }
+
+  // Função para trocar instância
+  const handleChangeInstance = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newInstanceId = e.target.value
+    
+    if (!conversation?.id || !companyId) return
+    
+    // Se for a mesma instância, apenas atualizar estado
+    if (newInstanceId === conversation.instance_id) {
+      setSelectedInstanceId(newInstanceId)
+      return
+    }
+    
+    // Buscar nome da nova instância
+    const newInstance = availableInstances.find(i => i.id === newInstanceId)
+    if (!newInstance) return
+    
+    // Confirmar mudança
+    const confirmed = window.confirm(
+      `Deseja trocar para a instância "${newInstance.instance_name}"?\n\nPróximas mensagens serão enviadas por esta instância.`
+    )
+    
+    if (!confirmed) {
+      return
+    }
+    
+    try {
+      setChangingInstance(true)
+      
+      // Chamar função SQL para atualizar
+      const { data, error } = await chatApi.supabase.rpc('change_conversation_instance', {
+        p_conversation_id: conversation.id,
+        p_new_instance_id: newInstanceId,
+        p_company_id: companyId
+      })
+      
+      if (error) throw error
+      
+      if (data?.success) {
+        setSelectedInstanceId(newInstanceId)
+        alert('✅ Instância alterada com sucesso!')
+        
+        // Recarregar dados
+        await onUpdate()
+      } else {
+        throw new Error(data?.error || 'Erro ao trocar instância')
+      }
+    } catch (error: any) {
+      console.error('Error changing instance:', error)
+      alert('❌ Erro ao trocar instância: ' + (error.message || 'Erro desconhecido'))
+      
+      // Reverter seleção
+      if (conversation?.instance_id) {
+        setSelectedInstanceId(conversation.instance_id)
+      }
+    } finally {
+      setChangingInstance(false)
+    }
+  }
+
+  // Obter nome da instância selecionada
+  const getSelectedInstanceName = () => {
+    const instance = availableInstances.find(i => i.id === selectedInstanceId)
+    return instance ? `${instance.instance_name}${instance.profile_name ? ' - ' + instance.profile_name : ''}` : ''
   }
 
   const formatPhone = (phone: string) => {
@@ -454,6 +551,60 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getStatusColor(contact.lead_status)}`}>
             {getStatusLabel(contact.lead_status)}
           </span>
+        )}
+      </div>
+
+      {/* Seletor de Instância de Envio */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-blue-600">📱</span>
+          <label className="text-sm font-medium text-gray-700">
+            Instância de Envio
+          </label>
+        </div>
+        
+        {loadingInstances ? (
+          <div className="text-sm text-gray-500">Carregando instâncias...</div>
+        ) : (
+          <>
+            <select
+              value={selectedInstanceId}
+              onChange={handleChangeInstance}
+              disabled={changingInstance || availableInstances.length === 0}
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {availableInstances.length === 0 ? (
+                <option value="">Nenhuma instância disponível</option>
+              ) : (
+                availableInstances.map(instance => (
+                  <option key={instance.id} value={instance.id}>
+                    {instance.instance_name}
+                    {instance.profile_name ? ` - ${instance.profile_name}` : ''}
+                    {instance.id === conversation?.instance_id ? ' ✓' : ''}
+                  </option>
+                ))
+              )}
+            </select>
+            
+            {/* Aviso quando instância diferente da original */}
+            {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (
+              <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 p-2 rounded">
+                <span>⚠️</span>
+                <p>
+                  Você alterou a instância. Próximas mensagens serão enviadas por{' '}
+                  <strong>{getSelectedInstanceName()}</strong>
+                </p>
+              </div>
+            )}
+            
+            {/* Info quando instância original */}
+            {selectedInstanceId && selectedInstanceId === conversation?.instance_id && (
+              <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                <span>ℹ️</span>
+                Usando instância original da conversa
+              </p>
+            )}
+          </>
         )}
       </div>
 
