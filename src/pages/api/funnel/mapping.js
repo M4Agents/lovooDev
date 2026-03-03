@@ -75,6 +75,7 @@ export default async function handler(req, res) {
             id,
             name,
             slug,
+            external_id,
             description,
             color,
             position,

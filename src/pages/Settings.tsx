@@ -2163,7 +2163,8 @@ export const Settings: React.FC = () => {
                         <li>api_key: Sua chave de API</li>
                         <li>lead_id: ID numérico do lead</li>
                         <li>funnel_slug: Slug do funil (ex: "sdr")</li>
-                        <li>stage_slug: Slug da etapa (ex: "contato_realizado")</li>
+                        <li><strong>stage_external_id:</strong> ID fixo da etapa (ex: "stage_1_4942a712") <span className="text-green-600">← RECOMENDADO</span></li>
+                        <li><strong>OU</strong> stage_slug: Slug da etapa (ex: "contato_realizado") <span className="text-yellow-600">← Pode quebrar se renomear</span></li>
                       </ul>
                       <p className="pt-2"><strong>Campos opcionais:</strong></p>
                       <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
@@ -2193,6 +2194,7 @@ export const Settings: React.FC = () => {
                       <div className="ml-8">{'        {'}</div>
                       <div className="ml-10 text-orange-600">{'          "name": "Lead Novo",'}</div>
                       <div className="ml-10 text-orange-600">{'          "slug": "lead_novo",'}</div>
+                      <div className="ml-10 text-green-600">{'          "external_id": "stage_0_12134b5f",'}</div>
                       <div className="ml-10 text-orange-600">{'          "position": 0'}</div>
                       <div className="ml-8">{'        }'}</div>
                       <div className="ml-6">{'      ]'}</div>
@@ -2202,24 +2204,45 @@ export const Settings: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Exemplo 2: Mover Lead */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo 2: Mover Lead</h4>
+                  {/* Exemplo 2: Mover Lead (RECOMENDADO - usando external_id) */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium text-green-900 mb-2">✅ Exemplo 2: Mover Lead (RECOMENDADO)</h4>
                     <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                       <div className="text-gray-600">{'// POST /api/funnel/move-lead'}</div>
                       <div className="text-green-600 mt-2">{'{'}</div>
                       <div className="ml-2 text-red-600">{'  "api_key": "sua-api-key-aqui",'}</div>
                       <div className="ml-2 text-blue-600">{'  "lead_id": 123,'}</div>
                       <div className="ml-2 text-purple-600">{'  "funnel_slug": "sdr",'}</div>
-                      <div className="ml-2 text-purple-600">{'  "stage_slug": "contato_realizado",'}</div>
+                      <div className="ml-2 text-green-600">{'  "stage_external_id": "stage_1_4942a712",  // ⭐ NUNCA muda'}</div>
                       <div className="ml-2 text-orange-600">{'  "notes": "Lead qualificado via CRM externo"'}</div>
                       <div className="text-green-600">{'}'}</div>
                     </div>
+                    <p className="text-xs text-green-700 mt-2">
+                      💡 <strong>Vantagem:</strong> Funciona mesmo se o usuário renomear a etapa
+                    </p>
+                  </div>
+
+                  {/* Exemplo 3: Mover Lead (Alternativo - usando slug) */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 className="font-medium text-yellow-900 mb-2">⚠️ Exemplo 3: Alternativo (usando slug)</h4>
+                    <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                      <div className="text-gray-600">{'// POST /api/funnel/move-lead'}</div>
+                      <div className="text-green-600 mt-2">{'{'}</div>
+                      <div className="ml-2 text-red-600">{'  "api_key": "sua-api-key-aqui",'}</div>
+                      <div className="ml-2 text-blue-600">{'  "lead_id": 123,'}</div>
+                      <div className="ml-2 text-purple-600">{'  "funnel_slug": "sdr",'}</div>
+                      <div className="ml-2 text-yellow-600">{'  "stage_slug": "contato_realizado",  // ⚠️ Pode quebrar'}</div>
+                      <div className="ml-2 text-orange-600">{'  "notes": "Lead qualificado"'}</div>
+                      <div className="text-green-600">{'}'}</div>
+                    </div>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      ⚠️ <strong>Atenção:</strong> Se renomear a etapa, precisa atualizar integração
+                    </p>
                   </div>
 
                   {/* Resposta de Sucesso */}
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium text-green-900 mb-2">✅ Resposta de Sucesso:</h4>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-900 mb-2">✅ Resposta de Sucesso:</h4>
                     <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                       <div className="text-green-600">{'{'}</div>
                       <div className="ml-2">{'  "success": true,'}</div>
@@ -2229,26 +2252,53 @@ export const Settings: React.FC = () => {
                       <div className="ml-4">{'    "lead_name": "João Silva",'}</div>
                       <div className="ml-4">{'    "funnel_name": "SDR",'}</div>
                       <div className="ml-4">{'    "stage_name": "Contato Realizado",'}</div>
+                      <div className="ml-4 text-green-600">{'    "stage_external_id": "stage_1_4942a712",'}</div>
                       <div className="ml-4">{'    "moved_at": "2026-03-03T16:30:00Z"'}</div>
                       <div className="ml-2">{'  }'}</div>
                       <div className="text-green-600">{'}'}</div>
                     </div>
                   </div>
 
-                  {/* Slugs Disponíveis */}
+                  {/* External IDs Disponíveis */}
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h4 className="font-medium text-purple-900 mb-2">🏷️ Slugs do Funil SDR:</h4>
+                    <h4 className="font-medium text-purple-900 mb-2">🏷️ External IDs do Funil SDR:</h4>
                     <div className="space-y-1 text-sm text-purple-800">
-                      <p className="font-mono text-xs">• lead_novo</p>
-                      <p className="font-mono text-xs">• contato_realizado</p>
-                      <p className="font-mono text-xs">• diagnostico_briefing</p>
-                      <p className="font-mono text-xs">• proposta_enviada</p>
-                      <p className="font-mono text-xs">• follow-up</p>
-                      <p className="font-mono text-xs">• fechado_-_ganhou</p>
-                      <p className="font-mono text-xs">• fechado_-_perdeu</p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_0_12134b5f</span>
+                        <span className="text-gray-500">→ Lead Novo</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_1_4942a712</span>
+                        <span className="text-gray-500">→ Contato Realizado</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_2_69811823</span>
+                        <span className="text-gray-500">→ Diagnóstico</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_3_328bebb9</span>
+                        <span className="text-gray-500">→ Proposta Enviada</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_4_6dfe2b82</span>
+                        <span className="text-gray-500">→ Follow-up</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_5_0482055b</span>
+                        <span className="text-gray-500">→ Fechado - Ganhou</span>
+                      </p>
+                      <p className="font-mono text-xs flex justify-between">
+                        <span className="text-green-600 font-bold">stage_6_146e74a3</span>
+                        <span className="text-gray-500">→ Fechado - Perdeu</span>
+                      </p>
+                    </div>
+                    <div className="mt-3 p-2 bg-green-100 rounded">
+                      <p className="text-xs text-green-800">
+                        ⭐ <strong>IMPORTANTE:</strong> External IDs <strong>NUNCA mudam</strong>, mesmo se renomear a etapa!
+                      </p>
                     </div>
                     <p className="text-xs text-purple-600 mt-2">
-                      💡 Use o endpoint de mapeamento para obter slugs atualizados
+                      💡 Use o endpoint de mapeamento para obter IDs atualizados de novos funis
                     </p>
                   </div>
                 </div>

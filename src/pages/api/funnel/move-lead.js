@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { api_key, lead_id, funnel_slug, stage_slug, notes } = req.body;
+    const { api_key, lead_id, funnel_slug, stage_slug, stage_external_id, notes } = req.body;
 
     // Validações
     if (!api_key) {
@@ -40,10 +40,11 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!stage_slug) {
+    if (!stage_slug && !stage_external_id) {
       return res.status(400).json({ 
-        error: 'Slug da etapa é obrigatório',
-        field: 'stage_slug'
+        error: 'stage_slug ou stage_external_id é obrigatório',
+        field: 'stage_slug / stage_external_id',
+        message: 'Informe stage_external_id (recomendado) ou stage_slug'
       });
     }
 
@@ -95,18 +96,29 @@ export default async function handler(req, res) {
       });
     }
 
-    // 4. Buscar etapa pelo slug
-    const { data: stage, error: stageError } = await supabase
+    // 4. Buscar etapa pelo external_id (prioridade) ou slug (fallback)
+    let stageQuery = supabase
       .from('funnel_stages')
-      .select('id, name, slug, position, stage_type')
-      .eq('funnel_id', funnel.id)
-      .eq('slug', stage_slug)
-      .single();
+      .select('id, name, slug, external_id, position, stage_type')
+      .eq('funnel_id', funnel.id);
+
+    // Priorizar external_id (mais estável, nunca muda)
+    if (stage_external_id) {
+      stageQuery = stageQuery.eq('external_id', stage_external_id);
+    } else {
+      // Fallback para slug (pode quebrar se usuário renomear etapa)
+      stageQuery = stageQuery.eq('slug', stage_slug);
+    }
+
+    const { data: stage, error: stageError } = await stageQuery.single();
 
     if (stageError || !stage) {
+      const identifier = stage_external_id || stage_slug;
+      const identifierType = stage_external_id ? 'external_id' : 'slug';
       return res.status(404).json({ 
         error: 'Etapa não encontrada',
-        message: `Etapa com slug "${stage_slug}" não existe no funil "${funnel.name}"`
+        message: `Etapa com ${identifierType} "${identifier}" não existe no funil "${funnel.name}"`,
+        tip: 'Use o endpoint /api/funnel/mapping para obter external_ids atualizados'
       });
     }
 
@@ -205,6 +217,7 @@ export default async function handler(req, res) {
         stage_id: stage.id,
         stage_name: stage.name,
         stage_slug: stage.slug,
+        stage_external_id: stage.external_id,
         stage_position: stage.position,
         stage_type: stage.stage_type,
         moved_at: new Date().toISOString(),
