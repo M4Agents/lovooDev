@@ -4,7 +4,7 @@
 // Objetivo: Serviço para integração com APIs do sistema de funil
 // =====================================================
 
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
 import type {
   SalesFunnel,
   FunnelStage,
@@ -23,13 +23,9 @@ import type {
 } from '../types/sales-funnel'
 
 // =====================================================
-// CONFIGURAÇÃO DO SUPABASE
+// SUPABASE CLIENT
 // =====================================================
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Usando cliente já configurado em src/lib/supabase.ts
 
 // =====================================================
 // CLASSE: FunnelApiService
