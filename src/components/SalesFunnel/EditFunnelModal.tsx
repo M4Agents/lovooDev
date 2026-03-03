@@ -248,24 +248,34 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }
   }
 
-  const handleDragStart = (stage: FunnelStage) => {
+  const handleDragStart = (e: React.DragEvent, stage: FunnelStage) => {
+    e.dataTransfer.effectAllowed = 'move'
     setDraggedStage(stage)
+    console.log('Drag started:', stage.name)
   }
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
     setDragOverIndex(index)
   }
 
-  const handleDragEnd = async () => {
-    if (!draggedStage || dragOverIndex === null) {
-      setDraggedStage(null)
-      setDragOverIndex(null)
+  const handleDragLeave = () => {
+    setDragOverIndex(null)
+  }
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    
+    if (!draggedStage) {
+      console.log('No dragged stage')
       return
     }
 
     const currentIndex = stages.findIndex(s => s.id === draggedStage.id)
-    if (currentIndex === dragOverIndex) {
+    console.log('Drop:', { from: currentIndex, to: dropIndex, stage: draggedStage.name })
+    
+    if (currentIndex === dropIndex) {
       setDraggedStage(null)
       setDragOverIndex(null)
       return
@@ -274,13 +284,15 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     // Reordenar localmente
     const newStages = [...stages]
     newStages.splice(currentIndex, 1)
-    newStages.splice(dragOverIndex, 0, draggedStage)
+    newStages.splice(dropIndex, 0, draggedStage)
 
     // Atualizar posições
     const updatedStages = newStages.map((stage, index) => ({
       id: stage.id,
       position: index
     }))
+
+    console.log('Reordering stages:', updatedStages)
 
     try {
       const response = await fetch('/api/funnel/reorder-stages', {
@@ -305,13 +317,21 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         }
       }
 
+      console.log('Reorder successful')
       await loadStages()
+      setError(undefined)
     } catch (err) {
+      console.error('Reorder error:', err)
       setError(err instanceof Error ? err.message : 'Erro ao reordenar etapas')
     } finally {
       setDraggedStage(null)
       setDragOverIndex(null)
     }
+  }
+
+  const handleDragEnd = () => {
+    setDraggedStage(null)
+    setDragOverIndex(null)
   }
 
   const handleClose = () => {
@@ -495,8 +515,10 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                     <div
                       key={stage.id}
                       draggable={!editingStageId && !deletingStageId}
-                      onDragStart={() => handleDragStart(stage)}
+                      onDragStart={(e) => handleDragStart(e, stage)}
                       onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, index)}
                       onDragEnd={handleDragEnd}
                       className={`
                         flex items-center gap-3 p-3 rounded-lg border transition-all
