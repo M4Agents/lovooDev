@@ -15,10 +15,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('=== REORDER STAGES API ===');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    
     const { funnel_id, stages } = req.body;
 
     // Validações
     if (!funnel_id) {
+      console.log('ERROR: Missing funnel_id');
       return res.status(400).json({ 
         error: 'ID do funil é obrigatório',
         field: 'funnel_id'
@@ -26,13 +30,22 @@ export default async function handler(req, res) {
     }
 
     if (!stages || !Array.isArray(stages) || stages.length === 0) {
+      console.log('ERROR: Invalid stages array');
       return res.status(400).json({ 
         error: 'Lista de etapas é obrigatória',
         field: 'stages'
       });
     }
 
+    if (!supabaseServiceKey) {
+      console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not configured');
+      return res.status(500).json({ 
+        error: 'Configuração do servidor incompleta'
+      });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log('Supabase client created');
 
     // Verificar se funil existe
     const { data: funnel, error: funnelError } = await supabase
@@ -48,28 +61,39 @@ export default async function handler(req, res) {
     }
 
     // Atualizar posições em lote
+    console.log('Starting updates for', stages.length, 'stages');
     const updates = [];
+    
     for (const stage of stages) {
+      console.log('Processing stage:', stage);
+      
       if (!stage.id || stage.position === undefined) {
+        console.log('ERROR: Invalid stage data', stage);
         return res.status(400).json({ 
           error: 'Cada etapa deve ter id e position',
           field: 'stages'
         });
       }
 
-      const { error: updateError } = await supabase
+      console.log(`Updating stage ${stage.id} to position ${stage.position}`);
+      
+      const { data, error: updateError } = await supabase
         .from('funnel_stages')
         .update({ position: stage.position })
         .eq('id', stage.id)
-        .eq('funnel_id', funnel_id);
+        .eq('funnel_id', funnel_id)
+        .select();
 
       if (updateError) {
+        console.error('Update error:', updateError);
         throw updateError;
       }
 
+      console.log('Update result:', data);
       updates.push({ id: stage.id, position: stage.position });
     }
 
+    console.log('All updates completed successfully');
     return res.status(200).json({
       success: true,
       message: 'Etapas reordenadas com sucesso',
@@ -78,9 +102,11 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error in reorder stages API:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({ 
       error: 'Erro ao reordenar etapas',
-      message: error.message
+      message: error.message,
+      details: error.toString()
     });
   }
 }
