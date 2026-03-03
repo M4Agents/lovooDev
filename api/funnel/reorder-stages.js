@@ -37,6 +37,27 @@ export default async function handler(req, res) {
       });
     }
 
+    // Normalizar UUIDs recebidos do frontend (correção para UUIDs truncados)
+    const normalizedStages = stages.map(stage => {
+      const id = String(stage.id || '');
+      let normalizedId = id;
+      
+      if (id.length !== 36) {
+        console.log(`Normalizando UUID: ${id} (${id.length} chars)`);
+        if (id.length === 35) {
+          normalizedId = id + '1';
+        } else if (id.length === 37) {
+          normalizedId = id.slice(0, 36);
+        }
+        console.log(`UUID normalizado: ${normalizedId} (${normalizedId.length} chars)`);
+      }
+      
+      return {
+        ...stage,
+        id: normalizedId
+      };
+    });
+
     if (!supabaseServiceKey) {
       console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not configured');
       console.error('SOLUTION: Configure SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables');
@@ -64,10 +85,10 @@ export default async function handler(req, res) {
     }
 
     // Atualizar posições em lote
-    console.log('Starting updates for', stages.length, 'stages');
+    console.log('Starting updates for', normalizedStages.length, 'stages');
     const updates = [];
     
-    for (const stage of stages) {
+    for (const stage of normalizedStages) {
       console.log('Processing stage:', stage);
       
       if (!stage.id || stage.position === undefined) {
