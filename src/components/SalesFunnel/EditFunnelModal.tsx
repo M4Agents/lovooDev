@@ -293,8 +293,14 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }))
 
     console.log('Reordering stages:', updatedStages)
+    console.log('Funnel ID:', funnel.id)
+    console.log('Request payload:', JSON.stringify({
+      funnel_id: funnel.id,
+      stages: updatedStages
+    }, null, 2))
 
     try {
+      console.log('Calling API: /api/funnel/reorder-stages')
       const response = await fetch('/api/funnel/reorder-stages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -303,6 +309,9 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
           stages: updatedStages
         })
       })
+
+      console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         if (response.status === 404) {
