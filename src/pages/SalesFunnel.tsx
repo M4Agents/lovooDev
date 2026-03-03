@@ -4,12 +4,13 @@
 // Objetivo: Página principal do funil de vendas
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Filter, Download, Plus, Sliders } from 'lucide-react'
+import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelModal } from '../components/SalesFunnel/CreateFunnelModal'
+import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
 import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,7 +20,7 @@ import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 
 export default function SalesFunnel() {
   const navigate = useNavigate()
-  const { user, company } = useAuth()
+  const { company } = useAuth()
   const companyId = company?.id
 
   const {
@@ -34,12 +35,29 @@ export default function SalesFunnel() {
 
   const [showFilters, setShowFilters] = useState(false)
   const [showCreateFunnelModal, setShowCreateFunnelModal] = useState(false)
+  const [showEditFunnelModal, setShowEditFunnelModal] = useState(false)
   const [showCardCustomizer, setShowCardCustomizer] = useState(false)
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [visibleFields, setVisibleFields] = useState<string[]>([...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState('')
+  const optionsMenuRef = useRef<HTMLDivElement>(null)
+
+  // Fechar menu de opções ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+        setShowOptionsMenu(false)
+      }
+    }
+
+    if (showOptionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showOptionsMenu])
 
   // Carregar preferências salvas ao montar componente
   useEffect(() => {
@@ -229,22 +247,56 @@ export default function SalesFunnel() {
               <span className="text-sm font-medium">Filtros</span>
             </button>
 
-            <button
-              onClick={() => setShowCardCustomizer(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              title="Personalizar campos dos cards"
-            >
-              <Sliders className="w-4 h-4" />
-              <span className="text-sm font-medium">Personalizar</span>
-            </button>
+            {/* Menu de Opções (...) */}
+            <div className="relative" ref={optionsMenuRef}>
+              <button
+                onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                title="Mais opções"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
 
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span className="text-sm font-medium">Exportar</span>
-            </button>
+              {showOptionsMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <button
+                    onClick={() => {
+                      setShowCardCustomizer(true)
+                      setShowOptionsMenu(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <Sliders className="w-4 h-4" />
+                    <span>Personalizar</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleExport()
+                      setShowOptionsMenu(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Exportar</span>
+                  </button>
+
+                  <div className="border-t border-gray-200 my-1" />
+
+                  <button
+                    onClick={() => {
+                      setShowEditFunnelModal(true)
+                      setShowOptionsMenu(false)
+                    }}
+                    disabled={!selectedFunnel}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Editar Funil</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => navigate('/leads?action=create')}
@@ -369,6 +421,15 @@ export default function SalesFunnel() {
         onSubmit={handleUpdateCardPreferences}
         currentVisibleFields={visibleFields}
       />
+
+      {selectedFunnel && (
+        <EditFunnelModal
+          isOpen={showEditFunnelModal}
+          onClose={() => setShowEditFunnelModal(false)}
+          funnel={selectedFunnel}
+          onUpdate={refreshFunnels}
+        />
+      )}
     </div>
   )
 }
