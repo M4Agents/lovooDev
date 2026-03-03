@@ -331,7 +331,6 @@ class FunnelApiService {
             email,
             phone,
             company_name,
-            tags,
             created_at,
             origin,
             status,
