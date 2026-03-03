@@ -128,7 +128,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     if (!editingStageId || !editingStageName.trim()) return
 
     try {
-      const response = await fetch('/api/funnel/stages/update', {
+      const response = await fetch('/api/funnel/update-stage', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -171,7 +171,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }
 
     try {
-      const response = await fetch('/api/funnel/stages/create', {
+      const response = await fetch('/api/funnel/create-stage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -213,7 +213,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     if (!deletingStageId) return
 
     try {
-      const response = await fetch('/api/funnel/stages/delete', {
+      const response = await fetch('/api/funnel/delete-stage', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -283,7 +283,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }))
 
     try {
-      const response = await fetch('/api/funnel/stages/reorder', {
+      const response = await fetch('/api/funnel/reorder-stages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
