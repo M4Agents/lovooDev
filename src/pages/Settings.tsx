@@ -2222,24 +2222,6 @@ export const Settings: React.FC = () => {
                     </p>
                   </div>
 
-                  {/* Exemplo 3: Mover Lead (Alternativo - usando slug) */}
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h4 className="font-medium text-yellow-900 mb-2">⚠️ Exemplo 3: Alternativo (usando slug)</h4>
-                    <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
-                      <div className="text-gray-600">{'// POST /api/funnel/move-lead'}</div>
-                      <div className="text-green-600 mt-2">{'{'}</div>
-                      <div className="ml-2 text-red-600">{'  "api_key": "sua-api-key-aqui",'}</div>
-                      <div className="ml-2 text-blue-600">{'  "lead_id": 123,'}</div>
-                      <div className="ml-2 text-purple-600">{'  "funnel_slug": "sdr",'}</div>
-                      <div className="ml-2 text-yellow-600">{'  "stage_slug": "contato_realizado",  // ⚠️ Pode quebrar'}</div>
-                      <div className="ml-2 text-orange-600">{'  "notes": "Lead qualificado"'}</div>
-                      <div className="text-green-600">{'}'}</div>
-                    </div>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      ⚠️ <strong>Atenção:</strong> Se renomear a etapa, precisa atualizar integração
-                    </p>
-                  </div>
-
                   {/* Resposta de Sucesso */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <h4 className="font-medium text-blue-900 mb-2">✅ Resposta de Sucesso:</h4>
