@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -101,7 +101,7 @@ export const Settings: React.FC = () => {
       setActiveTab('tracking');
     }
   }, [searchParams]);
-  const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado'>('whatsapp');
+  const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'>('whatsapp');
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   
@@ -1051,7 +1051,7 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           
           {/* Sub-navegação das Integrações Moderna - OTIMIZADA */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* WhatsApp Card - COMPACTO */}
             <div 
               onClick={() => setIntegracoesTab('whatsapp')}
@@ -1134,6 +1134,35 @@ export const Settings: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-slate-600">Envie dados automaticamente</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Funil de Vendas API Card - NOVO */}
+            <div 
+              onClick={() => setIntegracoesTab('funil-api')}
+              className="group cursor-pointer"
+            >
+              <div className={`bg-gradient-to-br from-orange-50 to-amber-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+                integracoesTab === 'funil-api'
+                  ? 'border-orange-400 shadow-md scale-[1.02]'
+                  : 'border-transparent hover:border-orange-400'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                    integracoesTab === 'funil-api' ? 'bg-orange-600' : 'bg-orange-500'
+                  }`}>
+                    <GitBranch className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-base font-semibold text-slate-900">Funil de Vendas</h3>
+                      <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                        API REST
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600">Mover leads entre etapas via API</p>
                   </div>
                 </div>
               </div>
@@ -2010,6 +2039,219 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* Sub-aba: Funil de Vendas API - NOVO */}
+          {integracoesTab === 'funil-api' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <GitBranch className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">API de Funil de Vendas</h2>
+                  <p className="text-sm text-slate-600">Mova leads entre etapas do funil via webhook</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* COLUNA 1: Endpoints e Autenticação */}
+                <div className="space-y-4">
+                  
+                  {/* Endpoint de Mapeamento */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      📋 Consultar Funis e Etapas
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value="https://app.lovoocrm.com/api/funnel/mapping"
+                        readOnly
+                        className="flex-1 px-4 py-2 bg-blue-50 border border-blue-300 rounded-lg text-slate-900 font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => copyToClipboard('https://app.lovoocrm.com/api/funnel/mapping')}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-2 font-medium">
+                      GET - Retorna todos os funis e etapas com seus slugs
+                    </p>
+                  </div>
+
+                  {/* Endpoint de Movimentação */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      🚀 Mover Lead entre Etapas
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value="https://app.lovoocrm.com/api/funnel/move-lead"
+                        readOnly
+                        className="flex-1 px-4 py-2 bg-orange-50 border border-orange-300 rounded-lg text-slate-900 font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => copyToClipboard('https://app.lovoocrm.com/api/funnel/move-lead')}
+                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="text-xs text-orange-600 mt-2 font-medium">
+                      POST - Move lead para etapa específica do funil
+                    </p>
+                  </div>
+
+                  {/* API Key */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      🔑 Sua API Key
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={company?.api_key || 'Carregando...'}
+                        readOnly
+                        className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
+                        title={showApiKey ? "Ocultar API Key" : "Mostrar API Key"}
+                      >
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => copyToClipboard(company?.api_key || '')}
+                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Use esta chave no parâmetro api_key de todas as requisições
+                    </p>
+                  </div>
+
+                  {/* Como Usar */}
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h4 className="font-medium text-orange-900 mb-2">📋 Como usar (3 passos):</h4>
+                    <div className="space-y-2 text-sm text-orange-800">
+                      <p><strong>1.</strong> Consulte o endpoint de mapeamento para obter slugs</p>
+                      <p><strong>2.</strong> Envie POST com lead_id, funnel_slug e stage_slug</p>
+                      <p><strong>3.</strong> Lead será movido automaticamente com histórico</p>
+                    </div>
+                  </div>
+
+                  {/* Informações Técnicas */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-900 mb-2">🔧 Informações Técnicas:</h4>
+                    <div className="space-y-2 text-sm text-blue-800">
+                      <p><strong>Método Mapeamento:</strong> GET</p>
+                      <p><strong>Método Movimentação:</strong> POST</p>
+                      <p><strong>Content-Type:</strong> application/json</p>
+                      <p><strong>Autenticação:</strong> API Key</p>
+                      <p className="pt-2"><strong>Campos obrigatórios (POST):</strong></p>
+                      <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
+                        <li>api_key: Sua chave de API</li>
+                        <li>lead_id: ID numérico do lead</li>
+                        <li>funnel_slug: Slug do funil (ex: "sdr")</li>
+                        <li>stage_slug: Slug da etapa (ex: "contato_realizado")</li>
+                      </ul>
+                      <p className="pt-2"><strong>Campos opcionais:</strong></p>
+                      <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
+                        <li>notes: Observações sobre a movimentação</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* COLUNA 2: Exemplos */}
+                <div className="space-y-4">
+                  
+                  {/* Exemplo 1: Consultar Mapeamento */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo 1: Consultar Funis</h4>
+                    <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                      <div className="text-gray-600">{'// GET /api/funnel/mapping?api_key=SUA_KEY'}</div>
+                      <div className="text-green-600 mt-2">{'// Resposta:'}</div>
+                      <div className="text-blue-600">{'{'}</div>
+                      <div className="ml-2">{'  "success": true,'}</div>
+                      <div className="ml-2">{'  "funnels": ['}</div>
+                      <div className="ml-4">{'    {'}</div>
+                      <div className="ml-6 text-purple-600">{'      "id": "uuid...",'}</div>
+                      <div className="ml-6 text-purple-600">{'      "name": "SDR",'}</div>
+                      <div className="ml-6 text-purple-600">{'      "slug": "sdr",'}</div>
+                      <div className="ml-6">{'      "stages": ['}</div>
+                      <div className="ml-8">{'        {'}</div>
+                      <div className="ml-10 text-orange-600">{'          "name": "Lead Novo",'}</div>
+                      <div className="ml-10 text-orange-600">{'          "slug": "lead_novo",'}</div>
+                      <div className="ml-10 text-orange-600">{'          "position": 0'}</div>
+                      <div className="ml-8">{'        }'}</div>
+                      <div className="ml-6">{'      ]'}</div>
+                      <div className="ml-4">{'    }'}</div>
+                      <div className="ml-2">{'  ]'}</div>
+                      <div className="text-blue-600">{'}'}</div>
+                    </div>
+                  </div>
+
+                  {/* Exemplo 2: Mover Lead */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo 2: Mover Lead</h4>
+                    <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                      <div className="text-gray-600">{'// POST /api/funnel/move-lead'}</div>
+                      <div className="text-green-600 mt-2">{'{'}</div>
+                      <div className="ml-2 text-red-600">{'  "api_key": "sua-api-key-aqui",'}</div>
+                      <div className="ml-2 text-blue-600">{'  "lead_id": 123,'}</div>
+                      <div className="ml-2 text-purple-600">{'  "funnel_slug": "sdr",'}</div>
+                      <div className="ml-2 text-purple-600">{'  "stage_slug": "contato_realizado",'}</div>
+                      <div className="ml-2 text-orange-600">{'  "notes": "Lead qualificado via CRM externo"'}</div>
+                      <div className="text-green-600">{'}'}</div>
+                    </div>
+                  </div>
+
+                  {/* Resposta de Sucesso */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium text-green-900 mb-2">✅ Resposta de Sucesso:</h4>
+                    <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
+                      <div className="text-green-600">{'{'}</div>
+                      <div className="ml-2">{'  "success": true,'}</div>
+                      <div className="ml-2">{'  "message": "Lead movido com sucesso",'}</div>
+                      <div className="ml-2">{'  "data": {'}</div>
+                      <div className="ml-4">{'    "lead_id": 123,'}</div>
+                      <div className="ml-4">{'    "lead_name": "João Silva",'}</div>
+                      <div className="ml-4">{'    "funnel_name": "SDR",'}</div>
+                      <div className="ml-4">{'    "stage_name": "Contato Realizado",'}</div>
+                      <div className="ml-4">{'    "moved_at": "2026-03-03T16:30:00Z"'}</div>
+                      <div className="ml-2">{'  }'}</div>
+                      <div className="text-green-600">{'}'}</div>
+                    </div>
+                  </div>
+
+                  {/* Slugs Disponíveis */}
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h4 className="font-medium text-purple-900 mb-2">🏷️ Slugs do Funil SDR:</h4>
+                    <div className="space-y-1 text-sm text-purple-800">
+                      <p className="font-mono text-xs">• lead_novo</p>
+                      <p className="font-mono text-xs">• contato_realizado</p>
+                      <p className="font-mono text-xs">• diagnostico_briefing</p>
+                      <p className="font-mono text-xs">• proposta_enviada</p>
+                      <p className="font-mono text-xs">• follow-up</p>
+                      <p className="font-mono text-xs">• fechado_-_ganhou</p>
+                      <p className="font-mono text-xs">• fechado_-_perdeu</p>
+                    </div>
+                    <p className="text-xs text-purple-600 mt-2">
+                      💡 Use o endpoint de mapeamento para obter slugs atualizados
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
