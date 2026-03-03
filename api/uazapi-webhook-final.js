@@ -188,17 +188,56 @@ async function processMessage(payload) {
 
     const messageId = message.id;
     const instanceName = payload.instanceName;
+    const ownerPhone = payload.owner; // Telefone da instância
     
-    // Buscar instância
-    const { data: instance, error: instanceError } = await supabase
+    // SOLUÇÃO 3: Buscar instância com fallback por phone_number
+    console.log('🔍 Buscando instância:', { instanceName, ownerPhone });
+    
+    // Tentar buscar por provider_instance_id primeiro
+    let { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id, company_id')
+      .select('id, company_id, provider_instance_id')
       .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
     
+    // Se não encontrou, buscar por phone_number (fallback)
     if (instanceError || !instance) {
-      return { success: false, error: 'Instância não encontrada: ' + instanceName };
+      console.log('⚠️ Instância não encontrada por provider_instance_id, tentando por phone_number...');
+      
+      const { data: instanceByPhone, error: phoneError } = await supabase
+        .from('whatsapp_life_instances')
+        .select('id, company_id, provider_instance_id')
+        .eq('phone_number', ownerPhone)
+        .eq('status', 'connected')
+        .single();
+      
+      if (phoneError || !instanceByPhone) {
+        console.error('❌ Instância não encontrada nem por provider_instance_id nem por phone_number:', { instanceName, ownerPhone });
+        return { success: false, error: 'Instância não encontrada: ' + instanceName };
+      }
+      
+      // Encontrou por phone_number! Auto-atualizar provider_instance_id
+      console.log('✅ Instância encontrada por phone_number! Auto-atualizando provider_instance_id...');
+      console.log('📝 Atualizando de:', instanceByPhone.provider_instance_id, '→', instanceName);
+      
+      const { error: updateError } = await supabase
+        .from('whatsapp_life_instances')
+        .update({ 
+          provider_instance_id: instanceName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', instanceByPhone.id);
+      
+      if (updateError) {
+        console.error('⚠️ Erro ao atualizar provider_instance_id:', updateError);
+      } else {
+        console.log('✅ provider_instance_id atualizado com sucesso!');
+      }
+      
+      instance = instanceByPhone;
+    } else {
+      console.log('✅ Instância encontrada por provider_instance_id');
     }
     
     // Buscar empresa usando função SECURITY DEFINER (bypass RLS)
