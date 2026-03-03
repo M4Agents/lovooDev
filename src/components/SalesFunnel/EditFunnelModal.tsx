@@ -57,6 +57,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const loadStages = async () => {
     try {
       setLoadingStages(true)
+      console.log('🔄 VERSÃO 2.0 - Carregando etapas com normalização de UUID')
       const data = await funnelApi.getStages(funnel.id)
       console.log('Stages loaded:', data)
       console.log('Stage IDs:', data.map(s => ({ name: s.name, id: s.id, idLength: s.id?.length })))
