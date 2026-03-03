@@ -138,13 +138,22 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Erro ao atualizar etapa')
+        if (response.status === 404) {
+          throw new Error('API ainda não disponível. Aguarde 1-2 minutos para o deploy completar.')
+        }
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json()
+          throw new Error(data.error || 'Erro ao atualizar etapa')
+        } else {
+          throw new Error('Erro ao atualizar etapa. Aguarde o deploy completar.')
+        }
       }
 
       await loadStages()
       setEditingStageId(null)
       setEditingStageName('')
+      setError(undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar etapa')
     }
@@ -173,8 +182,16 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Erro ao criar etapa')
+        if (response.status === 404) {
+          throw new Error('API ainda não disponível. Aguarde 1-2 minutos para o deploy completar.')
+        }
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json()
+          throw new Error(data.error || 'Erro ao criar etapa')
+        } else {
+          throw new Error('Erro ao criar etapa. Aguarde o deploy completar.')
+        }
       }
 
       await loadStages()
@@ -205,14 +222,21 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         })
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        if (data.lead_count > 0 && !moveToStageId) {
-          setError(data.message)
-          return
+        if (response.status === 404) {
+          throw new Error('API ainda não disponível. Aguarde 1-2 minutos para o deploy completar.')
         }
-        throw new Error(data.error || 'Erro ao deletar etapa')
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json()
+          if (data.lead_count > 0 && !moveToStageId) {
+            setError(data.message)
+            return
+          }
+          throw new Error(data.error || 'Erro ao deletar etapa')
+        } else {
+          throw new Error('Erro ao deletar etapa. Aguarde o deploy completar.')
+        }
       }
 
       await loadStages()
@@ -269,7 +293,16 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao reordenar etapas')
+        if (response.status === 404) {
+          throw new Error('API ainda não disponível. Aguarde 1-2 minutos para o deploy completar.')
+        }
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json()
+          throw new Error(data.error || 'Erro ao reordenar etapas')
+        } else {
+          throw new Error('Erro ao reordenar etapas. Aguarde o deploy completar.')
+        }
       }
 
       await loadStages()
