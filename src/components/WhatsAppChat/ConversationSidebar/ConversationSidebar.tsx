@@ -109,19 +109,29 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         </div>
 
         {/* Seletor de Instância */}
-        {instances.length > 1 && (
+        {instances.length > 0 && (
           <div className="mb-4">
             <select
-              value={selectedInstance || ''}
+              value={selectedInstance || 'all'}
               onChange={(e) => onSelectInstance(e.target.value)}
               className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+              style={{
+                fontFamily: 'inherit'
+              }}
             >
-              <option value="">Selecione uma instância</option>
-              {instances.map(instance => (
-                <option key={instance.id} value={instance.id}>
-                  {instance.instance_name} ({instance.phone_number || 'Sem número'})
-                </option>
-              ))}
+              <option value="all">📱 Todas as Instâncias ({conversations.length})</option>
+              {instances.map(instance => {
+                const instanceConversations = conversations.filter(c => c.instance_id === instance.id)
+                const displayText = instance.profile_name 
+                  ? `${instance.instance_name} - ${instance.profile_name}`
+                  : `${instance.instance_name} (${instanceConversations.length})`
+                
+                return (
+                  <option key={instance.id} value={instance.id}>
+                    {displayText}
+                  </option>
+                )
+              })}
             </select>
           </div>
         )}
@@ -324,14 +334,22 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <div className="flex-1 min-w-0">
-              {/* Nome do Lead */}
-              <h4 className={`text-sm truncate ${
-                conversation.unread_count > 0 ? 'font-bold' : 'font-semibold' // NOVO: Negrito para não lidas
-              } ${
-                isSelected ? 'text-slate-800' : 'text-slate-700'
-              }`}>
-                {conversation.contact_name || 'Lead sem nome'}
-              </h4>
+              {/* Nome do Lead + Badge de Instância */}
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className={`text-sm truncate ${
+                  conversation.unread_count > 0 ? 'font-bold' : 'font-semibold'
+                } ${
+                  isSelected ? 'text-slate-800' : 'text-slate-700'
+                }`}>
+                  {conversation.contact_name || 'Lead sem nome'}
+                </h4>
+                {/* Badge da Instância */}
+                {conversation.instance_name && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">
+                    {conversation.instance_name}
+                  </span>
+                )}
+              </div>
               
               {/* NOVO: Nome da Empresa (só aparece se existir) */}
               {conversation.company_name && conversation.company_name.trim() !== '' && (

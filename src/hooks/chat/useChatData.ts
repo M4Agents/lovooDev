@@ -47,9 +47,10 @@ export const useChatData = (
       const instancesData = await chatApi.getCompanyInstances(companyId)
       setInstances(instancesData)
 
-      // Auto-selecionar primeira instância se disponível
+      // NÃO auto-selecionar instância - deixar 'all' como padrão
+      // Isso permite mostrar todas as conversas de todas as instâncias
       if (instancesData.length > 0 && !selectedInstance) {
-        setSelectedInstance(instancesData[0].id)
+        setSelectedInstance('all')
       }
     } catch (error) {
       console.error('Error fetching instances:', error)
@@ -68,11 +69,13 @@ export const useChatData = (
 
     try {
       setConversationsLoading(true)
+      // Se selectedInstance for 'all', passar undefined para buscar todas as instâncias
+      const instanceFilter = selectedInstance === 'all' ? undefined : selectedInstance
       const conversationsData = await chatApi.getConversations(
         companyId,
         userId,
         filter,
-        selectedInstance
+        instanceFilter
       )
       setConversations(conversationsData)
     } catch (error) {
@@ -94,6 +97,7 @@ export const useChatData = (
 
   // Buscar conversas quando filtros mudarem
   useEffect(() => {
+    // Buscar conversas sempre que houver instância selecionada (incluindo 'all')
     if (selectedInstance) {
       fetchConversations()
     }
