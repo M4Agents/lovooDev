@@ -703,7 +703,6 @@ class FunnelApiService {
               email,
               phone,
               company_name,
-              profile_picture_url,
               created_at,
               origin,
               status,
