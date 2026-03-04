@@ -99,7 +99,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               </div>
             </div>
           ) : conversationId ? (
-            <div className="flex-1 flex">
+            <div className="flex-1 flex w-full">
               <ChatLayout
                 companyId={companyId}
                 userId={userId}
