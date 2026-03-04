@@ -14,6 +14,7 @@ interface FunnelColumnProps {
   stage: FunnelStage
   leads: LeadFunnelPosition[]
   visibleFields?: string[]
+  leadPhotos?: Record<string, string>
   onLeadClick?: (leadId: number) => void
   onAddLead?: (stageId: string) => void
   onEditStage?: (stageId: string) => void
@@ -23,6 +24,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   stage,
   leads,
   visibleFields,
+  leadPhotos,
   onLeadClick,
   onAddLead,
   onEditStage
@@ -148,6 +150,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   position={position}
                   index={index}
                   visibleFields={visibleFields}
+                  leadPhotos={leadPhotos}
                   onClick={onLeadClick}
                 />
               ))

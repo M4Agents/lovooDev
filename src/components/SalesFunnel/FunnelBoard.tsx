@@ -14,6 +14,7 @@ import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useLeadPositions } from '../../hooks/useLeadPositions'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
+import { chatApi } from '../../services/chat/chatApi'
 import type { LeadFunnelPosition, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 
 interface FunnelBoardProps {
@@ -55,6 +56,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [showAddLeadModal, setShowAddLeadModal] = useState(false)
   const [selectedStage, setSelectedStage] = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId] = useState<string>('')
+  const [leadPhotos, setLeadPhotos] = useState<Record<string, string>>({})
 
   // Organizar leads por etapa com filtro de busca
   const getLeadsByStage = useCallback((stageId: string): LeadFunnelPosition[] => {
@@ -126,6 +128,42 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     
     fetchAvailableLeads()
   }, [companyId, funnelId, positions])
+
+  // Carregar fotos dos leads a partir do telefone
+  useEffect(() => {
+    const loadLeadPhotos = async () => {
+      if (!companyId || positions.length === 0) return
+
+      const phones = Array.from(new Set(
+        positions
+          .map((pos) => pos.lead?.phone)
+          .filter((phone): phone is string => !!phone)
+      ))
+
+      const missingPhones = phones
+        .map((p) => p.replace(/\D/g, ''))
+        .filter((phone) => phone && !leadPhotos[phone])
+
+      missingPhones.forEach(async (rawPhone) => {
+        try {
+          const phoneDigits = rawPhone.replace(/\D/g, '')
+          if (!phoneDigits) return
+
+          const contact = await chatApi.getContactInfo(companyId, phoneDigits)
+          if (contact?.profile_picture_url) {
+            setLeadPhotos((prev) => {
+              if (prev[phoneDigits]) return prev
+              return { ...prev, [phoneDigits]: contact.profile_picture_url! }
+            })
+          }
+        } catch (error) {
+          console.error('Erro ao carregar foto do lead no funil:', error)
+        }
+      })
+    }
+
+    loadLeadPhotos()
+  }, [companyId, positions, leadPhotos])
 
   // Handler do drag & drop
   const handleDragStart = () => {
@@ -234,6 +272,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 stage={stage}
                 leads={getLeadsByStage(stage.id)}
                 visibleFields={visibleFields}
+                leadPhotos={leadPhotos}
                 onLeadClick={onLeadClick}
                 onAddLead={handleAddLead}
                 onEditStage={handleEditStage}

@@ -13,6 +13,7 @@ interface LeadCardProps {
   position: LeadFunnelPosition
   index: number
   visibleFields?: string[]
+  leadPhotos?: Record<string, string>
   onClick?: (leadId: number) => void
 }
 
@@ -20,6 +21,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   position,
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
+  leadPhotos,
   onClick
 }) => {
   const lead = position.lead
@@ -53,17 +55,24 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           <div className="flex items-start gap-3 mb-3">
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
-                {lead.profile_picture_url ? (
-                  <img
-                    src={lead.profile_picture_url}
-                    alt={lead.name}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                )}
+                {(() => {
+                  const phoneKey = lead.phone ? lead.phone.replace(/\D/g, '') : ''
+                  const photoUrl = phoneKey && leadPhotos ? leadPhotos[phoneKey] : undefined
+                  if (photoUrl) {
+                    return (
+                      <img
+                        src={photoUrl}
+                        alt={lead.name}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    )
+                  }
+                  return (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <User className="w-5 h-5 text-white" />
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
