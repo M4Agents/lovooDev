@@ -30,6 +30,6 @@ backups/
 backup/
 
 # Documentação local (não essencial para deploy)
-*.md
-!README.md
+# *.md - REMOVIDO para permitir documentação técnica
+# !README.md
 .vercel
