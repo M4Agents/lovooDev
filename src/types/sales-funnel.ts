@@ -386,6 +386,7 @@ export const FUNNEL_CONSTANTS = {
     'company',
     'tags',
     'deal_value',
+    'probability',
     'origin',
     'status',
     'created_at',

@@ -119,11 +119,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             )}
 
-            {/* Valor da Oportunidade (ATUALIZADO) */}
+            {/* Valor da Oportunidade com Probabilidade */}
             {isFieldVisible('deal_value') && opportunity.value > 0 && (
               <div className="flex items-center gap-2 text-xs font-semibold text-green-600">
                 <DollarSign className="w-3.5 h-3.5" />
                 <span>{formatCurrency(opportunity.value)}</span>
+                {isFieldVisible('probability') && opportunity.probability && (
+                  <span className="text-blue-600">↗ {opportunity.probability}%</span>
+                )}
               </div>
             )}
 
