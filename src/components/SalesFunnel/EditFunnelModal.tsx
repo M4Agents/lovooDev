@@ -57,10 +57,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const loadStages = async () => {
     try {
       setLoadingStages(true)
-      console.log('🔄 VERSÃO 2.0 - Carregando etapas com normalização de UUID')
       const data = await funnelApi.getStages(funnel.id)
-      console.log('Stages loaded:', data)
-      console.log('Stage IDs:', data.map(s => ({ name: s.name, id: s.id, idLength: s.id?.length })))
       setStages(data)
     } catch (err) {
       console.error('Error loading stages:', err)
@@ -290,38 +287,12 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     newStages.splice(dropIndex, 0, draggedStage)
 
     // Atualizar posições
-    const updatedStages = newStages.map((stage, index) => {
-      // Validar e corrigir UUID se necessário
-      let validId = stage.id
-      if (validId && validId.length !== 36) {
-        console.warn(`Invalid UUID length for stage ${stage.name}: ${validId.length} chars`)
-        // Se tiver 35 caracteres, adicionar um caractere no final
-        if (validId.length === 35) {
-          validId = validId + '1'
-          console.log(`Fixed UUID: ${stage.id} -> ${validId}`)
-        }
-        // Se tiver 37 caracteres, remover o último
-        else if (validId.length === 37) {
-          validId = validId.slice(0, 36)
-          console.log(`Fixed UUID: ${stage.id} -> ${validId}`)
-        }
-      }
-      
-      return {
-        id: validId,
-        position: index
-      }
-    })
-
-    console.log('Reordering stages:', updatedStages)
-    console.log('Funnel ID:', funnel.id)
-    console.log('Request payload:', JSON.stringify({
-      funnel_id: funnel.id,
-      stages: updatedStages
-    }, null, 2))
+    const updatedStages = newStages.map((stage, index) => ({
+      id: stage.id,
+      position: index
+    }))
 
     try {
-      console.log('Calling API: /api/funnel/reorder-stages')
       const response = await fetch('/api/funnel/reorder-stages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

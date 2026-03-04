@@ -220,24 +220,7 @@ class FunnelApiService {
       
       if (error) throw error
       
-      // Normalizar UUIDs para garantir 36 caracteres
-      const normalizedData = (data || []).map(stage => {
-        const id = String(stage.id || '')
-        const normalizedId = id.length === 36 ? id : 
-                            id.length === 35 ? id + '1' :
-                            id.length === 37 ? id.slice(0, 36) : id
-        
-        if (id !== normalizedId) {
-          console.warn(`UUID normalizado: ${stage.name} - ${id.length} chars -> ${normalizedId.length} chars`)
-        }
-        
-        return {
-          ...stage,
-          id: normalizedId
-        }
-      })
-      
-      return normalizedData
+      return data || []
     } catch (error) {
       console.error('Error fetching stages:', error)
       throw error

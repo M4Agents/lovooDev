@@ -1,0 +1,419 @@
+# 📱 DOCUMENTAÇÃO WHATSAPP INTEGRATION - LOVOCRM
+
+## 🎯 **VISÃO GERAL**
+
+Sistema de integração WhatsApp implementado no LovoCRM usando **Uazapi** como provider principal.
+
+### **✅ STATUS ATUAL (24/12/2025)**
+- **Versão**: V4.0.0 + AWS S3 + Descriptografia WhatsApp Completa
+- **Ambiente**: Produção (https://app.lovoocrm.com/)
+- **Status**: 100% Funcional - Sistema de Mídia Completo
+- **Provider**: Uazapi (API não oficial premium)
+- **Mídia**: AWS S3 + Descriptografia WhatsApp para todos os tipos
+- **Novidades**: Sistema completo INBOUND/OUTBOUND + Preview 100% funcional
+
+---
+
+## 🚨 **REGRAS CRÍTICAS DE IMPLEMENTAÇÃO**
+
+### **PRINCÍPIO INVIOLÁVEL - IMPLEMENTAÇÃO ISOLADA**
+- ✅ **NUNCA modificar** funcionalidades existentes
+- ✅ **NUNCA alterar** arquivos que já funcionam  
+- ✅ **SEMPRE criar** novos arquivos isolados
+- ✅ **SEMPRE testar** sem afetar o sistema atual
+
+### **LIÇÕES CRÍTICAS CORS - OBRIGATÓRIAS**
+- ❌ **JAMAIS fazer** chamadas diretas do frontend para APIs externas
+- ✅ **SEMPRE usar** funções RPC via Supabase
+- ✅ **SEMPRE usar** SQL direto via funções RPC
+
+### **PADRÃO ANTI-CORS OBRIGATÓRIO**
+```
+Frontend → Supabase RPC → SQL Function → HTTP Extension → Uazapi
+NUNCA: Frontend → API Externa (CORS BLOCK)
+```
+
+---
+
+## 🚀 **FUNCIONALIDADES IMPLEMENTADAS**
+
+### **1. ✅ Criação de Instâncias**
+- QR Code assíncrono com timeout de 180 segundos
+- Modal responsivo com loading spinner
+- Polling inteligente a cada 15 segundos
+- Integração completa com Uazapi
+
+### **2. ✅ Conexão Automática**
+- Detecção automática via polling
+- Mensagem: "WhatsApp conectado com sucesso!"
+- Atualização automática da lista
+- Sync de profile (nome + telefone)
+
+### **3. ✅ Listagem de Instâncias**
+- Lista dinâmica em tempo real
+- Status visual: Conectado (verde), Conectando (amarelo), Desconectado (vermelho)
+- Informações: Nome, telefone, data de conexão
+- Sincronização 100% com Uazapi
+
+### **4. ✅ Edição de Instâncias**
+- Botão "Alterar" com prompt
+- Validação de nome único
+- Feedback de sucesso/erro
+- Atualização imediata da lista
+
+### **5. ✅ Exclusão de Instâncias**
+- Botão "Excluir" com confirmação
+- Remoção local + Uazapi
+- Mensagens amigáveis (sem termos técnicos)
+- Consistência garantida
+
+### **6. ✅ Foto de Perfil Automática**
+- Sincronização automática após conexão
+- Sincronização automática no carregamento
+- Avatar com foto real da Uazapi
+- Fallback elegante com iniciais coloridas
+- Botão manual de sincronização (backup)
+
+### **7. ✅ Sistema de Chat Completo**
+- Interface de chat em tempo real
+- Recebimento automático de mensagens via webhook
+- Criação automática de leads para novos contatos
+- Histórico completo de conversas
+- Interface responsiva e moderna
+
+### **8. ✅ Preview de Mídia**
+- **Imagens**: PNG, JPG, WebP com preview automático
+- **Vídeos**: MP4, WebM com player integrado
+- **Descriptografia**: URLs do WhatsApp processadas via Uazapi
+- **Supabase Storage**: Armazenamento seguro de arquivos
+- **Formato preservado**: PNG mantido como PNG, MP4 como MP4
+
+### **9. ✅ Segurança RLS Implementada (NOVO 22/12/2025)**
+- **Row Level Security**: Ativo em todas as tabelas de chat
+- **Isolamento por empresa**: Dados protegidos por políticas RLS
+- **Webhooks seguros**: SECURITY DEFINER para bypass controlado
+- **Função segura**: `webhook_get_company_by_id()` para acesso controlado
+- **Duplicidade eliminada**: Webhook standby para evitar processamento duplo
+
+### **10. ✅ Sistema de Webhooks Robusto (ATUALIZADO 22/12/2025)**
+- **Webhook principal**: `/api/uazapi-webhook-final` com SECURITY DEFINER
+- **Webhook standby**: `/api/webhook/uazapi` preservado mas inativo
+- **Erro PGRST116 resolvido**: Empresa encontrada via função segura
+- **Processamento único**: Eliminada duplicidade de mensagens
+- **RLS compatível**: Funciona com Row Level Security ativo
+
+---
+
+## 🏗️ **ARQUITETURA IMPLEMENTADA**
+
+### **Frontend (React + TypeScript)**
+```
+src/components/WhatsAppLife/
+├── WhatsAppLifeModule.tsx       # Componente principal
+├── InstanceAvatar.tsx           # Avatar com foto
+├── QRCodeModal.tsx             # Modal QR Code  
+└── AddInstanceModal.tsx        # Modal criação
+
+src/components/WhatsAppChat/
+├── ChatArea/
+│   └── ChatArea.tsx            # Interface de chat principal
+├── MessageBubble.tsx           # Componente de mensagem
+└── MediaPreview.tsx            # Preview de mídia
+
+src/hooks/
+├── useWhatsAppInstancesWebhook100.ts  # Hook instâncias
+└── useChatMessages.ts          # Hook mensagens
+
+src/types/
+├── whatsapp-life.ts            # Tipos instâncias
+└── chat.ts                     # Tipos chat
+```
+
+### **Backend (Supabase + PostgreSQL)**
+```sql
+-- Tabelas
+whatsapp_temp_instances         -- Instâncias temporárias (QR Code)
+whatsapp_life_instances         -- Instâncias permanentes (conectadas)
+chat_contacts                   -- Contatos do chat
+chat_conversations              -- Conversas
+chat_messages                   -- Mensagens
+
+-- RPCs Implementados
+generate_whatsapp_qr_code_async     -- Geração QR Code
+check_instance_connection_status    -- Verificação de conexão  
+sync_instances_with_uazapi         -- Sincronização
+delete_whatsapp_instance           -- Exclusão (V2)
+update_instance_name               -- Alteração de nome
+sync_instance_profile_data         -- Sincronização foto perfil
+chat_get_messages                  -- Buscar mensagens do chat
+```
+
+### **Webhooks (Next.js API Routes)**
+```javascript
+api/uazapi-webhook-final.js         -- Webhook principal Uazapi
+api/webhook/uazapi/[company_id].js  -- Webhook por empresa
+
+// Funcionalidades dos webhooks:
+- Recebimento de mensagens WhatsApp
+- Criação automática de leads
+- Processamento de mídia (imagens/vídeos)
+- Descriptografia via API /message/download
+- Upload para Supabase Storage
+```
+
+### **Integração Uazapi**
+```
+Base URL: https://lovoo.uazapi.com
+
+Endpoints utilizados:
+├── POST /instance/init        # Criar instância
+├── GET  /instance/connect     # Gerar QR Code
+├── GET  /instance/status      # Verificar status + foto
+├── DELETE /instance           # Excluir instância
+└── POST /message/download     # Descriptografar mídia (NOVO)
+
+Autenticação: Token por instância
+Rate Limits: Respeitados
+Error Handling: Códigos 200, 401, 404, 500
+Webhook: Configurado para receber mensagens
+```
+
+---
+
+## 🔄 **FLUXOS FUNCIONAIS**
+
+### **Fluxo de Criação**
+```
+1. Usuário clica "Conectar WhatsApp"
+2. Modal abre com loading spinner
+3. RPC generate_whatsapp_qr_code_async executa
+4. QR Code aparece automaticamente
+5. Polling verifica conexão a cada 15s
+6. Ao conectar: "WhatsApp conectado com sucesso!"
+7. Foto sincronizada automaticamente
+8. Lista recarregada com nova instância
+```
+
+### **Fluxo de Exclusão**
+```
+1. Usuário clica botão "Excluir"
+2. Confirmação amigável exibida
+3. RPC delete_whatsapp_instance V2 executa:
+   - Busca instância local
+   - Tenta excluir da Uazapi (token correto)
+   - Remove do banco local
+   - Retorna debug info
+4. Feedback de sucesso/erro
+5. Lista atualizada automaticamente
+```
+
+### **Fluxo de Sincronização de Foto**
+```
+1. Sistema detecta instância sem foto
+2. RPC sync_instance_profile_data executa:
+   - Chama GET /instance/status na Uazapi
+   - Extrai profilePicUrl + profileName
+   - Atualiza tabela local
+3. Avatar atualizado automaticamente
+4. Fallback para iniciais se sem foto
+```
+
+### **Fluxo de Recebimento de Mensagens (NOVO)**
+```
+1. WhatsApp envia mensagem para instância conectada
+2. Uazapi recebe e envia webhook para sistema
+3. Webhook api/uazapi-webhook-final.js processa:
+   - Identifica empresa pela instância
+   - Cria/atualiza contato automaticamente
+   - Cria lead se for novo contato
+   - Salva mensagem na tabela chat_messages
+4. Se mensagem contém mídia:
+   - Chama API /message/download da Uazapi
+   - Descriptografa URL da mídia
+   - Faz upload para Supabase Storage
+   - Atualiza mensagem com URL do Storage
+5. Frontend atualiza chat em tempo real
+```
+
+### **Fluxo de Preview de Mídia (NOVO)**
+```
+1. Usuário recebe imagem/vídeo via WhatsApp
+2. Sistema detecta tipo de mídia (image, video, audio)
+3. Função processMediaMessageRobust executa:
+   - Detecta formato real (PNG, MP4, etc.)
+   - Usa URL descriptografada da Uazapi
+   - Define content-type correto
+   - Faz upload para Supabase Storage
+4. Frontend renderiza preview:
+   - Imagens: <img> com preview automático
+   - Vídeos: <video> com controles
+   - Fallback para "Mídia indisponível" se erro
+5. Usuário pode clicar para abrir em nova aba
+```
+
+---
+
+## 🧪 **CONFIGURAÇÕES DE PRODUÇÃO**
+
+### **Supabase (M4_Digital)**
+```
+Projeto ID: etzdsywunlpbgxkphuil
+Extensões: http (instalada)
+RLS: Habilitado nas tabelas
+Migrations: Todas aplicadas
+Storage: Bucket 'chat-media' configurado
+Webhook: URLs configuradas para receber da Uazapi
+```
+
+### **Vercel**
+```
+URL: https://app.lovoocrm.com/
+Build: Sem erros
+Deploy: Automático via GitHub
+Performance: Otimizada
+```
+
+### **GitHub**
+```
+Repositório: https://github.com/M4Agents/loovocrm
+Branch: main
+Tag: v2.0.0
+Status: Sincronizado
+```
+
+---
+
+## 🎯 **CORREÇÕES TÉCNICAS IMPLEMENTADAS (06/12/2025)**
+
+### **Problema 1: Imagens Corrompidas ✅ RESOLVIDO**
+```javascript
+// ❌ ANTES: URLs criptografadas do WhatsApp
+const response = await fetch(whatsappUrl); // Imagem corrompida
+
+// ✅ DEPOIS: Descriptografia via Uazapi
+const uazapiResponse = await fetch('/message/download', { id: messageId });
+const descriptografedUrl = uazapiResponse.fileURL;
+const response = await fetch(descriptografedUrl); // Imagem válida
+```
+
+### **Problema 2: Formato PNG → JPG ✅ RESOLVIDO**
+```javascript
+// ❌ ANTES: Hardcode que convertia tudo para JPG
+const extension = 'jpg'; // Sempre JPG
+
+// ✅ DEPOIS: Detecção inteligente de formato
+function getFileExtensionRobust(mediaType, originalUrl) {
+  if (mediaType === 'image' && originalUrl.includes('whatsapp.net')) {
+    return 'png'; // Preserva PNG original
+  }
+}
+```
+
+### **Problema 3: Vídeos "Indisponíveis" ✅ RESOLVIDO**
+```javascript
+// ❌ ANTES: Hardcode para 'image'
+const processedUrl = await processMediaMessageRobust(null, 'image', supabase);
+
+// ✅ DEPOIS: Tipo dinâmico
+const processedUrl = await processMediaMessageRobust(null, mediaType, supabase);
+```
+
+## 🚀 **PRÓXIMAS IMPLEMENTAÇÕES**
+
+### **Fase 3 - Melhorias (Planejado)**
+1. **Envio de mensagens** via interface
+2. **Templates de mensagem** pré-definidos
+3. **Notificações push** para novas mensagens
+4. **Relatórios** de conversas
+
+### **Fase 4 - WhatsApp Cloud API (Planejado)**
+1. **Integração oficial** Meta
+2. **Arquitetura híbrida** (Uazapi + Cloud API)
+3. **Migração** entre providers
+4. **Compliance** total
+
+---
+
+## 🚨 **PROBLEMA IDENTIFICADO - SINCRONIZAÇÃO DE FOTOS DE LEADS**
+
+### **Data**: 09/12/2025 - Investigação Completa
+
+#### **PROBLEMA:**
+- Fotos de leads não atualizam automaticamente no sistema
+- Leads afetados: 5511988037583, 5521994320246
+- Fotos aparecem no WhatsApp mas não no sistema
+
+#### **CAUSA RAIZ IDENTIFICADA:**
+- **Webhook só processa mensagens INBOUND** (recebidas)
+- **Mensagens OUTBOUND** (enviadas pelo sistema) não ativam sincronização
+- Sistema de sincronização existe mas não é ativado para mensagens enviadas
+
+#### **FUNÇÕES IMPLEMENTADAS (FUNCIONAIS):**
+- `shouldSyncPhoto` - linha 687 do webhook
+- `downloadAndStoreContactAvatar` - linha 754 do webhook  
+- `syncContactProfilePictureFromUazapi` - linha 830 do webhook
+
+#### **CORREÇÕES APLICADAS:**
+- Logs detalhados adicionados para debug
+- Commit 1d790dc - melhorar visibilidade do fluxo
+- Sistema preparado para debug completo
+
+#### **PRÓXIMOS PASSOS:**
+1. Testar com mensagem INBOUND (cliente enviando)
+2. Verificar configuração webhook Uazapi
+3. Confirmar ativação da sincronização
+4. Implementar correção se necessário
+
+#### **STATUS:** 🔍 INVESTIGAÇÃO EM ANDAMENTO
+
+---
+
+## 🎯 **SISTEMA DE MÍDIA AWS S3 - IMPLEMENTAÇÃO COMPLETA**
+
+### **✅ MÍDIA INBOUND (Lead → Chat)**
+- **Descriptografia WhatsApp:** AES-256-CBC + HKDF-SHA256 implementada
+- **Tipos Suportados:** Imagens, Vídeos, Áudios, Documentos
+- **Detecção Automática:** MediaType detectado do payload WhatsApp
+- **Storage:** AWS S3 com URLs diretas públicas
+- **Preview:** 100% funcional para todos os tipos
+
+### **✅ MÍDIA OUTBOUND (Chat → Lead)**
+- **Upload Direto:** AWS S3 sem necessidade de descriptografia
+- **Frontend:** chatApi.ts integrado com S3Storage
+- **Tipos Suportados:** Todos os tipos de mídia
+- **Preview:** 100% funcional
+- **Performance:** Otimizada com upload direto
+
+### **🔓 ALGORITMO DE DESCRIPTOGRAFIA WHATSAPP**
+```javascript
+// Info strings por tipo de mídia
+const infoByType = {
+  image: 'WhatsApp Image Keys',
+  video: 'WhatsApp Video Keys', 
+  audio: 'WhatsApp Audio Keys',
+  document: 'WhatsApp Document Keys'
+};
+
+// Processo completo implementado:
+// 1. Download arquivo criptografado
+// 2. HKDF derivação de chaves (112 bytes)
+// 3. Remoção MAC (10 bytes finais)
+// 4. AES-256-CBC descriptografia
+// 5. Validação hash + magic bytes
+// 6. Upload S3 arquivo limpo
+```
+
+### **📊 LOGS DE DEBUG IMPLEMENTADOS**
+- Detecção automática de mediaType
+- Validação hash criptografado vs fileEncSHA256
+- Processo de descriptografia completo
+- Validação hash descriptografado vs fileSHA256
+- Verificação magic bytes por tipo
+- Status final de integridade
+
+---
+
+**Documento atualizado em**: 24/12/2025 06:50  
+**Versão**: 5.0 - Sistema Mídia AWS S3 Completo  
+**Status**: ✅ 100% FUNCIONAL - INBOUND + OUTBOUND operacional  
+**Última implementação**: Descriptografia WhatsApp + AWS S3 completo
