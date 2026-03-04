@@ -5,11 +5,13 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
+import type { SalesFunnel, FunnelStage, OpportunityFunnelPosition } from '../../../types/sales-funnel'
 import { supabase } from '../../../lib/supabase'
+import { funnelApi } from '../../../services/funnelApi'
 
 interface OpportunitiesSectionProps {
   phoneNumber: string
@@ -26,6 +28,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   
   const [leadId, setLeadId] = useState<number | null>(null)
   const [loadingLeadId, setLoadingLeadId] = useState(true)
+  
+  // Estados para funis e etapas
+  const [funnels, setFunnels] = useState<SalesFunnel[]>([])
+  const [stagesByFunnel, setStagesByFunnel] = useState<Record<string, FunnelStage[]>>({})
+  const [positions, setPositions] = useState<Record<string, OpportunityFunnelPosition>>({})
+  const [loadingFunnels, setLoadingFunnels] = useState(false)
+  const [updatingPosition, setUpdatingPosition] = useState<string | null>(null)
   
   // Buscar lead_id a partir do telefone
   useEffect(() => {
@@ -67,8 +76,104 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId || 0)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
+  // Buscar funis e posições das oportunidades
+  useEffect(() => {
+    const fetchFunnelsAndPositions = async () => {
+      if (!companyId || opportunities.length === 0) return
+      
+      try {
+        setLoadingFunnels(true)
+        
+        // Buscar funis da empresa
+        const funnelsData = await funnelApi.getFunnels(companyId)
+        setFunnels(funnelsData)
+        
+        // Buscar etapas de cada funil
+        const stagesData: Record<string, FunnelStage[]> = {}
+        for (const funnel of funnelsData) {
+          const stages = await funnelApi.getStages(funnel.id)
+          stagesData[funnel.id] = stages
+        }
+        setStagesByFunnel(stagesData)
+        
+        // Buscar posições das oportunidades
+        const positionsData: Record<string, OpportunityFunnelPosition> = {}
+        for (const opp of opportunities) {
+          const { data } = await supabase
+            .from('opportunity_funnel_positions')
+            .select('*')
+            .eq('opportunity_id', opp.id)
+            .single()
+          
+          if (data) {
+            positionsData[opp.id] = data
+          }
+        }
+        setPositions(positionsData)
+        
+      } catch (error) {
+        console.error('Erro ao buscar funis:', error)
+      } finally {
+        setLoadingFunnels(false)
+      }
+    }
+    
+    fetchFunnelsAndPositions()
+  }, [companyId, opportunities])
+
   // Filtrar apenas oportunidades abertas
   const activeOpportunities = opportunities.filter(opp => opp.status === 'open')
+
+  // Função para atualizar posição da oportunidade
+  const handleUpdatePosition = async (
+    opportunityId: string,
+    newFunnelId: string,
+    newStageId: string
+  ) => {
+    try {
+      setUpdatingPosition(opportunityId)
+      
+      const currentPosition = positions[opportunityId]
+      
+      // Se mudou de funil, precisa remover do antigo e adicionar no novo
+      if (currentPosition && currentPosition.funnel_id !== newFunnelId) {
+        // Remover do funil antigo
+        await funnelApi.removeOpportunityFromFunnel(opportunityId, currentPosition.funnel_id)
+        
+        // Adicionar no novo funil
+        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId)
+      } else if (currentPosition) {
+        // Apenas mudou de etapa no mesmo funil
+        await funnelApi.moveOpportunityToStage({
+          opportunity_id: opportunityId,
+          funnel_id: newFunnelId,
+          from_stage_id: currentPosition.stage_id,
+          to_stage_id: newStageId,
+          position_in_stage: 0
+        })
+      } else {
+        // Primeira vez adicionando ao funil
+        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId)
+      }
+      
+      // Atualizar estado local
+      const { data } = await supabase
+        .from('opportunity_funnel_positions')
+        .select('*')
+        .eq('opportunity_id', opportunityId)
+        .single()
+      
+      if (data) {
+        setPositions(prev => ({ ...prev, [opportunityId]: data }))
+      }
+      
+    } catch (error) {
+      console.error('Erro ao atualizar posição:', error)
+      alert('Erro ao atualizar posição da oportunidade')
+    } finally {
+      setUpdatingPosition(null)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -176,6 +281,73 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Seletores de Funil e Etapa */}
+              {!loadingFunnels && funnels.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                  {/* Seletor de Funil */}
+                  <div>
+                    <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                      <Target className="w-3 h-3" />
+                      Funil
+                    </label>
+                    <select
+                      value={positions[opportunity.id]?.funnel_id || ''}
+                      onChange={(e) => {
+                        const newFunnelId = e.target.value
+                        const firstStage = stagesByFunnel[newFunnelId]?.[0]
+                        if (firstStage) {
+                          handleUpdatePosition(opportunity.id, newFunnelId, firstStage.id)
+                        }
+                      }}
+                      disabled={updatingPosition === opportunity.id}
+                      className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Selecione um funil</option>
+                      {funnels.map(funnel => (
+                        <option key={funnel.id} value={funnel.id}>
+                          {funnel.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Seletor de Etapa */}
+                  {positions[opportunity.id]?.funnel_id && stagesByFunnel[positions[opportunity.id].funnel_id] && (
+                    <div>
+                      <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                        <MapPin className="w-3 h-3" />
+                        Etapa
+                      </label>
+                      <select
+                        value={positions[opportunity.id]?.stage_id || ''}
+                        onChange={(e) => {
+                          const newStageId = e.target.value
+                          const funnelId = positions[opportunity.id].funnel_id
+                          handleUpdatePosition(opportunity.id, funnelId, newStageId)
+                        }}
+                        disabled={updatingPosition === opportunity.id}
+                        className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Selecione uma etapa</option>
+                        {stagesByFunnel[positions[opportunity.id].funnel_id]?.map(stage => (
+                          <option key={stage.id} value={stage.id}>
+                            {stage.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Indicador de loading */}
+                  {updatingPosition === opportunity.id && (
+                    <div className="flex items-center gap-2 text-xs text-purple-600">
+                      <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                      Atualizando...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
