@@ -57,8 +57,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 {(() => {
-                  const phoneKey = lead.phone ? lead.phone.replace(/\D/g, '') : ''
-                  const photoUrl = phoneKey && leadPhotos ? leadPhotos[phoneKey] : undefined
+                  // Primeiro tenta profile_picture_url do lead
+                  let photoUrl = lead.profile_picture_url
+                  
+                  // Fallback para leadPhotos (mapeamento por telefone)
+                  if (!photoUrl && lead.phone && leadPhotos) {
+                    const phoneKey = lead.phone.replace(/\D/g, '')
+                    photoUrl = leadPhotos[phoneKey]
+                  }
+                  
                   if (photoUrl) {
                     return (
                       <img
