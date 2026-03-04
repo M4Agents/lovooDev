@@ -38,21 +38,60 @@ export interface FunnelStage {
   total_value?: number
 }
 
-export interface LeadFunnelPosition {
+// =====================================================
+// INTERFACE: Opportunity (NOVO MODELO)
+// =====================================================
+
+export interface Opportunity {
   id: string
   lead_id: number
+  company_id: string
+  title: string
+  description?: string
+  value: number
+  currency: string
+  status: 'open' | 'won' | 'lost'
+  probability: number
+  expected_close_date?: string
+  actual_close_date?: string
+  source?: string
+  owner_user_id?: string
+  created_at: string
+  updated_at: string
+  closed_at?: string
+  
+  // Joins
+  lead?: LeadCardData
+}
+
+// =====================================================
+// INTERFACE: OpportunityFunnelPosition (RENOMEADO)
+// =====================================================
+
+export interface OpportunityFunnelPosition {
+  id: string
+  opportunity_id: string
+  lead_id: number  // Mantido temporariamente para compatibilidade
   funnel_id: string
   stage_id: string
   position_in_stage: number
-  entered_stage_at: Date
+  entered_stage_at?: Date
   updated_at: Date
+  
+  // Joins
+  opportunity?: Opportunity
   lead?: LeadCardData
+  stage?: FunnelStage
   days_in_stage?: number
 }
 
-export interface LeadStageHistory {
+// Alias para compatibilidade (DEPRECATED)
+export type LeadFunnelPosition = OpportunityFunnelPosition
+
+export interface OpportunityStageHistory {
   id: string
-  lead_id: number
+  opportunity_id: string
+  lead_id: number  // Mantido para compatibilidade
   funnel_id: string
   from_stage_id?: string
   to_stage_id: string
@@ -62,6 +101,9 @@ export interface LeadStageHistory {
   from_stage?: FunnelStage
   to_stage?: FunnelStage
 }
+
+// Alias para compatibilidade (DEPRECATED)
+export type LeadStageHistory = OpportunityStageHistory
 
 export interface LeadCardFieldPreference {
   id: string
@@ -138,6 +180,44 @@ export interface MoveLeadForm {
   notes?: string
 }
 
+// =====================================================
+// FORMS PARA OPORTUNIDADES (NOVO)
+// =====================================================
+
+export interface CreateOpportunityForm {
+  lead_id: number
+  company_id: string
+  title: string
+  description?: string
+  value?: number
+  currency?: string
+  probability?: number
+  expected_close_date?: string
+  source?: string
+  owner_user_id?: string
+}
+
+export interface UpdateOpportunityForm {
+  title?: string
+  description?: string
+  value?: number
+  currency?: string
+  status?: 'open' | 'won' | 'lost'
+  probability?: number
+  expected_close_date?: string
+  actual_close_date?: string
+  owner_user_id?: string
+}
+
+export interface MoveOpportunityForm {
+  opportunity_id: string
+  funnel_id: string
+  from_stage_id: string
+  to_stage_id: string
+  position_in_stage: number
+  notes?: string
+}
+
 export interface UpdateCardFieldsForm {
   visible_fields: string[]
 }
@@ -192,16 +272,29 @@ export interface StageResponse extends FunnelApiResponse {
   data?: FunnelStage
 }
 
-export interface LeadPositionsResponse extends FunnelApiResponse {
-  data?: LeadFunnelPosition[]
+// Responses para Oportunidades (NOVO)
+export interface OpportunitiesResponse extends FunnelApiResponse {
+  data?: Opportunity[]
 }
 
-export interface LeadPositionResponse extends FunnelApiResponse {
-  data?: LeadFunnelPosition
+export interface OpportunityResponse extends FunnelApiResponse {
+  data?: Opportunity
 }
+
+export interface OpportunityPositionsResponse extends FunnelApiResponse {
+  data?: OpportunityFunnelPosition[]
+}
+
+export interface OpportunityPositionResponse extends FunnelApiResponse {
+  data?: OpportunityFunnelPosition
+}
+
+// Aliases para compatibilidade (DEPRECATED)
+export type LeadPositionsResponse = OpportunityPositionsResponse
+export type LeadPositionResponse = OpportunityPositionResponse
 
 export interface StageHistoryResponse extends FunnelApiResponse {
-  data?: LeadStageHistory[]
+  data?: OpportunityStageHistory[]
 }
 
 export interface CardPreferencesResponse extends FunnelApiResponse {
