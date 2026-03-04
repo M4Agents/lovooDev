@@ -909,28 +909,13 @@ export class ChatApi {
       console.log('📞 Telefone original:', lead.phone)
       console.log('📞 Telefone limpo:', cleanPhone)
 
-      // 2. Buscar contato via telefone
-      const { data: contact, error: contactError } = await supabase
-        .from('chat_contacts')
-        .select('id')
-        .eq('phone_number', cleanPhone)
-        .eq('company_id', companyId)
-        .single()
-
-      console.log('👤 Contato encontrado:', contact)
-      console.log('❌ Erro contato:', contactError)
-
-      if (contactError || !contact) {
-        console.log('⚠️ Contato não encontrado no chat')
-        return null
-      }
-
-      // 3. Buscar conversa do contato
+      // 2. Buscar conversa diretamente via telefone (chat_conversations usa contact_phone)
       const { data: conversation, error: conversationError } = await supabase
         .from('chat_conversations')
         .select('id')
-        .eq('contact_id', contact.id)
+        .eq('contact_phone', cleanPhone)
         .eq('company_id', companyId)
+        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
