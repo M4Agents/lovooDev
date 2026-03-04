@@ -62,7 +62,7 @@ export default function SalesFunnel() {
     }
   }, [showOptionsMenu])
 
-  // Carregar preferências salvas ao montar componente
+  // Carregar preferências salvas ao montar componente e ao trocar funil
   useEffect(() => {
     const loadPreferences = async () => {
       if (!companyId) return
@@ -80,7 +80,7 @@ export default function SalesFunnel() {
       }
     }
     loadPreferences()
-  }, [companyId])
+  }, [companyId, selectedFunnel])
 
   const handleLeadClick = (leadId: number) => {
     setSelectedLeadId(leadId)
