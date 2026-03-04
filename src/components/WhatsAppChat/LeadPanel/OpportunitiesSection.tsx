@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2 } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
@@ -35,6 +35,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [positions, setPositions] = useState<Record<string, OpportunityFunnelPosition>>({})
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [updatingPosition, setUpdatingPosition] = useState<string | null>(null)
+  const [deletingOpportunity, setDeletingOpportunity] = useState<string | null>(null)
   
   // Buscar lead_id a partir do telefone (ou criar se não existir)
   useEffect(() => {
@@ -141,6 +142,45 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
   // Filtrar apenas oportunidades abertas
   const activeOpportunities = opportunities.filter(opp => opp.status === 'open')
+
+  // Função para excluir oportunidade
+  const handleDeleteOpportunity = async (opportunityId: string, opportunityTitle: string) => {
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir a oportunidade "${opportunityTitle}"?\n\nEsta ação não pode ser desfeita.`
+    )
+    
+    if (!confirmed) return
+    
+    try {
+      setDeletingOpportunity(opportunityId)
+      
+      console.log('🗑️ OpportunitiesSection - Excluindo oportunidade:', opportunityId)
+      
+      // Remover da posição do funil primeiro (se existir)
+      if (positions[opportunityId]) {
+        await funnelApi.removeOpportunityFromFunnel(opportunityId, positions[opportunityId].funnel_id)
+      }
+      
+      // Excluir a oportunidade
+      const { error } = await supabase
+        .from('opportunities')
+        .delete()
+        .eq('id', opportunityId)
+      
+      if (error) throw error
+      
+      console.log('✅ OpportunitiesSection - Oportunidade excluída com sucesso')
+      
+      // Atualizar lista
+      refreshOpportunities()
+      
+    } catch (error) {
+      console.error('❌ OpportunitiesSection - Erro ao excluir oportunidade:', error)
+      alert('Erro ao excluir oportunidade. Tente novamente.')
+    } finally {
+      setDeletingOpportunity(null)
+    }
+  }
 
   // Função para atualizar posição da oportunidade
   const handleUpdatePosition = async (
@@ -271,9 +311,19 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     </p>
                   )}
                 </div>
-                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
-                  Aberta
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
+                    Aberta
+                  </span>
+                  <button
+                    onClick={() => handleDeleteOpportunity(opportunity.id, opportunity.title)}
+                    disabled={deletingOpportunity === opportunity.id}
+                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Excluir oportunidade"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Informações Compactas */}
