@@ -15,7 +15,6 @@ import { useLeadPositions } from '../../hooks/useLeadPositions'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { chatApi } from '../../services/chat/chatApi'
-import { supabase } from '../../lib/supabase'
 import type { LeadFunnelPosition, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 
 interface FunnelBoardProps {
@@ -58,7 +57,6 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [selectedStage, setSelectedStage] = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId] = useState<string>('')
   const [leadPhotos, setLeadPhotos] = useState<Record<string, string>>({})
-  const [lastMessageTimes, setLastMessageTimes] = useState<Record<string, Date>>({})
 
   // Organizar leads por etapa com filtro de busca
   const getLeadsByStage = useCallback((stageId: string): LeadFunnelPosition[] => {
@@ -80,33 +78,24 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       })
     }
     
-    // Ordenar por última interação no chat (mais recente primeiro)
+    // Ordenar por data de criação da oportunidade (mais recente primeiro)
     return filtered.sort((a, b) => {
-      const phoneA = a.opportunity?.lead?.phone?.replace(/\D/g, '')
-      const phoneB = b.opportunity?.lead?.phone?.replace(/\D/g, '')
+      const dateA = a.opportunity?.created_at
+      const dateB = b.opportunity?.created_at
       
-      // Se não tem telefone, vai para o final
-      if (!phoneA && !phoneB) return a.position_in_stage - b.position_in_stage
-      if (!phoneA) return 1
-      if (!phoneB) return -1
-      
-      // Buscar última mensagem no cache
-      const lastMessageA = phoneA ? lastMessageTimes[phoneA] : null
-      const lastMessageB = phoneB ? lastMessageTimes[phoneB] : null
-      
-      // Se ambos têm última mensagem, ordenar por mais recente
-      if (lastMessageA && lastMessageB) {
-        return lastMessageB.getTime() - lastMessageA.getTime()
+      // Se ambos têm data de criação, ordenar por mais recente
+      if (dateA && dateB) {
+        return new Date(dateB).getTime() - new Date(dateA).getTime()
       }
       
-      // Se apenas um tem última mensagem, ele vem primeiro
-      if (lastMessageA) return -1
-      if (lastMessageB) return 1
+      // Se apenas um tem data, ele vem primeiro
+      if (dateA) return -1
+      if (dateB) return 1
       
       // Fallback: usar position_in_stage
       return a.position_in_stage - b.position_in_stage
     })
-  }, [positions, searchTerm, lastMessageTimes])
+  }, [positions, searchTerm])
 
   // Handlers dos modais
   const handleEditStage = (stageId: string) => {
@@ -156,9 +145,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     fetchAvailableLeads()
   }, [companyId, funnelId, positions])
 
-  // Carregar fotos dos leads e última mensagem a partir do telefone
+  // Carregar fotos dos leads a partir do telefone
   useEffect(() => {
-    const loadLeadData = async () => {
+    const loadLeadPhotos = async () => {
       if (!companyId || positions.length === 0) return
 
       const phones = Array.from(new Set(
@@ -171,13 +160,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         .map((p) => p.replace(/\D/g, ''))
         .filter((phone) => phone && !leadPhotos[phone])
 
-      // Buscar fotos e última mensagem em paralelo
-      const promises = missingPhones.map(async (rawPhone) => {
+      missingPhones.forEach(async (rawPhone) => {
         const phoneDigits = rawPhone.replace(/\D/g, '')
         if (!phoneDigits) return
 
         try {
-          // Buscar foto do contato
           const contact = await chatApi.getContactInfo(companyId, phoneDigits)
           if (contact?.profile_picture_url) {
             setLeadPhotos((prev) => {
@@ -186,33 +173,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             })
           }
         } catch (error) {
-          console.error('Erro ao carregar foto do lead:', error)
-        }
-
-        try {
-          // Buscar última mensagem da conversa diretamente
-          const { data: conversation } = await supabase
-            .from('chat_conversations')
-            .select('last_message_at')
-            .eq('company_id', companyId)
-            .eq('contact_phone', phoneDigits)
-            .maybeSingle()
-          
-          if (conversation?.last_message_at) {
-            setLastMessageTimes((prev) => ({
-              ...prev,
-              [phoneDigits]: new Date(conversation.last_message_at)
-            }))
-          }
-        } catch (error) {
-          console.error('Erro ao carregar última mensagem:', error)
+          console.error('Erro ao carregar foto do lead no funil:', error)
         }
       })
-
-      await Promise.all(promises)
     }
 
-    loadLeadData()
+    loadLeadPhotos()
   }, [companyId, positions, leadPhotos])
 
   // Handler do drag & drop
