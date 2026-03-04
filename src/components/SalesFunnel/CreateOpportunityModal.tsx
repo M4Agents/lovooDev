@@ -88,15 +88,29 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     return parseFloat(cleaned) || 0
   }
 
-  // Atualizar display do valor
+  // Atualizar display do valor com formatação brasileira
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value
-    // Permitir apenas números e vírgula
-    const cleaned = input.replace(/[^0-9,]/g, '')
-    setValueDisplay(cleaned)
     
-    // Atualizar valor numérico no formData
-    const numericValue = parseCurrency(cleaned)
+    // Remover tudo exceto números
+    const numbersOnly = input.replace(/\D/g, '')
+    
+    if (!numbersOnly) {
+      setValueDisplay('0,00')
+      setFormData({ ...formData, value: 0 })
+      return
+    }
+    
+    // Converter para número (centavos)
+    const numericValue = parseInt(numbersOnly) / 100
+    
+    // Formatar para moeda brasileira
+    const formatted = numericValue.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+    
+    setValueDisplay(formatted)
     setFormData({ ...formData, value: numericValue })
   }
 
