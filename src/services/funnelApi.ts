@@ -680,9 +680,24 @@ class FunnelApiService {
         .from('opportunity_funnel_positions')
         .select(`
           *,
-          opportunity:opportunities!inner(
-            *,
-            lead:leads!inner(
+          opportunity:opportunities(
+            id,
+            lead_id,
+            company_id,
+            title,
+            description,
+            value,
+            currency,
+            status,
+            probability,
+            expected_close_date,
+            actual_close_date,
+            source,
+            owner_user_id,
+            created_at,
+            updated_at,
+            closed_at,
+            lead:leads(
               id,
               name,
               email,
@@ -692,28 +707,27 @@ class FunnelApiService {
               created_at,
               origin,
               status,
-              record_type,
-              deleted_at
+              record_type
             )
           )
         `)
         .eq('funnel_id', funnelId)
-        .is('opportunity.lead.deleted_at', null)
         .order('position_in_stage', { ascending: true })
       
       if (filter?.stage_id) {
         query = query.eq('stage_id', filter.stage_id)
       }
       
-      if (filter?.search) {
-        query = query.or(`opportunity.title.ilike.%${filter.search}%,opportunity.lead.name.ilike.%${filter.search}%`)
-      }
-      
       const { data, error } = await query
       
       if (error) throw error
       
-      const positions = (data || []).map(pos => ({
+      // Filtrar leads deletados no frontend
+      const filteredData = (data || []).filter(pos => 
+        pos.opportunity?.lead && !pos.opportunity.lead.deleted_at
+      )
+      
+      const positions = filteredData.map(pos => ({
         ...pos,
         days_in_stage: pos.entered_stage_at ? this.calculateDaysInStage(pos.entered_stage_at) : 0
       }))
