@@ -12,6 +12,7 @@ import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelModal } from '../components/SalesFunnel/CreateFunnelModal'
 import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
 import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer'
+import { ChatModal } from '../components/SalesFunnel/ChatModal'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { funnelApi } from '../services/funnelApi'
@@ -20,7 +21,7 @@ import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 
 export default function SalesFunnel() {
   const navigate = useNavigate()
-  const { company } = useAuth()
+  const { company, user } = useAuth()
   const companyId = company?.id
 
   const {
@@ -38,6 +39,8 @@ export default function SalesFunnel() {
   const [showEditFunnelModal, setShowEditFunnelModal] = useState(false)
   const [showCardCustomizer, setShowCardCustomizer] = useState(false)
   const [showOptionsMenu, setShowOptionsMenu] = useState(false)
+  const [showChatModal, setShowChatModal] = useState(false)
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null)
   const [visibleFields, setVisibleFields] = useState<string[]>([...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
@@ -76,7 +79,8 @@ export default function SalesFunnel() {
   }, [companyId])
 
   const handleLeadClick = (leadId: number) => {
-    navigate(`/chat?leadId=${leadId}`)
+    setSelectedLeadId(leadId)
+    setShowChatModal(true)
   }
 
   const handleCreateFunnel = () => {
@@ -428,6 +432,20 @@ export default function SalesFunnel() {
           onClose={() => setShowEditFunnelModal(false)}
           funnel={selectedFunnel}
           onUpdate={refreshFunnels}
+        />
+      )}
+
+      {/* Modal de Chat */}
+      {selectedLeadId && user && companyId && (
+        <ChatModal
+          leadId={selectedLeadId}
+          companyId={companyId}
+          userId={user.id}
+          isOpen={showChatModal}
+          onClose={() => {
+            setShowChatModal(false)
+            setSelectedLeadId(null)
+          }}
         />
       )}
     </div>

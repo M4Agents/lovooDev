@@ -169,6 +169,8 @@ export interface AssignConversationForm {
 export interface ChatLayoutProps {
   companyId: string
   userId: string
+  initialConversationId?: string
+  hideConversationSidebar?: boolean
 }
 
 export interface ConversationSidebarProps {

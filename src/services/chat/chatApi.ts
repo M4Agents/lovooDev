@@ -876,6 +876,66 @@ export class ChatApi {
       )
       .subscribe()
   }
+
+  // =====================================================
+  // BUSCAR CONVERSA POR LEAD ID
+  // =====================================================
+
+  static async getConversationByLeadId(
+    leadId: number,
+    companyId: string
+  ): Promise<string | null> {
+    try {
+      // 1. Buscar telefone do lead
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('phone')
+        .eq('id', leadId)
+        .eq('company_id', companyId)
+        .single()
+
+      if (leadError || !lead?.phone) {
+        console.log('Lead não encontrado ou sem telefone')
+        return null
+      }
+
+      // Limpar telefone (remover caracteres especiais)
+      const cleanPhone = lead.phone.replace(/\D/g, '')
+
+      // 2. Buscar contato via telefone
+      const { data: contact, error: contactError } = await supabase
+        .from('chat_contacts')
+        .select('id')
+        .eq('phone_number', cleanPhone)
+        .eq('company_id', companyId)
+        .single()
+
+      if (contactError || !contact) {
+        console.log('Contato não encontrado no chat')
+        return null
+      }
+
+      // 3. Buscar conversa do contato
+      const { data: conversation, error: conversationError } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('contact_id', contact.id)
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (conversationError || !conversation) {
+        console.log('Conversa não encontrada')
+        return null
+      }
+
+      return conversation.id
+    } catch (error) {
+      console.error('Erro ao buscar conversationId:', error)
+      return null
+    }
+  }
 }
 
 // Exportar instância padrão

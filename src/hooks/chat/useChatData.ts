@@ -22,7 +22,8 @@ import type {
 
 export const useChatData = (
   companyId: string,
-  userId: string
+  userId: string,
+  initialConversationId?: string
 ): UseChatDataReturn => {
   // Estados principais
   const [instances, setInstances] = useState<any[]>([])
@@ -94,6 +95,13 @@ export const useChatData = (
   useEffect(() => {
     fetchInstances()
   }, [fetchInstances])
+
+  // Selecionar conversa inicial se fornecida
+  useEffect(() => {
+    if (initialConversationId && !selectedConversation) {
+      setSelectedConversation(initialConversationId)
+    }
+  }, [initialConversationId, selectedConversation])
 
   // Buscar conversas quando filtros mudarem
   useEffect(() => {

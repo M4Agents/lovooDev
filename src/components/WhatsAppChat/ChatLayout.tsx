@@ -17,9 +17,11 @@ import type { ChatLayoutProps } from '../../types/whatsapp-chat'
 
 export const ChatLayout: React.FC<ChatLayoutProps> = ({
   companyId,
-  userId
+  userId,
+  initialConversationId,
+  hideConversationSidebar = false
 }) => {
-  const chatData = useChatData(companyId, userId)
+  const chatData = useChatData(companyId, userId, initialConversationId)
 
   // =====================================================
   // LOADING STATE
@@ -81,25 +83,26 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   return (
     <div className="flex h-full bg-gradient-to-br from-slate-50 to-gray-100">
-      {/* Sidebar Conversas - 25% */}
-      <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
-        <ConversationSidebar
-          instances={chatData.instances}
-          conversations={chatData.conversations}
-          companyId={companyId}
-          selectedInstance={chatData.selectedInstance}
-          selectedConversation={chatData.selectedConversation}
-          filter={chatData.filter}
-          loading={chatData.conversationsLoading}
-          onSelectInstance={chatData.setSelectedInstance}
-          onSelectConversation={chatData.setSelectedConversation}
-          onFilterChange={chatData.setFilter}
-          onRefresh={chatData.refreshConversations}
-        />
-      </div>
+      {/* Sidebar Conversas - 25% (oculta se hideConversationSidebar = true) */}
+      {!hideConversationSidebar && (
+        <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
+          <ConversationSidebar
+            instances={chatData.instances}
+            conversations={chatData.conversations}
+            selectedInstance={chatData.selectedInstance}
+            selectedConversation={chatData.selectedConversation}
+            filter={chatData.filter}
+            loading={chatData.conversationsLoading}
+            onSelectInstance={chatData.setSelectedInstance}
+            onSelectConversation={chatData.setSelectedConversation}
+            onFilterChange={chatData.setFilter}
+            onRefresh={chatData.refreshConversations}
+          />
+        </div>
+      )}
 
-      {/* Área Chat - 50% */}
-      <div className="flex-1 flex flex-col bg-white/60 backdrop-blur-sm">
+      {/* Área Chat - 50% ou 60% se sidebar oculta */}
+      <div className={`${hideConversationSidebar ? 'w-3/5' : 'flex-1'} flex flex-col bg-white/60 backdrop-blur-sm`}>
         {chatData.selectedConversation ? (
           <ChatArea
             conversationId={chatData.selectedConversation}
@@ -127,8 +130,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         )}
       </div>
 
-      {/* Painel Lead - 25% */}
-      <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm">
+      {/* Painel Lead - 25% ou 40% se sidebar oculta */}
+      <div className={`${hideConversationSidebar ? 'w-2/5' : 'w-1/4'} min-w-[320px] bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
         {chatData.selectedConversation ? (
           <LeadPanel
             conversationId={chatData.selectedConversation}
@@ -227,7 +230,6 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
           <ConversationSidebar
             instances={chatData.instances}
             conversations={chatData.conversations}
-            companyId={companyId}
             selectedInstance={chatData.selectedInstance}
             selectedConversation={chatData.selectedConversation}
             filter={chatData.filter}
