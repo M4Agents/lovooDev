@@ -7,7 +7,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
-import BibliotecaV2 from './BibliotecaV2'
+import { BibliotecaV2 } from './BibliotecaV2'
+import { OpportunitiesTab } from './OpportunitiesTab'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -162,7 +163,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca' | 'opportunities'>('info')
   const [conversation, setConversation] = useState<any>(null)
   
   console.log('📊 LeadPanel - activeTab atual:', activeTab)
@@ -260,6 +261,16 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           >
             📚 Biblioteca
           </button>
+          <button
+            onClick={() => setActiveTab('opportunities')}
+            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
+              activeTab === 'opportunities'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            💼 Oportunidades
+          </button>
         </div>
       </div>
 
@@ -302,6 +313,18 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             companyId={companyId}
             leadId={contact?.id}
           />
+        ) : activeTab === 'opportunities' ? (
+          contact?.id ? (
+            <OpportunitiesTab
+              leadId={contact.id}
+              leadName={contact.name || 'Lead'}
+              companyId={companyId}
+            />
+          ) : (
+            <div className="p-8 text-center">
+              <p className="text-sm text-gray-600">Carregando informações do lead...</p>
+            </div>
+          )
         ) : null}
       </div>
 
