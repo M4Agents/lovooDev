@@ -52,7 +52,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-[85vw] max-h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-[85vw] h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden">
         {/* Header do Modal */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
           <h2 className="text-xl font-semibold text-gray-900">
