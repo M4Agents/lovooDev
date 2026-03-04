@@ -4,24 +4,67 @@
 // Objetivo: Seção de oportunidades dentro da aba Informações
 // =====================================================
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
+import { supabase } from '../../../lib/supabase'
 
 interface OpportunitiesSectionProps {
-  leadId: number
+  phoneNumber: string
   leadName: string
+  companyId: string
 }
 
 export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
-  leadId,
-  leadName
+  phoneNumber,
+  leadName,
+  companyId
 }) => {
-  console.log('💼 OpportunitiesSection - Rendered with leadId:', leadId, 'type:', typeof leadId)
+  console.log('💼 OpportunitiesSection - Rendered with phone:', phoneNumber)
   
-  const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId)
+  const [leadId, setLeadId] = useState<number | null>(null)
+  const [loadingLeadId, setLoadingLeadId] = useState(true)
+  
+  // Buscar lead_id a partir do telefone
+  useEffect(() => {
+    const fetchLeadId = async () => {
+      try {
+        setLoadingLeadId(true)
+        console.log('🔍 OpportunitiesSection - Buscando lead_id para telefone:', phoneNumber)
+        
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('phone', phoneNumber)
+          .single()
+        
+        if (error) {
+          console.error('❌ OpportunitiesSection - Erro ao buscar lead:', error)
+          setLeadId(null)
+        } else if (data) {
+          console.log('✅ OpportunitiesSection - Lead encontrado, ID:', data.id)
+          setLeadId(data.id)
+        } else {
+          console.warn('⚠️ OpportunitiesSection - Lead não encontrado para telefone:', phoneNumber)
+          setLeadId(null)
+        }
+      } catch (err) {
+        console.error('❌ OpportunitiesSection - Erro:', err)
+        setLeadId(null)
+      } finally {
+        setLoadingLeadId(false)
+      }
+    }
+    
+    if (phoneNumber && companyId) {
+      fetchLeadId()
+    }
+  }, [phoneNumber, companyId])
+  
+  const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId || 0)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   // Filtrar apenas oportunidades abertas
@@ -36,7 +79,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     }
   }
 
-  if (loading) {
+  if (loadingLeadId || loading) {
     return (
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -148,16 +191,18 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
       )}
 
       {/* Modal de Criação */}
-      <CreateOpportunityModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        leadId={leadId}
-        leadName={leadName}
-        onSuccess={() => {
-          refreshOpportunities()
-          setShowCreateModal(false)
-        }}
-      />
+      {leadId && (
+        <CreateOpportunityModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          leadId={leadId}
+          leadName={leadName}
+          onSuccess={() => {
+            refreshOpportunities()
+            setShowCreateModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }

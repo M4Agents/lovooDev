@@ -556,10 +556,11 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       </div>
 
       {/* Seção de Oportunidades */}
-      {contact?.id && (
+      {conversation?.contact_phone && (
         <OpportunitiesSection
-          leadId={typeof contact.id === 'string' ? parseInt(contact.id) : contact.id}
-          leadName={contact.name || 'Lead'}
+          phoneNumber={conversation.contact_phone}
+          leadName={contact?.name || conversation?.contact_name || 'Lead'}
+          companyId={companyId}
         />
       )}
 
