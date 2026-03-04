@@ -1,9 +1,9 @@
 # 📋 DOCUMENTAÇÃO TÉCNICA - DESENVOLVIMENTO DRAG & DROP FUNIL
 
-**Data:** 03/03/2026  
+**Data:** 03/03/2026 - 04/03/2026  
 **Desenvolvedor:** Cascade AI  
 **Projeto:** Lovoo CRM - Sistema de Funil de Vendas  
-**Status:** 🟡 EM DESENVOLVIMENTO (Drag & Drop com problema de UUIDs)
+**Status:** ✅ CONCLUÍDO (Drag & Drop funcionando perfeitamente)
 
 ---
 
@@ -14,7 +14,7 @@ Implementar sistema completo de gerenciamento de etapas do funil de vendas, incl
 - ✅ Renomear etapas inline
 - ✅ Adicionar novas etapas
 - ✅ Deletar etapas com migração de leads
-- ❌ **Reordenar etapas via drag & drop** (PROBLEMA IDENTIFICADO)
+- ✅ **Reordenar etapas via drag & drop** (FUNCIONANDO)
 
 ### Status das Funcionalidades
 
@@ -23,38 +23,47 @@ Implementar sistema completo de gerenciamento de etapas do funil de vendas, incl
 | Renomear etapa | ✅ Funcionando | Inline editing com validação |
 | Adicionar etapa | ✅ Funcionando | Com cor e posição |
 | Deletar etapa | ✅ Funcionando | Com migração de leads |
-| Drag & drop | ❌ **COM PROBLEMA** | UUIDs truncados impedem funcionamento |
+| Drag & drop | ✅ **FUNCIONANDO** | Atualização em duas etapas |
 
 ---
 
-## 🔴 PROBLEMA CRÍTICO IDENTIFICADO
+## ✅ SOLUÇÃO IMPLEMENTADA
 
-### Descrição
-O drag & drop para reordenar etapas **não está funcionando** devido a **UUIDs truncados**.
+### Problema Identificado
+O drag & drop falhava devido a **constraints no banco de dados**:
 
-### Evidências
+1. **UNIQUE Constraint:** `unique_funnel_stage_position (funnel_id, position)`
+   - Não permite duas etapas na mesma posição simultaneamente
+   
+2. **CHECK Constraint:** `valid_position CHECK (position >= 0)`
+   - Não permite posições negativas
 
-**No banco de dados (correto):**
-```sql
-"12134b5f-ee55-4f99-bd46-b813d282ee91"  -- ✅ 36 caracteres
-"69811823-2eea-404b-9323-12f3fcdfa4ab"  -- ✅ 36 caracteres
-```
+### Solução Final
+**Atualização em duas etapas** usando posições temporárias altas:
 
-**No frontend (corrompido):**
 ```javascript
-"12134b5f-ee55-4f99-bd46-b813d82ce91"   // ❌ 35 caracteres (falta "2e")
-"69811823-2eea-404b-9323-12f3fcdfad4ab" // ❌ 37 caracteres (tem "d4" extra)
+// ETAPA 1: Mover para posições temporárias altas (10000+)
+for (let i = 0; i < stages.length; i++) {
+  const tempPosition = 10000 + i;
+  await supabase
+    .from('funnel_stages')
+    .update({ position: tempPosition })
+    .eq('id', stage.id);
+}
+
+// ETAPA 2: Atualizar para posições finais (0, 1, 2, ...)
+for (const stage of stages) {
+  await supabase
+    .from('funnel_stages')
+    .update({ position: stage.position })
+    .eq('id', stage.id);
+}
 ```
 
-### Erro Resultante
-```
-PUT /api/funnel/reorder-stages
-500 (Internal Server Error)
-Error: invalid input syntax for type uuid: "12134b5f-ee55-4f99-bd46-b813d82ce91"
-```
-
-### Causa Raiz
-**Problema de serialização/deserialização** entre Supabase e frontend. Os UUIDs estão corretos no banco, mas são corrompidos durante o transporte.
+**Vantagens:**
+- ✅ Respeita ambas as constraints
+- ✅ Nunca há conflito de posições
+- ✅ Simples e eficiente
 
 ---
 
