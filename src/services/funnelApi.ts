@@ -532,20 +532,45 @@ class FunnelApiService {
     userId?: string
   ): Promise<LeadCardFieldPreference> {
     try {
+      // Primeiro, buscar se já existe um registro
+      let query = supabase
+        .from('lead_card_field_preferences')
+        .select('*')
+        .eq('company_id', companyId)
+      
+      if (userId) {
+        query = query.eq('user_id', userId)
+      } else {
+        query = query.is('user_id', null)
+      }
+      
+      const { data: existing } = await query.single()
+      
+      // Se existe, atualizar
+      if (existing) {
+        const { data, error } = await supabase
+          .from('lead_card_field_preferences')
+          .update({ visible_fields: visibleFields })
+          .eq('id', existing.id)
+          .select()
+          .single()
+        
+        if (error) throw error
+        return data
+      }
+      
+      // Se não existe, criar novo
       const { data, error } = await supabase
         .from('lead_card_field_preferences')
-        .upsert({
+        .insert({
           company_id: companyId,
           user_id: userId || null,
           visible_fields: visibleFields
-        }, {
-          onConflict: 'company_id,user_id'
         })
         .select()
         .single()
       
       if (error) throw error
-      
       return data
     } catch (error) {
       console.error('Error updating card preferences:', error)
