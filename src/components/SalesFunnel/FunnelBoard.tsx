@@ -136,7 +136,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
       const phones = Array.from(new Set(
         positions
-          .map((pos) => pos.lead?.phone)
+          .map((pos) => pos.opportunity?.lead?.phone)
           .filter((phone): phone is string => !!phone)
       ))
 
