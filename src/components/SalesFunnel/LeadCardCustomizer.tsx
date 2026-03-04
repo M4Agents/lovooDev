@@ -58,6 +58,13 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
     setVisibleFields(currentVisibleFields)
   }, [currentVisibleFields])
 
+  // Recarregar preferências quando o modal abrir
+  useEffect(() => {
+    if (isOpen) {
+      setVisibleFields(currentVisibleFields)
+    }
+  }, [isOpen, currentVisibleFields])
+
   const toggleField = (field: string) => {
     if (visibleFields.includes(field)) {
       setVisibleFields(visibleFields.filter(f => f !== field))

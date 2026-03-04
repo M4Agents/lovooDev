@@ -68,8 +68,12 @@ export default function SalesFunnel() {
       if (!companyId) return
       try {
         const preferences = await funnelApi.getCardPreferences(companyId)
+        console.log('📊 Preferências carregadas:', preferences)
         if (preferences && preferences.visible_fields && preferences.visible_fields.length > 0) {
+          console.log('✅ Aplicando preferências:', preferences.visible_fields)
           setVisibleFields(preferences.visible_fields)
+        } else {
+          console.log('⚠️ Nenhuma preferência salva, usando padrão')
         }
       } catch (error) {
         console.error('Error loading preferences:', error)
@@ -148,7 +152,7 @@ export default function SalesFunnel() {
           stageMap.get(pos.stage_id) || '',
           lead.deal_value ? `R$ ${lead.deal_value.toFixed(2)}` : '',
           lead.origin || '',
-          new Date(pos.entered_stage_at).toLocaleDateString('pt-BR'),
+          pos.entered_stage_at ? new Date(pos.entered_stage_at).toLocaleDateString('pt-BR') : '',
           pos.days_in_stage || 0
         ]
       }).filter(row => row !== null)
