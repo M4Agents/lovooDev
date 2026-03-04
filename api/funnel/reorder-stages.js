@@ -77,11 +77,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // ETAPA 1: Definir posições temporárias negativas para evitar conflito
-    console.log('Step 1: Setting temporary negative positions');
+    // ETAPA 1: Definir posições temporárias altas para evitar conflito
+    console.log('Step 1: Setting temporary high positions');
     for (let i = 0; i < stages.length; i++) {
       const stage = stages[i];
-      const tempPosition = -(i + 1000); // Posição temporária negativa
+      const tempPosition = 10000 + i; // Posição temporária alta (respeita constraint >= 0)
       
       const { error: tempError } = await supabase
         .from('funnel_stages')
