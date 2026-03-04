@@ -148,7 +148,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         value: formData.value || 0,
         currency: formData.currency || 'BRL',
         probability: formData.probability || 50,
-        expected_close_date: formData.expected_close_date,
+        expected_close_date: formData.expected_close_date || null,
         source: formData.source
       }
 
