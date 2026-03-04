@@ -12,7 +12,7 @@ import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelModal } from '../components/SalesFunnel/CreateFunnelModal'
 import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
 import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer'
-import { ChatModal } from '../components/SalesFunnel/ChatModal'
+import ChatModalSimple from '../components/SalesFunnel/ChatModalSimple'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { funnelApi } from '../services/funnelApi'
@@ -437,7 +437,7 @@ export default function SalesFunnel() {
 
       {/* Modal de Chat */}
       {selectedLeadId && user && companyId && (
-        <ChatModal
+        <ChatModalSimple
           leadId={selectedLeadId}
           companyId={companyId}
           userId={user.id}
