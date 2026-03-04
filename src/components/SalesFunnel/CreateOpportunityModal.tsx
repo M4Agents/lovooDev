@@ -178,7 +178,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             await funnelApi.addOpportunityToFunnel(
               result.id,
               defaultFunnel.id,
-              firstStage.id
+              firstStage.id,
+              leadId
             )
             
             console.log('✅ CreateOpportunityModal - Oportunidade adicionada ao funil com sucesso!')

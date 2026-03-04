@@ -767,7 +767,7 @@ class FunnelApiService {
   /**
    * Adicionar oportunidade ao funil
    */
-  async addOpportunityToFunnel(opportunityId: string, funnelId: string, stageId: string): Promise<OpportunityFunnelPosition> {
+  async addOpportunityToFunnel(opportunityId: string, funnelId: string, stageId: string, leadId?: number): Promise<OpportunityFunnelPosition> {
     try {
       const { data: position, error } = await supabase
         .from('opportunity_funnel_positions')
@@ -775,6 +775,7 @@ class FunnelApiService {
           opportunity_id: opportunityId,
           funnel_id: funnelId,
           stage_id: stageId,
+          lead_id: leadId,
           position_in_stage: 0,
           entered_stage_at: new Date().toISOString()
         })

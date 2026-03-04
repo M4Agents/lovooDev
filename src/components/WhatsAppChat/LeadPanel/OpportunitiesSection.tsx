@@ -159,7 +159,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         await funnelApi.removeOpportunityFromFunnel(opportunityId, currentPosition.funnel_id)
         
         // Adicionar no novo funil
-        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId)
+        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
       } else if (currentPosition) {
         // Apenas mudou de etapa no mesmo funil
         await funnelApi.moveOpportunityToStage({
@@ -171,7 +171,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         })
       } else {
         // Primeira vez adicionando ao funil
-        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId)
+        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
       }
       
       // Atualizar estado local
