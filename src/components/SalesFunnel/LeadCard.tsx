@@ -5,7 +5,7 @@
 // =====================================================
 
 import { Draggable } from '@hello-pangea/dnd'
-import { User, Phone, Building2, Tag, DollarSign, Calendar, Briefcase } from 'lucide-react'
+import { User, Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp } from 'lucide-react'
 import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 
@@ -125,7 +125,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 <DollarSign className="w-3.5 h-3.5" />
                 <span>{formatCurrency(opportunity.value)}</span>
                 {isFieldVisible('probability') && opportunity.probability && (
-                  <span className="text-blue-600">↗ {opportunity.probability}%</span>
+                  <div className="flex items-center gap-1 text-blue-600">
+                    <TrendingUp className="w-3 h-3" />
+                    <span className="font-medium">{opportunity.probability}%</span>
+                  </div>
                 )}
               </div>
             )}
