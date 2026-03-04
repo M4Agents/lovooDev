@@ -132,7 +132,14 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // Carregar fotos dos leads a partir do telefone
   useEffect(() => {
     const loadLeadPhotos = async () => {
-      if (!companyId || positions.length === 0) return
+      console.log('🔍 FUNIL - Iniciando busca de fotos')
+      console.log('🔍 FUNIL - Company ID:', companyId)
+      console.log('🔍 FUNIL - Positions count:', positions.length)
+      
+      if (!companyId || positions.length === 0) {
+        console.log('⚠️ FUNIL - Abortando: sem company ou positions')
+        return
+      }
 
       const phones = Array.from(new Set(
         positions
@@ -140,24 +147,34 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           .filter((phone): phone is string => !!phone)
       ))
 
+      console.log('📞 FUNIL - Telefones encontrados:', phones)
+
       const missingPhones = phones
         .map((p) => p.replace(/\D/g, ''))
         .filter((phone) => phone && !leadPhotos[phone])
 
-      missingPhones.forEach(async (rawPhone) => {
-        try {
-          const phoneDigits = rawPhone.replace(/\D/g, '')
-          if (!phoneDigits) return
+      console.log('📞 FUNIL - Telefones faltando foto:', missingPhones)
 
+      missingPhones.forEach(async (rawPhone) => {
+        const phoneDigits = rawPhone.replace(/\D/g, '')
+        if (!phoneDigits) return
+
+        try {
+          console.log('🔍 FUNIL - Buscando foto para:', phoneDigits)
           const contact = await chatApi.getContactInfo(companyId, phoneDigits)
+          console.log('📸 FUNIL - Resposta chatApi:', contact)
+          
           if (contact?.profile_picture_url) {
+            console.log('✅ FUNIL - Foto encontrada:', contact.profile_picture_url)
             setLeadPhotos((prev) => {
               if (prev[phoneDigits]) return prev
               return { ...prev, [phoneDigits]: contact.profile_picture_url! }
             })
+          } else {
+            console.log('❌ FUNIL - Sem foto para:', phoneDigits)
           }
         } catch (error) {
-          console.error('Erro ao carregar foto do lead no funil:', error)
+          console.error('❌ FUNIL - Erro ao carregar foto:', phoneDigits, error)
         }
       })
     }
