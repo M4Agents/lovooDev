@@ -515,7 +515,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   }
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6 h-full overflow-y-auto">
       {/* Avatar e Info Básica */}
       <div className="text-center">
         <div className="w-16 h-16 rounded-full mx-auto mb-3 overflow-hidden bg-gray-300 flex items-center justify-center">
