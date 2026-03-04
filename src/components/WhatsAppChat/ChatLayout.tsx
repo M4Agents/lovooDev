@@ -131,7 +131,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       </div>
 
       {/* Painel Lead - 25% ou 40% se sidebar oculta */}
-      <div className={`${hideConversationSidebar ? 'w-2/5' : 'w-1/4'} min-w-[320px] bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
+      <div className={`${hideConversationSidebar ? 'w-2/5 h-full' : 'w-1/4'} min-w-[320px] bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
         {chatData.selectedConversation ? (
           <LeadPanel
             conversationId={chatData.selectedConversation}
