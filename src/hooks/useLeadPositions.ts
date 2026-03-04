@@ -1,23 +1,24 @@
 // =====================================================
-// HOOK: useLeadPositions
-// Data: 03/03/2026
-// Objetivo: Hook para gerenciar posições dos leads no funil
+// HOOK: useLeadPositions (ATUALIZADO PARA OPORTUNIDADES)
+// Data: 03/03/2026 - Atualizado: 04/03/2026
+// Objetivo: Hook para gerenciar posições das oportunidades no funil
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react'
 import { funnelApi } from '../services/funnelApi'
+import { supabase } from '../lib/supabase'
 import type {
-  LeadFunnelPosition,
+  OpportunityFunnelPosition,
   LeadPositionFilter,
   UseLeadPositionsReturn
 } from '../types/sales-funnel'
 
 export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter): UseLeadPositionsReturn => {
-  const [positions, setPositions] = useState<LeadFunnelPosition[]>([])
+  const [positions, setPositions] = useState<OpportunityFunnelPosition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
 
-  // Buscar posições
+  // Buscar posições (ATUALIZADO PARA OPORTUNIDADES)
   const fetchPositions = useCallback(async () => {
     if (!funnelId) return
     
@@ -25,11 +26,11 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
       setLoading(true)
       setError(undefined)
       
-      const data = await funnelApi.getLeadPositions(funnelId, filter)
+      const data = await funnelApi.getOpportunityPositions(funnelId, filter)
       setPositions(data)
     } catch (err) {
-      console.error('Error fetching lead positions:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao buscar posições dos leads')
+      console.error('Error fetching opportunity positions:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao buscar posições das oportunidades')
     } finally {
       setLoading(false)
     }
@@ -40,7 +41,7 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     fetchPositions()
   }, [fetchPositions])
 
-  // Mover lead para outra etapa
+  // Mover oportunidade para outra etapa (ATUALIZADO)
   const moveLeadToStage = useCallback(async (
     leadId: number,
     toStageId: string,
@@ -49,15 +50,15 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     try {
       setError(undefined)
       
-      // Encontrar posição atual do lead
+      // Encontrar posição atual da oportunidade pelo lead_id
       const currentPosition = positions.find(p => p.lead_id === leadId)
       if (!currentPosition) {
-        throw new Error('Lead não encontrado no funil')
+        throw new Error('Oportunidade não encontrada no funil')
       }
       
-      // Mover lead
-      await funnelApi.moveLeadToStage({
-        lead_id: leadId,
+      // Mover oportunidade
+      await funnelApi.moveOpportunityToStage({
+        opportunity_id: currentPosition.opportunity_id,
         funnel_id: funnelId,
         from_stage_id: currentPosition.stage_id,
         to_stage_id: toStageId,
@@ -67,14 +68,14 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
       // Atualizar lista local
       await fetchPositions()
     } catch (err) {
-      console.error('Error moving lead:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao mover lead'
+      console.error('Error moving opportunity:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao mover oportunidade'
       setError(errorMessage)
       throw new Error(errorMessage)
     }
   }, [funnelId, positions, fetchPositions])
 
-  // Adicionar lead ao funil
+  // Adicionar lead ao funil (CRIA OPORTUNIDADE AUTOMATICAMENTE)
   const addLeadToFunnel = useCallback(async (leadId: number, funnelId: string): Promise<void> => {
     try {
       setError(undefined)
@@ -87,8 +88,28 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
         throw new Error('Funil não possui etapas')
       }
       
-      // Adicionar lead
-      await funnelApi.addLeadToFunnel(leadId, funnelId, firstStage.id)
+      // Buscar dados do lead para criar oportunidade
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('name, company_id, origin, responsible_user_id')
+        .eq('id', leadId)
+        .single()
+      
+      if (!lead) {
+        throw new Error('Lead não encontrado')
+      }
+      
+      // Criar oportunidade automaticamente
+      const opportunity = await funnelApi.createOpportunity({
+        lead_id: leadId,
+        company_id: lead.company_id,
+        title: `Oportunidade - ${lead.name}`,
+        source: lead.origin,
+        owner_user_id: lead.responsible_user_id
+      })
+      
+      // Adicionar oportunidade ao funil
+      await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, firstStage.id)
       
       // Atualizar lista
       await fetchPositions()
@@ -100,21 +121,29 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     }
   }, [fetchPositions])
 
-  // Remover lead do funil
+  // Remover oportunidade do funil (ATUALIZADO)
   const removeLeadFromFunnel = useCallback(async (leadId: number, funnelId: string): Promise<void> => {
     try {
       setError(undefined)
-      await funnelApi.removeLeadFromFunnel(leadId, funnelId)
+      
+      // Encontrar oportunidade pelo lead_id
+      const position = positions.find(p => p.lead_id === leadId)
+      if (!position) {
+        throw new Error('Oportunidade não encontrada')
+      }
+      
+      // Remover oportunidade do funil
+      await funnelApi.removeOpportunityFromFunnel(position.opportunity_id, funnelId)
       
       // Remover da lista local
       setPositions(prev => prev.filter(p => p.lead_id !== leadId))
     } catch (err) {
-      console.error('Error removing lead from funnel:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao remover lead do funil'
+      console.error('Error removing opportunity from funnel:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao remover oportunidade do funil'
       setError(errorMessage)
       throw new Error(errorMessage)
     }
-  }, [])
+  }, [positions])
 
   // Refresh
   const refreshPositions = useCallback(async () => {
