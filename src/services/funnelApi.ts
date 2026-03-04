@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase'
 import type {
   SalesFunnel,
   FunnelStage,
+  Opportunity,
+  OpportunityFunnelPosition,
   LeadFunnelPosition,
   LeadStageHistory,
   LeadCardFieldPreference,
@@ -15,6 +17,9 @@ import type {
   UpdateFunnelForm,
   CreateStageForm,
   UpdateStageForm,
+  CreateOpportunityForm,
+  UpdateOpportunityForm,
+  MoveOpportunityForm,
   MoveLeadForm,
   FunnelFilter,
   StageFilter,
@@ -585,6 +590,206 @@ class FunnelApiService {
       return data || []
     } catch (error) {
       console.error('Error fetching available leads:', error)
+      throw error
+    }
+  }
+  
+  // ===================================================
+  // OPORTUNIDADES (OPPORTUNITIES) - NOVO MODELO
+  // ===================================================
+  
+  /**
+   * Criar nova oportunidade
+   */
+  async createOpportunity(data: CreateOpportunityForm): Promise<Opportunity> {
+    try {
+      const { data: opportunity, error } = await supabase
+        .from('opportunities')
+        .insert({
+          lead_id: data.lead_id,
+          company_id: data.company_id,
+          title: data.title,
+          description: data.description,
+          value: data.value || 0,
+          currency: data.currency || 'BRL',
+          probability: data.probability || 50,
+          expected_close_date: data.expected_close_date,
+          source: data.source,
+          owner_user_id: data.owner_user_id,
+          status: 'open'
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      return opportunity
+    } catch (error) {
+      console.error('Error creating opportunity:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Atualizar oportunidade
+   */
+  async updateOpportunity(id: string, data: UpdateOpportunityForm): Promise<Opportunity> {
+    try {
+      const { data: opportunity, error } = await supabase
+        .from('opportunities')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      return opportunity
+    } catch (error) {
+      console.error('Error updating opportunity:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Buscar oportunidades de um lead
+   */
+  async getOpportunitiesByLead(leadId: number): Promise<Opportunity[]> {
+    try {
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      
+      return data || []
+    } catch (error) {
+      console.error('Error fetching opportunities by lead:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Buscar posições das oportunidades em um funil
+   */
+  async getOpportunityPositions(funnelId: string, filter?: LeadPositionFilter): Promise<OpportunityFunnelPosition[]> {
+    try {
+      let query = supabase
+        .from('opportunity_funnel_positions')
+        .select(`
+          *,
+          opportunity:opportunities!inner(
+            *,
+            lead:leads!inner(
+              id,
+              name,
+              email,
+              phone,
+              company_name,
+              created_at,
+              origin,
+              status,
+              record_type,
+              deleted_at
+            )
+          )
+        `)
+        .eq('funnel_id', funnelId)
+        .is('opportunity.lead.deleted_at', null)
+        .order('position_in_stage', { ascending: true })
+      
+      if (filter?.stage_id) {
+        query = query.eq('stage_id', filter.stage_id)
+      }
+      
+      if (filter?.search) {
+        query = query.or(`opportunity.title.ilike.%${filter.search}%,opportunity.lead.name.ilike.%${filter.search}%`)
+      }
+      
+      const { data, error } = await query
+      
+      if (error) throw error
+      
+      const positions = (data || []).map(pos => ({
+        ...pos,
+        days_in_stage: pos.entered_stage_at ? this.calculateDaysInStage(pos.entered_stage_at) : 0
+      }))
+      
+      return positions
+    } catch (error) {
+      console.error('Error fetching opportunity positions:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Mover oportunidade para outra etapa
+   */
+  async moveOpportunityToStage(data: MoveOpportunityForm): Promise<OpportunityFunnelPosition> {
+    try {
+      const { data: position, error } = await supabase
+        .from('opportunity_funnel_positions')
+        .update({
+          stage_id: data.to_stage_id,
+          position_in_stage: data.position_in_stage,
+          entered_stage_at: new Date().toISOString()
+        })
+        .eq('opportunity_id', data.opportunity_id)
+        .eq('funnel_id', data.funnel_id)
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      return position
+    } catch (error) {
+      console.error('Error moving opportunity:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Adicionar oportunidade ao funil
+   */
+  async addOpportunityToFunnel(opportunityId: string, funnelId: string, stageId: string): Promise<OpportunityFunnelPosition> {
+    try {
+      const { data: position, error } = await supabase
+        .from('opportunity_funnel_positions')
+        .insert({
+          opportunity_id: opportunityId,
+          funnel_id: funnelId,
+          stage_id: stageId,
+          position_in_stage: 0,
+          entered_stage_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      return position
+    } catch (error) {
+      console.error('Error adding opportunity to funnel:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Remover oportunidade do funil
+   */
+  async removeOpportunityFromFunnel(opportunityId: string, funnelId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('opportunity_funnel_positions')
+        .delete()
+        .eq('opportunity_id', opportunityId)
+        .eq('funnel_id', funnelId)
+      
+      if (error) throw error
+    } catch (error) {
+      console.error('Error removing opportunity from funnel:', error)
       throw error
     }
   }
