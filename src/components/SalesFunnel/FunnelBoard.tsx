@@ -30,8 +30,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   onLeadClick,
   searchTerm = ''
 }) => {
-  const { user } = useAuth()
-  const companyId = user?.user_metadata?.company_id
+  const { company } = useAuth()
+  const companyId = company?.id
   const {
     stages,
     loading: stagesLoading,
