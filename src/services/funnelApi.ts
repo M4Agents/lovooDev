@@ -706,7 +706,8 @@ class FunnelApiService {
               created_at,
               origin,
               status,
-              record_type
+              record_type,
+              last_contact_at
             )
           )
         `)
