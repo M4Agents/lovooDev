@@ -28,16 +28,25 @@ export const useOpportunities = (leadId: number): UseOpportunitiesReturn => {
 
   // Buscar oportunidades do lead
   const fetchOpportunities = useCallback(async () => {
-    if (!leadId) return
+    console.log('🔍 useOpportunities - fetchOpportunities called with leadId:', leadId)
+    
+    if (!leadId || isNaN(leadId)) {
+      console.warn('⚠️ useOpportunities - Invalid leadId:', leadId)
+      setLoading(false)
+      setOpportunities([])
+      return
+    }
     
     try {
       setLoading(true)
       setError(undefined)
       
+      console.log('📡 useOpportunities - Fetching opportunities for lead:', leadId)
       const data = await funnelApi.getOpportunitiesByLead(leadId)
+      console.log('✅ useOpportunities - Opportunities fetched:', data.length)
       setOpportunities(data)
     } catch (err) {
-      console.error('Error fetching opportunities:', err)
+      console.error('❌ useOpportunities - Error fetching opportunities:', err)
       setError(err instanceof Error ? err.message : 'Erro ao buscar oportunidades')
     } finally {
       setLoading(false)

@@ -19,6 +19,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   leadId,
   leadName
 }) => {
+  console.log('💼 OpportunitiesSection - Rendered with leadId:', leadId, 'type:', typeof leadId)
+  
   const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
