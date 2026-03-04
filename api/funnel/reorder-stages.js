@@ -104,12 +104,21 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Error in reorder stages API:', error);
+    console.error('=== ERROR IN REORDER STAGES API ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error details:', error.details);
+    console.error('Error hint:', error.hint);
     console.error('Error stack:', error.stack);
+    console.error('Full error object:', JSON.stringify(error, null, 2));
+    
     return res.status(500).json({ 
       error: 'Erro ao reordenar etapas',
       message: error.message,
-      details: error.toString()
+      code: error.code,
+      details: error.details || error.toString(),
+      hint: error.hint
     });
   }
 }
