@@ -1,16 +1,16 @@
 // =====================================================
-// COMPONENTE: LeadCard
-// Data: 03/03/2026
-// Objetivo: Card arrastável do lead no Kanban
+// COMPONENTE: LeadCard (ATUALIZADO PARA OPORTUNIDADES)
+// Data: 03/03/2026 - Atualizado: 04/03/2026
+// Objetivo: Card arrastável da oportunidade no Kanban
 // =====================================================
 
 import { Draggable } from '@hello-pangea/dnd'
-import { User, Phone, Building2, Tag, DollarSign, Calendar } from 'lucide-react'
-import type { LeadFunnelPosition } from '../../types/sales-funnel'
+import { User, Phone, Building2, Tag, DollarSign, Calendar, Briefcase } from 'lucide-react'
+import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 
 interface LeadCardProps {
-  position: LeadFunnelPosition
+  position: OpportunityFunnelPosition
   index: number
   visibleFields?: string[]
   leadPhotos?: Record<string, string>
@@ -24,9 +24,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   leadPhotos,
   onClick
 }) => {
-  const lead = position.lead
+  const opportunity = position.opportunity
+  const lead = opportunity?.lead
   
-  if (!lead) return null
+  if (!lead || !opportunity) return null
 
   const handleClick = () => {
     if (onClick) {
@@ -77,10 +78,19 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             )}
 
             <div className="flex-1 min-w-0">
-              {isFieldVisible('name') && (
+              {/* Título da Oportunidade (NOVO) */}
+              <div className="flex items-center gap-1.5 mb-1">
+                <Briefcase className="w-3.5 h-3.5 text-purple-600" />
                 <h3 className="font-semibold text-gray-900 truncate text-sm">
-                  {lead.name}
+                  {opportunity.title}
                 </h3>
+              </div>
+              
+              {/* Nome do Lead */}
+              {isFieldVisible('name') && (
+                <p className="text-xs text-gray-600 truncate">
+                  👤 {lead.name}
+                </p>
               )}
               
               {isFieldVisible('email') && lead.email && (
@@ -107,10 +117,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             )}
 
-            {isFieldVisible('deal_value') && lead.deal_value && (
+            {/* Valor da Oportunidade (ATUALIZADO) */}
+            {isFieldVisible('deal_value') && opportunity.value > 0 && (
               <div className="flex items-center gap-2 text-xs font-semibold text-green-600">
                 <DollarSign className="w-3.5 h-3.5" />
-                <span>{formatCurrency(lead.deal_value)}</span>
+                <span>{formatCurrency(opportunity.value)}</span>
               </div>
             )}
 
