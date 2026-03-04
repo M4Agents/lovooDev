@@ -82,12 +82,6 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     }
   }, [isOpen])
 
-  // Converter string formatada para número
-  const parseCurrency = (value: string): number => {
-    const cleaned = value.replace(/\./g, '').replace(',', '.')
-    return parseFloat(cleaned) || 0
-  }
-
   // Atualizar display do valor com formatação brasileira
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value
@@ -148,7 +142,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         value: formData.value || 0,
         currency: formData.currency || 'BRL',
         probability: formData.probability || 50,
-        expected_close_date: formData.expected_close_date || null,
+        expected_close_date: formData.expected_close_date || undefined,
         source: formData.source
       }
 
@@ -157,6 +151,45 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       const result = await funnelApi.createOpportunity(opportunityData)
       
       console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
+
+      // Adicionar automaticamente ao funil padrão
+      try {
+        console.log('🎯 CreateOpportunityModal - Buscando funil padrão para adicionar oportunidade...')
+        
+        const funnels = await funnelApi.getFunnels(company.id)
+        console.log('📊 CreateOpportunityModal - Funis encontrados:', funnels.length)
+        
+        if (funnels.length > 0) {
+          // Buscar funil padrão ou usar o primeiro
+          const defaultFunnel = funnels.find(f => f.is_default) || funnels[0]
+          console.log('🎯 CreateOpportunityModal - Funil selecionado:', defaultFunnel.name)
+          
+          // Buscar etapas do funil
+          const stages = await funnelApi.getStages(defaultFunnel.id)
+          console.log('📍 CreateOpportunityModal - Etapas encontradas:', stages.length)
+          
+          if (stages.length > 0) {
+            const firstStage = stages[0]
+            console.log('📍 CreateOpportunityModal - Primeira etapa:', firstStage.name)
+            
+            // Adicionar oportunidade ao funil
+            await funnelApi.addOpportunityToFunnel(
+              result.id,
+              defaultFunnel.id,
+              firstStage.id
+            )
+            
+            console.log('✅ CreateOpportunityModal - Oportunidade adicionada ao funil com sucesso!')
+          } else {
+            console.warn('⚠️ CreateOpportunityModal - Funil não tem etapas cadastradas')
+          }
+        } else {
+          console.warn('⚠️ CreateOpportunityModal - Nenhum funil cadastrado para a empresa')
+        }
+      } catch (funnelError) {
+        console.error('❌ CreateOpportunityModal - Erro ao adicionar ao funil:', funnelError)
+        // Não bloqueia a criação da oportunidade, apenas loga o erro
+      }
 
       // Resetar formulário
       setFormData({
