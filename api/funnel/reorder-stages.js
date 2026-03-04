@@ -63,13 +63,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Atualizar posições em lote
+    // Atualizar posições em duas etapas para evitar conflito de unique constraint
     console.log('Starting updates for', stages.length, 'stages');
-    const updates = [];
     
+    // Validar dados primeiro
     for (const stage of stages) {
-      console.log('Processing stage:', stage);
-      
       if (!stage.id || stage.position === undefined) {
         console.log('ERROR: Invalid stage data', stage);
         return res.status(400).json({ 
@@ -77,7 +75,31 @@ export default async function handler(req, res) {
           field: 'stages'
         });
       }
+    }
 
+    // ETAPA 1: Definir posições temporárias negativas para evitar conflito
+    console.log('Step 1: Setting temporary negative positions');
+    for (let i = 0; i < stages.length; i++) {
+      const stage = stages[i];
+      const tempPosition = -(i + 1000); // Posição temporária negativa
+      
+      const { error: tempError } = await supabase
+        .from('funnel_stages')
+        .update({ position: tempPosition })
+        .eq('id', stage.id)
+        .eq('funnel_id', funnel_id);
+
+      if (tempError) {
+        console.error('Temp update error:', tempError);
+        throw tempError;
+      }
+    }
+
+    // ETAPA 2: Atualizar para posições finais
+    console.log('Step 2: Setting final positions');
+    const updates = [];
+    
+    for (const stage of stages) {
       console.log(`Updating stage ${stage.id} to position ${stage.position}`);
       
       const { data, error: updateError } = await supabase
