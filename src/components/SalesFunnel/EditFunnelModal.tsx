@@ -251,7 +251,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const handleDragStart = (e: React.DragEvent, stage: FunnelStage) => {
     e.dataTransfer.effectAllowed = 'move'
     setDraggedStage(stage)
-    console.log('Drag started:', stage.name)
   }
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -267,13 +266,9 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault()
     
-    if (!draggedStage) {
-      console.log('No dragged stage')
-      return
-    }
+    if (!draggedStage) return
 
     const currentIndex = stages.findIndex(s => s.id === draggedStage.id)
-    console.log('Drop:', { from: currentIndex, to: dropIndex, stage: draggedStage.name })
     
     if (currentIndex === dropIndex) {
       setDraggedStage(null)
@@ -301,9 +296,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
           stages: updatedStages
         })
       })
-
-      console.log('Response status:', response.status)
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         if (response.status === 404) {
