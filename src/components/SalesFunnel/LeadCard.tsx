@@ -134,6 +134,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 </span>
               </div>
             )}
+
+            {/* Último Contato */}
+            {isFieldVisible('last_contact_at') && lead.last_contact_at && (
+              <div className="flex items-center gap-2 text-xs text-gray-600">
+                <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                <span>Último contato: {new Date(lead.last_contact_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+            )}
           </div>
 
           {/* Tags */}
