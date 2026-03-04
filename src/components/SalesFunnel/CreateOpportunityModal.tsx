@@ -131,7 +131,16 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       setLoading(true)
       setError(undefined)
 
-      await funnelApi.createOpportunity({
+      console.log('🚀 CreateOpportunityModal - Criando oportunidade com dados:', {
+        lead_id: leadId,
+        lead_id_type: typeof leadId,
+        company_id: company.id,
+        title: formData.title,
+        value: formData.value,
+        probability: formData.probability
+      })
+
+      const opportunityData = {
         lead_id: leadId,
         company_id: company.id,
         title: formData.title,
@@ -141,7 +150,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         probability: formData.probability || 50,
         expected_close_date: formData.expected_close_date,
         source: formData.source
-      })
+      }
+
+      console.log('📦 CreateOpportunityModal - Payload completo:', opportunityData)
+
+      const result = await funnelApi.createOpportunity(opportunityData)
+      
+      console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
 
       // Resetar formulário
       setFormData({
