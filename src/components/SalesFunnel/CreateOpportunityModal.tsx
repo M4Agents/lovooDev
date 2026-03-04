@@ -4,11 +4,12 @@
 // Objetivo: Modal para criar nova oportunidade manualmente
 // =====================================================
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Briefcase, DollarSign, Calendar, Percent, FileText } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
+import { supabase } from '../../lib/supabase'
 import type { CreateOpportunityForm } from '../../types/sales-funnel'
 
 interface CreateOpportunityModalProps {
@@ -29,6 +30,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   const { company } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
+  const [valueDisplay, setValueDisplay] = useState('0,00')
   
   const [formData, setFormData] = useState<Partial<CreateOpportunityForm>>({
     title: '',
@@ -39,6 +41,64 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     expected_close_date: '',
     source: ''
   })
+
+  // Buscar origem do lead ao abrir modal
+  useEffect(() => {
+    const fetchLeadSource = async () => {
+      if (!isOpen || !leadId) return
+      
+      try {
+        const { data } = await supabase
+          .from('leads')
+          .select('lead_source')
+          .eq('id', leadId)
+          .single()
+        
+        if (data?.lead_source) {
+          setFormData(prev => ({ ...prev, source: data.lead_source }))
+        }
+      } catch (err) {
+        console.error('Erro ao buscar origem do lead:', err)
+      }
+    }
+    
+    fetchLeadSource()
+  }, [isOpen, leadId])
+
+  // Resetar formulário quando modal fechar
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        title: '',
+        description: '',
+        value: 0,
+        currency: 'BRL',
+        probability: 50,
+        expected_close_date: '',
+        source: ''
+      })
+      setValueDisplay('0,00')
+      setError(undefined)
+    }
+  }, [isOpen])
+
+  // Converter string formatada para número
+  const parseCurrency = (value: string): number => {
+    const cleaned = value.replace(/\./g, '').replace(',', '.')
+    return parseFloat(cleaned) || 0
+  }
+
+  // Atualizar display do valor
+  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value
+    // Permitir apenas números e vírgula
+    const cleaned = input.replace(/[^0-9,]/g, '')
+    setValueDisplay(cleaned)
+    
+    // Atualizar valor numérico no formData
+    const numericValue = parseCurrency(cleaned)
+    setFormData({ ...formData, value: numericValue })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,6 +139,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         expected_close_date: '',
         source: ''
       })
+      setValueDisplay('0,00')
 
       if (onSuccess) onSuccess()
       onClose()
@@ -154,12 +215,10 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 Valor (R$)
               </label>
               <input
-                type="number"
-                value={formData.value}
-                onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+                type="text"
+                value={valueDisplay}
+                onChange={handleValueChange}
                 placeholder="0,00"
-                step="0.01"
-                min="0"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
