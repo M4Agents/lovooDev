@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2 } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
@@ -94,6 +94,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   
   const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId || 0)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingOpportunity, setEditingOpportunity] = useState<any>(null)
 
   // Buscar funis e posições das oportunidades
   useEffect(() => {
@@ -142,6 +144,12 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
   // Filtrar apenas oportunidades abertas
   const activeOpportunities = opportunities.filter(opp => opp.status === 'open')
+
+  // Função para abrir modal de edição
+  const handleEditOpportunity = (opportunity: any) => {
+    setEditingOpportunity(opportunity)
+    setShowEditModal(true)
+  }
 
   // Função para excluir oportunidade
   const handleDeleteOpportunity = async (opportunityId: string, opportunityTitle: string) => {
@@ -316,6 +324,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     Aberta
                   </span>
                   <button
+                    onClick={() => handleEditOpportunity(opportunity)}
+                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    title="Editar oportunidade"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDeleteOpportunity(opportunity.id, opportunity.title)}
                     disabled={deletingOpportunity === opportunity.id}
                     className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -440,6 +455,25 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           onSuccess={() => {
             refreshOpportunities()
             setShowCreateModal(false)
+          }}
+        />
+      )}
+
+      {/* Modal de Edição */}
+      {leadId && editingOpportunity && (
+        <CreateOpportunityModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditingOpportunity(null)
+          }}
+          leadId={leadId}
+          leadName={leadName}
+          opportunityData={editingOpportunity}
+          onSuccess={() => {
+            refreshOpportunities()
+            setShowEditModal(false)
+            setEditingOpportunity(null)
           }}
         />
       )}

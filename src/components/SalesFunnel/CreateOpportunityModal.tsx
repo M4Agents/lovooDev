@@ -17,6 +17,7 @@ interface CreateOpportunityModalProps {
   onClose: () => void
   leadId: number
   leadName: string
+  opportunityData?: any
   onSuccess?: () => void
 }
 
@@ -25,12 +26,14 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   onClose,
   leadId,
   leadName,
+  opportunityData,
   onSuccess
 }) => {
   const { company } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [valueDisplay, setValueDisplay] = useState('0,00')
+  const isEditMode = !!opportunityData
   
   const [formData, setFormData] = useState<Partial<CreateOpportunityForm>>({
     title: '',
@@ -41,6 +44,30 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     expected_close_date: '',
     source: ''
   })
+
+  // Preencher formulário quando estiver editando
+  useEffect(() => {
+    if (isOpen && opportunityData) {
+      setFormData({
+        title: opportunityData.title || '',
+        description: opportunityData.description || '',
+        value: opportunityData.value || 0,
+        currency: opportunityData.currency || 'BRL',
+        probability: opportunityData.probability || 50,
+        expected_close_date: opportunityData.expected_close_date || '',
+        source: opportunityData.source || ''
+      })
+      
+      // Formatar valor para exibição
+      if (opportunityData.value) {
+        const formatted = opportunityData.value.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })
+        setValueDisplay(formatted)
+      }
+    }
+  }, [isOpen, opportunityData])
 
   // Buscar origem do lead ao abrir modal
   useEffect(() => {
@@ -125,36 +152,56 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       setLoading(true)
       setError(undefined)
 
-      console.log('🚀 CreateOpportunityModal - Criando oportunidade com dados:', {
-        lead_id: leadId,
-        lead_id_type: typeof leadId,
-        company_id: company.id,
-        title: formData.title,
-        value: formData.value,
-        probability: formData.probability
-      })
+      let result
+      
+      if (isEditMode && opportunityData) {
+        // Modo de edição - atualizar oportunidade existente
+        console.log('✏️ CreateOpportunityModal - Atualizando oportunidade:', opportunityData.id)
+        result = await funnelApi.updateOpportunity(opportunityData.id, {
+          title: formData.title,
+          description: formData.description,
+          value: formData.value || 0,
+          currency: formData.currency || 'BRL',
+          probability: formData.probability || 50,
+          expected_close_date: formData.expected_close_date || undefined
+        })
+        console.log('✅ CreateOpportunityModal - Oportunidade atualizada com sucesso:', result)
+      } else {
+        // Modo de criação - criar nova oportunidade
+        console.log('🚀 CreateOpportunityModal - Criando oportunidade com dados:', {
+          lead_id: leadId,
+          lead_id_type: typeof leadId,
+          company_id: company.id,
+          title: formData.title,
+          value: formData.value,
+          probability: formData.probability
+        })
 
-      const opportunityData = {
-        lead_id: leadId,
-        company_id: company.id,
-        title: formData.title,
-        description: formData.description,
-        value: formData.value || 0,
-        currency: formData.currency || 'BRL',
-        probability: formData.probability || 50,
-        expected_close_date: formData.expected_close_date || undefined,
-        source: formData.source
+        const newOpportunityData = {
+          lead_id: leadId,
+          company_id: company.id,
+          title: formData.title,
+          description: formData.description,
+          value: formData.value || 0,
+          currency: formData.currency || 'BRL',
+          probability: formData.probability || 50,
+          expected_close_date: formData.expected_close_date || undefined,
+          source: formData.source
+        }
+
+        console.log('📦 CreateOpportunityModal - Payload completo:', newOpportunityData)
+        
+        result = await funnelApi.createOpportunity(newOpportunityData)
+        console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
       }
 
-      console.log('📦 CreateOpportunityModal - Payload completo:', opportunityData)
+      // Adicionar automaticamente ao funil padrão (apenas ao criar)
+      if (!isEditMode) {
+        console.log('🚀 CreateOpportunityModal - INICIANDO ADIÇÃO AUTOMÁTICA AO FUNIL...')
+      }
 
-      const result = await funnelApi.createOpportunity(opportunityData)
-      
-      console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
-      console.log('🚀 CreateOpportunityModal - INICIANDO ADIÇÃO AUTOMÁTICA AO FUNIL...')
-
-      // Adicionar automaticamente ao funil padrão
       try {
+        if (!isEditMode) {
         console.log('🎯 CreateOpportunityModal - Buscando funil padrão para adicionar oportunidade...')
         console.log('🏢 CreateOpportunityModal - Company ID:', company.id)
         
@@ -188,6 +235,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           }
         } else {
           console.warn('⚠️ CreateOpportunityModal - Nenhum funil cadastrado para a empresa')
+        }
         }
       } catch (funnelError) {
         console.error('❌ CreateOpportunityModal - Erro ao adicionar ao funil:', funnelError)
