@@ -538,6 +538,8 @@ class FunnelApiService {
           company_id: companyId,
           user_id: userId || null,
           visible_fields: visibleFields
+        }, {
+          onConflict: 'company_id,user_id'
         })
         .select()
         .single()
