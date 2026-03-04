@@ -886,8 +886,6 @@ export class ChatApi {
     companyId: string
   ): Promise<string | null> {
     try {
-      console.log('🔍 BUSCAR CONVERSA - Lead ID:', leadId, 'Company ID:', companyId)
-      
       // 1. Buscar telefone do lead
       const { data: lead, error: leadError } = await supabase
         .from('leads')
@@ -896,18 +894,12 @@ export class ChatApi {
         .eq('company_id', companyId)
         .single()
 
-      console.log('📞 Lead encontrado:', lead)
-      console.log('❌ Erro lead:', leadError)
-
       if (leadError || !lead?.phone) {
-        console.log('⚠️ Lead não encontrado ou sem telefone')
         return null
       }
 
       // Limpar telefone (remover caracteres especiais)
       const cleanPhone = lead.phone.replace(/\D/g, '')
-      console.log('📞 Telefone original:', lead.phone)
-      console.log('📞 Telefone limpo:', cleanPhone)
 
       // 2. Buscar conversa diretamente via telefone (chat_conversations usa contact_phone)
       const { data: conversation, error: conversationError } = await supabase
@@ -920,18 +912,13 @@ export class ChatApi {
         .limit(1)
         .single()
 
-      console.log('💬 Conversa encontrada:', conversation)
-      console.log('❌ Erro conversa:', conversationError)
-
       if (conversationError || !conversation) {
-        console.log('⚠️ Conversa não encontrada')
         return null
       }
 
-      console.log('✅ Conversation ID:', conversation.id)
       return conversation.id
     } catch (error) {
-      console.error('❌ Erro ao buscar conversationId:', error)
+      console.error('Erro ao buscar conversationId:', error)
       return null
     }
   }
