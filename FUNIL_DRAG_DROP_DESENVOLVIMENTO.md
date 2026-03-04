@@ -15,6 +15,7 @@ Implementar sistema completo de gerenciamento de etapas do funil de vendas, incl
 - ✅ Adicionar novas etapas
 - ✅ Deletar etapas com migração de leads
 - ✅ **Reordenar etapas via drag & drop** (FUNCIONANDO)
+- ✅ **Modal de Chat ao clicar no lead** (NOVO - 04/03/2026)
 
 ### Status das Funcionalidades
 
@@ -24,6 +25,7 @@ Implementar sistema completo de gerenciamento de etapas do funil de vendas, incl
 | Adicionar etapa | ✅ Funcionando | Com cor e posição |
 | Deletar etapa | ✅ Funcionando | Com migração de leads |
 | Drag & drop | ✅ **FUNCIONANDO** | Atualização em duas etapas |
+| **Modal de Chat** | ✅ **FUNCIONANDO** | Chat completo ao clicar no lead |
 
 ---
 
@@ -285,7 +287,93 @@ CREATE TABLE funnel_stages (
 
 ---
 
-## 🚀 PRÓXIMOS PASSOS PARA AMANHÃ
+## � MODAL DE CHAT NO FUNIL (NOVO - 04/03/2026)
+
+### Objetivo
+Permitir que o usuário visualize e interaja com o chat do lead diretamente ao clicar no card do lead no funil, sem precisar navegar para a página de chat.
+
+### Implementação
+
+#### Arquivos Criados
+
+**`src/components/SalesFunnel/ChatModalSimple.tsx`** (~125 linhas)
+- Modal simplificado com layout direto
+- Larguras fixas: ChatArea (60%) + LeadPanel (40%)
+- Usa `style` inline para evitar problemas de flex
+- Busca conversationId via `chatApi.getConversationByLeadId()`
+
+```typescript
+interface ChatModalSimpleProps {
+  isOpen: boolean
+  onClose: () => void
+  leadId: number
+  companyId: string
+  userId: string
+}
+```
+
+#### Arquivos Modificados
+
+**`src/pages/SalesFunnel.tsx`**
+- Importa `ChatModalSimple`
+- Estados: `showChatModal`, `selectedLeadId`
+- Handler: `handleLeadClick` abre modal em vez de navegar
+
+**`src/services/chat/chatApi.ts`**
+- Nova função: `getConversationByLeadId(leadId, companyId)`
+- Busca telefone do lead
+- Busca conversa por `contact_phone` em `chat_conversations`
+- Retorna `conversationId` ou `null`
+
+**`src/components/WhatsAppChat/ChatLayout.tsx`**
+- Props opcionais: `initialConversationId`, `hideConversationSidebar`
+- Ajustes de largura quando sidebar oculta (flex-[3] e flex-[2])
+
+**`src/hooks/chat/useChatData.ts`**
+- Suporte para `initialConversationId`
+- Seleciona conversa automaticamente ao abrir
+
+**`src/types/whatsapp-chat.ts`**
+- Interface `ChatLayoutProps` atualizada
+
+### Funcionalidades
+
+- ✅ Modal abre ao clicar no lead no funil
+- ✅ Chat completo com todas as mensagens em tempo real
+- ✅ 3 abas funcionando: Informações, Agendar, Biblioteca
+- ✅ Envio de mensagens e mídias
+- ✅ Tamanho otimizado: 70vw x 80vh
+- ✅ Sem espaços brancos ou problemas de layout
+- ✅ Reutiliza componentes existentes (ChatArea, LeadPanel)
+
+### Solução de Problemas
+
+**Problema Inicial:** Tentativa de reutilizar `ChatLayout` completo causava espaço branco devido a:
+- Sistema de flex complexo e aninhado
+- `min-w-[320px]` causando overflow
+- Larguras `w-3/5` e `w-2/5` não ocupando 100% do espaço
+
+**Solução Final:** Criar `ChatModalSimple` com:
+- Layout direto sem dependências complexas
+- Larguras fixas com `style={{ width: '60%' }}` e `style={{ width: '40%' }}`
+- Estrutura simples e manutenível
+
+### Commits Principais
+
+```bash
+b52ae06 - feat: criar ChatModalSimple com layout direto e simples
+85dcf60 - fix: reduzir tamanho do modal para 70vw x 80vh
+02c4efb - chore: remover logs de debug do chatApi.getConversationByLeadId
+```
+
+### Deploy
+
+- ✅ **Dev:** https://lovoo-dev.vercel.app
+- ✅ **Produção:** https://lovoo.vercel.app (105 commits enviados)
+
+---
+
+## � PRÓXIMOS PASSOS PARA AMANHÃ
 
 ### 1. Investigar Causa Raiz dos UUIDs Truncados
 
@@ -424,7 +512,7 @@ Para considerar o drag & drop **COMPLETO**, deve:
 
 **Desenvolvedor:** Cascade AI  
 **Data de Criação:** 03/03/2026  
-**Última Atualização:** 03/03/2026 19:00 BRT
+**Última Atualização:** 04/03/2026 13:15 BRT (Adicionado Modal de Chat)
 
 **Repositórios:**
 - Dev: https://github.com/M4Agents/lovooDev
