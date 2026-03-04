@@ -108,7 +108,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   }
 
   const handleSubmitAddLead = async (leadId: number, stageId: string) => {
-    await addLeadToFunnel(leadId, stageId)
+    await addLeadToFunnel(leadId, funnelId)
     await refreshPositions()
   }
 
