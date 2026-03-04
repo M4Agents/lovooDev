@@ -36,29 +36,47 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [updatingPosition, setUpdatingPosition] = useState<string | null>(null)
   
-  // Buscar lead_id a partir do telefone
+  // Buscar lead_id a partir do telefone (ou criar se não existir)
   useEffect(() => {
-    const fetchLeadId = async () => {
+    const fetchOrCreateLead = async () => {
       try {
         setLoadingLeadId(true)
         console.log('🔍 OpportunitiesSection - Buscando lead_id para telefone:', phoneNumber)
         
-        const { data, error } = await supabase
+        // Tentar buscar lead existente
+        const { data: existingLead, error: searchError } = await supabase
           .from('leads')
           .select('id')
           .eq('company_id', companyId)
           .eq('phone', phoneNumber)
+          .maybeSingle()
+        
+        if (existingLead) {
+          console.log('✅ OpportunitiesSection - Lead encontrado, ID:', existingLead.id)
+          setLeadId(existingLead.id)
+          return
+        }
+        
+        // Se não encontrou, criar novo lead
+        console.log('📝 OpportunitiesSection - Lead não encontrado, criando novo...')
+        const { data: newLead, error: createError } = await supabase
+          .from('leads')
+          .insert({
+            company_id: companyId,
+            phone: phoneNumber,
+            name: leadName || phoneNumber,
+            lead_status: 'new',
+            lead_source: 'chat'
+          })
+          .select('id')
           .single()
         
-        if (error) {
-          console.error('❌ OpportunitiesSection - Erro ao buscar lead:', error)
+        if (createError) {
+          console.error('❌ OpportunitiesSection - Erro ao criar lead:', createError)
           setLeadId(null)
-        } else if (data) {
-          console.log('✅ OpportunitiesSection - Lead encontrado, ID:', data.id)
-          setLeadId(data.id)
-        } else {
-          console.warn('⚠️ OpportunitiesSection - Lead não encontrado para telefone:', phoneNumber)
-          setLeadId(null)
+        } else if (newLead) {
+          console.log('✅ OpportunitiesSection - Lead criado com sucesso, ID:', newLead.id)
+          setLeadId(newLead.id)
         }
       } catch (err) {
         console.error('❌ OpportunitiesSection - Erro:', err)
@@ -69,9 +87,9 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     }
     
     if (phoneNumber && companyId) {
-      fetchLeadId()
+      fetchOrCreateLead()
     }
-  }, [phoneNumber, companyId])
+  }, [phoneNumber, companyId, leadName])
   
   const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId || 0)
   const [showCreateModal, setShowCreateModal] = useState(false)
