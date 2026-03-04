@@ -151,10 +151,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       const result = await funnelApi.createOpportunity(opportunityData)
       
       console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
+      console.log('🚀 CreateOpportunityModal - INICIANDO ADIÇÃO AUTOMÁTICA AO FUNIL...')
 
       // Adicionar automaticamente ao funil padrão
       try {
         console.log('🎯 CreateOpportunityModal - Buscando funil padrão para adicionar oportunidade...')
+        console.log('🏢 CreateOpportunityModal - Company ID:', company.id)
         
         const funnels = await funnelApi.getFunnels(company.id)
         console.log('📊 CreateOpportunityModal - Funis encontrados:', funnels.length)
