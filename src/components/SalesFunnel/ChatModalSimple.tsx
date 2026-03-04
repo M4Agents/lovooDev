@@ -53,7 +53,7 @@ export default function ChatModalSimple({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden" style={{ width: '85vw', height: '90vh' }}>
+      <div className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden" style={{ width: '70vw', height: '80vh' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
           <h2 className="text-xl font-semibold text-gray-900">Chat do Lead</h2>
