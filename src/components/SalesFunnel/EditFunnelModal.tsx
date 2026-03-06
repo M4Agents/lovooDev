@@ -74,11 +74,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     try {
       setLoadingStages(true)
       const data = await funnelApi.getStages(funnel.id)
-      console.log('📋 EditFunnelModal - Stages loaded from DB:', data.map(s => ({
-        id: s.id,
-        name: s.name,
-        is_hidden: s.is_hidden
-      })))
       setStages(data)
     } catch (err) {
       console.error('Error loading stages:', err)
@@ -284,20 +279,14 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       }
 
       const newHiddenValue = !stage.is_hidden
-      console.log('🔄 Toggling stage visibility:', { 
-        stageId, 
-        stageName: stage.name,
-        current: stage.is_hidden, 
-        new: newHiddenValue 
-      })
 
       // Atualizar estado local imediatamente para feedback visual
       setStages(prev => prev.map(s => 
         s.id === stageId ? { ...s, is_hidden: newHiddenValue } : s
       ))
 
-      // Update direto no Supabase (bypass da API Next.js problemática)
-      const { data, error: updateError } = await supabase
+      // Update direto no Supabase
+      const { error: updateError } = await supabase
         .from('funnel_stages')
         .update({ is_hidden: newHiddenValue })
         .eq('id', stageId)
@@ -305,7 +294,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         .single()
 
       if (updateError) {
-        console.error('❌ Supabase update error:', updateError)
+        console.error('Supabase update error:', updateError)
         // Reverter estado local em caso de erro
         setStages(prev => prev.map(s => 
           s.id === stageId ? { ...s, is_hidden: stage.is_hidden } : s
@@ -313,7 +302,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         throw new Error(updateError.message || 'Erro ao atualizar visibilidade da etapa')
       }
 
-      console.log('✅ Stage updated successfully via Supabase:', data)
       setError(undefined)
     } catch (err) {
       console.error('Toggle hidden error:', err)
