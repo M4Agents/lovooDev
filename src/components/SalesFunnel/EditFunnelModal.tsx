@@ -73,6 +73,11 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     try {
       setLoadingStages(true)
       const data = await funnelApi.getStages(funnel.id)
+      console.log('📋 EditFunnelModal - Stages loaded from DB:', data.map(s => ({
+        id: s.id,
+        name: s.name,
+        is_hidden: s.is_hidden
+      })))
       setStages(data)
     } catch (err) {
       console.error('Error loading stages:', err)
