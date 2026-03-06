@@ -128,7 +128,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         await funnelApi.deleteFunnel(funnel.id)
       }
       
-      await onUpdate()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao deletar funil')
