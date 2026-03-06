@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { funnelApi } from '../services/funnelApi'
+import { supabase } from '../lib/supabase'
 import type {
   SalesFunnel,
   CreateFunnelForm,
@@ -131,7 +132,20 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
   const reorderFunnels = useCallback(async (funnels: Array<{id: string, display_order: number}>): Promise<void> => {
     try {
       setError(undefined)
-      await funnelApi.reorderFunnels(companyId, funnels)
+      
+      // Update direto no Supabase (bypass da API)
+      for (const funnel of funnels) {
+        const { error: updateError } = await supabase
+          .from('sales_funnels')
+          .update({ display_order: funnel.display_order })
+          .eq('id', funnel.id)
+          .eq('company_id', companyId)
+        
+        if (updateError) {
+          throw updateError
+        }
+      }
+      
       await fetchFunnels()
     } catch (err) {
       console.error('Error reordering funnels:', err)
