@@ -96,7 +96,8 @@ export default async function handler(req, res) {
     }
 
     // Log para debug
-    console.log('Update stage request:', { stage_id, updateData });
+    console.log('🔧 Update stage request:', { stage_id, updateData });
+    console.log('🔧 Current stage before update:', currentStage);
 
     // Verificar se há dados para atualizar
     if (Object.keys(updateData).length === 0) {
@@ -114,9 +115,14 @@ export default async function handler(req, res) {
       .select()
       .single();
 
+    console.log('🔧 Update result:', { updatedStage, updateError });
+
     if (updateError) {
+      console.error('🔧 Update error:', updateError);
       throw updateError;
     }
+
+    console.log('✅ Stage updated successfully:', updatedStage);
 
     return res.status(200).json({
       success: true,
