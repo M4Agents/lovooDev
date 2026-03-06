@@ -1,7 +1,8 @@
 // =====================================================
 // API ENDPOINT: Atualizar Etapa do Funil
 // Data: 03/03/2026
-// Objetivo: Permitir edição de nome, cor e tipo da etapa
+// Objetivo: Permitir edição de nome, cor, tipo e visibilidade da etapa
+// Atualizado: 06/03/2026 - Suporte para is_hidden
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js';
