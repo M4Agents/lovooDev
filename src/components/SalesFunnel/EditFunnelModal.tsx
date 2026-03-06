@@ -103,7 +103,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         ...formData,
         description: formData.description || undefined
       })
-      await onUpdate()
+      // Não chamar onUpdate aqui pois isso recarrega dados do servidor
+      // e sobrescreve mudanças de is_hidden feitas individualmente
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar funil')
