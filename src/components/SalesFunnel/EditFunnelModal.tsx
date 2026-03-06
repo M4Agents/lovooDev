@@ -271,9 +271,23 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const handleToggleStageHidden = async (stageId: string) => {
     try {
       const stage = stages.find(s => s.id === stageId)
-      if (!stage) return
+      if (!stage) {
+        console.error('Stage not found:', stageId)
+        return
+      }
 
-      console.log('Toggling stage visibility:', { stageId, current: stage.is_hidden, new: !stage.is_hidden })
+      const newHiddenValue = !stage.is_hidden
+      console.log('Toggling stage visibility:', { 
+        stageId, 
+        stageName: stage.name,
+        current: stage.is_hidden, 
+        new: newHiddenValue 
+      })
+
+      // Atualizar estado local imediatamente para feedback visual
+      setStages(prev => prev.map(s => 
+        s.id === stageId ? { ...s, is_hidden: newHiddenValue } : s
+      ))
 
       const response = await fetch('/api/funnel/update-stage', {
         method: 'PUT',
@@ -281,15 +295,24 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         body: JSON.stringify({
           stage_id: stageId,
           name: stage.name,
-          is_hidden: !stage.is_hidden
+          is_hidden: newHiddenValue
         })
       })
+
+      console.log('API Response status:', response.status)
 
       if (!response.ok) {
         const errorData = await response.json()
         console.error('API Error:', errorData)
+        // Reverter estado local em caso de erro
+        setStages(prev => prev.map(s => 
+          s.id === stageId ? { ...s, is_hidden: stage.is_hidden } : s
+        ))
         throw new Error(errorData.error || 'Erro ao atualizar visibilidade da etapa')
       }
+
+      const responseData = await response.json()
+      console.log('API Success:', responseData)
 
       await loadStages()
       setError(undefined)
