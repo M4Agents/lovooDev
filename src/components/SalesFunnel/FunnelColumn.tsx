@@ -30,7 +30,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onEditStage
 }) => {
   const totalValue = leads.reduce((sum, pos) => {
-    return sum + (pos.lead?.deal_value || 0)
+    return sum + (pos.opportunity?.value || 0)
   }, 0)
 
   const getStageTypeColor = (type: string) => {
@@ -67,9 +67,19 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             <h3 className="font-semibold text-gray-900 truncate">
               {stage.name}
             </h3>
-            <p className="text-xs text-gray-500">
-              {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-500">
+                {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
+              </p>
+              {totalValue > 0 && (
+                <>
+                  <span className="text-xs text-gray-300">•</span>
+                  <p className="text-xs text-green-600 font-semibold">
+                    {formatCurrency(totalValue)}
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
