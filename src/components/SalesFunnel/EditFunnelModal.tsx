@@ -273,6 +273,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       const stage = stages.find(s => s.id === stageId)
       if (!stage) return
 
+      console.log('Toggling stage visibility:', { stageId, current: stage.is_hidden, new: !stage.is_hidden })
+
       const response = await fetch('/api/funnel/update-stage', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -283,12 +285,15 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao atualizar visibilidade da etapa')
+        const errorData = await response.json()
+        console.error('API Error:', errorData)
+        throw new Error(errorData.error || 'Erro ao atualizar visibilidade da etapa')
       }
 
       await loadStages()
       setError(undefined)
     } catch (err) {
+      console.error('Toggle hidden error:', err)
       setError(err instanceof Error ? err.message : 'Erro ao atualizar etapa')
     }
   }
