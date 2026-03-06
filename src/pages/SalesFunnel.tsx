@@ -9,14 +9,14 @@ import { useNavigate } from 'react-router-dom'
 import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
-import { CreateFunnelModal } from '../components/SalesFunnel/CreateFunnelModal'
+import { CreateFunnelWizard } from '../components/SalesFunnel/CreateFunnelWizard'
 import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
 import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer'
 import ChatModalSimple from '../components/SalesFunnel/ChatModalSimple'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { funnelApi } from '../services/funnelApi'
-import type { CreateFunnelForm } from '../types/sales-funnel'
+import type { CreateFunnelForm, FunnelStage } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 
 export default function SalesFunnel() {
@@ -91,9 +91,28 @@ export default function SalesFunnel() {
     setShowCreateFunnelModal(true)
   }
 
-  const handleSubmitFunnel = async (data: CreateFunnelForm) => {
+  const handleSubmitFunnel = async (
+    data: CreateFunnelForm,
+    stages: Omit<FunnelStage, 'id' | 'funnel_id' | 'created_at' | 'updated_at'>[]
+  ) => {
     if (!companyId) return
-    await createFunnel(data)
+    
+    // Criar funil com flag para pular criação automática de etapas
+    const funnelData = { ...data, skip_default_stages: true }
+    const newFunnel = await createFunnel(funnelData)
+    
+    // Criar etapas customizadas
+    for (const stage of stages) {
+      await funnelApi.createStage({
+        funnel_id: newFunnel.id,
+        name: stage.name,
+        description: stage.description,
+        color: stage.color,
+        position: stage.position,
+        stage_type: stage.stage_type
+      })
+    }
+    
     await refreshFunnels()
   }
 
@@ -417,7 +436,7 @@ export default function SalesFunnel() {
       </div>
 
       {/* Modais */}
-      <CreateFunnelModal
+      <CreateFunnelWizard
         isOpen={showCreateFunnelModal}
         onClose={() => setShowCreateFunnelModal(false)}
         onSubmit={handleSubmitFunnel}

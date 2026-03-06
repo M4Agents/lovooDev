@@ -145,6 +145,7 @@ export interface CreateFunnelForm {
   description?: string
   is_default?: boolean
   is_active?: boolean
+  skip_default_stages?: boolean
 }
 
 export interface UpdateFunnelForm {

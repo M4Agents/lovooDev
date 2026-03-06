@@ -150,7 +150,8 @@ class FunnelApiService {
           name: data.name,
           description: data.description,
           is_default: data.is_default || false,
-          is_active: data.is_active !== undefined ? data.is_active : true
+          is_active: data.is_active !== undefined ? data.is_active : true,
+          skip_default_stages: data.skip_default_stages || false
         })
         .select()
         .single()
