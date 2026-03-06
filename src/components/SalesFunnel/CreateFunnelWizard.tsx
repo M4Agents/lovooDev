@@ -22,16 +22,17 @@ interface StageForm {
   position: number
   is_system_stage: boolean
   stage_type: 'active' | 'won' | 'lost'
+  is_hidden?: boolean
 }
 
 const DEFAULT_STAGES: StageForm[] = [
-  { tempId: '1', name: 'Nova Oportunidade', color: '#FCD34D', position: 0, is_system_stage: true, stage_type: 'active' },
-  { tempId: '2', name: 'Contato Realizado', color: '#86EFAC', position: 1, is_system_stage: false, stage_type: 'active' },
-  { tempId: '3', name: 'Diagnóstico / Briefing', color: '#93C5FD', position: 2, is_system_stage: false, stage_type: 'active' },
-  { tempId: '4', name: 'Proposta Enviada', color: '#C4B5FD', position: 3, is_system_stage: false, stage_type: 'active' },
-  { tempId: '5', name: 'Follow-up', color: '#FCA5A5', position: 4, is_system_stage: false, stage_type: 'active' },
-  { tempId: '6', name: 'Fechado - Ganhou', color: '#10B981', position: 5, is_system_stage: false, stage_type: 'won' },
-  { tempId: '7', name: 'Fechado - Perdeu', color: '#EF4444', position: 6, is_system_stage: false, stage_type: 'lost' }
+  { tempId: '1', name: 'Nova Oportunidade', color: '#FCD34D', position: 0, is_system_stage: true, stage_type: 'active', is_hidden: false },
+  { tempId: '2', name: 'Contato Realizado', color: '#86EFAC', position: 1, is_system_stage: false, stage_type: 'active', is_hidden: false },
+  { tempId: '3', name: 'Diagnóstico / Briefing', color: '#93C5FD', position: 2, is_system_stage: false, stage_type: 'active', is_hidden: false },
+  { tempId: '4', name: 'Proposta Enviada', color: '#C4B5FD', position: 3, is_system_stage: false, stage_type: 'active', is_hidden: false },
+  { tempId: '5', name: 'Follow-up', color: '#FCA5A5', position: 4, is_system_stage: false, stage_type: 'active', is_hidden: false },
+  { tempId: '6', name: 'Fechado - Ganhou', color: '#10B981', position: 5, is_system_stage: false, stage_type: 'won', is_hidden: false },
+  { tempId: '7', name: 'Fechado - Perdeu', color: '#EF4444', position: 6, is_system_stage: false, stage_type: 'lost', is_hidden: false }
 ]
 
 const STAGE_COLORS = [
@@ -189,6 +190,10 @@ export const CreateFunnelWizard: React.FC<CreateFunnelWizardProps> = ({
 
   const handleChangeStageType = (stageId: string, type: 'active' | 'won' | 'lost') => {
     setStages(stages.map(s => s.tempId === stageId ? { ...s, stage_type: type } : s))
+  }
+
+  const handleToggleHidden = (stageId: string) => {
+    setStages(stages.map(s => s.tempId === stageId ? { ...s, is_hidden: !s.is_hidden } : s))
   }
 
   const handleDragStart = (stage: StageForm) => {
@@ -449,6 +454,16 @@ export const CreateFunnelWizard: React.FC<CreateFunnelWizardProps> = ({
                         <option value="won">Ganhou</option>
                         <option value="lost">Perdeu</option>
                       </select>
+
+                      <label className="flex items-center gap-1 cursor-pointer" title="Ocultar esta etapa do funil visual">
+                        <input
+                          type="checkbox"
+                          checked={stage.is_hidden || false}
+                          onChange={() => handleToggleHidden(stage.tempId)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-600">Ocultar</span>
+                      </label>
 
                       <div className="flex gap-1">
                         {STAGE_COLORS.slice(0, 5).map(color => (

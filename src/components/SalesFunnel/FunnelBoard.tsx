@@ -278,7 +278,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {stages.map(stage => (
+          {stages.filter(stage => !stage.is_hidden).map(stage => (
             <div
               key={stage.id}
               className="flex-shrink-0"

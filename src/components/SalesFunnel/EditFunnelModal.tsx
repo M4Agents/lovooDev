@@ -268,6 +268,31 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     }
   }
 
+  const handleToggleStageHidden = async (stageId: string) => {
+    try {
+      const stage = stages.find(s => s.id === stageId)
+      if (!stage) return
+
+      const response = await fetch('/api/funnel/update-stage', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage_id: stageId,
+          is_hidden: !stage.is_hidden
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao atualizar visibilidade da etapa')
+      }
+
+      await loadStages()
+      setError(undefined)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar etapa')
+    }
+  }
+
   const handleDragStart = (e: React.DragEvent, stage: FunnelStage) => {
     e.dataTransfer.effectAllowed = 'move'
     setDraggedStage(stage)
@@ -586,6 +611,16 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                       )}
 
                       <span className="text-xs text-gray-500 flex-shrink-0">#{index + 1}</span>
+
+                      <label className="flex items-center gap-1 cursor-pointer" title="Ocultar esta etapa do funil visual">
+                        <input
+                          type="checkbox"
+                          checked={stage.is_hidden || false}
+                          onChange={() => handleToggleStageHidden(stage.id)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-600">Ocultar</span>
+                      </label>
 
                       {editingStageId === stage.id ? (
                         <div className="flex items-center gap-1">

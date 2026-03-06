@@ -32,6 +32,7 @@ export interface FunnelStage {
   position: number
   is_system_stage: boolean
   stage_type: 'active' | 'won' | 'lost'
+  is_hidden?: boolean
   created_at: Date
   updated_at: Date
   lead_count?: number
