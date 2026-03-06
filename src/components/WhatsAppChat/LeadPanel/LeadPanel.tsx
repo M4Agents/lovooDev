@@ -9,6 +9,7 @@ import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
 import { BibliotecaV2 } from './BibliotecaV2'
 import { OpportunitiesSection } from './OpportunitiesSection'
+import { InstanceSelector } from '../InstanceSelector'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -575,26 +576,20 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         
         {loadingInstances ? (
           <div className="text-sm text-gray-500">Carregando instâncias...</div>
+        ) : availableInstances.length === 0 ? (
+          <div className="text-sm text-gray-500">Nenhuma instância disponível</div>
         ) : (
           <>
-            <select
-              value={selectedInstanceId}
-              onChange={handleChangeInstance}
-              disabled={changingInstance || availableInstances.length === 0}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {availableInstances.length === 0 ? (
-                <option value="">Nenhuma instância disponível</option>
-              ) : (
-                availableInstances.map(instance => (
-                  <option key={instance.id} value={instance.id}>
-                    {instance.instance_name}
-                    {instance.profile_name ? ` - ${instance.profile_name}` : ''}
-                    {instance.id === conversation?.instance_id ? ' ✓' : ''}
-                  </option>
-                ))
-              )}
-            </select>
+            <InstanceSelector
+              instances={availableInstances}
+              selectedInstance={selectedInstanceId}
+              onSelectInstance={(id) => {
+                const event = { target: { value: id } } as React.ChangeEvent<HTMLSelectElement>
+                handleChangeInstance(event)
+              }}
+              showAllOption={false}
+              className={changingInstance ? 'opacity-50 pointer-events-none' : ''}
+            />
             
             {/* Aviso quando instância diferente da original */}
             {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (

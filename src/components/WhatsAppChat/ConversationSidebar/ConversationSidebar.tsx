@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
+import { InstanceSelector } from '../InstanceSelector'
 
 // =====================================================
 // TIPOS DO COMPONENTE
@@ -111,28 +112,13 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         {/* Seletor de Instância */}
         {instances.length > 0 && (
           <div className="mb-4">
-            <select
-              value={selectedInstance || 'all'}
-              onChange={(e) => onSelectInstance(e.target.value)}
-              className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
-              style={{
-                fontFamily: 'inherit'
-              }}
-            >
-              <option value="all">📱 Todas as Instâncias ({conversations.length})</option>
-              {instances.map(instance => {
-                const instanceConversations = conversations.filter(c => c.instance_id === instance.id)
-                const displayText = instance.profile_name 
-                  ? `${instance.instance_name} - ${instance.profile_name}`
-                  : `${instance.instance_name} (${instanceConversations.length})`
-                
-                return (
-                  <option key={instance.id} value={instance.id}>
-                    {displayText}
-                  </option>
-                )
-              })}
-            </select>
+            <InstanceSelector
+              instances={instances}
+              selectedInstance={selectedInstance || 'all'}
+              onSelectInstance={onSelectInstance}
+              showAllOption={true}
+              conversationCount={conversations.length}
+            />
           </div>
         )}
 
