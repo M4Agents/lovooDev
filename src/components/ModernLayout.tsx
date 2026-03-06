@@ -198,15 +198,78 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           })}
         </nav>
 
-        {/* User Section */}
+        {/* User Profile Section - MODERNIZADO */}
         <div className="p-4 border-t border-slate-800">
-          {!sidebarCollapsed && (
-            <div className="mb-3">
-              <p className="text-sm font-medium text-white truncate">{company?.name}</p>
-              <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+          {!sidebarCollapsed ? (
+            <div className="bg-slate-800/50 rounded-xl p-4 mb-3 space-y-3">
+              {/* Avatar e Nome */}
+              <div className="flex items-center gap-3">
+                <Avatar 
+                  src={userPhoto || currentUserData?.profile_picture_url}
+                  alt={userDisplayName || currentUserData?.display_name || user?.email || 'Usuário'}
+                  size="lg"
+                  fallbackText={(userDisplayName || currentUserData?.display_name || user?.email)?.charAt(0)}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {userDisplayName || currentUserData?.display_name || user?.email?.split('@')[0]}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Crown className="w-3 h-3 text-yellow-400" />
+                    <p className="text-xs text-yellow-400 font-medium capitalize">
+                      {company?.plan || 'Free'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Empresa e Email */}
+              <div className="space-y-1 pt-2 border-t border-slate-700/50">
+                <p className="text-xs font-medium text-slate-300 truncate">
+                  {company?.name}
+                </p>
+                <p className="text-xs text-slate-400 truncate">
+                  {user?.email}
+                </p>
+              </div>
+
+              {/* Notificações */}
+              <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-700/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-slate-300" />
+                  <span className="text-sm text-slate-300">Notificações</span>
+                </div>
+                {realtimeStats?.activeVisitors > 0 && (
+                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">
+                    {realtimeStats.activeVisitors}
+                  </span>
+                )}
+              </button>
+            </div>
+          ) : (
+            /* Sidebar Colapsada - Apenas Avatar e Sininho */
+            <div className="flex flex-col items-center gap-3 mb-3">
+              <div className="relative">
+                <Avatar 
+                  src={userPhoto || currentUserData?.profile_picture_url}
+                  alt={userDisplayName || user?.email || 'Usuário'}
+                  size="md"
+                  fallbackText={(userDisplayName || user?.email)?.charAt(0)}
+                />
+                {company?.plan && (
+                  <Crown className="absolute -bottom-1 -right-1 w-3 h-3 text-yellow-400 bg-slate-900 rounded-full" />
+                )}
+              </div>
+              <button className="relative p-2 rounded-lg hover:bg-slate-800 transition-colors">
+                <Bell className="w-5 h-5 text-slate-300" />
+                {realtimeStats?.activeVisitors > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+                )}
+              </button>
             </div>
           )}
           
+          {/* Botão Sair */}
           <button
             onClick={handleSignOut}
             className={`
@@ -260,30 +323,6 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   placeholder="Buscar..."
                   className="bg-transparent border-none outline-none text-sm placeholder-gray-400 w-32"
                 />
-              </div>
-
-              {/* Notifications */}
-              <button className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors">
-                <Bell className="w-5 h-5 text-gray-600" />
-                {realtimeStats?.activeVisitors > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
-                )}
-              </button>
-
-              {/* User Menu */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
-                <Avatar 
-                  src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || currentUserData?.display_name || user?.email || 'Usuário'}
-                  size="sm"
-                  fallbackText={(userDisplayName || currentUserData?.display_name || user?.email)?.charAt(0)}
-                />
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-gray-900 truncate max-w-32">
-                    {userDisplayName || currentUserData?.display_name || user?.email?.split('@')[0]}
-                  </p>
-                  <p className="text-xs text-gray-500 capitalize">{company?.plan}</p>
-                </div>
               </div>
             </div>
           </div>
