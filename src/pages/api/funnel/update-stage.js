@@ -94,6 +94,17 @@ export default async function handler(req, res) {
       updateData.is_hidden = is_hidden;
     }
 
+    // Log para debug
+    console.log('Update stage request:', { stage_id, updateData });
+
+    // Verificar se há dados para atualizar
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ 
+        error: 'Nenhum campo para atualizar foi fornecido',
+        received: { name, color, stage_type, is_hidden }
+      });
+    }
+
     // Atualizar etapa
     const { data: updatedStage, error: updateError } = await supabase
       .from('funnel_stages')
