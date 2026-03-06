@@ -565,17 +565,14 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         />
       )}
 
-      {/* Seletor de Instância de Envio */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-blue-600">📱</span>
-          <label className="text-sm font-medium text-gray-700">
-            Instância de Envio
-          </label>
-        </div>
+      {/* Seletor de Instância de Envio - MODERNIZADO */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          Instância de Envio
+        </label>
         
         {loadingInstances ? (
-          <div className="text-sm text-gray-500">Carregando instâncias...</div>
+          <div className="text-sm text-gray-500">Carregando...</div>
         ) : availableInstances.length === 0 ? (
           <div className="text-sm text-gray-500">Nenhuma instância disponível</div>
         ) : (
@@ -591,23 +588,12 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               className={changingInstance ? 'opacity-50 pointer-events-none' : ''}
             />
             
-            {/* Aviso quando instância diferente da original */}
+            {/* Apenas aviso se instância foi alterada */}
             {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (
-              <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 p-2 rounded">
+              <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
                 <span>⚠️</span>
-                <p>
-                  Você alterou a instância. Próximas mensagens serão enviadas por{' '}
-                  <strong>{getSelectedInstanceName()}</strong>
-                </p>
+                <p>Instância alterada</p>
               </div>
-            )}
-            
-            {/* Info quando instância original */}
-            {selectedInstanceId && selectedInstanceId === conversation?.instance_id && (
-              <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
-                <span>ℹ️</span>
-                Usando instância original da conversa
-              </p>
             )}
           </>
         )}
