@@ -453,7 +453,10 @@ export default function SalesFunnel() {
       {selectedFunnel && (
         <EditFunnelModal
           isOpen={showEditFunnelModal}
-          onClose={() => setShowEditFunnelModal(false)}
+          onClose={() => {
+            setShowEditFunnelModal(false)
+            refreshFunnels()
+          }}
           funnel={selectedFunnel}
           onUpdate={refreshFunnels}
           onDelete={deleteFunnel}
