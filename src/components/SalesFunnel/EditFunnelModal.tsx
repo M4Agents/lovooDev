@@ -280,6 +280,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stage_id: stageId,
+          name: stage.name,
           is_hidden: !stage.is_hidden
         })
       })
