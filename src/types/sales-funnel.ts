@@ -15,6 +15,7 @@ export interface SalesFunnel {
   description?: string
   is_default: boolean
   is_active: boolean
+  display_order: number
   created_by?: string
   created_at: Date
   updated_at: Date
@@ -582,6 +583,7 @@ export interface UseFunnelsReturn {
   createFunnel: (data: CreateFunnelForm) => Promise<SalesFunnel>
   updateFunnel: (id: string, data: UpdateFunnelForm) => Promise<SalesFunnel>
   deleteFunnel: (id: string) => Promise<void>
+  reorderFunnels: (funnels: Array<{id: string, display_order: number}>) => Promise<void>
   refreshFunnels: () => Promise<void>
 }
 

@@ -32,6 +32,7 @@ export default function SalesFunnel() {
     setSelectedFunnel,
     createFunnel,
     deleteFunnel,
+    reorderFunnels,
     refreshFunnels
   } = useFunnels(companyId || '')
 
@@ -257,6 +258,7 @@ export default function SalesFunnel() {
               selectedFunnel={selectedFunnel}
               onSelectFunnel={setSelectedFunnel}
               onCreateFunnel={handleCreateFunnel}
+              onReorderFunnels={reorderFunnels}
             />
           </div>
 

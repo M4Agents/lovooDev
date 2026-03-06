@@ -54,7 +54,7 @@ class FunnelApiService {
           stages:funnel_stages(count)
         `)
         .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
+        .order('display_order', { ascending: true })
       
       if (filter?.is_active !== undefined) {
         query = query.eq('is_active', filter.is_active)
@@ -877,6 +877,32 @@ class FunnelApiService {
       if (error) throw error
     } catch (error) {
       console.error('Error removing opportunity from funnel:', error)
+      throw error
+    }
+  }
+  
+  /**
+   * Reordenar funis (drag & drop)
+   */
+  async reorderFunnels(companyId: string, funnels: Array<{id: string, display_order: number}>): Promise<void> {
+    try {
+      const response = await fetch('/api/funnel/reorder-funnels', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: companyId,
+          funnels
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao reordenar funis')
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Error reordering funnels:', error)
       throw error
     }
   }

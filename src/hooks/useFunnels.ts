@@ -127,6 +127,20 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
     }
   }, [selectedFunnel, funnels])
 
+  // Reordenar funis
+  const reorderFunnels = useCallback(async (funnels: Array<{id: string, display_order: number}>): Promise<void> => {
+    try {
+      setError(undefined)
+      await funnelApi.reorderFunnels(companyId, funnels)
+      await fetchFunnels()
+    } catch (err) {
+      console.error('Error reordering funnels:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao reordenar funis'
+      setError(errorMessage)
+      throw new Error(errorMessage)
+    }
+  }, [companyId, fetchFunnels])
+
   // Refresh
   const refreshFunnels = useCallback(async () => {
     await fetchFunnels()
@@ -141,6 +155,7 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
     createFunnel,
     updateFunnel,
     deleteFunnel,
+    reorderFunnels,
     refreshFunnels
   }
 }
