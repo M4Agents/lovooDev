@@ -286,53 +286,29 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - FULLSCREEN */}
       <div className={`
         transition-all duration-300 ease-in-out
         ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
       `}>
-        {/* Top Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setMobileMenuOpen(true)}
-                className="lg:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-
-              {/* Breadcrumb */}
-              <div className="hidden sm:block">
-                <h2 className="text-xl font-semibold text-gray-900 capitalize">
-                  {location.pathname.split('/')[1] || 'Dashboard'}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {company?.is_super_admin ? 'Administração da Plataforma' : company?.name}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl">
-                <Search className="w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  className="bg-transparent border-none outline-none text-sm placeholder-gray-400 w-32"
-                />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="p-6">
+        {/* Header removido - conteúdo fullscreen */}
+        
+        {/* Page Content - Fullscreen */}
+        <main className="p-6 min-h-screen bg-gray-50">
           {children}
         </main>
       </div>
+
+      {/* Botão Menu Mobile - Flutuante */}
+      {!mobileMenuOpen && (
+        <button 
+          onClick={() => setMobileMenuOpen(true)}
+          className="lg:hidden fixed top-4 left-4 z-40 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-200"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Real-time Stats Indicator */}
       {realtimeStats?.activeVisitors > 0 && (
