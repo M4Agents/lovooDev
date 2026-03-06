@@ -388,7 +388,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
             )}
 
             {/* Aviso - Não pode deletar */}
-            {!canDelete && (
+            {!canDelete && showDeleteConfirm && (
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
