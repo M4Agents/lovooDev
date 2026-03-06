@@ -314,7 +314,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       const responseData = await response.json()
       console.log('API Success:', responseData)
 
-      await loadStages()
+      // Não precisa chamar loadStages pois já atualizamos o estado local
+      // e loadStages pode trazer dados em cache do servidor
       setError(undefined)
     } catch (err) {
       console.error('Toggle hidden error:', err)
