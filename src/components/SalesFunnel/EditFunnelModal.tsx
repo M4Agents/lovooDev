@@ -9,6 +9,7 @@ import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCirc
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
+import { supabase } from '../../lib/supabase'
 
 interface EditFunnelModalProps {
   isOpen: boolean
@@ -283,7 +284,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       }
 
       const newHiddenValue = !stage.is_hidden
-      console.log('Toggling stage visibility:', { 
+      console.log('🔄 Toggling stage visibility:', { 
         stageId, 
         stageName: stage.name,
         current: stage.is_hidden, 
@@ -295,33 +296,24 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         s.id === stageId ? { ...s, is_hidden: newHiddenValue } : s
       ))
 
-      const response = await fetch('/api/funnel/update-stage', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stage_id: stageId,
-          name: stage.name,
-          is_hidden: newHiddenValue
-        })
-      })
+      // Update direto no Supabase (bypass da API Next.js problemática)
+      const { data, error: updateError } = await supabase
+        .from('funnel_stages')
+        .update({ is_hidden: newHiddenValue })
+        .eq('id', stageId)
+        .select()
+        .single()
 
-      console.log('API Response status:', response.status)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('API Error:', errorData)
+      if (updateError) {
+        console.error('❌ Supabase update error:', updateError)
         // Reverter estado local em caso de erro
         setStages(prev => prev.map(s => 
           s.id === stageId ? { ...s, is_hidden: stage.is_hidden } : s
         ))
-        throw new Error(errorData.error || 'Erro ao atualizar visibilidade da etapa')
+        throw new Error(updateError.message || 'Erro ao atualizar visibilidade da etapa')
       }
 
-      const responseData = await response.json()
-      console.log('API Success:', responseData)
-
-      // Não precisa chamar loadStages pois já atualizamos o estado local
-      // e loadStages pode trazer dados em cache do servidor
+      console.log('✅ Stage updated successfully via Supabase:', data)
       setError(undefined)
     } catch (err) {
       console.error('Toggle hidden error:', err)
