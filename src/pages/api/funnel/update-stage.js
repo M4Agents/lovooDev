@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { stage_id, name, color, stage_type } = req.body;
+    const { stage_id, name, color, stage_type, is_hidden } = req.body;
 
     // Validações
     if (!stage_id) {
@@ -25,18 +25,21 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ 
-        error: 'Nome da etapa é obrigatório',
-        field: 'name'
-      });
-    }
+    // Name é obrigatório apenas se não estiver alterando apenas visibilidade
+    if (name !== undefined) {
+      if (name.trim() === '') {
+        return res.status(400).json({ 
+          error: 'Nome da etapa não pode ser vazio',
+          field: 'name'
+        });
+      }
 
-    if (name.length > 50) {
-      return res.status(400).json({ 
-        error: 'Nome da etapa deve ter no máximo 50 caracteres',
-        field: 'name'
-      });
+      if (name.length > 50) {
+        return res.status(400).json({ 
+          error: 'Nome da etapa deve ter no máximo 50 caracteres',
+          field: 'name'
+        });
+      }
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -54,33 +57,41 @@ export default async function handler(req, res) {
       });
     }
 
-    // Verificar se nome duplicado no mesmo funil
-    const { data: duplicateStage } = await supabase
-      .from('funnel_stages')
-      .select('id')
-      .eq('funnel_id', currentStage.funnel_id)
-      .eq('name', name.trim())
-      .neq('id', stage_id)
-      .single();
+    // Verificar se nome duplicado no mesmo funil (apenas se name foi fornecido)
+    if (name !== undefined) {
+      const { data: duplicateStage } = await supabase
+        .from('funnel_stages')
+        .select('id')
+        .eq('funnel_id', currentStage.funnel_id)
+        .eq('name', name.trim())
+        .neq('id', stage_id)
+        .single();
 
-    if (duplicateStage) {
-      return res.status(400).json({ 
-        error: 'Já existe uma etapa com este nome neste funil',
-        field: 'name'
-      });
+      if (duplicateStage) {
+        return res.status(400).json({ 
+          error: 'Já existe uma etapa com este nome neste funil',
+          field: 'name'
+        });
+      }
     }
 
     // Preparar dados para atualização
-    const updateData = {
-      name: name.trim()
-    };
+    const updateData = {};
 
-    if (color) {
+    if (name !== undefined) {
+      updateData.name = name.trim();
+    }
+
+    if (color !== undefined) {
       updateData.color = color;
     }
 
-    if (stage_type) {
+    if (stage_type !== undefined) {
       updateData.stage_type = stage_type;
+    }
+
+    if (is_hidden !== undefined) {
+      updateData.is_hidden = is_hidden;
     }
 
     // Atualizar etapa
