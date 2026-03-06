@@ -31,6 +31,7 @@ export default function SalesFunnel() {
     selectedFunnel,
     setSelectedFunnel,
     createFunnel,
+    deleteFunnel,
     refreshFunnels
   } = useFunnels(companyId || '')
 
@@ -455,6 +456,7 @@ export default function SalesFunnel() {
           onClose={() => setShowEditFunnelModal(false)}
           funnel={selectedFunnel}
           onUpdate={refreshFunnels}
+          onDelete={deleteFunnel}
         />
       )}
 

@@ -15,13 +15,15 @@ interface EditFunnelModalProps {
   onClose: () => void
   funnel: SalesFunnel
   onUpdate: () => Promise<void>
+  onDelete?: (funnelId: string) => Promise<void>
 }
 
 export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   isOpen,
   onClose,
   funnel,
-  onUpdate
+  onUpdate,
+  onDelete
 }) => {
   const [formData, setFormData] = useState<UpdateFunnelForm>({
     name: funnel.name,
@@ -119,7 +121,13 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     try {
       setLoading(true)
       setError(undefined)
-      await funnelApi.deleteFunnel(funnel.id)
+      
+      if (onDelete) {
+        await onDelete(funnel.id)
+      } else {
+        await funnelApi.deleteFunnel(funnel.id)
+      }
+      
       await onUpdate()
       onClose()
     } catch (err) {
