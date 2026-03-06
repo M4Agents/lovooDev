@@ -278,7 +278,20 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {stages.filter(stage => !stage.is_hidden).map(stage => (
+          {(() => {
+            console.log('FunnelBoard - All stages:', stages.map(s => ({ 
+              id: s.id, 
+              name: s.name, 
+              is_hidden: s.is_hidden,
+              stage_type: s.stage_type 
+            })))
+            const visibleStages = stages.filter(stage => !stage.is_hidden)
+            console.log('FunnelBoard - Visible stages:', visibleStages.map(s => ({ 
+              id: s.id, 
+              name: s.name 
+            })))
+            return visibleStages
+          })().map(stage => (
             <div
               key={stage.id}
               className="flex-shrink-0"
