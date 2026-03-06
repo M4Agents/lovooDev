@@ -187,10 +187,53 @@ class FunnelApiService {
   }
   
   /**
+   * Verificar se funil pode ser deletado
+   */
+  async canDeleteFunnel(funnelId: string): Promise<{
+    canDelete: boolean
+    opportunityCount: number
+    message?: string
+  }> {
+    try {
+      const { count, error } = await supabase
+        .from('opportunity_funnel_positions')
+        .select('*', { count: 'exact', head: true })
+        .eq('funnel_id', funnelId)
+      
+      if (error) throw error
+      
+      const opportunityCount = count || 0
+      
+      if (opportunityCount > 0) {
+        return {
+          canDelete: false,
+          opportunityCount,
+          message: `Este funil possui ${opportunityCount} oportunidade${opportunityCount > 1 ? 's' : ''} e não pode ser excluído. Mova ou conclua as oportunidades primeiro.`
+        }
+      }
+      
+      return {
+        canDelete: true,
+        opportunityCount: 0
+      }
+    } catch (error) {
+      console.error('Error checking funnel:', error)
+      throw error
+    }
+  }
+
+  /**
    * Deletar funil
    */
   async deleteFunnel(funnelId: string): Promise<void> {
     try {
+      // Verificar se pode deletar
+      const check = await this.canDeleteFunnel(funnelId)
+      
+      if (!check.canDelete) {
+        throw new Error(check.message)
+      }
+      
       const { error } = await supabase
         .from('sales_funnels')
         .delete()

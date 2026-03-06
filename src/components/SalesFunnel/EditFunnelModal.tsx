@@ -34,6 +34,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [loadingStages, setLoadingStages] = useState(true)
   const [error, setError] = useState<string>()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [opportunityCount, setOpportunityCount] = useState(0)
+  const [canDelete, setCanDelete] = useState(true)
   
   // Estados para gerenciamento de etapas
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
@@ -47,12 +49,23 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
-  // Carregar etapas do funil
+  // Carregar etapas do funil e verificar se pode deletar
   useEffect(() => {
     if (isOpen && funnel.id) {
       loadStages()
+      checkCanDelete()
     }
   }, [isOpen, funnel.id])
+
+  const checkCanDelete = async () => {
+    try {
+      const check = await funnelApi.canDeleteFunnel(funnel.id)
+      setCanDelete(check.canDelete)
+      setOpportunityCount(check.opportunityCount)
+    } catch (err) {
+      console.error('Error checking funnel:', err)
+    }
+  }
 
   const loadStages = async () => {
     try {
@@ -374,6 +387,22 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
               </div>
             )}
 
+            {/* Aviso - Não pode deletar */}
+            {!canDelete && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Este funil não pode ser excluído</p>
+                    <p>
+                      Existem {opportunityCount} oportunidade{opportunityCount > 1 ? 's' : ''} neste funil. 
+                      Para excluí-lo, você precisa primeiro mover ou concluir todas as oportunidades.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Nome */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -652,18 +681,26 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
           <button
             type="button"
             onClick={handleDeleteFunnel}
-            disabled={loading}
+            disabled={loading || !canDelete}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50
-              ${showDeleteConfirm 
-                ? 'bg-red-600 text-white hover:bg-red-700' 
-                : 'text-red-600 hover:bg-red-50'
+              flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors
+              ${!canDelete 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : showDeleteConfirm 
+                  ? 'bg-red-600 text-white hover:bg-red-700' 
+                  : 'text-red-600 hover:bg-red-50'
               }
             `}
+            title={!canDelete ? `Funil possui ${opportunityCount} oportunidade${opportunityCount > 1 ? 's' : ''}` : ''}
           >
             <Trash2 className="w-4 h-4" />
             <span className="text-sm">
-              {showDeleteConfirm ? 'Confirmar Exclusão' : 'Deletar Funil'}
+              {!canDelete 
+                ? `Não pode excluir (${opportunityCount} oportunidade${opportunityCount > 1 ? 's' : ''})` 
+                : showDeleteConfirm 
+                  ? 'Confirmar Exclusão' 
+                  : 'Deletar Funil'
+              }
             </span>
           </button>
 
