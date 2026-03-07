@@ -936,6 +936,7 @@ export const api = {
     name?: string;
     phone?: string;
     email?: string;
+    responsible_user_id?: string;
     dateRange?: { start: string; end: string };
     limit?: number;
     offset?: number;
@@ -984,6 +985,15 @@ export const api = {
 
       if (filters?.email) {
         query = query.ilike('email', `%${filters.email}%`);
+      }
+
+      // FILTRO POR RESPONSÁVEL
+      if (filters?.responsible_user_id) {
+        if (filters.responsible_user_id === 'unassigned') {
+          query = query.is('responsible_user_id', null);
+        } else {
+          query = query.eq('responsible_user_id', filters.responsible_user_id);
+        }
       }
 
       // FILTRO POR PERÍODO

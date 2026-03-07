@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
@@ -111,6 +112,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
   const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
+  const [companyUsers, setCompanyUsers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -178,9 +180,28 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
   };
 
+  // Função para carregar usuários da empresa
+  const loadCompanyUsers = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .rpc('get_company_users_with_details', {
+          p_company_id: company.id
+        });
+      
+      if (error) throw error;
+      setCompanyUsers(data || []);
+    } catch (error) {
+      console.error('Error loading company users:', error);
+      setCompanyUsers([]);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && company?.id) {
       loadCustomFields();
+      loadCompanyUsers();
       if (lead) {
         // Edição - preencher dados existentes
         setFormData({
@@ -784,6 +805,25 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   </select>
                 </div>
 
+                {/* NOVO: Campo Responsável */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    <User className="w-4 h-4 inline mr-1" />
+                    Responsável
+                  </label>
+                  <select
+                    value={formData.responsible_user_id}
+                    onChange={(e) => handleInputChange('responsible_user_id', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                  >
+                    <option value="">Sem responsável</option>
+                    {companyUsers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.display_name || user.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
               </div>
 

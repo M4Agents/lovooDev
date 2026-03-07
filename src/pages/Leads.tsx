@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
@@ -97,13 +98,36 @@ export const Leads: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  // NOVO: Estado para filtro de responsável
+  const [responsibleFilter, setResponsibleFilter] = useState('');
+  const [companyUsers, setCompanyUsers] = useState<any[]>([]);
 
 
   useEffect(() => {
     if (company?.id) {
       loadData();
+      loadCompanyUsers();
     }
   }, [company?.id]);
+
+  // Carregar usuários da empresa
+  const loadCompanyUsers = async () => {
+    if (!company?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .rpc('get_company_users_with_details', {
+          p_company_id: company.id
+        });
+      
+      if (error) throw error;
+      setCompanyUsers(data || []);
+    } catch (error) {
+      console.error('Error loading company users:', error);
+      setCompanyUsers([]);
+    }
+  };
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -132,6 +156,7 @@ export const Leads: React.FC = () => {
           search: searchTerm,
           status: statusFilter || undefined,
           origin: originFilter || undefined,
+          responsible_user_id: responsibleFilter || undefined,
           limit: 100
         }),
         api.getLeadStats(company.id)
@@ -257,6 +282,7 @@ export const Leads: React.FC = () => {
     setEmailFilter('');
     setStatusFilter('');
     setOriginFilter('');
+    setResponsibleFilter('');
     setDateFilter('');
     setStartDate('');
     setEndDate('');
@@ -605,6 +631,20 @@ export const Leads: React.FC = () => {
               <option value="whatsapp">WhatsApp</option>
               <option value="manual">Manual</option>
               <option value="import">Importação</option>
+            </select>
+            
+            <select
+              value={responsibleFilter}
+              onChange={(e) => setResponsibleFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todos os Responsáveis</option>
+              <option value="unassigned">Sem responsável</option>
+              {companyUsers.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.display_name || user.email}
+                </option>
+              ))}
             </select>
             
             <button
