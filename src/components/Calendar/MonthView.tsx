@@ -73,7 +73,8 @@ export const MonthView: React.FC<MonthViewProps> = ({
   }
 
   const getActivityColor = (activity: LeadActivity) => {
-    const calendar = availableCalendars.find(cal => cal.id === activity.owner_user_id)
+    const activityUserId = activity.assigned_to || activity.owner_user_id
+    const calendar = availableCalendars.find(cal => cal.id === activityUserId)
     return calendar?.color || '#3B82F6'
   }
 

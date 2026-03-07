@@ -103,14 +103,17 @@ export const Calendar: React.FC = () => {
         const data = await calendarApi.getActivities(company.id, filter)
         
         // Filtrar por usuário selecionado na barra de avatares
-        let filtered = data.filter(activity => activity.owner_user_id === selectedUserId)
+        // Usa assigned_to (responsável) ou owner_user_id (criador) como fallback
+        let filtered = data.filter(activity => 
+          (activity.assigned_to || activity.owner_user_id) === selectedUserId
+        )
         
         // Se sidebar tem outros calendários selecionados, adicionar atividades deles também
         if (selectedCalendars.length > 1) {
-          const additionalActivities = data.filter(activity => 
-            selectedCalendars.includes(activity.owner_user_id) && 
-            activity.owner_user_id !== selectedUserId
-          )
+          const additionalActivities = data.filter(activity => {
+            const activityUserId = activity.assigned_to || activity.owner_user_id
+            return selectedCalendars.includes(activityUserId) && activityUserId !== selectedUserId
+          })
           filtered = [...filtered, ...additionalActivities]
         }
         
