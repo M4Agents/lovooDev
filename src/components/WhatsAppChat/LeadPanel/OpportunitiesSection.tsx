@@ -301,7 +301,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           </button>
         </div>
       ) : (
-        <div className={`space-y-2 ${activeOpportunities.length > 3 ? 'overflow-y-auto max-h-[45vh] pr-2' : ''}`}>
+        <div className="space-y-2">
           {activeOpportunities.map((opportunity) => (
             <div
               key={opportunity.id}

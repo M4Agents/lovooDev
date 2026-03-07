@@ -744,7 +744,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     <div className="flex flex-col h-full">
       {/* Seção de Oportunidades - Scroll Inteligente */}
       {conversation?.contact_phone && (
-        <div className="flex-shrink-0 px-4 pt-4">
+        <div className="flex-shrink-0 overflow-y-auto max-h-[40vh] px-4 pt-4">
           <OpportunitiesSection
             phoneNumber={conversation.contact_phone}
             leadName={contact?.name || conversation?.contact_name || 'Lead'}
