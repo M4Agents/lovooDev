@@ -1245,21 +1245,12 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               </div>
             ) : (
               <>
-                <select
-                  value={selectedInstanceId}
-                  onChange={(e) => setSelectedInstanceId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Selecione a instância...</option>
-                  {availableInstances.map((inst: any) => (
-                    <option key={inst.id} value={inst.id}>
-                      {inst.instance_name}
-                      {inst.phone_number ? ` (${inst.phone_number})` : ''}
-                      {inst.id === instanceId ? ' - Conversa atual' : ''}
-                    </option>
-                  ))}
-                </select>
+                <InstanceSelector
+                  instances={availableInstances}
+                  selectedInstance={selectedInstanceId}
+                  onSelectInstance={(id) => setSelectedInstanceId(id)}
+                  showAllOption={false}
+                />
                 
                 {/* Aviso quando instância diferente da conversa */}
                 {selectedInstanceId && selectedInstanceId !== instanceId && (
