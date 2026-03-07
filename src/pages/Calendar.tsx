@@ -49,19 +49,23 @@ export const Calendar: React.FC = () => {
         
         const companyUsers = data || []
         
-        // Adicionar próprio calendário
+        // Buscar dados do próprio usuário
+        const ownUserData = companyUsers.find((u: any) => u.user_id === user.id)
+        
+        // Adicionar próprio calendário com foto
         const ownCalendar: CalendarUser = {
           id: user.id,
           email: user.email || '',
-          display_name: 'Meu Calendário',
+          display_name: ownUserData?.display_name || 'Meu Calendário',
+          profile_picture_url: ownUserData?.profile_picture_url,
           color: '#3B82F6',
           is_own: true
         }
 
-        // Filtrar para não duplicar o próprio usuário e mapear para CalendarUser
+        // Filtrar: remover próprio usuário + APENAS ATIVOS
         const colors = ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1']
         const otherUsers = companyUsers
-          .filter((u: any) => u.user_id !== user.id)
+          .filter((u: any) => u.user_id !== user.id && u.is_active === true)
           .map((u: any, index: number) => ({
             id: u.user_id,
             email: u.email || '',
