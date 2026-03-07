@@ -451,22 +451,36 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       if (!conversation?.contact_phone || !companyId) return
       
       try {
-        // Buscar lead pelo telefone
+        // Normalizar telefone (remover caracteres especiais)
+        const normalizedPhone = conversation.contact_phone.replace(/\D/g, '')
+        
+        // Buscar lead pelo telefone normalizado
         const { data: leads, error } = await supabase
           .from('leads')
           .select('id, responsible_user_id')
           .eq('company_id', companyId)
-          .eq('phone', conversation.contact_phone)
           .is('deleted_at', null)
-          .limit(1)
         
         if (error) throw error
         
-        if (leads && leads.length > 0) {
-          const lead = leads[0]
-          setCurrentLeadId(lead.id)
-          setCurrentResponsibleId(lead.responsible_user_id || '')
-          setOriginalResponsibleId(lead.responsible_user_id || null)
+        // Filtrar leads que tenham telefone correspondente (normalizado)
+        const matchingLead = leads?.find(lead => {
+          if (!lead.phone) return false
+          const leadPhone = lead.phone.replace(/\D/g, '')
+          return leadPhone === normalizedPhone
+        })
+        
+        if (matchingLead) {
+          setCurrentLeadId(matchingLead.id)
+          setCurrentResponsibleId(matchingLead.responsible_user_id || '')
+          setOriginalResponsibleId(matchingLead.responsible_user_id || null)
+          console.log('✅ Lead encontrado:', matchingLead.id, 'Responsável:', matchingLead.responsible_user_id)
+        } else {
+          console.warn('⚠️ Lead não encontrado para telefone:', normalizedPhone)
+          // Resetar estados se não encontrar lead
+          setCurrentLeadId(null)
+          setCurrentResponsibleId('')
+          setOriginalResponsibleId(null)
         }
       } catch (error) {
         console.error('Error loading lead info:', error)
@@ -555,15 +569,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
   // Função para trocar responsável
   const handleChangeResponsible = async (newResponsibleId: string) => {
-    if (!currentLeadId || !companyId) {
-      console.warn('Lead ID ou Company ID não disponível')
-      return
-    }
-    
-    // Verificar permissão
-    const leadData = { id: currentLeadId, responsible_user_id: currentResponsibleId, company_id: companyId }
-    if (!canEditLead(leadData)) {
-      alert('Você não tem permissão para alterar o responsável deste lead')
+    if (!companyId || !conversation?.contact_phone) {
+      console.warn('Company ID ou telefone não disponível')
       return
     }
     
@@ -571,20 +578,56 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     setResponsibleChangeSuccess(false)
     
     try {
-      // Atualizar no banco
-      await api.updateLead(currentLeadId, {
-        responsible_user_id: newResponsibleId || null,
-        company_id: companyId
-      })
-      
-      // Atualizar estado local
-      setCurrentResponsibleId(newResponsibleId)
-      
-      // Feedback de sucesso
-      setResponsibleChangeSuccess(true)
-      setTimeout(() => setResponsibleChangeSuccess(false), 3000)
-      
-      console.log('✅ Responsável atualizado com sucesso')
+      // Se não tem lead, criar um novo
+      if (!currentLeadId) {
+        console.log('🆕 Criando novo lead para atribuir responsável...')
+        
+        const newLead = await api.createLead({
+          company_id: companyId,
+          name: contact?.name || conversation?.contact_name || 'Lead sem nome',
+          phone: conversation.contact_phone,
+          email: contact?.email || '',
+          origin: 'whatsapp',
+          status: 'novo',
+          responsible_user_id: newResponsibleId || null
+        })
+        
+        if (newLead && newLead.id) {
+          setCurrentLeadId(newLead.id)
+          setCurrentResponsibleId(newResponsibleId)
+          setOriginalResponsibleId(newResponsibleId)
+          
+          console.log('✅ Lead criado e responsável atribuído:', newLead.id)
+          
+          // Feedback de sucesso
+          setResponsibleChangeSuccess(true)
+          setTimeout(() => setResponsibleChangeSuccess(false), 3000)
+          
+          // Recarregar dados
+          await onUpdate()
+        }
+      } else {
+        // Lead já existe, apenas atualizar
+        const leadData = { id: currentLeadId, responsible_user_id: currentResponsibleId, company_id: companyId }
+        if (!canEditLead(leadData)) {
+          alert('Você não tem permissão para alterar o responsável deste lead')
+          return
+        }
+        
+        await api.updateLead(currentLeadId, {
+          responsible_user_id: newResponsibleId || null,
+          company_id: companyId
+        })
+        
+        // Atualizar estado local
+        setCurrentResponsibleId(newResponsibleId)
+        
+        // Feedback de sucesso
+        setResponsibleChangeSuccess(true)
+        setTimeout(() => setResponsibleChangeSuccess(false), 3000)
+        
+        console.log('✅ Responsável atualizado com sucesso')
+      }
     } catch (error) {
       console.error('❌ Erro ao atualizar responsável:', error)
       alert('Erro ao atualizar responsável. Tente novamente.')
@@ -728,11 +771,9 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <select
               value={currentResponsibleId}
               onChange={(e) => handleChangeResponsible(e.target.value)}
-              disabled={changingResponsible || !currentLeadId}
+              disabled={changingResponsible}
               className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 ${
-                changingResponsible ? 'opacity-50 pointer-events-none' : ''
-              } ${
-                !currentLeadId ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-gray-400'
+                changingResponsible ? 'opacity-50 pointer-events-none' : 'hover:border-gray-400'
               }`}
             >
               <option value="">Sem responsável</option>
