@@ -149,19 +149,24 @@ export const Calendar: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+      {/* Header Premium */}
+      <div className="bg-gradient-to-r from-white via-blue-50/50 to-white border-b border-blue-100/50 px-6 py-5 shadow-sm backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <CalendarIcon className="w-8 h-8 text-blue-600" />
+            <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/30">
+              <CalendarIcon className="w-6 h-6 text-white" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Calendário</h1>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent tracking-tight">Calendário</h1>
               <p className="text-sm text-gray-600">
-                {todayCount > 0 && (
-                  <span className="text-blue-600 font-medium">
+                {todayCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium text-xs animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                     {todayCount} {todayCount === 1 ? 'atividade' : 'atividades'} hoje
                   </span>
+                ) : (
+                  <span className="text-gray-500">Gerencie suas atividades</span>
                 )}
               </p>
             </div>
@@ -169,10 +174,10 @@ export const Calendar: React.FC = () => {
 
           <button
             onClick={handleCreateActivity}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="group flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all duration-300 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95"
           >
-            <Plus className="w-5 h-5" />
-            Nova Atividade
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+            <span className="font-medium">Nova Atividade</span>
           </button>
         </div>
       </div>
@@ -188,32 +193,32 @@ export const Calendar: React.FC = () => {
 
         {/* Calendar View */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Month Navigation */}
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
+          {/* Month Navigation Premium */}
+          <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={handlePreviousMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2.5 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 group"
                 >
-                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                  <ChevronLeft className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
                 
-                <h2 className="text-xl font-semibold text-gray-900 capitalize min-w-[200px] text-center">
+                <h2 className="text-xl font-bold text-gray-900 capitalize min-w-[200px] text-center tracking-tight">
                   {monthName}
                 </h2>
                 
                 <button
                   onClick={handleNextMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2.5 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 group"
                 >
-                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
               </div>
 
               <button
                 onClick={handleToday}
-                className="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 border border-blue-200/50"
               >
                 Hoje
               </button>
@@ -225,8 +230,11 @@ export const Calendar: React.FC = () => {
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Carregando atividades...</p>
+                  <div className="relative">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mx-auto mb-4"></div>
+                    <div className="absolute inset-0 animate-ping rounded-full h-12 w-12 border-4 border-blue-400 opacity-20 mx-auto"></div>
+                  </div>
+                  <p className="text-gray-600 font-medium">Carregando atividades...</p>
                 </div>
               </div>
             ) : (
