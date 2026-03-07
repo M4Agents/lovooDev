@@ -19,6 +19,14 @@ interface Lead {
   email?: string
 }
 
+interface CompanyUser {
+  user_id: string
+  email: string
+  display_name: string
+  profile_picture_url?: string
+  is_active: boolean
+}
+
 export const ActivityModal: React.FC<ActivityModalProps> = ({
   activity,
   onClose,
@@ -29,6 +37,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('')
   const [leads, setLeads] = useState<Lead[]>([])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+  const [selectedResponsible, setSelectedResponsible] = useState<CompanyUser | null>(null)
   
   const [formData, setFormData] = useState<CreateActivityForm>({
     lead_id: 0,
@@ -42,6 +52,27 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     priority: 'medium',
     visibility: 'private'
   })
+
+  // Buscar usuários da empresa
+  useEffect(() => {
+    const fetchCompanyUsers = async () => {
+      if (!company?.id) return
+
+      try {
+        const { data, error } = await supabase
+          .rpc('get_company_users_with_details', {
+            p_company_id: company.id
+          })
+        
+        if (error) throw error
+        setCompanyUsers(data || [])
+      } catch (error) {
+        console.error('Error fetching company users:', error)
+      }
+    }
+
+    fetchCompanyUsers()
+  }, [company?.id])
 
   // Carregar dados da atividade se estiver editando
   useEffect(() => {
@@ -68,6 +99,14 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           email: activity.lead.email
         })
       }
+      
+      // Selecionar usuário responsável se existir
+      if (activity.assigned_to && companyUsers.length > 0) {
+        const responsible = companyUsers.find(u => u.user_id === activity.assigned_to)
+        if (responsible) {
+          setSelectedResponsible(responsible)
+        }
+      }
     } else {
       // Definir data/hora mínima como agora
       const now = new Date()
@@ -79,8 +118,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         scheduled_date: minDate,
         scheduled_time: minTime
       }))
+      
+      // Selecionar usuário logado como responsável padrão
+      if (user?.id && companyUsers.length > 0) {
+        const currentUser = companyUsers.find(u => u.user_id === user.id)
+        if (currentUser) {
+          setSelectedResponsible(currentUser)
+        }
+      }
     }
-  }, [activity])
+  }, [activity, companyUsers, user?.id])
 
   // Buscar leads
   useEffect(() => {
@@ -127,7 +174,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
       const dataToSave = {
         ...formData,
-        lead_id: selectedLead.id
+        lead_id: selectedLead.id,
+        assigned_to: selectedResponsible?.user_id || user.id
       }
 
       if (activity) {
@@ -234,6 +282,65 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   </div>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* Responsável pela Atividade */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              👥 Responsável pela Atividade *
+            </label>
+            {selectedResponsible ? (
+              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  {selectedResponsible.profile_picture_url ? (
+                    <img 
+                      src={selectedResponsible.profile_picture_url} 
+                      alt={selectedResponsible.display_name}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold">
+                      {selectedResponsible.display_name?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900">{selectedResponsible.display_name}</p>
+                    <p className="text-sm text-gray-600">{selectedResponsible.email}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedResponsible(null)}
+                  className="text-red-600 hover:text-red-800 text-sm"
+                >
+                  Alterar
+                </button>
+              </div>
+            ) : (
+              <select
+                onChange={(e) => {
+                  const selectedUser = companyUsers.find(u => u.user_id === e.target.value)
+                  if (selectedUser) {
+                    setSelectedResponsible(selectedUser)
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Selecione o responsável...</option>
+                {user?.id && (
+                  <option value={user.id}>👤 Eu mesmo</option>
+                )}
+                {companyUsers
+                  .filter(u => u.user_id !== user?.id && u.is_active)
+                  .map(u => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.display_name || u.email}
+                    </option>
+                  ))
+                }
+              </select>
             )}
           </div>
 
