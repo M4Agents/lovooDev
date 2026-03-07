@@ -124,7 +124,7 @@ export class CalendarApi {
         query = query.or(`title.ilike.%${filter.search}%,description.ilike.%${filter.search}%`)
       }
 
-      query = query.order('scheduled_datetime', { ascending: true })
+      query = query.order('scheduled_date', { ascending: true }).order('scheduled_time', { ascending: true })
 
       const { data, error } = await query
 
@@ -472,7 +472,6 @@ export class CalendarApi {
   private static mapActivity(data: any): LeadActivity {
     return {
       ...data,
-      scheduled_datetime: new Date(data.scheduled_datetime),
       completed_at: data.completed_at ? new Date(data.completed_at) : undefined,
       created_at: new Date(data.created_at),
       updated_at: new Date(data.updated_at)
