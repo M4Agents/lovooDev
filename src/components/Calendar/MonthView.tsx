@@ -79,6 +79,11 @@ export const MonthView: React.FC<MonthViewProps> = ({
     return priority?.icon || '🟡'
   }
 
+  const isWeekend = (index: number) => {
+    const dayOfWeek = index % 7
+    return dayOfWeek === 0 || dayOfWeek === 6 // Domingo (0) ou Sábado (6)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       {/* Header com dias da semana */}
@@ -98,12 +103,17 @@ export const MonthView: React.FC<MonthViewProps> = ({
         {calendarDays.map((day, index) => {
           const dayActivities = day ? activitiesByDay[day] || [] : []
           const isTodayDay = day ? isToday(day) : false
+          const isWeekendDay = isWeekend(index)
 
           return (
             <div
               key={index}
               className={`min-h-[120px] border-r border-b border-gray-200 p-2 ${
-                day ? 'bg-white hover:bg-gray-50' : 'bg-gray-50'
+                day 
+                  ? isWeekendDay 
+                    ? 'bg-gray-50 hover:bg-gray-100' 
+                    : 'bg-white hover:bg-gray-50'
+                  : 'bg-gray-50'
               } ${isTodayDay ? 'bg-blue-50' : ''}`}
             >
               {day && (
