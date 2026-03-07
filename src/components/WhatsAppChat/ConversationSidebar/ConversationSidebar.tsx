@@ -112,6 +112,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         {/* Seletor de Instância */}
         {instances.length > 0 && (
           <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2 mb-2">
+              <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
+              Selecione a Instância
+            </label>
             <InstanceSelector
               instances={instances}
               selectedInstance={selectedInstance || 'all'}
