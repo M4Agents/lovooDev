@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { calendarApi } from '../services/calendarApi'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { LeadActivity, CalendarUser, ActivityFilter } from '../types/calendar'
+import type { LeadActivity, CalendarUser, ActivityFilter, CalendarView } from '../types/calendar'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
 import { MonthView } from '../components/Calendar/MonthView'
+import { WeekView } from '../components/Calendar/WeekView'
+import { DayView } from '../components/Calendar/DayView'
+import { ViewSelector } from '../components/Calendar/ViewSelector'
 import { CalendarSidebar } from '../components/Calendar/CalendarSidebar'
 
 export const Calendar: React.FC = () => {
   const { user, company } = useAuth()
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentView, setCurrentView] = useState<CalendarView>('month')
   const [activities, setActivities] = useState<LeadActivity[]>([])
   const [selectedCalendars, setSelectedCalendars] = useState<string[]>([])
   const [availableCalendars, setAvailableCalendars] = useState<CalendarUser[]>([])
@@ -101,12 +105,28 @@ export const Calendar: React.FC = () => {
     fetchTodayCount()
   }, [company?.id, user?.id])
 
-  const handlePreviousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+  const handlePrevious = () => {
+    const newDate = new Date(currentDate)
+    if (currentView === 'month') {
+      newDate.setMonth(newDate.getMonth() - 1)
+    } else if (currentView === 'week') {
+      newDate.setDate(newDate.getDate() - 7)
+    } else {
+      newDate.setDate(newDate.getDate() - 1)
+    }
+    setCurrentDate(newDate)
   }
 
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+  const handleNext = () => {
+    const newDate = new Date(currentDate)
+    if (currentView === 'month') {
+      newDate.setMonth(newDate.getMonth() + 1)
+    } else if (currentView === 'week') {
+      newDate.setDate(newDate.getDate() + 7)
+    } else {
+      newDate.setDate(newDate.getDate() + 1)
+    }
+    setCurrentDate(newDate)
   }
 
   const handleToday = () => {
@@ -138,7 +158,20 @@ export const Calendar: React.FC = () => {
     )
   }
 
-  const monthName = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const getNavigationLabel = () => {
+    if (currentView === 'month') {
+      return currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    } else if (currentView === 'week') {
+      const startOfWeek = new Date(currentDate)
+      const day = startOfWeek.getDay()
+      startOfWeek.setDate(startOfWeek.getDate() - day)
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(endOfWeek.getDate() + 6)
+      return `${startOfWeek.getDate()} - ${endOfWeek.getDate()} de ${startOfWeek.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+    } else {
+      return currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    }
+  }
 
   if (!user || !company) {
     return (
@@ -193,35 +226,42 @@ export const Calendar: React.FC = () => {
 
         {/* Calendar View */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Month Navigation Premium */}
+          {/* Navigation Premium */}
           <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={handlePreviousMonth}
+                  onClick={handlePrevious}
                   className="p-2.5 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 group"
                 >
                   <ChevronLeft className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
                 
-                <h2 className="text-xl font-bold text-gray-900 capitalize min-w-[200px] text-center tracking-tight">
-                  {monthName}
+                <h2 className="text-xl font-bold text-gray-900 capitalize min-w-[300px] text-center tracking-tight">
+                  {getNavigationLabel()}
                 </h2>
                 
                 <button
-                  onClick={handleNextMonth}
+                  onClick={handleNext}
                   className="p-2.5 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 group"
                 >
                   <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
               </div>
 
-              <button
-                onClick={handleToday}
-                className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 border border-blue-200/50"
-              >
-                Hoje
-              </button>
+              <div className="flex items-center gap-3">
+                <ViewSelector
+                  currentView={currentView}
+                  onViewChange={setCurrentView}
+                />
+                
+                <button
+                  onClick={handleToday}
+                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 border border-blue-200/50"
+                >
+                  Hoje
+                </button>
+              </div>
             </div>
           </div>
 
@@ -238,12 +278,32 @@ export const Calendar: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <MonthView
-                currentDate={currentDate}
-                activities={activities}
-                availableCalendars={availableCalendars}
-                onEditActivity={handleEditActivity}
-              />
+              <>
+                {currentView === 'month' && (
+                  <MonthView
+                    currentDate={currentDate}
+                    activities={activities}
+                    availableCalendars={availableCalendars}
+                    onEditActivity={handleEditActivity}
+                  />
+                )}
+                {currentView === 'week' && (
+                  <WeekView
+                    currentDate={currentDate}
+                    activities={activities}
+                    availableCalendars={availableCalendars}
+                    onEditActivity={handleEditActivity}
+                  />
+                )}
+                {currentView === 'day' && (
+                  <DayView
+                    currentDate={currentDate}
+                    activities={activities}
+                    availableCalendars={availableCalendars}
+                    onEditActivity={handleEditActivity}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
