@@ -591,14 +591,18 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       if (!currentLeadId) {
         console.log('🆕 Criando novo lead para atribuir responsável...')
         
-        const leadData = {
+        const leadData: any = {
           company_id: companyId,
           name: contact?.name || conversation?.contact_name || 'Lead sem nome',
           phone: conversation.contact_phone,
-          email: contact?.email || '',
           origin: 'whatsapp',
           status: 'novo',
           responsible_user_id: newResponsibleId || null
+        }
+        
+        // Só adicionar email se existir (evitar constraint valid_email)
+        if (contact?.email && contact.email.trim() !== '') {
+          leadData.email = contact.email
         }
         
         console.log('📋 Dados do novo lead:', leadData)
