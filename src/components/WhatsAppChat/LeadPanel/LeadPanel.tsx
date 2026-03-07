@@ -458,7 +458,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         // Buscar lead pelo telefone normalizado
         const { data: leads, error } = await supabase
           .from('leads')
-          .select('id, responsible_user_id')
+          .select('id, responsible_user_id, phone')
           .eq('company_id', companyId)
           .is('deleted_at', null)
         
