@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { calendarApi } from '../services/calendarApi'
+import { supabase } from '../lib/supabase'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { LeadActivity, CalendarUser, ActivityFilter, CalendarView } from '../types/calendar'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
@@ -32,27 +33,43 @@ export const Calendar: React.FC = () => {
     }
   }, [user?.id])
 
-  // Buscar todos usuários da empresa
+  // Buscar todos usuários da empresa usando RPC (mesma implementação do sistema de responsáveis)
   useEffect(() => {
     const fetchCalendars = async () => {
       if (!user?.id || !company?.id) return
 
       try {
-        // Buscar todos usuários da empresa
-        const companyUsers = await calendarApi.getCompanyUsers(company.id)
+        // Usar RPC get_company_users_with_details (mesma que sistema de responsáveis)
+        const { data, error } = await supabase
+          .rpc('get_company_users_with_details', {
+            p_company_id: company.id
+          })
+        
+        if (error) throw error
+        
+        const companyUsers = data || []
         
         // Adicionar próprio calendário
         const ownCalendar: CalendarUser = {
           id: user.id,
           email: user.email || '',
-          display_name: user.display_name || 'Meu Calendário',
-          profile_picture_url: user.profile_picture_url,
+          display_name: 'Meu Calendário',
           color: '#3B82F6',
           is_own: true
         }
 
-        // Filtrar para não duplicar o próprio usuário
-        const otherUsers = companyUsers.filter(u => u.id !== user.id)
+        // Filtrar para não duplicar o próprio usuário e mapear para CalendarUser
+        const colors = ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1']
+        const otherUsers = companyUsers
+          .filter((u: any) => u.user_id !== user.id)
+          .map((u: any, index: number) => ({
+            id: u.user_id,
+            email: u.email || '',
+            display_name: u.display_name || u.email?.split('@')[0] || 'Usuário',
+            profile_picture_url: u.profile_picture_url,
+            color: colors[index % colors.length],
+            is_own: false
+          }))
 
         setAvailableCalendars([ownCalendar, ...otherUsers])
       } catch (error) {
