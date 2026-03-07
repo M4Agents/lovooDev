@@ -170,6 +170,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca'>('info')
   const [conversation, setConversation] = useState<any>(null)
+  const [averageResponseTime, setAverageResponseTime] = useState<string>('--')
   
   console.log('📊 LeadPanel - activeTab atual:', activeTab)
   
@@ -180,6 +181,67 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   // =====================================================
   // BUSCAR DADOS
   // =====================================================
+
+  // Função para calcular tempo médio de resposta
+  const calculateAverageResponseTime = async (conversationId: string) => {
+    try {
+      const { data: messages, error } = await supabase
+        .from('chat_messages')
+        .select('timestamp, direction')
+        .eq('conversation_id', conversationId)
+        .order('timestamp', { ascending: true })
+      
+      if (error || !messages || messages.length < 2) {
+        return '--'
+      }
+      
+      const responseTimes: number[] = []
+      
+      // Calcular tempo entre mensagem inbound e próxima outbound
+      for (let i = 0; i < messages.length - 1; i++) {
+        if (messages[i].direction === 'inbound') {
+          // Buscar próxima mensagem outbound
+          for (let j = i + 1; j < messages.length; j++) {
+            if (messages[j].direction === 'outbound') {
+              const inboundTime = new Date(messages[i].timestamp).getTime()
+              const outboundTime = new Date(messages[j].timestamp).getTime()
+              const diffMs = outboundTime - inboundTime
+              
+              if (diffMs > 0) {
+                responseTimes.push(diffMs)
+              }
+              break
+            }
+          }
+        }
+      }
+      
+      if (responseTimes.length === 0) {
+        return '--'
+      }
+      
+      // Calcular média
+      const avgMs = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+      
+      // Formatar tempo
+      const minutes = Math.floor(avgMs / (1000 * 60))
+      const hours = Math.floor(minutes / 60)
+      const days = Math.floor(hours / 24)
+      
+      if (days > 0) {
+        return `${days}d`
+      } else if (hours > 0) {
+        return `${hours}h`
+      } else if (minutes > 0) {
+        return `${minutes}m`
+      } else {
+        return '<1m'
+      }
+    } catch (error) {
+      console.error('Erro ao calcular tempo médio de resposta:', error)
+      return '--'
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -194,6 +256,10 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         // Buscar informações do contato
         const contactData = await chatApi.getContactInfo(companyId, conv.contact_phone)
         setContact(contactData)
+        
+        // Calcular tempo médio de resposta
+        const avgTime = await calculateAverageResponseTime(conversationId)
+        setAverageResponseTime(avgTime)
         
         // Buscar mensagens agendadas
         const scheduledData = await chatApi.getScheduledMessages(companyId, conversationId)
@@ -808,7 +874,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             {/* Tempo Médio de Resposta */}
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-600">
-                --
+                {averageResponseTime}
               </div>
               <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
               <div className="text-[10px] text-gray-400">médio resp.</div>
