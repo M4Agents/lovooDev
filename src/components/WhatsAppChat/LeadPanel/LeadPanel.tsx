@@ -1210,6 +1210,38 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     }
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800'
   }
+
+  // Função para transformar URLs em links clicáveis
+  const renderMessageWithLinks = (text: string) => {
+    // Regex para detectar URLs (http, https, www)
+    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/g
+    
+    const parts = text.split(urlRegex).filter(Boolean)
+    
+    return parts.map((part, index) => {
+      // Verificar se é uma URL
+      if (part && part.match(urlRegex)) {
+        // Adicionar https:// se começar com www
+        const href = part.startsWith('www.') ? `https://${part}` : part
+        
+        return (
+          <a
+            key={index}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        )
+      }
+      
+      // Retornar texto normal
+      return <span key={index}>{part}</span>
+    })
+  }
   
   const filteredMessages = scheduledMessages.filter(msg => 
     statusFilter === 'all' || msg.status === statusFilter
@@ -1650,7 +1682,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                   )}
                 </div>
                 
-                <p className="text-sm text-gray-900 mb-2">{message.content}</p>
+                <p className="text-sm text-gray-900 mb-2">
+                  {renderMessageWithLinks(message.content)}
+                </p>
                 
                 <p className="text-xs text-gray-600">
                   {formatDateTime(message.scheduled_for)}
