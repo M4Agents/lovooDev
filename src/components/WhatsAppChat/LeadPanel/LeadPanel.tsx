@@ -347,6 +347,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               setLeadForEdit(leadData)
               setShowLeadModal(true)
             }}
+            averageResponseTime={averageResponseTime}
           />
         ) : activeTab === 'schedule' ? (
           conversation?.instance_id ? (
@@ -407,6 +408,7 @@ interface ContactInfoProps {
   companyId: string
   onUpdate: () => void
   onOpenLeadModal: (leadData: Lead) => void
+  averageResponseTime: string
 }
 
 const ContactInfo: React.FC<ContactInfoProps> = ({
@@ -414,7 +416,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   conversation,
   companyId,
   onUpdate,
-  onOpenLeadModal
+  onOpenLeadModal,
+  averageResponseTime
 }) => {
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<ContactInfoForm>({
