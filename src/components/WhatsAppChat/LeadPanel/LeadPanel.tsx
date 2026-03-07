@@ -864,7 +864,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <div className="grid grid-cols-3 gap-3">
               {/* Dias no Sistema */}
               <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
+                <div className="text-xl font-bold text-blue-600">
                   {contact?.first_contact_at || contact?.created_at
                     ? Math.floor((Date.now() - new Date(contact.first_contact_at || contact.created_at).getTime()) / (1000 * 60 * 60 * 24))
                     : 0
@@ -876,7 +876,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               
               {/* Mensagens Trocadas */}
               <div className="text-center border-x border-slate-200">
-                <div className="text-2xl font-bold text-green-600">
+                <div className="text-xl font-bold text-green-600">
                   {contact?.total_messages || 0}
                 </div>
                 <div className="text-xs text-gray-600 mt-1 font-medium">Mensagens</div>
@@ -885,7 +885,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               
               {/* Tempo Médio de Resposta */}
               <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
+                <div className="text-xl font-bold text-purple-600">
                   {averageResponseTime}
                 </div>
                 <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
