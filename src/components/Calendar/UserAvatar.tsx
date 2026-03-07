@@ -39,83 +39,64 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const backgroundColor = user.color || getColorFromName(displayName)
 
   // Badge de permissão
-  const getPermissionBadge = () => {
-    if (user.is_own) return null
+  const getPermissionLabel = () => {
+    if (user.is_own) return 'Seu calendário'
     
-    const badges = {
-      view: '👁️',
-      edit: '✏️',
-      manage: '⚙️'
+    const labels = {
+      view: 'Visualizar',
+      edit: 'Editar',
+      manage: 'Gerenciar'
     }
     
-    return user.permission ? badges[user.permission] : null
+    return user.permission ? labels[user.permission] : 'Visualizar'
   }
 
-  return (
-    <div className="flex flex-col items-center gap-1.5 group">
-      <button
-        onClick={onClick}
-        className={`relative transition-all duration-200 ${
-          isActive
-            ? 'scale-100'
-            : 'scale-90 opacity-80 hover:scale-95 hover:opacity-100'
-        }`}
-      >
-        {/* Avatar */}
-        <div
-          className={`relative ${
-            isActive ? 'w-12 h-12' : 'w-10 h-10'
-          } rounded-full overflow-hidden transition-all duration-200`}
-          style={{
-            boxShadow: isActive
-              ? `0 0 0 3px white, 0 0 0 5px ${backgroundColor}, 0 4px 12px ${backgroundColor}40`
-              : '0 0 0 2px white, 0 0 0 3px #E5E7EB'
-          }}
-        >
-          {user.profile_picture_url ? (
-            <img
-              src={user.profile_picture_url}
-              alt={displayName}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div
-              className="w-full h-full flex items-center justify-center text-white font-bold"
-              style={{ backgroundColor }}
-            >
-              <span className={isActive ? 'text-sm' : 'text-xs'}>
-                {initials}
-              </span>
-            </div>
-          )}
-        </div>
+  const tooltipText = user.is_own 
+    ? 'Você' 
+    : `${displayName} - ${getPermissionLabel()}`
 
-        {/* Badge de permissão */}
-        {getPermissionBadge() && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md text-xs">
-            {getPermissionBadge()}
+  return (
+    <button
+      onClick={onClick}
+      title={tooltipText}
+      className={`relative transition-all duration-200 hover:z-[999] ${
+        isActive ? 'z-50' : 'z-auto'
+      }`}
+    >
+      {/* Avatar */}
+      <div
+        className="w-8 h-8 rounded-full overflow-hidden transition-all duration-200"
+        style={{
+          boxShadow: isActive
+            ? `0 0 0 3px ${backgroundColor}, 0 2px 8px ${backgroundColor}40`
+            : '0 0 0 2px white, 0 1px 3px rgba(0,0,0,0.1)',
+          transform: isActive ? 'scale(1.1)' : 'scale(1)'
+        }}
+      >
+        {user.profile_picture_url ? (
+          <img
+            src={user.profile_picture_url}
+            alt={displayName}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center text-white font-bold text-xs"
+            style={{ backgroundColor }}
+          >
+            {initials}
           </div>
         )}
+      </div>
 
-        {/* Indicador de ativo */}
-        {isActive && (
-          <div
-            className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 rounded-full"
-            style={{ backgroundColor }}
-          />
-        )}
-      </button>
-
-      {/* Nome */}
-      <span
-        className={`text-xs transition-all duration-200 ${
-          isActive
-            ? 'font-bold text-gray-900'
-            : 'font-medium text-gray-600 group-hover:text-gray-900'
-        }`}
-      >
-        {user.is_own ? 'Você' : displayName.split(' ')[0]}
-      </span>
-    </div>
+      {/* Badge de permissão (pequeno) */}
+      {!user.is_own && (
+        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-white rounded-full flex items-center justify-center shadow-sm text-[8px]">
+          {user.permission === 'view' && '👁️'}
+          {user.permission === 'edit' && '✏️'}
+          {user.permission === 'manage' && '⚙️'}
+        </div>
+      )}
+    </button>
   )
 }

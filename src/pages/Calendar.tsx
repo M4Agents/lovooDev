@@ -225,16 +225,6 @@ export const Calendar: React.FC = () => {
         </div>
       </div>
 
-      {/* User Avatar Bar */}
-      {availableCalendars.length > 0 && (
-        <UserAvatarBar
-          currentUser={availableCalendars.find(cal => cal.is_own) || availableCalendars[0]}
-          availableCalendars={availableCalendars}
-          selectedUserId={selectedUserId}
-          onSelectUser={setSelectedUserId}
-        />
-      )}
-
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
@@ -249,7 +239,7 @@ export const Calendar: React.FC = () => {
           {/* Navigation Premium */}
           <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <button
                   onClick={handlePrevious}
                   className="p-2.5 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 group"
@@ -257,7 +247,7 @@ export const Calendar: React.FC = () => {
                   <ChevronLeft className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
                 
-                <h2 className="text-xl font-bold text-gray-900 capitalize min-w-[300px] text-center tracking-tight">
+                <h2 className="text-xl font-bold text-gray-900 capitalize min-w-[200px] text-center tracking-tight">
                   {getNavigationLabel()}
                 </h2>
                 
@@ -268,6 +258,16 @@ export const Calendar: React.FC = () => {
                   <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors" />
                 </button>
               </div>
+
+              {/* User Avatar Bar - Centro */}
+              {availableCalendars.length > 0 && (
+                <UserAvatarBar
+                  currentUser={availableCalendars.find(cal => cal.is_own) || availableCalendars[0]}
+                  availableCalendars={availableCalendars}
+                  selectedUserId={selectedUserId}
+                  onSelectUser={setSelectedUserId}
+                />
+              )}
 
               <div className="flex items-center gap-3">
                 <ViewSelector
