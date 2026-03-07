@@ -10,6 +10,9 @@ import { LeadModal } from '../../LeadModal'
 import { BibliotecaV2 } from './BibliotecaV2'
 import { OpportunitiesSection } from './OpportunitiesSection'
 import { InstanceSelector } from '../InstanceSelector'
+import { supabase } from '../../../lib/supabase'
+import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
+import { api } from '../../../services/api'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -364,6 +367,18 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   const [loadingInstances, setLoadingInstances] = useState(false)
   const [changingInstance, setChangingInstance] = useState(false)
 
+  // Estados para seletor de responsável
+  const [companyUsers, setCompanyUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [changingResponsible, setChangingResponsible] = useState(false)
+  const [originalResponsibleId, setOriginalResponsibleId] = useState<string | null>(null)
+  const [responsibleChangeSuccess, setResponsibleChangeSuccess] = useState(false)
+  const [currentLeadId, setCurrentLeadId] = useState<number | null>(null)
+  const [currentResponsibleId, setCurrentResponsibleId] = useState<string>('')
+  
+  // Hook de permissões
+  const { canEditLead } = useLeadPermissions()
+
   useEffect(() => {
     if (contact) {
       setFormData({
@@ -404,6 +419,62 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     
     loadInstances()
   }, [companyId, conversation?.instance_id])
+
+  // Carregar usuários da empresa
+  useEffect(() => {
+    const loadCompanyUsers = async () => {
+      if (!companyId) return
+      
+      try {
+        setLoadingUsers(true)
+        const { data, error } = await supabase
+          .rpc('get_company_users_with_details', {
+            p_company_id: companyId
+          })
+        
+        if (error) throw error
+        setCompanyUsers(data || [])
+      } catch (error) {
+        console.error('Error loading company users:', error)
+        setCompanyUsers([])
+      } finally {
+        setLoadingUsers(false)
+      }
+    }
+    
+    loadCompanyUsers()
+  }, [companyId])
+
+  // Buscar informações do lead atual
+  useEffect(() => {
+    const loadLeadInfo = async () => {
+      if (!conversation?.contact_phone || !companyId) return
+      
+      try {
+        // Buscar lead pelo telefone
+        const { data: leads, error } = await supabase
+          .from('leads')
+          .select('id, responsible_user_id')
+          .eq('company_id', companyId)
+          .eq('phone', conversation.contact_phone)
+          .is('deleted_at', null)
+          .limit(1)
+        
+        if (error) throw error
+        
+        if (leads && leads.length > 0) {
+          const lead = leads[0]
+          setCurrentLeadId(lead.id)
+          setCurrentResponsibleId(lead.responsible_user_id || '')
+          setOriginalResponsibleId(lead.responsible_user_id || null)
+        }
+      } catch (error) {
+        console.error('Error loading lead info:', error)
+      }
+    }
+    
+    loadLeadInfo()
+  }, [conversation?.contact_phone, companyId])
 
   const handleSave = async () => {
     if (!conversation) return
@@ -480,6 +551,49 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   const getSelectedInstanceName = () => {
     const instance = availableInstances.find(i => i.id === selectedInstanceId)
     return instance ? `${instance.instance_name}${instance.profile_name ? ' - ' + instance.profile_name : ''}` : ''
+  }
+
+  // Função para trocar responsável
+  const handleChangeResponsible = async (newResponsibleId: string) => {
+    if (!currentLeadId || !companyId) {
+      console.warn('Lead ID ou Company ID não disponível')
+      return
+    }
+    
+    // Verificar permissão
+    const leadData = { id: currentLeadId, responsible_user_id: currentResponsibleId, company_id: companyId }
+    if (!canEditLead(leadData)) {
+      alert('Você não tem permissão para alterar o responsável deste lead')
+      return
+    }
+    
+    setChangingResponsible(true)
+    setResponsibleChangeSuccess(false)
+    
+    try {
+      // Atualizar no banco
+      await api.updateLead(currentLeadId, {
+        responsible_user_id: newResponsibleId || null,
+        company_id: companyId
+      })
+      
+      // Atualizar estado local
+      setCurrentResponsibleId(newResponsibleId)
+      
+      // Feedback de sucesso
+      setResponsibleChangeSuccess(true)
+      setTimeout(() => setResponsibleChangeSuccess(false), 3000)
+      
+      console.log('✅ Responsável atualizado com sucesso')
+    } catch (error) {
+      console.error('❌ Erro ao atualizar responsável:', error)
+      alert('Erro ao atualizar responsável. Tente novamente.')
+      
+      // Reverter seleção
+      setCurrentResponsibleId(originalResponsibleId || '')
+    } finally {
+      setChangingResponsible(false)
+    }
   }
 
   const formatPhone = (phone: string) => {
@@ -593,6 +707,55 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
                 <span>⚠️</span>
                 <p>Instância alterada</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Seletor de Responsável pelo Lead - MODERNIZADO */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          Responsável pelo Lead
+        </label>
+        
+        {loadingUsers ? (
+          <div className="text-sm text-gray-500">Carregando...</div>
+        ) : companyUsers.length === 0 ? (
+          <div className="text-sm text-gray-500">Nenhum usuário disponível</div>
+        ) : (
+          <>
+            <select
+              value={currentResponsibleId}
+              onChange={(e) => handleChangeResponsible(e.target.value)}
+              disabled={changingResponsible || !currentLeadId}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 ${
+                changingResponsible ? 'opacity-50 pointer-events-none' : ''
+              } ${
+                !currentLeadId ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-gray-400'
+              }`}
+            >
+              <option value="">Sem responsável</option>
+              {companyUsers.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.display_name || user.email}
+                </option>
+              ))}
+            </select>
+            
+            {/* Aviso se responsável foi alterado */}
+            {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (
+              <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
+                <span>⚠️</span>
+                <p>Responsável alterado</p>
+              </div>
+            )}
+            
+            {/* Feedback de sucesso */}
+            {responsibleChangeSuccess && (
+              <div className="flex items-start gap-2 text-xs text-green-600 bg-green-50/50 px-2 py-1.5 rounded">
+                <span>✓</span>
+                <p>Responsável atualizado com sucesso</p>
               </div>
             )}
           </>
