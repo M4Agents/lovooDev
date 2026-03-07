@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
+import { UserSelector } from './WhatsAppChat/UserSelector';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
@@ -811,18 +812,13 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     <User className="w-4 h-4 inline mr-1" />
                     Responsável
                   </label>
-                  <select
-                    value={formData.responsible_user_id}
-                    onChange={(e) => handleInputChange('responsible_user_id', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                  >
-                    <option value="">Sem responsável</option>
-                    {companyUsers.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.display_name || user.email}
-                      </option>
-                    ))}
-                  </select>
+                  <UserSelector
+                    users={companyUsers}
+                    selectedUser={formData.responsible_user_id}
+                    onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
+                    showNoneOption={true}
+                    disabled={loading}
+                  />
                 </div>
 
               </div>
