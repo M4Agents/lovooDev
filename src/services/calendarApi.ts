@@ -311,7 +311,42 @@ export class CalendarApi {
   }
 
   /**
-   * Buscar calendários que posso visualizar
+   * Buscar todos usuários da empresa
+   */
+  static async getCompanyUsers(companyId: string): Promise<CalendarUser[]> {
+    try {
+      const { data, error } = await supabase
+        .from('company_users')
+        .select(`
+          user_id,
+          users:user_id (
+            id,
+            email,
+            display_name,
+            profile_picture_url
+          )
+        `)
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+
+      if (error) throw error
+      
+      return (data || []).map((item: any, index: number) => ({
+        id: item.users.id,
+        email: item.users.email || '',
+        display_name: item.users.display_name || item.users.email?.split('@')[0] || 'Usuário',
+        profile_picture_url: item.users.profile_picture_url,
+        color: this.getUserColor(index + 1),
+        is_own: false
+      }))
+    } catch (error) {
+      console.error('Error fetching company users:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Buscar calendários que posso visualizar (com permissões)
    */
   static async getAccessibleCalendars(userId: string): Promise<CalendarUser[]> {
     try {

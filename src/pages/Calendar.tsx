@@ -32,24 +32,29 @@ export const Calendar: React.FC = () => {
     }
   }, [user?.id])
 
-  // Buscar calendários acessíveis
+  // Buscar todos usuários da empresa
   useEffect(() => {
     const fetchCalendars = async () => {
       if (!user?.id || !company?.id) return
 
       try {
-        const accessible = await calendarApi.getAccessibleCalendars(user.id)
+        // Buscar todos usuários da empresa
+        const companyUsers = await calendarApi.getCompanyUsers(company.id)
         
         // Adicionar próprio calendário
         const ownCalendar: CalendarUser = {
           id: user.id,
           email: user.email || '',
-          display_name: 'Meu Calendário',
+          display_name: user.display_name || 'Meu Calendário',
+          profile_picture_url: user.profile_picture_url,
           color: '#3B82F6',
           is_own: true
         }
 
-        setAvailableCalendars([ownCalendar, ...accessible])
+        // Filtrar para não duplicar o próprio usuário
+        const otherUsers = companyUsers.filter(u => u.id !== user.id)
+
+        setAvailableCalendars([ownCalendar, ...otherUsers])
       } catch (error) {
         console.error('Error fetching calendars:', error)
       }
