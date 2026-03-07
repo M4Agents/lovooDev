@@ -787,8 +787,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             {/* Dias no Sistema */}
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
-                {contact?.first_contact_at 
-                  ? Math.floor((Date.now() - new Date(contact.first_contact_at).getTime()) / (1000 * 60 * 60 * 24))
+                {contact?.first_contact_at || contact?.created_at
+                  ? Math.floor((Date.now() - new Date(contact.first_contact_at || contact.created_at).getTime()) / (1000 * 60 * 60 * 24))
                   : 0
                 }
               </div>
