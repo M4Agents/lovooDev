@@ -570,8 +570,16 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
   // Função para trocar responsável
   const handleChangeResponsible = async (newResponsibleId: string) => {
+    console.log('🔵 INÍCIO handleChangeResponsible', {
+      newResponsibleId,
+      currentLeadId,
+      companyId,
+      contactPhone: conversation?.contact_phone,
+      contactName: contact?.name || conversation?.contact_name
+    })
+    
     if (!companyId || !conversation?.contact_phone) {
-      console.warn('Company ID ou telefone não disponível')
+      console.warn('⚠️ Dados faltando:', { companyId, contactPhone: conversation?.contact_phone })
       return
     }
     
@@ -583,7 +591,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       if (!currentLeadId) {
         console.log('🆕 Criando novo lead para atribuir responsável...')
         
-        const newLead = await api.createLead({
+        const leadData = {
           company_id: companyId,
           name: contact?.name || conversation?.contact_name || 'Lead sem nome',
           phone: conversation.contact_phone,
@@ -591,7 +599,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           origin: 'whatsapp',
           status: 'novo',
           responsible_user_id: newResponsibleId || null
-        })
+        }
+        
+        console.log('📋 Dados do novo lead:', leadData)
+        
+        const newLead = await api.createLead(leadData)
+        
+        console.log('✅ Lead criado:', newLead)
         
         if (newLead && newLead.id) {
           setCurrentLeadId(newLead.id)
@@ -605,20 +619,34 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           setTimeout(() => setResponsibleChangeSuccess(false), 3000)
           
           // Recarregar dados
+          console.log('🔄 Chamando onUpdate...')
           await onUpdate()
+          console.log('✅ onUpdate concluído')
         }
       } else {
         // Lead já existe, apenas atualizar
+        console.log('🔄 Atualizando lead existente:', currentLeadId)
+        
         const leadData = { id: currentLeadId, responsible_user_id: currentResponsibleId, company_id: companyId }
+        
+        console.log('🔐 Verificando permissões...', leadData)
+        
         if (!canEditLead(leadData)) {
+          console.warn('❌ Sem permissão para editar')
           alert('Você não tem permissão para alterar o responsável deste lead')
           return
         }
         
-        await api.updateLead(currentLeadId, {
+        const updateData = {
           responsible_user_id: newResponsibleId || null,
           company_id: companyId
-        })
+        }
+        
+        console.log('📋 Dados de atualização:', updateData)
+        
+        await api.updateLead(currentLeadId, updateData)
+        
+        console.log('✅ Lead atualizado com sucesso')
         
         // Atualizar estado local
         setCurrentResponsibleId(newResponsibleId)
@@ -626,17 +654,22 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         // Feedback de sucesso
         setResponsibleChangeSuccess(true)
         setTimeout(() => setResponsibleChangeSuccess(false), 3000)
-        
-        console.log('✅ Responsável atualizado com sucesso')
       }
-    } catch (error) {
-      console.error('❌ Erro ao atualizar responsável:', error)
+    } catch (error: any) {
+      console.error('❌ ERRO DETALHADO:', {
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response,
+        data: error?.response?.data,
+        error: error
+      })
       alert('Erro ao atualizar responsável. Tente novamente.')
       
       // Reverter seleção
       setCurrentResponsibleId(originalResponsibleId || '')
     } finally {
       setChangingResponsible(false)
+      console.log('🔵 FIM handleChangeResponsible')
     }
   }
 
