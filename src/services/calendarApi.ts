@@ -317,25 +317,16 @@ export class CalendarApi {
     try {
       const { data, error } = await supabase
         .from('company_users')
-        .select(`
-          user_id,
-          users:user_id (
-            id,
-            email,
-            display_name,
-            profile_picture_url
-          )
-        `)
+        .select('user_id')
         .eq('company_id', companyId)
         .eq('is_active', true)
 
       if (error) throw error
       
       return (data || []).map((item: any, index: number) => ({
-        id: item.users.id,
-        email: item.users.email || '',
-        display_name: item.users.display_name || item.users.email?.split('@')[0] || 'Usuário',
-        profile_picture_url: item.users.profile_picture_url,
+        id: item.user_id,
+        email: '',
+        display_name: `Usuário ${index + 1}`,
         color: this.getUserColor(index + 1),
         is_own: false
       }))
