@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
+import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
@@ -69,6 +70,7 @@ interface LeadStats {
 
 export const Leads: React.FC = () => {
   const { company } = useAuth();
+  const { canViewLead, canEditLead, canDeleteLead } = useLeadPermissions();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -788,6 +790,9 @@ export const Leads: React.FC = () => {
                   Origem
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Responsável
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Data
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -859,6 +864,12 @@ export const Leads: React.FC = () => {
                       {lead.origin.replace('_', ' ')}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {(() => {
+                      const responsibleUser = companyUsers.find(u => u.id === lead.responsible_user_id);
+                      return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
+                    })()}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {formatDate(lead.created_at)}
                   </td>
@@ -871,20 +882,24 @@ export const Leads: React.FC = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleEditLead(lead)}
-                        className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteLead(lead.id)}
-                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEditLead(lead) && (
+                        <button
+                          onClick={() => handleEditLead(lead)}
+                          className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canDeleteLead() && (
+                        <button
+                          onClick={() => handleDeleteLead(lead.id)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
