@@ -15,6 +15,12 @@ export const WeekView: React.FC<WeekViewProps> = ({
   availableCalendars,
   onEditActivity
 }) => {
+  // Função para parse de data sem conversão de timezone
+  const parseLocalDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
   // Calcular início da semana (domingo)
   const startOfWeek = new Date(currentDate)
   const day = startOfWeek.getDay()

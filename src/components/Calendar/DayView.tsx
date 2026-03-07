@@ -15,6 +15,12 @@ export const DayView: React.FC<DayViewProps> = ({
   availableCalendars,
   onEditActivity
 }) => {
+  // Função para parse de data sem conversão de timezone
+  const parseLocalDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
   // Filtrar atividades do dia
   const dayStr = currentDate.toISOString().split('T')[0]
   const dayActivities = activities.filter(activity => activity.scheduled_date === dayStr)

@@ -18,6 +18,12 @@ export const MonthView: React.FC<MonthViewProps> = ({
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
+  // Função para parse de data sem conversão de timezone
+  const parseLocalDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
   // Primeiro dia do mês
   const firstDay = new Date(year, month, 1)
   const firstDayOfWeek = firstDay.getDay() // 0 = Domingo
@@ -44,7 +50,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
 
   // Agrupar atividades por dia
   const activitiesByDay = activities.reduce((acc, activity) => {
-    const activityDate = new Date(activity.scheduled_date)
+    const activityDate = parseLocalDate(activity.scheduled_date)
     const day = activityDate.getDate()
     
     if (activityDate.getMonth() === month && activityDate.getFullYear() === year) {
