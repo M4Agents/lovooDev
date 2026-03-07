@@ -8,12 +8,14 @@ import { MonthView } from '../components/Calendar/MonthView'
 import { WeekView } from '../components/Calendar/WeekView'
 import { DayView } from '../components/Calendar/DayView'
 import { ViewSelector } from '../components/Calendar/ViewSelector'
+import { UserAvatarBar } from '../components/Calendar/UserAvatarBar'
 import { CalendarSidebar } from '../components/Calendar/CalendarSidebar'
 
 export const Calendar: React.FC = () => {
   const { user, company } = useAuth()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [currentView, setCurrentView] = useState<CalendarView>('month')
+  const [selectedUserId, setSelectedUserId] = useState<string>('')
   const [activities, setActivities] = useState<LeadActivity[]>([])
   const [selectedCalendars, setSelectedCalendars] = useState<string[]>([])
   const [availableCalendars, setAvailableCalendars] = useState<CalendarUser[]>([])
@@ -22,9 +24,10 @@ export const Calendar: React.FC = () => {
   const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
   const [todayCount, setTodayCount] = useState(0)
 
-  // Inicializar calendários selecionados (próprio usuário sempre selecionado)
+  // Inicializar usuário selecionado e calendários
   useEffect(() => {
     if (user?.id) {
+      setSelectedUserId(user.id)
       setSelectedCalendars([user.id])
     }
   }, [user?.id])
@@ -55,10 +58,10 @@ export const Calendar: React.FC = () => {
     fetchCalendars()
   }, [user?.id, company?.id])
 
-  // Buscar atividades do mês atual
+  // Buscar atividades do período atual
   useEffect(() => {
     const fetchActivities = async () => {
-      if (!company?.id) return
+      if (!company?.id || !selectedUserId) return
 
       try {
         setLoading(true)
@@ -73,10 +76,17 @@ export const Calendar: React.FC = () => {
 
         const data = await calendarApi.getActivities(company.id, filter)
         
-        // Filtrar por calendários selecionados
-        const filtered = data.filter(activity => 
-          selectedCalendars.includes(activity.owner_user_id)
-        )
+        // Filtrar por usuário selecionado na barra de avatares
+        let filtered = data.filter(activity => activity.owner_user_id === selectedUserId)
+        
+        // Se sidebar tem outros calendários selecionados, adicionar atividades deles também
+        if (selectedCalendars.length > 1) {
+          const additionalActivities = data.filter(activity => 
+            selectedCalendars.includes(activity.owner_user_id) && 
+            activity.owner_user_id !== selectedUserId
+          )
+          filtered = [...filtered, ...additionalActivities]
+        }
         
         setActivities(filtered)
       } catch (error) {
@@ -87,15 +97,15 @@ export const Calendar: React.FC = () => {
     }
 
     fetchActivities()
-  }, [company?.id, currentDate, selectedCalendars])
+  }, [company?.id, currentDate, selectedUserId, selectedCalendars])
 
-  // Buscar contagem de atividades de hoje
+  // Buscar contagem de atividades de hoje do usuário selecionado
   useEffect(() => {
     const fetchTodayCount = async () => {
-      if (!company?.id || !user?.id) return
+      if (!company?.id || !selectedUserId) return
 
       try {
-        const count = await calendarApi.getTodayActivitiesCount(company.id, user.id)
+        const count = await calendarApi.getTodayActivitiesCount(company.id, selectedUserId)
         setTodayCount(count)
       } catch (error) {
         console.error('Error fetching today count:', error)
@@ -103,7 +113,7 @@ export const Calendar: React.FC = () => {
     }
 
     fetchTodayCount()
-  }, [company?.id, user?.id])
+  }, [company?.id, selectedUserId])
 
   const handlePrevious = () => {
     const newDate = new Date(currentDate)
@@ -184,7 +194,7 @@ export const Calendar: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
       {/* Header Premium */}
-      <div className="bg-gradient-to-r from-white via-blue-50/50 to-white border-b border-blue-100/50 px-6 py-5 shadow-sm backdrop-blur-sm">
+      <div className="bg-gradient-to-r from-white via-blue-50/50 to-white border-b border-blue-100/50 px-6 py-4 shadow-sm backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/30">
@@ -214,6 +224,16 @@ export const Calendar: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* User Avatar Bar */}
+      {availableCalendars.length > 0 && (
+        <UserAvatarBar
+          currentUser={availableCalendars.find(cal => cal.is_own) || availableCalendars[0]}
+          availableCalendars={availableCalendars}
+          selectedUserId={selectedUserId}
+          onSelectUser={setSelectedUserId}
+        />
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
