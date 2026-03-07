@@ -762,7 +762,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
       {/* Seletor de Instância de Envio - MODERNIZADO */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+          <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
           Instância de Envio
         </label>
         
