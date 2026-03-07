@@ -41,9 +41,7 @@ export class CalendarApi {
         })
         .select(`
           *,
-          lead:leads(id, name, phone, email, company_name),
-          owner_user:auth.users!owner_user_id(id, email),
-          assigned_user:auth.users!assigned_to(id, email)
+          lead:leads(id, name, phone, email, company_name)
         `)
         .single()
 
@@ -67,9 +65,7 @@ export class CalendarApi {
         .from('lead_activities')
         .select(`
           *,
-          lead:leads(id, name, phone, email, company_name),
-          owner_user:auth.users!owner_user_id(id, email),
-          assigned_user:auth.users!assigned_to(id, email)
+          lead:leads(id, name, phone, email, company_name)
         `)
         .eq('company_id', companyId)
 
@@ -149,9 +145,7 @@ export class CalendarApi {
         .from('lead_activities')
         .select(`
           *,
-          lead:leads(id, name, phone, email, company_name),
-          owner_user:auth.users!owner_user_id(id, email),
-          assigned_user:auth.users!assigned_to(id, email)
+          lead:leads(id, name, phone, email, company_name)
         `)
         .eq('id', activityId)
         .single()
@@ -181,9 +175,7 @@ export class CalendarApi {
         .eq('id', activityId)
         .select(`
           *,
-          lead:leads(id, name, phone, email, company_name),
-          owner_user:auth.users!owner_user_id(id, email),
-          assigned_user:auth.users!assigned_to(id, email)
+          lead:leads(id, name, phone, email, company_name)
         `)
         .single()
 
@@ -216,9 +208,7 @@ export class CalendarApi {
         .eq('id', activityId)
         .select(`
           *,
-          lead:leads(id, name, phone, email, company_name),
-          owner_user:auth.users!owner_user_id(id, email),
-          assigned_user:auth.users!assigned_to(id, email)
+          lead:leads(id, name, phone, email, company_name)
         `)
         .single()
 
@@ -289,11 +279,7 @@ export class CalendarApi {
           granted_by: grantedBy,
           ...data
         })
-        .select(`
-          *,
-          viewer_user:auth.users!viewer_user_id(id, email),
-          owner_user:auth.users!owner_user_id(id, email)
-        `)
+        .select('*')
         .single()
 
       if (error) throw error
@@ -311,10 +297,7 @@ export class CalendarApi {
     try {
       const { data, error } = await supabase
         .from('calendar_permissions')
-        .select(`
-          *,
-          viewer_user:auth.users!viewer_user_id(id, email)
-        `)
+        .select('*')
         .eq('owner_user_id', userId)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -334,22 +317,18 @@ export class CalendarApi {
     try {
       const { data, error } = await supabase
         .from('calendar_permissions')
-        .select(`
-          permission_level,
-          owner_user:auth.users!owner_user_id(id, email)
-        `)
+        .select('*')
         .eq('viewer_user_id', userId)
         .eq('is_active', true)
 
       if (error) throw error
       
       return (data || []).map((p: any, index: number) => ({
-        id: p.owner_user.id,
-        email: p.owner_user.email,
-        display_name: p.owner_user.display_name,
-        profile_picture_url: p.owner_user.profile_picture_url,
+        id: p.owner_user_id,
+        email: '',
+        display_name: 'Usuário',
         permission: p.permission_level,
-        color: this.getUserColor(index + 1), // +1 porque índice 0 é o próprio usuário
+        color: this.getUserColor(index + 1),
         is_own: false
       }))
     } catch (error) {
@@ -373,10 +352,7 @@ export class CalendarApi {
           updated_at: new Date().toISOString()
         })
         .eq('id', permissionId)
-        .select(`
-          *,
-          viewer_user:auth.users!viewer_user_id(id, email)
-        `)
+        .select('*')
         .single()
 
       if (error) throw error
