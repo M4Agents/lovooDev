@@ -13,6 +13,7 @@ import { PlansManagement } from './pages/PlansManagement';
 import { MediaLibrary } from './pages/MediaLibrary';
 import Chat from './pages/Chat';
 import SalesFunnel from './pages/SalesFunnel';
+import { Calendar } from './pages/Calendar';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
@@ -175,6 +176,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SalesFunnel />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <Calendar />
           </ProtectedRoute>
         }
       />
