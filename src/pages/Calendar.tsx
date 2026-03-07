@@ -331,6 +331,7 @@ export const Calendar: React.FC = () => {
                     activities={activities}
                     availableCalendars={availableCalendars}
                     onEditActivity={handleEditActivity}
+                    onCreateActivity={handleCreateActivity}
                   />
                 )}
                 {currentView === 'week' && (
