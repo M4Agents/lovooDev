@@ -10,6 +10,7 @@ import { LeadModal } from '../../LeadModal'
 import { BibliotecaV2 } from './BibliotecaV2'
 import { OpportunitiesSection } from './OpportunitiesSection'
 import { InstanceSelector } from '../InstanceSelector'
+import { UserSelector } from '../UserSelector'
 import { supabase } from '../../../lib/supabase'
 import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
 import { api } from '../../../services/api'
@@ -764,25 +765,16 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         
         {loadingUsers ? (
           <div className="text-sm text-gray-500">Carregando...</div>
-        ) : companyUsers.length === 0 ? (
-          <div className="text-sm text-gray-500">Nenhum usuário disponível</div>
         ) : (
           <>
-            <select
-              value={currentResponsibleId}
-              onChange={(e) => handleChangeResponsible(e.target.value)}
+            <UserSelector
+              users={companyUsers}
+              selectedUser={currentResponsibleId}
+              onSelectUser={(userId) => handleChangeResponsible(userId)}
+              showNoneOption={true}
               disabled={changingResponsible}
-              className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 ${
-                changingResponsible ? 'opacity-50 pointer-events-none' : 'hover:border-gray-400'
-              }`}
-            >
-              <option value="">Sem responsável</option>
-              {companyUsers.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.display_name || user.email}
-                </option>
-              ))}
-            </select>
+              className={changingResponsible ? 'opacity-50 pointer-events-none' : ''}
+            />
             
             {/* Aviso se responsável foi alterado */}
             {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (
