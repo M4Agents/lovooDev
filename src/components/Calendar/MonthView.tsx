@@ -7,7 +7,7 @@ interface MonthViewProps {
   activities: LeadActivity[]
   availableCalendars: CalendarUser[]
   onEditActivity: (activity: LeadActivity) => void
-  onCreateActivity?: () => void
+  onViewDay?: (day: number) => void
 }
 
 export const MonthView: React.FC<MonthViewProps> = ({
@@ -15,7 +15,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
   activities,
   availableCalendars,
   onEditActivity,
-  onCreateActivity
+  onViewDay
 }) => {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -186,7 +186,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
 
                     {dayActivities.length > 3 && (
                       <button
-                        onClick={onCreateActivity}
+                        onClick={() => onViewDay?.(day)}
                         className="w-full text-xs font-semibold text-blue-600 text-center py-1.5 bg-blue-50/50 rounded-lg border border-blue-100/50 hover:bg-blue-100 hover:border-blue-200 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                       >
                         +{dayActivities.length - 3} mais

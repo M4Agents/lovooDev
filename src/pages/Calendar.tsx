@@ -169,6 +169,12 @@ export const Calendar: React.FC = () => {
     setCurrentDate(new Date())
   }
 
+  const handleViewDay = (day: number) => {
+    const selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
+    setCurrentDate(selectedDate)
+    setCurrentView('day')
+  }
+
   const handleCreateActivity = () => {
     setSelectedActivity(null)
     setShowActivityModal(true)
@@ -331,7 +337,7 @@ export const Calendar: React.FC = () => {
                     activities={activities}
                     availableCalendars={availableCalendars}
                     onEditActivity={handleEditActivity}
-                    onCreateActivity={handleCreateActivity}
+                    onViewDay={handleViewDay}
                   />
                 )}
                 {currentView === 'week' && (
