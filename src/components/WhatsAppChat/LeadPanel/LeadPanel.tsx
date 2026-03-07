@@ -762,134 +762,135 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6">
         {/* Seletor de Instância de Envio - MODERNIZADO */}
         <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
-          <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
-          Instância de Envio
-        </label>
-        
-        {loadingInstances ? (
-          <div className="text-sm text-gray-500">Carregando...</div>
-        ) : availableInstances.length === 0 ? (
-          <div className="text-sm text-gray-500">Nenhuma instância disponível</div>
-        ) : (
-          <>
-            <InstanceSelector
-              instances={availableInstances}
-              selectedInstance={selectedInstanceId}
-              onSelectInstance={(id) => {
-                const event = { target: { value: id } } as React.ChangeEvent<HTMLSelectElement>
-                handleChangeInstance(event)
-              }}
-              showAllOption={false}
-              className={changingInstance ? 'opacity-50 pointer-events-none' : ''}
-            />
-            
-            {/* Apenas aviso se instância foi alterada */}
-            {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (
-              <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
-                <span>⚠️</span>
-                <p>Instância alterada</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
+            Instância de Envio
+          </label>
+          
+          {loadingInstances ? (
+            <div className="text-sm text-gray-500">Carregando...</div>
+          ) : availableInstances.length === 0 ? (
+            <div className="text-sm text-gray-500">Nenhuma instância disponível</div>
+          ) : (
+            <>
+              <InstanceSelector
+                instances={availableInstances}
+                selectedInstance={selectedInstanceId}
+                onSelectInstance={(id) => {
+                  const event = { target: { value: id } } as React.ChangeEvent<HTMLSelectElement>
+                  handleChangeInstance(event)
+                }}
+                showAllOption={false}
+                className={changingInstance ? 'opacity-50 pointer-events-none' : ''}
+              />
+              
+              {/* Apenas aviso se instância foi alterada */}
+              {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (
+                <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
+                  <span>⚠️</span>
+                  <p>Instância alterada</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
-      {/* Seletor de Responsável pelo Lead - MODERNIZADO */}
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          Responsável pelo Lead
-        </label>
-        
-        {loadingUsers ? (
-          <div className="text-sm text-gray-500">Carregando...</div>
-        ) : (
-          <>
-            <UserSelector
-              users={companyUsers}
-              selectedUser={currentResponsibleId}
-              onSelectUser={(userId) => handleChangeResponsible(userId)}
-              showNoneOption={true}
-              disabled={changingResponsible}
-              className={changingResponsible ? 'opacity-50 pointer-events-none' : ''}
-            />
-            
-            {/* Aviso se responsável foi alterado */}
-            {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (
-              <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
-                <span>⚠️</span>
-                <p>Responsável alterado</p>
-              </div>
-            )}
-            
-            {/* Feedback de sucesso */}
-            {responsibleChangeSuccess && (
-              <div className="flex items-start gap-2 text-xs text-green-600 bg-green-50/50 px-2 py-1.5 rounded">
-                <span>✓</span>
-                <p>Responsável atualizado com sucesso</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+        {/* Seletor de Responsável pelo Lead - MODERNIZADO */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Responsável pelo Lead
+          </label>
+          
+          {loadingUsers ? (
+            <div className="text-sm text-gray-500">Carregando...</div>
+          ) : (
+            <>
+              <UserSelector
+                users={companyUsers}
+                selectedUser={currentResponsibleId}
+                onSelectUser={(userId) => handleChangeResponsible(userId)}
+                showNoneOption={true}
+                disabled={changingResponsible}
+                className={changingResponsible ? 'opacity-50 pointer-events-none' : ''}
+              />
+              
+              {/* Aviso se responsável foi alterado */}
+              {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (
+                <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
+                  <span>⚠️</span>
+                  <p>Responsável alterado</p>
+                </div>
+              )}
+              
+              {/* Feedback de sucesso */}
+              {responsibleChangeSuccess && (
+                <div className="flex items-start gap-2 text-xs text-green-600 bg-green-50/50 px-2 py-1.5 rounded">
+                  <span>✓</span>
+                  <p>Responsável atualizado com sucesso</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
-      {/* Botão Editar Lead - MODERNIZADO */}
-      <div className="space-y-2">
-        <button
-          onClick={() => {
-            if (contact && conversation) {
-              const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
-              onOpenLeadModal(leadData)
-            }
-          }}
-          className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Editar Lead Completo
-        </button>
-      </div>
+        {/* Botão Editar Lead - MODERNIZADO */}
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              if (contact && conversation) {
+                const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
+                onOpenLeadModal(leadData)
+              }
+            }}
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Editar Lead Completo
+          </button>
+        </div>
 
-      {/* Estatísticas do Lead - MODERNIZADO */}
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          Estatísticas do Lead
-        </label>
-        
-        <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200/60 shadow-sm">
-          <div className="grid grid-cols-3 gap-3">
-            {/* Dias no Sistema */}
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {contact?.first_contact_at || contact?.created_at
-                  ? Math.floor((Date.now() - new Date(contact.first_contact_at || contact.created_at).getTime()) / (1000 * 60 * 60 * 24))
-                  : 0
-                }
+        {/* Estatísticas do Lead - MODERNIZADO */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Estatísticas do Lead
+          </label>
+          
+          <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200/60 shadow-sm">
+            <div className="grid grid-cols-3 gap-3">
+              {/* Dias no Sistema */}
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {contact?.first_contact_at || contact?.created_at
+                    ? Math.floor((Date.now() - new Date(contact.first_contact_at || contact.created_at).getTime()) / (1000 * 60 * 60 * 24))
+                    : 0
+                  }
+                </div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">Dias</div>
+                <div className="text-[10px] text-gray-400">no sistema</div>
               </div>
-              <div className="text-xs text-gray-600 mt-1 font-medium">Dias</div>
-              <div className="text-[10px] text-gray-400">no sistema</div>
-            </div>
-            
-            {/* Mensagens Trocadas */}
-            <div className="text-center border-x border-slate-200">
-              <div className="text-2xl font-bold text-green-600">
-                {contact?.total_messages || 0}
+              
+              {/* Mensagens Trocadas */}
+              <div className="text-center border-x border-slate-200">
+                <div className="text-2xl font-bold text-green-600">
+                  {contact?.total_messages || 0}
+                </div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">Mensagens</div>
+                <div className="text-[10px] text-gray-400">trocadas</div>
               </div>
-              <div className="text-xs text-gray-600 mt-1 font-medium">Mensagens</div>
-              <div className="text-[10px] text-gray-400">trocadas</div>
-            </div>
-            
-            {/* Tempo Médio de Resposta */}
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {averageResponseTime}
+              
+              {/* Tempo Médio de Resposta */}
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {averageResponseTime}
+                </div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
+                <div className="text-[10px] text-gray-400">médio resp.</div>
               </div>
-              <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
-              <div className="text-[10px] text-gray-400">médio resp.</div>
             </div>
           </div>
         </div>
