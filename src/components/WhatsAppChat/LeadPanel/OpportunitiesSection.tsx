@@ -301,8 +301,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {activeOpportunities.slice(0, 3).map((opportunity) => (
+        <div className={`space-y-2 ${activeOpportunities.length > 3 ? 'overflow-y-auto max-h-[45vh] pr-2' : ''}`}>
+          {activeOpportunities.map((opportunity) => (
             <div
               key={opportunity.id}
               className="bg-white border border-gray-200 rounded-lg p-3 hover:border-purple-300 transition-colors"

@@ -741,18 +741,27 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   }
 
   return (
-    <div className="p-4 space-y-6 h-full overflow-y-auto">
-      {/* Seção de Oportunidades */}
+    <div className="flex flex-col h-full">
+      {/* Seção de Oportunidades - Scroll Inteligente */}
       {conversation?.contact_phone && (
-        <OpportunitiesSection
-          phoneNumber={conversation.contact_phone}
-          leadName={contact?.name || conversation?.contact_name || 'Lead'}
-          companyId={companyId}
-        />
+        <div className="flex-shrink-0 px-4 pt-4">
+          <OpportunitiesSection
+            phoneNumber={conversation.contact_phone}
+            leadName={contact?.name || conversation?.contact_name || 'Lead'}
+            companyId={companyId}
+          />
+        </div>
       )}
 
-      {/* Seletor de Instância de Envio - MODERNIZADO */}
-      <div className="space-y-2">
+      {/* Divisor visual */}
+      {conversation?.contact_phone && (
+        <div className="border-t border-gray-200 mx-4 my-4" />
+      )}
+
+      {/* Campos Fixos - Sempre Visíveis */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6">
+        {/* Seletor de Instância de Envio - MODERNIZADO */}
+        <div className="space-y-2">
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
           <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
           Instância de Envio
