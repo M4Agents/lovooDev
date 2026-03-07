@@ -562,12 +562,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
   }
 
-  // Obter nome da instância selecionada
-  const getSelectedInstanceName = () => {
-    const instance = availableInstances.find(i => i.id === selectedInstanceId)
-    return instance ? `${instance.instance_name}${instance.profile_name ? ' - ' + instance.profile_name : ''}` : ''
-  }
-
   // Função para trocar responsável
   const handleChangeResponsible = async (newResponsibleId: string) => {
     console.log('🔵 INÍCIO handleChangeResponsible', {
@@ -677,40 +671,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
   }
 
-  const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '')
-    if (cleaned.length === 11) {
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`
-    }
-    return phone
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors = {
-      new: 'bg-blue-100 text-blue-800',
-      contacted: 'bg-yellow-100 text-yellow-800',
-      qualified: 'bg-green-100 text-green-800',
-      proposal: 'bg-purple-100 text-purple-800',
-      negotiation: 'bg-orange-100 text-orange-800',
-      closed: 'bg-green-100 text-green-800',
-      lost: 'bg-red-100 text-red-800'
-    }
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusLabel = (status: string) => {
-    const labels = {
-      new: 'Novo',
-      contacted: 'Contatado',
-      qualified: 'Qualificado',
-      proposal: 'Proposta',
-      negotiation: 'Negociação',
-      closed: 'Fechado',
-      lost: 'Perdido'
-    }
-    return labels[status as keyof typeof labels] || status
-  }
-
   return (
     <div className="p-4 space-y-6 h-full overflow-y-auto">
       {/* Seção de Oportunidades */}
@@ -795,159 +755,66 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         )}
       </div>
 
-      {/* Ações */}
-      <div className="flex flex-col space-y-2">
-        {!editing ? (
-          <>
-            <button
-              onClick={() => {
-                if (contact && conversation) {
-                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
-                  onOpenLeadModal(leadData)
-                }
-              }}
-              className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Editar Lead Completo
-            </button>
-            <button
-              onClick={() => setEditing(true)}
-              className="w-full px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-            >
-              Edição Rápida
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={handleSave}
-              className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-            >
-              Salvar
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="flex-1 px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              Cancelar
-            </button>
-          </>
-        )}
+      {/* Botão Editar Lead - MODERNIZADO */}
+      <div className="space-y-2">
+        <button
+          onClick={() => {
+            if (contact && conversation) {
+              const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
+              onOpenLeadModal(leadData)
+            }
+          }}
+          className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Editar Lead Completo
+        </button>
       </div>
 
-      {/* Informações Detalhadas */}
-      <div className="space-y-4">
-        {editing ? (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status do Lead</label>
-              <select
-                value={formData.lead_status}
-                onChange={(e) => setFormData(prev => ({ ...prev, lead_status: e.target.value as any }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="new">Novo</option>
-                <option value="contacted">Contatado</option>
-                <option value="qualified">Qualificado</option>
-                <option value="proposal">Proposta</option>
-                <option value="negotiation">Negociação</option>
-                <option value="closed">Fechado</option>
-                <option value="lost">Perdido</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Valor do Negócio</label>
-              <input
-                type="number"
-                value={formData.deal_value}
-                onChange={(e) => setFormData(prev => ({ ...prev, deal_value: parseFloat(e.target.value) || 0 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="0,00"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Anotações</label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Adicione suas anotações..."
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {contact?.email && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">E-mail</label>
-                <p className="text-sm text-gray-900">{contact.email}</p>
+      {/* Estatísticas do Lead - MODERNIZADO */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Estatísticas do Lead
+        </label>
+        
+        <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200/60 shadow-sm">
+          <div className="grid grid-cols-3 gap-3">
+            {/* Dias no Sistema */}
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {contact?.first_contact_at 
+                  ? Math.floor((Date.now() - new Date(contact.first_contact_at).getTime()) / (1000 * 60 * 60 * 24))
+                  : 0
+                }
               </div>
-            )}
-
-            {contact?.deal_value && contact.deal_value > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Valor do Negócio</label>
-                <p className="text-sm text-gray-900">
-                  {new Intl.NumberFormat('pt-BR', { 
-                    style: 'currency', 
-                    currency: 'BRL' 
-                  }).format(contact.deal_value)}
-                </p>
-              </div>
-            )}
-
-            {contact?.notes && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Anotações</label>
-                <p className="text-sm text-gray-900 whitespace-pre-wrap">{contact.notes}</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Estatísticas</label>
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-semibold text-gray-900">
-                    {contact?.total_messages || 0}
-                  </div>
-                  <div className="text-xs text-gray-600">Mensagens</div>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-semibold text-gray-900">
-                    {contact?.first_contact_at ? 
-                      Math.floor((Date.now() - new Date(contact.first_contact_at).getTime()) / (1000 * 60 * 60 * 24))
-                      : 0
-                    }
-                  </div>
-                  <div className="text-xs text-gray-600">Dias</div>
-                </div>
-              </div>
+              <div className="text-xs text-gray-600 mt-1 font-medium">Dias</div>
+              <div className="text-[10px] text-gray-400">no sistema</div>
             </div>
-          </>
-        )}
+            
+            {/* Mensagens Trocadas */}
+            <div className="text-center border-x border-slate-200">
+              <div className="text-2xl font-bold text-green-600">
+                {contact?.total_messages || 0}
+              </div>
+              <div className="text-xs text-gray-600 mt-1 font-medium">Mensagens</div>
+              <div className="text-[10px] text-gray-400">trocadas</div>
+            </div>
+            
+            {/* Tempo Médio de Resposta */}
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                --
+              </div>
+              <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
+              <div className="text-[10px] text-gray-400">médio resp.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
