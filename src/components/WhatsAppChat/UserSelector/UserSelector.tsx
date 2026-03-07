@@ -13,6 +13,7 @@ interface CompanyUser {
   display_name?: string
   email: string
   avatar_url?: string
+  profile_picture_url?: string
 }
 
 interface UserSelectorProps {
@@ -61,11 +62,23 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     setIsOpen(false)
   }
 
-  // Gerar avatar com inicial do nome
+  // Gerar avatar com foto real ou inicial do nome
   const UserAvatar: React.FC<{ user: CompanyUser; size?: 'sm' | 'md' }> = ({ user, size = 'md' }) => {
     const sizeClasses = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-base'
     const initial = (user.display_name || user.email).charAt(0).toUpperCase()
     
+    // Se tem foto, mostrar imagem real
+    if (user.profile_picture_url) {
+      return (
+        <img
+          src={user.profile_picture_url}
+          alt={user.display_name || user.email}
+          className={`${sizeClasses} rounded-full object-cover flex-shrink-0`}
+        />
+      )
+    }
+    
+    // Fallback: avatar com inicial
     return (
       <div className={`${sizeClasses} rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold flex-shrink-0`}>
         {initial}
