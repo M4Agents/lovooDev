@@ -1198,6 +1198,38 @@ interface MessageBubbleProps {
   onResetVideoError: (messageId: string) => void
 }
 
+// Função para transformar URLs em links clicáveis
+const renderMessageWithLinks = (text: string) => {
+  // Regex para detectar URLs (http, https, www)
+  const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/g
+  
+  const parts = text.split(urlRegex).filter(Boolean)
+  
+  return parts.map((part, index) => {
+    // Verificar se é uma URL
+    if (part && part.match(urlRegex)) {
+      // Adicionar https:// se começar com www
+      const href = part.startsWith('www.') ? `https://${part}` : part
+      
+      return (
+        <a
+          key={index}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      )
+    }
+    
+    // Retornar texto normal
+    return <span key={index}>{part}</span>
+  })
+}
+
 // Componente para indicador de data flutuante (durante scroll)
 const DateIndicator: React.FC<{ date: string; visible: boolean }> = ({ date, visible }) => (
   <div 
@@ -1555,7 +1587,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {message.content && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap">
+              {renderMessageWithLinks(message.content)}
+            </p>
           )}
           
           {/* Timestamp para todas as mensagens, layout diferente por tipo */}
