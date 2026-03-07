@@ -713,44 +713,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
   return (
     <div className="p-4 space-y-6 h-full overflow-y-auto">
-      {/* Avatar e Info Básica */}
-      <div className="text-center">
-        <div className="w-16 h-16 rounded-full mx-auto mb-3 overflow-hidden bg-gray-300 flex items-center justify-center">
-          {contact?.profile_picture_url ? (
-            <img
-              src={contact.profile_picture_url}
-              alt={contact.name || conversation?.contact_name || 'Foto do lead'}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <svg className="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-            </svg>
-          )}
-        </div>
-        
-        <h3 className="text-lg font-medium text-gray-900">
-          {contact?.name || conversation?.contact_name || 'Sem nome'}
-        </h3>
-        
-        {/* NOVO: Nome da Empresa (sutil e delicado) */}
-        {conversation?.company_name && conversation.company_name.trim() !== '' && (
-          <p className="text-xs text-slate-400 font-normal mt-1">
-            {conversation.company_name}
-          </p>
-        )}
-        
-        <p className="text-sm text-gray-600">
-          {formatPhone(conversation?.contact_phone || '')}
-        </p>
-
-        {contact?.lead_status && (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getStatusColor(contact.lead_status)}`}>
-            {getStatusLabel(contact.lead_status)}
-          </span>
-        )}
-      </div>
-
       {/* Seção de Oportunidades */}
       {conversation?.contact_phone && (
         <OpportunitiesSection
