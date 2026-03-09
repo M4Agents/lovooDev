@@ -36,21 +36,39 @@ export class CalendarApi {
         Object.entries(data).filter(([_, value]) => value !== undefined)
       );
 
+      const dataToInsert = {
+        company_id: companyId,
+        owner_user_id: userId,
+        created_by: userId,
+        ...cleanData
+      };
+
+      // LOG DETALHADO PARA DEBUG
+      console.log('🔍 DEBUG createActivity - Data recebida:', data);
+      console.log('🔍 DEBUG createActivity - Data limpa:', cleanData);
+      console.log('🔍 DEBUG createActivity - Data final a inserir:', dataToInsert);
+      console.log('🔍 DEBUG createActivity - Tipos:', {
+        company_id: typeof dataToInsert.company_id,
+        owner_user_id: typeof dataToInsert.owner_user_id,
+        created_by: typeof dataToInsert.created_by,
+        lead_id: typeof dataToInsert.lead_id,
+        assigned_to: typeof dataToInsert.assigned_to
+      });
+
       const { data: result, error } = await supabase
         .from('lead_activities')
-        .insert({
-          company_id: companyId,
-          owner_user_id: userId,
-          created_by: userId,
-          ...cleanData
-        })
+        .insert(dataToInsert)
         .select(`
           *,
           lead:leads(id, name, phone, email, company_name)
         `)
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ ERRO SUPABASE:', error);
+        console.error('❌ Data que causou erro:', dataToInsert);
+        throw error;
+      }
       return this.mapActivity(result)
     } catch (error) {
       console.error('Error creating activity:', error)
