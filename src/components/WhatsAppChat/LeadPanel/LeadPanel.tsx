@@ -17,6 +17,7 @@ import { api } from '../../../services/api'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
+import { ActivityModal } from '../../Calendar/ActivityModal'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -24,6 +25,7 @@ import type {
   ContactInfoForm,
   ScheduleMessageForm
 } from '../../../types/whatsapp-chat'
+import type { LeadActivity } from '../../../types/calendar'
 
 // =====================================================
 // INTERFACE LEAD PARA COMPATIBILIDADE
@@ -357,6 +359,8 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               instanceId={conversation.instance_id}
               scheduledMessages={scheduledMessages}
               onUpdate={fetchData}
+              conversation={conversation}
+              contact={contact}
             />
           ) : (
             <div className="p-8 text-center">
@@ -909,6 +913,8 @@ interface ScheduleMessagesProps {
   instanceId?: string
   scheduledMessages: ChatScheduledMessage[]
   onUpdate: () => void
+  conversation?: any
+  contact?: ChatContact | null
 }
 
 const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
@@ -916,7 +922,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   companyId,
   instanceId,
   scheduledMessages,
-  onUpdate
+  onUpdate,
+  conversation,
+  contact
 }) => {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState<ScheduleMessageForm>({
@@ -949,6 +957,10 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  
+  // Estados para modal de atividade (integração com calendário)
+  const [showActivityModal, setShowActivityModal] = useState(false)
+  const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
 
   // Carregar instâncias disponíveis
   useEffect(() => {
@@ -1249,13 +1261,25 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
 
   return (
     <div className="p-4 space-y-4">
-      {/* Botão Agendar */}
-      <button
-        onClick={() => setShowForm(!showForm)}
-        className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-      >
-        {showForm ? 'Cancelar' : 'Agendar Mensagem'}
-      </button>
+      {/* Botões Agendar Mensagem e Atividades */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          📅 {showForm ? 'Cancelar' : 'Agendar Mensagem'}
+        </button>
+        
+        <button
+          onClick={() => {
+            setSelectedActivity(null)
+            setShowActivityModal(true)
+          }}
+          className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+        >
+          ✅ Atividades
+        </button>
+      </div>
 
       {/* Formulário */}
       {showForm && (
@@ -1737,6 +1761,24 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Modal de Atividade (Integração com Calendário) */}
+      {showActivityModal && (
+        <ActivityModal
+          activity={selectedActivity}
+          onClose={() => setShowActivityModal(false)}
+          onSave={() => {
+            setShowActivityModal(false)
+            setSelectedActivity(null)
+          }}
+          preSelectedLead={contact?.id ? {
+            id: parseInt(contact.id),
+            name: contact.name || conversation?.contact_name || '',
+            phone: contact.phone_number || conversation?.contact_phone || '',
+            email: contact.email
+          } : undefined}
+        />
       )}
     </div>
   )

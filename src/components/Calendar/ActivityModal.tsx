@@ -10,6 +10,7 @@ interface ActivityModalProps {
   activity: LeadActivity | null
   onClose: () => void
   onSave: () => void
+  preSelectedLead?: Lead
 }
 
 interface Lead {
@@ -30,7 +31,8 @@ interface CompanyUser {
 export const ActivityModal: React.FC<ActivityModalProps> = ({
   activity,
   onClose,
-  onSave
+  onSave,
+  preSelectedLead
 }) => {
   const { user, company } = useAuth()
   const [loading, setLoading] = useState(false)
@@ -119,6 +121,11 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         scheduled_time: minTime
       }))
       
+      // Pré-selecionar lead se fornecido (integração com Chat)
+      if (preSelectedLead && !activity) {
+        setSelectedLead(preSelectedLead)
+      }
+      
       // Selecionar usuário logado como responsável padrão
       if (user?.id && companyUsers.length > 0) {
         const currentUser = companyUsers.find(u => u.user_id === user.id)
@@ -127,7 +134,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
     }
-  }, [activity, companyUsers, user?.id])
+  }, [activity, companyUsers, user?.id, preSelectedLead])
 
   // Buscar leads
   useEffect(() => {
