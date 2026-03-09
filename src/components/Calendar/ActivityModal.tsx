@@ -43,7 +43,6 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [selectedResponsible, setSelectedResponsible] = useState<CompanyUser | null>(null)
   
   const [formData, setFormData] = useState<CreateActivityForm>({
-    lead_id: undefined,
     title: '',
     description: '',
     activity_type: 'task',
