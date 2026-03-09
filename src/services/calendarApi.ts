@@ -51,9 +51,52 @@ export class CalendarApi {
         .single()
 
       if (error) throw error
-      return this.mapActivity(result)
+      
+      const activity = this.mapActivity(result)
+
+      // Sincronizar com Google Calendar se solicitado
+      if (data.sync_to_google) {
+        this.syncToGoogleCalendar(activity.id).catch(err => {
+          console.error('Erro ao sincronizar com Google Calendar:', err)
+          // Não falhar a criação da atividade se sincronização falhar
+        })
+      }
+
+      return activity
     } catch (error) {
       console.error('Error creating activity:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Sincronizar atividade com Google Calendar
+   */
+  private static async syncToGoogleCalendar(activityId: string): Promise<void> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.warn('Sem sessão ativa para sincronizar com Google Calendar')
+        return
+      }
+
+      const response = await fetch('/api/google-calendar/sync/create-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ activity_id: activityId })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Falha na sincronização')
+      }
+
+      console.log('✅ Atividade sincronizada com Google Calendar')
+    } catch (error) {
+      console.error('Erro na sincronização com Google Calendar:', error)
       throw error
     }
   }

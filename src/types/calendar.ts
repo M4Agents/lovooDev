@@ -143,6 +143,7 @@ export interface CreateActivityForm {
   reminder_minutes: number
   priority: ActivityPriority
   visibility: ActivityVisibility
+  sync_to_google?: boolean
 }
 
 export interface UpdateActivityForm {

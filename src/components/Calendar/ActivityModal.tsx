@@ -489,6 +489,29 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             </select>
           </div>
 
+          {/* Sincronizar com Google Calendar */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={formData.sync_to_google || false}
+                onChange={(e) => setFormData({ ...formData, sync_to_google: e.target.checked })}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              />
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-lg">📅</span>
+                <div>
+                  <p className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">
+                    Sincronizar com Google Calendar
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    Evento será criado automaticamente no seu Google Calendar
+                  </p>
+                </div>
+              </div>
+            </label>
+          </div>
+
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
