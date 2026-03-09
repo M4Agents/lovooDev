@@ -106,7 +106,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
           return (
             <div
               key={index}
-              className={`h-[120px] border-r border-b border-gray-200 p-2 transition-colors ${
+              className={`min-h-[160px] border-r border-b border-gray-200 p-2 transition-colors ${
                 day 
                   ? isWeekendDay 
                     ? 'bg-gray-50 hover:bg-gray-100' 
@@ -133,7 +133,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    {dayActivities.slice(0, 3).map(activity => {
+                    {dayActivities.slice(0, 5).map(activity => {
                       const activityColor = getActivityColor(activity)
                       return (
                         <button
@@ -155,12 +155,12 @@ export const MonthView: React.FC<MonthViewProps> = ({
                       )
                     })}
 
-                    {dayActivities.length > 3 && (
+                    {dayActivities.length > 5 && (
                       <button
                         onClick={() => onViewDay?.(day)}
                         className="w-full text-xs font-medium text-blue-600 text-center py-1 hover:bg-gray-50 transition-colors"
                       >
-                        +{dayActivities.length - 3} mais
+                        +{dayActivities.length - 5} mais
                       </button>
                     )}
                   </div>
