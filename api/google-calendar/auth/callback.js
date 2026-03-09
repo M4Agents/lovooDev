@@ -50,28 +50,33 @@ export default async function handler(req, res) {
       expiresIn: tokens.expiry_date
     });
 
-    // Obter informações do usuário
+    // Obter informações do usuário Google
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const { data: userInfo } = await oauth2.userinfo.get();
 
-    console.log('✅ Informações do usuário:', {
+    console.log('✅ Informações do usuário Google:', {
       email: userInfo.email,
       id: userInfo.id
     });
 
-    // Obter user_id e company_id do header de autenticação
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    // Obter user_id do Supabase usando o email do Google
+    // Buscar usuário pelo email (já que não temos session no redirect)
+    const { data: authUser, error: authError } = await supabase.auth.admin.listUsers();
+    
+    if (authError) {
+      console.error('❌ Error listing users:', authError);
+      return res.redirect('/calendar?google_error=auth_failed');
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      console.error('❌ Auth error:', authError);
-      return res.status(401).json({ error: 'Invalid authentication' });
+    // Encontrar usuário com o email do Google
+    const user = authUser.users.find(u => u.email === userInfo.email);
+    
+    if (!user) {
+      console.error('❌ User not found with email:', userInfo.email);
+      return res.redirect('/calendar?google_error=user_not_found');
     }
+
+    console.log('✅ Usuário Supabase encontrado:', user.id);
 
     // Buscar company_id do usuário
     const { data: companyUser, error: companyError } = await supabase
@@ -82,7 +87,7 @@ export default async function handler(req, res) {
 
     if (companyError || !companyUser) {
       console.error('❌ Company not found:', companyError);
-      return res.status(404).json({ error: 'Company not found' });
+      return res.redirect('/calendar?google_error=company_not_found');
     }
 
     // Calcular data de expiração do token
@@ -110,7 +115,7 @@ export default async function handler(req, res) {
 
     if (saveError) {
       console.error('❌ Error saving connection:', saveError);
-      return res.status(500).json({ error: 'Failed to save connection' });
+      return res.redirect('/calendar?google_error=save_failed');
     }
 
     console.log('✅ Conexão Google Calendar salva:', connection.id);
@@ -123,9 +128,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('❌ Error in Google OAuth callback:', error);
-    res.status(500).json({ 
-      error: 'Failed to complete authorization',
-      details: error.message 
-    });
+    res.redirect(`/calendar?google_error=${encodeURIComponent(error.message)}`);
   }
 }
