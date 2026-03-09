@@ -21,12 +21,12 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
     <>
       {/* Overlay */}
       <div 
-        className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm animate-fadeIn"
+        className="absolute inset-0 bg-black/30 z-40 backdrop-blur-sm animate-fadeIn"
         onClick={onClose}
       />
       
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 bottom-0 w-80 bg-gradient-to-br from-white via-blue-50/20 to-white border-r border-gray-200/50 flex flex-col shadow-2xl z-50 animate-slideInLeft">
+      <div className="absolute left-0 top-0 bottom-0 w-80 bg-gradient-to-br from-white via-blue-50/20 to-white border-r border-gray-200/50 flex flex-col shadow-2xl z-50 animate-slideInLeft">
       <div className="p-5 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/30 to-transparent">
         <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase text-xs">Meus Calendários</h3>
         

@@ -262,7 +262,7 @@ export const Calendar: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Sidebar - Condicional */}
         {isSidebarOpen && (
           <CalendarSidebar
