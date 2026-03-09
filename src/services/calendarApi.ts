@@ -233,9 +233,52 @@ export class CalendarApi {
         .single()
 
       if (error) throw error
-      return this.mapActivity(result)
+      
+      const activity = this.mapActivity(result)
+
+      // Sincronizar com Google Calendar se a atividade estiver sincronizada
+      if (activity.google_event_id) {
+        this.updateGoogleCalendarEvent(activityId).catch(err => {
+          console.error('Erro ao atualizar evento no Google Calendar:', err)
+          // Não falhar a atualização da atividade se sincronização falhar
+        })
+      }
+
+      return activity
     } catch (error) {
       console.error('Error updating activity:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Atualizar evento no Google Calendar
+   */
+  private static async updateGoogleCalendarEvent(activityId: string): Promise<void> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.warn('Sem sessão ativa para atualizar no Google Calendar')
+        return
+      }
+
+      const response = await fetch('/api/google-calendar/sync/update-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ activity_id: activityId })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Falha na atualização')
+      }
+
+      console.log('✅ Evento atualizado no Google Calendar')
+    } catch (error) {
+      console.error('Erro ao atualizar evento no Google Calendar:', error)
       throw error
     }
   }
@@ -298,14 +341,62 @@ export class CalendarApi {
    */
   static async deleteActivity(activityId: string): Promise<void> {
     try {
+      // Buscar atividade antes de deletar para verificar se tem google_event_id
+      const { data: activity } = await supabase
+        .from('lead_activities')
+        .select('google_event_id')
+        .eq('id', activityId)
+        .single()
+
+      // Deletar do banco
       const { error } = await supabase
         .from('lead_activities')
         .delete()
         .eq('id', activityId)
 
       if (error) throw error
+
+      // Deletar do Google Calendar se estava sincronizado
+      if (activity?.google_event_id) {
+        this.deleteGoogleCalendarEvent(activityId).catch(err => {
+          console.error('Erro ao deletar evento no Google Calendar:', err)
+          // Não falhar a deleção da atividade se sincronização falhar
+        })
+      }
     } catch (error) {
       console.error('Error deleting activity:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Deletar evento no Google Calendar
+   */
+  private static async deleteGoogleCalendarEvent(activityId: string): Promise<void> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.warn('Sem sessão ativa para deletar do Google Calendar')
+        return
+      }
+
+      const response = await fetch('/api/google-calendar/sync/delete-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ activity_id: activityId })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Falha na deleção')
+      }
+
+      console.log('✅ Evento deletado do Google Calendar')
+    } catch (error) {
+      console.error('Erro ao deletar evento do Google Calendar:', error)
       throw error
     }
   }

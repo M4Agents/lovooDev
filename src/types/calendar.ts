@@ -47,6 +47,11 @@ export interface LeadActivity {
   priority: ActivityPriority
   visibility: ActivityVisibility
   
+  // Sincronização Google Calendar
+  google_event_id?: string
+  sync_to_google?: boolean
+  last_synced_at?: Date
+  
   // Timestamps
   created_at: Date
   updated_at: Date
@@ -132,7 +137,7 @@ export interface CalendarSettings {
 // =====================================================
 
 export interface CreateActivityForm {
-  lead_id: number
+  lead_id?: number | null
   title: string
   description?: string
   activity_type: ActivityType

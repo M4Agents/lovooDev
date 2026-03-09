@@ -38,6 +38,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 }) => {
   const { user, company } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [leads, setLeads] = useState<Lead[]>([])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
@@ -204,6 +205,25 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     setSelectedLead(lead)
     setSearchTerm('')
     setLeads([])
+  }
+
+  const handleDelete = async () => {
+    if (!activity) return
+    
+    if (!confirm('Tem certeza que deseja excluir esta atividade?')) {
+      return
+    }
+
+    try {
+      setDeleting(true)
+      await calendarApi.deleteActivity(activity.id)
+      onSave()
+    } catch (error) {
+      console.error('Error deleting activity:', error)
+      alert('Erro ao excluir atividade')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -514,6 +534,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
+            {activity && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+              >
+                {deleting ? '🗑️ Excluindo...' : '🗑️ Excluir'}
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
