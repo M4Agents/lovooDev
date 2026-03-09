@@ -91,7 +91,10 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
       )}
 
       <div className="p-5 border-t border-gray-200/50 bg-gradient-to-r from-blue-50/30 to-transparent">
-        <button className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-white hover:bg-blue-50 rounded-xl transition-all duration-200 border border-blue-200/50 hover:border-blue-300 hover:shadow-md group">
+        <button 
+          onClick={() => alert('🚧 Funcionalidade em desenvolvimento!\n\nEm breve você poderá:\n• Compartilhar seu calendário\n• Gerenciar permissões de acesso\n• Definir níveis de visualização')}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-white hover:bg-blue-50 rounded-xl transition-all duration-200 border border-blue-200/50 hover:border-blue-300 hover:shadow-md group"
+        >
           <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
           Gerenciar Permissões
         </button>
