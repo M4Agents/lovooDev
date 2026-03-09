@@ -52,7 +52,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     duration_minutes: 30,
     reminder_minutes: 15,
     priority: 'medium',
-    visibility: 'private'
+    visibility: 'public'
   })
 
   // Buscar usuários da empresa
