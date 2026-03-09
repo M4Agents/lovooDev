@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { calendarApi } from '../services/calendarApi'
 import { supabase } from '../lib/supabase'
-import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import type { LeadActivity, CalendarUser, ActivityFilter, CalendarView } from '../types/calendar'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
 import { MonthView } from '../components/Calendar/MonthView'
@@ -24,6 +24,7 @@ export const Calendar: React.FC = () => {
   const [showActivityModal, setShowActivityModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
   const [todayCount, setTodayCount] = useState(0)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   // Inicializar usuário selecionado e calendários
   useEffect(() => {
@@ -262,12 +263,15 @@ export const Calendar: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <CalendarSidebar
-          availableCalendars={availableCalendars}
-          selectedCalendars={selectedCalendars}
-          onToggleCalendar={handleToggleCalendar}
-        />
+        {/* Sidebar - Condicional */}
+        {isSidebarOpen && (
+          <CalendarSidebar
+            availableCalendars={availableCalendars}
+            selectedCalendars={selectedCalendars}
+            onToggleCalendar={handleToggleCalendar}
+            onClose={() => setIsSidebarOpen(false)}
+          />
+        )}
 
         {/* Calendar View */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -305,6 +309,21 @@ export const Calendar: React.FC = () => {
               )}
 
               <div className="flex items-center gap-3">
+                {/* Botão Gerenciar Calendários */}
+                <button
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                  className={`
+                    p-2.5 rounded-xl transition-all duration-200 border
+                    ${isSidebarOpen 
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30' 
+                      : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 border-gray-200/50'
+                    }
+                  `}
+                  title="Gerenciar Calendários"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+
                 <ViewSelector
                   currentView={currentView}
                   onViewChange={setCurrentView}

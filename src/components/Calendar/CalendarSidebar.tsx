@@ -1,23 +1,32 @@
 import React from 'react'
-import { Settings } from 'lucide-react'
 import type { CalendarUser } from '../../types/calendar'
 
 interface CalendarSidebarProps {
   availableCalendars: CalendarUser[]
   selectedCalendars: string[]
   onToggleCalendar: (userId: string) => void
+  onClose: () => void
 }
 
 export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
   availableCalendars,
   selectedCalendars,
-  onToggleCalendar
+  onToggleCalendar,
+  onClose
 }) => {
   const ownCalendar = availableCalendars.find(cal => cal.is_own)
   const sharedCalendars = availableCalendars.filter(cal => !cal.is_own)
 
   return (
-    <div className="w-80 bg-gradient-to-br from-white via-blue-50/20 to-white border-r border-gray-200/50 flex flex-col shadow-lg">
+    <>
+      {/* Overlay */}
+      <div 
+        className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm animate-fadeIn"
+        onClick={onClose}
+      />
+      
+      {/* Sidebar */}
+      <div className="fixed left-0 top-0 bottom-0 w-80 bg-gradient-to-br from-white via-blue-50/20 to-white border-r border-gray-200/50 flex flex-col shadow-2xl z-50 animate-slideInLeft">
       <div className="p-5 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/30 to-transparent">
         <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase text-xs">Meus Calendários</h3>
         
@@ -89,16 +98,7 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
           </div>
         </div>
       )}
-
-      <div className="p-5 border-t border-gray-200/50 bg-gradient-to-r from-blue-50/30 to-transparent">
-        <button 
-          onClick={() => alert('🚧 Funcionalidade em desenvolvimento!\n\nEm breve você poderá:\n• Compartilhar seu calendário\n• Gerenciar permissões de acesso\n• Definir níveis de visualização')}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-white hover:bg-blue-50 rounded-xl transition-all duration-200 border border-blue-200/50 hover:border-blue-300 hover:shadow-md group"
-        >
-          <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
-          Gerenciar Permissões
-        </button>
-      </div>
     </div>
+    </>
   )
 }
