@@ -236,12 +236,22 @@ export class CalendarApi {
       
       const activity = this.mapActivity(result)
 
+      console.log('🔄 Atividade atualizada:', {
+        id: activity.id,
+        google_event_id: activity.google_event_id,
+        sync_to_google: activity.sync_to_google,
+        title: activity.title
+      })
+
       // Sincronizar com Google Calendar se a atividade estiver sincronizada
       if (activity.google_event_id) {
+        console.log('📅 Sincronizando atualização com Google Calendar...')
         this.updateGoogleCalendarEvent(activityId).catch(err => {
-          console.error('Erro ao atualizar evento no Google Calendar:', err)
+          console.error('❌ Erro ao atualizar evento no Google Calendar:', err)
           // Não falhar a atualização da atividade se sincronização falhar
         })
+      } else {
+        console.log('⚠️ Atividade não tem google_event_id, sincronização ignorada')
       }
 
       return activity
