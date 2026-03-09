@@ -11,6 +11,7 @@ interface ActivityModalProps {
   onClose: () => void
   onSave: () => void
   preSelectedLead?: Lead
+  preSelectedDate?: string | null
 }
 
 interface Lead {
@@ -32,7 +33,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   activity,
   onClose,
   onSave,
-  preSelectedLead
+  preSelectedLead,
+  preSelectedDate
 }) => {
   const { user, company } = useAuth()
   const [loading, setLoading] = useState(false)
@@ -109,10 +111,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
     } else {
-      // Definir data/hora mínima como agora
+      // Definir data/hora mínima como agora ou usar data pré-selecionada
       const now = new Date()
-      const minDate = now.toISOString().split('T')[0]
-      const minTime = now.toTimeString().slice(0, 5)
+      const minDate = preSelectedDate || now.toISOString().split('T')[0]
+      const minTime = '09:00' // Hora padrão quando clica na data
       
       setFormData(prev => ({
         ...prev,
@@ -133,7 +135,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
     }
-  }, [activity, companyUsers, user?.id, preSelectedLead])
+  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate])
 
   // Buscar leads
   useEffect(() => {

@@ -25,6 +25,7 @@ export const Calendar: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [showActivityModal, setShowActivityModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
+  const [preSelectedDate, setPreSelectedDate] = useState<string | null>(null)
   const [todayCount, setTodayCount] = useState(0)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
@@ -185,14 +186,13 @@ export const Calendar: React.FC = () => {
 
   const handleCreateActivity = () => {
     setSelectedActivity(null)
+    setPreSelectedDate(null)
     setShowActivityModal(true)
   }
 
   const handleCreateActivityOnDate = (date: string) => {
-    setSelectedActivity({
-      scheduled_date: date,
-      scheduled_time: '09:00'
-    } as LeadActivity)
+    setSelectedActivity(null)
+    setPreSelectedDate(date)
     setShowActivityModal(true)
   }
 
@@ -204,6 +204,7 @@ export const Calendar: React.FC = () => {
   const handleActivitySaved = () => {
     setShowActivityModal(false)
     setSelectedActivity(null)
+    setPreSelectedDate(null)
     // Recarregar atividades
     setCurrentDate(new Date(currentDate))
   }
@@ -436,9 +437,11 @@ export const Calendar: React.FC = () => {
       {showActivityModal && (
         <ActivityModal
           activity={selectedActivity}
+          preSelectedDate={preSelectedDate}
           onClose={() => {
             setShowActivityModal(false)
             setSelectedActivity(null)
+            setPreSelectedDate(null)
           }}
           onSave={handleActivitySaved}
         />
