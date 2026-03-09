@@ -1764,22 +1764,41 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       )}
       
       {/* Modal de Atividade (Integração com Calendário) */}
-      {showActivityModal && (
-        <ActivityModal
-          activity={selectedActivity}
-          onClose={() => setShowActivityModal(false)}
-          onSave={() => {
-            setShowActivityModal(false)
-            setSelectedActivity(null)
-          }}
-          preSelectedLead={contact?.id ? {
-            id: parseInt(contact.id),
-            name: contact.name || conversation?.contact_name || '',
-            phone: contact.phone_number || conversation?.contact_phone || '',
-            email: contact.email
-          } : undefined}
-        />
-      )}
+      {showActivityModal && (() => {
+        // Preparar lead pré-selecionado com validação robusta
+        let preSelectedLead = undefined
+        
+        if (contact?.id) {
+          const leadId = parseInt(contact.id)
+          
+          // Validar se é um número válido
+          if (!isNaN(leadId) && leadId > 0) {
+            preSelectedLead = {
+              id: leadId,
+              name: contact.name || conversation?.contact_name || '',
+              phone: contact.phone_number || conversation?.contact_phone || '',
+              email: contact.email
+            }
+            console.log('✅ Lead pré-selecionado para ActivityModal:', preSelectedLead)
+          } else {
+            console.warn('⚠️ contact.id inválido:', contact.id)
+          }
+        } else {
+          console.warn('⚠️ Nenhum contact.id disponível para pré-selecionar')
+        }
+        
+        return (
+          <ActivityModal
+            activity={selectedActivity}
+            onClose={() => setShowActivityModal(false)}
+            onSave={() => {
+              setShowActivityModal(false)
+              setSelectedActivity(null)
+            }}
+            preSelectedLead={preSelectedLead}
+          />
+        )
+      })()}
     </div>
   )
 }
