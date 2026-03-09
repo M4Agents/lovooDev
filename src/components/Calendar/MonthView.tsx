@@ -157,9 +157,16 @@ export const MonthView: React.FC<MonthViewProps> = ({
                             borderLeftWidth: '3px'
                           }}
                         >
-                          <p className="text-xs font-normal text-gray-900 truncate">
-                            {activity.title}
-                          </p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs font-normal text-gray-900 truncate flex-1">
+                              {activity.title}
+                            </p>
+                            {activity.lead_id ? (
+                              <span className="text-[9px] text-blue-600">📊</span>
+                            ) : (
+                              <span className="text-[9px] text-gray-400">👤</span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-600">
                             {activity.scheduled_time.slice(0, 5)}
                           </p>

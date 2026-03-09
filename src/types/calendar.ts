@@ -15,7 +15,7 @@ export type CalendarView = 'month' | 'week' | 'agenda' | 'day'
 export interface LeadActivity {
   id: string
   company_id: string
-  lead_id: number
+  lead_id?: number
   
   // Informações da Atividade
   title: string
