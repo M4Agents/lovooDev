@@ -1,5 +1,6 @@
 import React from 'react'
 import type { CalendarUser } from '../../types/calendar'
+import { GoogleCalendarSettings } from './GoogleCalendarSettings'
 
 interface CalendarSidebarProps {
   availableCalendars: CalendarUser[]
@@ -55,7 +56,7 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
       </div>
 
       {sharedCalendars.length > 0 && (
-        <div className="p-5 flex-1 overflow-y-auto">
+        <div className="p-5 border-b border-gray-200/50">
           <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase text-xs">
             Calendários Compartilhados
           </h3>
@@ -98,6 +99,14 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Google Calendar Integration */}
+      <div className="p-5 flex-1 overflow-y-auto">
+        <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase text-xs">
+          Integrações
+        </h3>
+        <GoogleCalendarSettings />
+      </div>
     </div>
     </>
   )

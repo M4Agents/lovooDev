@@ -12,6 +12,7 @@ import { ViewSelector } from '../components/Calendar/ViewSelector'
 import { UserAvatarBar } from '../components/Calendar/UserAvatarBar'
 import { CalendarSidebar } from '../components/Calendar/CalendarSidebar'
 import { ActivityTypesModal } from '../components/Calendar/ActivityTypesModal'
+import { GoogleCalendarSettings } from '../components/Calendar/GoogleCalendarSettings'
 
 export const Calendar: React.FC = () => {
   const { user, company } = useAuth()
