@@ -25,11 +25,19 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Validar variáveis de ambiente obrigatórias
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) {
+      console.error('❌ Missing required Google OAuth environment variables');
+      return res.status(500).json({ 
+        error: 'Google Calendar integration not configured. Please contact administrator.' 
+      });
+    }
+
     // Configuração OAuth2
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI || 'https://lovoo-dev.vercel.app/api/google-calendar/auth/callback'
+      process.env.GOOGLE_REDIRECT_URI
     );
 
     // Trocar código por tokens

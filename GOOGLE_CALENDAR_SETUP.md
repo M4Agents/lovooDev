@@ -61,15 +61,17 @@ Clique em **"Save and Continue"** até finalizar.
 
 **Authorized JavaScript origins:**
 ```
-https://lovoo-dev.vercel.app
 https://app.lovoocrm.com
+https://lovoo-dev.vercel.app
 ```
 
 **Authorized redirect URIs:**
 ```
-https://lovoo-dev.vercel.app/api/google-calendar/auth/callback
 https://app.lovoocrm.com/api/google-calendar/auth/callback
+https://lovoo-dev.vercel.app/api/google-calendar/auth/callback
 ```
+
+**IMPORTANTE:** Configure AMBAS as URLs (PROD e DEV) para usar as mesmas credenciais em ambos os ambientes.
 
 5. Clique em **"Create"**
 6. **COPIE** o `Client ID` e `Client Secret` (você precisará deles!)
@@ -78,26 +80,12 @@ https://app.lovoocrm.com/api/google-calendar/auth/callback
 
 ## 🔐 Passo 4: Configurar Variáveis de Ambiente no Vercel
 
-### DEV (lovoo-dev.vercel.app)
+### PROD - app.lovoocrm.com (PRINCIPAL) ⭐
 
 1. Acesse [Vercel Dashboard](https://vercel.com/dashboard)
-2. Selecione o projeto **lovooDev**
+2. Selecione o projeto **loovocrm** (produção)
 3. Vá em **"Settings"** > **"Environment Variables"**
 4. Adicione as seguintes variáveis:
-
-```env
-GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=seu-client-secret
-GOOGLE_REDIRECT_URI=https://lovoo-dev.vercel.app/api/google-calendar/auth/callback
-GOOGLE_WEBHOOK_URL=https://lovoo-dev.vercel.app/api/google-calendar/webhook
-```
-
-5. Clique em **"Save"**
-6. **Redeploy** o projeto para aplicar as variáveis
-
-### PROD (app.lovoocrm.com)
-
-Repita o processo acima para o projeto **loovocrm**, alterando as URLs:
 
 ```env
 GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
@@ -106,11 +94,28 @@ GOOGLE_REDIRECT_URI=https://app.lovoocrm.com/api/google-calendar/auth/callback
 GOOGLE_WEBHOOK_URL=https://app.lovoocrm.com/api/google-calendar/webhook
 ```
 
+5. Clique em **"Save"**
+6. **Redeploy** o projeto para aplicar as variáveis
+
+### DEV - lovoo-dev.vercel.app (Desenvolvimento)
+
+Repita o processo acima para o projeto **lovooDev**, alterando as URLs:
+
+```env
+GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=seu-client-secret
+GOOGLE_REDIRECT_URI=https://lovoo-dev.vercel.app/api/google-calendar/auth/callback
+GOOGLE_WEBHOOK_URL=https://lovoo-dev.vercel.app/api/google-calendar/webhook
+```
+
+**NOTA:** Use as MESMAS credenciais (Client ID e Secret) em ambos os ambientes.
+
 ---
 
 ## ✅ Passo 5: Testar Integração
 
-1. Acesse o sistema em DEV: `https://lovoo-dev.vercel.app`
+### PROD (Recomendado) ⭐
+1. Acesse o sistema: `https://app.lovoocrm.com`
 2. Faça login
 3. Vá para **Calendário**
 4. Clique no ícone de **Configurações** (engrenagem)
@@ -119,6 +124,9 @@ GOOGLE_WEBHOOK_URL=https://app.lovoocrm.com/api/google-calendar/webhook
 7. Autorize o acesso na tela do Google
 8. Você será redirecionado de volta ao calendário
 9. Verifique se aparece **"Conectado"** com seu email
+
+### DEV (Opcional - para testes)
+Repita os mesmos passos acima em: `https://lovoo-dev.vercel.app`
 
 ---
 
