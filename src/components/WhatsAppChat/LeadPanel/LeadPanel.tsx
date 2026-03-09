@@ -173,6 +173,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca'>('info')
   const [conversation, setConversation] = useState<any>(null)
   const [averageResponseTime, setAverageResponseTime] = useState<string>('--')
+  const [associatedLead, setAssociatedLead] = useState<{id: number, name: string, phone?: string, email?: string} | null>(null)
   
   console.log('📊 LeadPanel - activeTab atual:', activeTab)
   
@@ -258,6 +259,28 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         // Buscar informações do contato
         const contactData = await chatApi.getContactInfo(companyId, conv.contact_phone)
         setContact(contactData)
+        
+        // Buscar lead associado ao telefone do contato
+        try {
+          const { data: leadData, error: leadError } = await supabase
+            .from('leads')
+            .select('id, name, phone, email')
+            .eq('company_id', companyId)
+            .eq('phone', conv.contact_phone)
+            .is('deleted_at', null)
+            .single()
+          
+          if (!leadError && leadData) {
+            setAssociatedLead(leadData)
+            console.log('✅ Lead associado encontrado:', leadData)
+          } else {
+            setAssociatedLead(null)
+            console.warn('⚠️ Nenhum lead encontrado para telefone:', conv.contact_phone)
+          }
+        } catch (error) {
+          console.error('Erro ao buscar lead associado:', error)
+          setAssociatedLead(null)
+        }
         
         // Calcular tempo médio de resposta
         const avgTime = await calculateAverageResponseTime(conversationId)
@@ -1765,26 +1788,19 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       
       {/* Modal de Atividade (Integração com Calendário) */}
       {showActivityModal && (() => {
-        // Preparar lead pré-selecionado com validação robusta
+        // Usar lead associado ao contato (busca via phone_number)
         let preSelectedLead = undefined
         
-        if (contact?.id) {
-          const leadId = parseInt(contact.id)
-          
-          // Validar se é um número válido
-          if (!isNaN(leadId) && leadId > 0) {
-            preSelectedLead = {
-              id: leadId,
-              name: contact.name || conversation?.contact_name || '',
-              phone: contact.phone_number || conversation?.contact_phone || '',
-              email: contact.email
-            }
-            console.log('✅ Lead pré-selecionado para ActivityModal:', preSelectedLead)
-          } else {
-            console.warn('⚠️ contact.id inválido:', contact.id)
+        if (associatedLead) {
+          preSelectedLead = {
+            id: associatedLead.id,
+            name: associatedLead.name,
+            phone: associatedLead.phone,
+            email: associatedLead.email
           }
+          console.log('✅ Lead pré-selecionado para ActivityModal:', preSelectedLead)
         } else {
-          console.warn('⚠️ Nenhum contact.id disponível para pré-selecionar')
+          console.warn('⚠️ Nenhum lead associado encontrado. Usuário precisará buscar manualmente.')
         }
         
         return (
