@@ -187,6 +187,14 @@ export const Calendar: React.FC = () => {
     setShowActivityModal(true)
   }
 
+  const handleCreateActivityOnDate = (date: string) => {
+    setSelectedActivity({
+      scheduled_date: date,
+      scheduled_time: '09:00'
+    } as LeadActivity)
+    setShowActivityModal(true)
+  }
+
   const handleEditActivity = (activity: LeadActivity) => {
     setSelectedActivity(activity)
     setShowActivityModal(true)
@@ -398,6 +406,7 @@ export const Calendar: React.FC = () => {
                     availableCalendars={availableCalendars}
                     onEditActivity={handleEditActivity}
                     onViewDay={handleViewDay}
+                    onCreateActivity={handleCreateActivityOnDate}
                   />
                 )}
                 {currentView === 'week' && (

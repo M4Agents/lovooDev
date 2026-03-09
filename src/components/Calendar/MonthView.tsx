@@ -7,6 +7,7 @@ interface MonthViewProps {
   availableCalendars: CalendarUser[]
   onEditActivity: (activity: LeadActivity) => void
   onViewDay?: (day: number) => void
+  onCreateActivity?: (date: string) => void
 }
 
 export const MonthView: React.FC<MonthViewProps> = ({
@@ -14,7 +15,8 @@ export const MonthView: React.FC<MonthViewProps> = ({
   activities,
   availableCalendars,
   onEditActivity,
-  onViewDay
+  onViewDay,
+  onCreateActivity
 }) => {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -117,6 +119,13 @@ export const MonthView: React.FC<MonthViewProps> = ({
                   ? 'bg-blue-50' 
                   : ''
               }`}
+              onClick={() => {
+                if (day && onCreateActivity) {
+                  const selectedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                  onCreateActivity(selectedDate)
+                }
+              }}
+              style={{ cursor: day ? 'pointer' : 'default' }}
             >
               {day && (
                 <>
@@ -138,7 +147,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
                       return (
                         <button
                           key={activity.id}
-                          onClick={() => onEditActivity(activity)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onEditActivity(activity)
+                          }}
                           className="w-full text-left px-2 py-1 rounded bg-white hover:bg-gray-50 transition-colors border-l-3"
                           style={{
                             borderLeftColor: activityColor,
@@ -157,7 +169,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
 
                     {dayActivities.length > 5 && (
                       <button
-                        onClick={() => onViewDay?.(day)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onViewDay?.(day)
+                        }}
                         className="w-full text-xs font-medium text-blue-600 text-center py-1 hover:bg-gray-50 transition-colors"
                       >
                         +{dayActivities.length - 5} mais
