@@ -1,10 +1,9 @@
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -59,17 +58,19 @@ export default async function handler(req, res) {
       id: userInfo.id
     });
 
-    // Obter user_id do Supabase usando o email do Google
-    // Buscar usuário pelo email (já que não temos session no redirect)
-    const { data: authUser, error: authError } = await supabase.auth.admin.listUsers();
+    // Criar cliente Supabase com Service Role para admin operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Buscar usuário pelo email usando Service Role
+    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
-    if (authError) {
-      console.error('❌ Error listing users:', authError);
+    if (listError) {
+      console.error('❌ Error listing users:', listError);
       return res.redirect('/calendar?google_error=auth_failed');
     }
 
     // Encontrar usuário com o email do Google
-    const user = authUser.users.find(u => u.email === userInfo.email);
+    const user = users?.find(u => u.email === userInfo.email);
     
     if (!user) {
       console.error('❌ User not found with email:', userInfo.email);
@@ -78,8 +79,8 @@ export default async function handler(req, res) {
 
     console.log('✅ Usuário Supabase encontrado:', user.id);
 
-    // Buscar company_id do usuário
-    const { data: companyUser, error: companyError } = await supabase
+    // Buscar company_id do usuário usando supabaseAdmin
+    const { data: companyUser, error: companyError } = await supabaseAdmin
       .from('company_users')
       .select('company_id')
       .eq('user_id', user.id)
@@ -90,11 +91,13 @@ export default async function handler(req, res) {
       return res.redirect('/calendar?google_error=company_not_found');
     }
 
+    console.log('✅ Company encontrada:', companyUser.company_id);
+
     // Calcular data de expiração do token
     const tokenExpiresAt = new Date(tokens.expiry_date || Date.now() + 3600 * 1000);
 
-    // Salvar conexão no banco
-    const { data: connection, error: saveError } = await supabase
+    // Salvar conexão no banco usando supabaseAdmin
+    const { data: connection, error: saveError } = await supabaseAdmin
       .from('google_calendar_connections')
       .upsert({
         user_id: user.id,
