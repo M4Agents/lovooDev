@@ -7,18 +7,21 @@
  * Converte atividade do sistema para evento do Google Calendar
  */
 export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') {
-  // Combinar data e hora no formato correto para o timezone local
-  // Formato: YYYY-MM-DDTHH:mm:ss (sem Z no final para não ser interpretado como UTC)
-  const startDateTime = `${activity.scheduled_date}T${activity.scheduled_time}:00`;
+  // Combinar data e hora - assumindo que já está no timezone local (America/Sao_Paulo)
+  const startDateTime = `${activity.scheduled_date}T${activity.scheduled_time}`;
+  
+  // Criar Date object e ajustar para timezone correto
+  // O horário vem do banco como horário local (America/Sao_Paulo = UTC-3)
+  const start = new Date(startDateTime);
+  
+  // Adicionar offset de timezone manualmente (UTC-3 = -180 minutos)
+  // Isso compensa a conversão automática do toISOString() para UTC
+  const offsetMinutes = 180; // UTC-3
+  const adjustedStart = new Date(start.getTime() + (offsetMinutes * 60 * 1000));
   
   // Calcular fim baseado na duração
-  const [hours, minutes] = activity.scheduled_time.split(':');
-  const durationMinutes = activity.duration_minutes || 30;
-  const totalMinutes = parseInt(hours) * 60 + parseInt(minutes) + durationMinutes;
-  const endHours = Math.floor(totalMinutes / 60);
-  const endMinutes = totalMinutes % 60;
-  const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
-  const endDateTime = `${activity.scheduled_date}T${endTime}`;
+  const end = new Date(adjustedStart);
+  end.setMinutes(end.getMinutes() + (activity.duration_minutes || 30));
 
   // Mapear tipo de atividade para cor do Google Calendar
   const colorId = getColorIdForActivityType(activity.activity_type);
@@ -30,11 +33,11 @@ export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') 
     summary: activity.title,
     description: description,
     start: {
-      dateTime: startDateTime,
+      dateTime: adjustedStart.toISOString(),
       timeZone: timezone
     },
     end: {
-      dateTime: endDateTime,
+      dateTime: end.toISOString(),
       timeZone: timezone
     },
     colorId: colorId,
