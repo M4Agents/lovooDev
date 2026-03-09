@@ -31,13 +31,18 @@ export class CalendarApi {
     data: CreateActivityForm
   ): Promise<LeadActivity> {
     try {
+      // Filtrar campos undefined para evitar erro de tipo no banco
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([_, value]) => value !== undefined)
+      );
+
       const { data: result, error } = await supabase
         .from('lead_activities')
         .insert({
           company_id: companyId,
           owner_user_id: userId,
           created_by: userId,
-          ...data
+          ...cleanData
         })
         .select(`
           *,
@@ -166,10 +171,15 @@ export class CalendarApi {
     data: UpdateActivityForm
   ): Promise<LeadActivity> {
     try {
+      // Filtrar campos undefined para evitar erro de tipo no banco
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([_, value]) => value !== undefined)
+      );
+
       const { data: result, error } = await supabase
         .from('lead_activities')
         .update({
-          ...data,
+          ...cleanData,
           updated_at: new Date().toISOString()
         })
         .eq('id', activityId)
