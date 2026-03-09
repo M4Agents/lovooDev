@@ -7,13 +7,18 @@
  * Converte atividade do sistema para evento do Google Calendar
  */
 export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') {
-  // Combinar data e hora
-  const startDateTime = `${activity.scheduled_date}T${activity.scheduled_time}`;
-  const start = new Date(startDateTime);
+  // Combinar data e hora no formato correto para o timezone local
+  // Formato: YYYY-MM-DDTHH:mm:ss (sem Z no final para não ser interpretado como UTC)
+  const startDateTime = `${activity.scheduled_date}T${activity.scheduled_time}:00`;
   
   // Calcular fim baseado na duração
-  const end = new Date(start);
-  end.setMinutes(end.getMinutes() + (activity.duration_minutes || 30));
+  const [hours, minutes] = activity.scheduled_time.split(':');
+  const durationMinutes = activity.duration_minutes || 30;
+  const totalMinutes = parseInt(hours) * 60 + parseInt(minutes) + durationMinutes;
+  const endHours = Math.floor(totalMinutes / 60);
+  const endMinutes = totalMinutes % 60;
+  const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+  const endDateTime = `${activity.scheduled_date}T${endTime}`;
 
   // Mapear tipo de atividade para cor do Google Calendar
   const colorId = getColorIdForActivityType(activity.activity_type);
@@ -25,11 +30,11 @@ export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') 
     summary: activity.title,
     description: description,
     start: {
-      dateTime: start.toISOString(),
+      dateTime: startDateTime,
       timeZone: timezone
     },
     end: {
-      dateTime: end.toISOString(),
+      dateTime: endDateTime,
       timeZone: timezone
     },
     colorId: colorId,
