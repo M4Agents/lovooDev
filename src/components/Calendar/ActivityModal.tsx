@@ -212,29 +212,30 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+          <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
             {activity ? '✏️ Editar Atividade' : '📅 Nova Atividade'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-slate-400 hover:text-slate-600 transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           {/* Tipo de Atividade */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              🎯 Tipo de Atividade *
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">🎯</span>
+              <span>Tipo de Atividade *</span>
             </label>
             <select
               value={formData.activity_type}
               onChange={(e) => setFormData({ ...formData, activity_type: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               required
             >
               {ACTIVITY_TYPES.map(type => (
@@ -247,19 +248,20 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Lead */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              👤 Lead *
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">👤</span>
+              <span>Lead *</span>
             </label>
             {selectedLead ? (
-              <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg hover:shadow-sm transition-shadow">
                 <div>
-                  <p className="font-medium text-gray-900">{selectedLead.name}</p>
-                  <p className="text-sm text-gray-600">{selectedLead.phone || selectedLead.email}</p>
+                  <p className="text-sm font-medium text-slate-900">{selectedLead.name}</p>
+                  <p className="text-xs text-slate-600">{selectedLead.phone || selectedLead.email}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedLead(null)}
-                  className="text-red-600 hover:text-red-800 text-sm"
+                  className="text-red-600 hover:text-red-800 text-xs font-medium"
                 >
                   Remover
                 </button>
@@ -271,19 +273,19 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar lead por nome, telefone ou email..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 />
                 {leads.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {leads.map(lead => (
                       <button
                         key={lead.id}
                         type="button"
                         onClick={() => handleSelectLead(lead)}
-                        className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                        className="w-full text-left p-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
                       >
-                        <p className="font-medium text-gray-900">{lead.name}</p>
-                        <p className="text-sm text-gray-600">{lead.phone || lead.email}</p>
+                        <p className="text-sm font-medium text-slate-900">{lead.name}</p>
+                        <p className="text-xs text-slate-600">{lead.phone || lead.email}</p>
                       </button>
                     ))}
                   </div>
@@ -294,32 +296,33 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Responsável pela Atividade */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              👥 Responsável pela Atividade *
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">👥</span>
+              <span>Responsável *</span>
             </label>
             {selectedResponsible ? (
-              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg hover:shadow-sm transition-shadow">
+                <div className="flex items-center gap-2.5">
                   {selectedResponsible.profile_picture_url ? (
                     <img 
                       src={selectedResponsible.profile_picture_url} 
                       alt={selectedResponsible.display_name}
-                      className="w-10 h-10 rounded-full object-cover"
+                      className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-sm font-semibold">
                       {selectedResponsible.display_name?.charAt(0)?.toUpperCase() || 'U'}
                     </div>
                   )}
                   <div>
-                    <p className="font-medium text-gray-900">{selectedResponsible.display_name}</p>
-                    <p className="text-sm text-gray-600">{selectedResponsible.email}</p>
+                    <p className="text-sm font-medium text-slate-900">{selectedResponsible.display_name}</p>
+                    <p className="text-xs text-slate-600">{selectedResponsible.email}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedResponsible(null)}
-                  className="text-red-600 hover:text-red-800 text-sm"
+                  className="text-red-600 hover:text-red-800 text-xs font-medium"
                 >
                   Alterar
                 </button>
@@ -332,7 +335,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                     setSelectedResponsible(selectedUser)
                   }
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 required
               >
                 <option value="">Selecione o responsável...</option>
@@ -353,86 +356,94 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Título */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              📝 Título *
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">📝</span>
+              <span>Título *</span>
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="Ex: Follow-up sobre proposta"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               required
             />
           </div>
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              📄 Descrição
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">📄</span>
+              <span>Descrição</span>
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Detalhes da atividade..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              rows={2}
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors resize-none"
             />
           </div>
 
-          {/* Data, Hora e Duração */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Data e Hora */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                📅 Data *
+              <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+                <span className="text-sm">📅</span>
+                <span>Data *</span>
               </label>
               <input
                 type="date"
                 value={formData.scheduled_date}
                 onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ⏰ Hora *
+              <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+                <span className="text-sm">⏰</span>
+                <span>Hora *</span>
               </label>
               <input
                 type="time"
                 value={formData.scheduled_time}
                 onChange={(e) => setFormData({ ...formData, scheduled_time: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ⏱ Duração
-              </label>
-              <select
-                value={formData.duration_minutes}
-                onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {DURATION_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
+          </div>
+
+          {/* Duração */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">⏱</span>
+              <span>Duração</span>
+            </label>
+            <select
+              value={formData.duration_minutes}
+              onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
+            >
+              {DURATION_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           {/* Lembrete e Prioridade */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                🔔 Lembrete
+              <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+                <span className="text-sm">🔔</span>
+                <span>Lembrete</span>
               </label>
               <select
                 value={formData.reminder_minutes}
                 onChange={(e) => setFormData({ ...formData, reminder_minutes: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               >
                 {REMINDER_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -440,8 +451,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ⚡ Prioridade
+              <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+                <span className="text-sm">⚡</span>
+                <span>Prioridade</span>
               </label>
               <div className="flex gap-2">
                 {PRIORITIES.map(priority => (
@@ -449,13 +461,13 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                     key={priority.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, priority: priority.value })}
-                    className={`flex-1 px-3 py-2 rounded-lg border-2 transition-all ${
+                    className={`flex-1 px-2 py-1.5 rounded-lg border transition-all ${
                       formData.priority === priority.value
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-blue-100 shadow-sm scale-105'
+                        : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'
                     }`}
                   >
-                    <span className="text-lg">{priority.icon}</span>
+                    <span className="text-base">{priority.icon}</span>
                   </button>
                 ))}
               </div>
@@ -464,13 +476,14 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Visibilidade */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              👁️ Visibilidade
+            <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
+              <span className="text-sm">👁️</span>
+              <span>Visibilidade</span>
             </label>
             <select
               value={formData.visibility}
               onChange={(e) => setFormData({ ...formData, visibility: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
             >
               <option value="private">🔒 Privado (apenas eu)</option>
               <option value="shared">👥 Compartilhado (com permissões)</option>
@@ -479,20 +492,30 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading || !selectedLead}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
             >
-              {loading ? 'Salvando...' : activity ? 'Atualizar' : 'Agendar'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Salvando...
+                </span>
+              ) : (
+                activity ? '✅ Atualizar' : '📅 Agendar'
+              )}
             </button>
           </div>
         </form>
