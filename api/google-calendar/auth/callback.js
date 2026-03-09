@@ -80,18 +80,31 @@ export default async function handler(req, res) {
     console.log('✅ Usuário Supabase encontrado:', user.id);
 
     // Buscar company_id do usuário usando supabaseAdmin
-    const { data: companyUser, error: companyError } = await supabaseAdmin
+    // Suporta múltiplas empresas e filtra apenas registros ativos
+    const { data: companyUsers, error: companyError } = await supabaseAdmin
       .from('company_users')
-      .select('company_id')
+      .select('company_id, role, is_active')
       .eq('user_id', user.id)
-      .single();
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
-    if (companyError || !companyUser) {
-      console.error('❌ Company not found:', companyError);
+    console.log('🔍 DEBUG: Registros encontrados em company_users:', companyUsers?.length || 0);
+
+    if (companyError) {
+      console.error('❌ Error querying company_users:', companyError);
+      return res.redirect('/calendar?google_error=database_error');
+    }
+
+    if (!companyUsers || companyUsers.length === 0) {
+      console.error('❌ No active company found for user:', user.id);
+      console.error('❌ User email:', user.email);
       return res.redirect('/calendar?google_error=company_not_found');
     }
 
+    // Pegar primeira empresa ativa (mais recente)
+    const companyUser = companyUsers[0];
     console.log('✅ Company encontrada:', companyUser.company_id);
+    console.log('✅ User role:', companyUser.role);
 
     // Calcular data de expiração do token
     const tokenExpiresAt = new Date(tokens.expiry_date || Date.now() + 3600 * 1000);
