@@ -21,6 +21,30 @@ export const GoogleCalendarSettings: React.FC = () => {
     fetchConnection()
   }, [user])
 
+  // Detectar quando volta do OAuth e recarregar dados
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const googleConnected = urlParams.get('google_connected')
+    const googleError = urlParams.get('google_error')
+
+    if (googleConnected === 'true') {
+      // Recarregar conexão
+      fetchConnection()
+      
+      // Mostrar mensagem de sucesso
+      setTimeout(() => {
+        alert('✅ Google Calendar conectado com sucesso!')
+      }, 500)
+      
+      // Limpar parâmetro da URL
+      window.history.replaceState({}, '', '/calendar')
+    } else if (googleError) {
+      // Mostrar erro se houver
+      alert(`❌ Erro ao conectar Google Calendar: ${decodeURIComponent(googleError)}`)
+      window.history.replaceState({}, '', '/calendar')
+    }
+  }, [])
+
   const fetchConnection = async () => {
     if (!user) return
 
