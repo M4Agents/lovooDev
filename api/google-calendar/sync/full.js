@@ -1,4 +1,6 @@
+import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
+import { activityToGoogleEvent } from '../helpers/event-converter.js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -58,28 +60,77 @@ export default async function handler(req, res) {
       });
     }
 
+    // Configurar OAuth2 Client
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      access_token: connection.access_token,
+      refresh_token: connection.refresh_token
+    });
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
     // Buscar atividades pendentes de sincronização
     // (atividades com sync_to_google = true mas sem google_event_id)
     const { data: pendingActivities, error: activitiesError } = await supabase
       .from('lead_activities')
-      .select('id, title, scheduled_date')
+      .select('*, lead:leads(*)')
       .eq('company_id', companyId)
+      .eq('owner_user_id', user.id)
       .eq('sync_to_google', true)
       .is('google_event_id', null)
-      .order('scheduled_date', { ascending: true });
+      .order('scheduled_date', { ascending: true })
+      .limit(50); // Limitar a 50 atividades por vez
 
     if (activitiesError) {
       throw activitiesError;
     }
 
-    // Por enquanto, apenas retornar sucesso
-    // A sincronização real será implementada quando integrar com as APIs individuais
+    // Processar cada atividade pendente
+    let syncedCount = 0;
+    let failedCount = 0;
+    const errors = [];
+
+    for (const activity of pendingActivities || []) {
+      try {
+        // Criar evento no Google Calendar
+        const { data: event } = await calendar.events.insert({
+          calendarId: 'primary',
+          requestBody: activityToGoogleEvent(activity)
+        });
+
+        // Atualizar atividade com google_event_id
+        await supabase
+          .from('lead_activities')
+          .update({ 
+            google_event_id: event.id, 
+            last_synced_at: new Date().toISOString() 
+          })
+          .eq('id', activity.id);
+
+        syncedCount++;
+      } catch (error) {
+        failedCount++;
+        errors.push({
+          activity_id: activity.id,
+          title: activity.title,
+          error: error.message
+        });
+        console.error(`Failed to sync activity ${activity.id}:`, error);
+      }
+    }
+
     return res.json({
       success: true,
-      message: 'Sincronização iniciada',
+      message: 'Sincronização concluída',
       pending_count: pendingActivities?.length || 0,
-      synced_count: 0,
-      note: 'Sincronização manual via APIs individuais ainda não implementada. Use toggle no modal de atividades.'
+      synced_count: syncedCount,
+      failed_count: failedCount,
+      errors: errors.length > 0 ? errors : undefined
     });
 
   } catch (error) {
