@@ -384,6 +384,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               onUpdate={fetchData}
               conversation={conversation}
               contact={contact}
+              associatedLead={associatedLead}
             />
           ) : (
             <div className="p-8 text-center">
@@ -938,6 +939,7 @@ interface ScheduleMessagesProps {
   onUpdate: () => void
   conversation?: any
   contact?: ChatContact | null
+  associatedLead?: {id: number, name: string, phone?: string, email?: string} | null
 }
 
 const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
@@ -947,7 +949,8 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   scheduledMessages,
   onUpdate,
   conversation,
-  contact
+  contact,
+  associatedLead
 }) => {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState<ScheduleMessageForm>({
