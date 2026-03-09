@@ -439,8 +439,7 @@ export const Calendar: React.FC = () => {
         <ActivityTypesModal
           onClose={() => setShowActivityTypesModal(false)}
           onSave={() => {
-            // Recarregar atividades se necessário
-            fetchActivities()
+            // Tipos salvos com sucesso
           }}
         />
       )}
