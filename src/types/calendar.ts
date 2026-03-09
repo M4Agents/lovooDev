@@ -290,3 +290,33 @@ export const USER_CALENDAR_COLORS = [
   '#6366F1', // indigo
   '#84CC16'  // lime
 ]
+
+// =====================================================
+// CUSTOM ACTIVITY TYPES (Personalizáveis por empresa)
+// =====================================================
+
+export interface CustomActivityType {
+  id: string
+  company_id: string
+  name: string
+  icon: string
+  color: string
+  display_order: number
+  is_active: boolean
+  is_system: boolean
+  created_by?: string
+  created_at?: Date
+  updated_at?: Date
+}
+
+// Ícones disponíveis para seleção (60+ ícones)
+export const AVAILABLE_ICONS = [
+  '✓', '📞', '📧', '📅', '🤝', '📋', '🎯', '🔄',
+  '📱', '💼', '📊', '📈', '📉', '💰', '🏆', '⭐',
+  '🔔', '⏰', '📍', '🏢', '🏠', '✈️', '🚗', '🚀',
+  '💡', '🔧', '⚙️', '🔨', '📝', '📄', '📑', '📂',
+  '📁', '📎', '🔗', '🔒', '🔓', '👤', '👥', '💬',
+  '💭', '📢', '📣', '🎤', '🎧', '📷', '📹', '🎬',
+  '🎨', '🖼️', '📚', '📖', '✏️', '✒️', '🖊️', '🖍️',
+  '📐', '📏', '📌', '📍', '🎁', '🎉', '🎊', '🎈'
+]

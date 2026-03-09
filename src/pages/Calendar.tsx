@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { calendarApi } from '../services/calendarApi'
 import { supabase } from '../lib/supabase'
-import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, Settings, Users, Tag } from 'lucide-react'
 import type { LeadActivity, CalendarUser, ActivityFilter, CalendarView } from '../types/calendar'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
 import { MonthView } from '../components/Calendar/MonthView'
@@ -11,6 +11,7 @@ import { DayView } from '../components/Calendar/DayView'
 import { ViewSelector } from '../components/Calendar/ViewSelector'
 import { UserAvatarBar } from '../components/Calendar/UserAvatarBar'
 import { CalendarSidebar } from '../components/Calendar/CalendarSidebar'
+import { ActivityTypesModal } from '../components/Calendar/ActivityTypesModal'
 
 export const Calendar: React.FC = () => {
   const { user, company } = useAuth()
@@ -25,6 +26,8 @@ export const Calendar: React.FC = () => {
   const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
   const [todayCount, setTodayCount] = useState(0)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [showActivityTypesModal, setShowActivityTypesModal] = useState(false)
 
   // Inicializar usuário selecionado e calendários
   useEffect(() => {
@@ -309,20 +312,55 @@ export const Calendar: React.FC = () => {
               )}
 
               <div className="flex items-center gap-3">
-                {/* Botão Gerenciar Calendários */}
-                <button
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className={`
-                    p-2.5 rounded-xl transition-all duration-200 border
-                    ${isSidebarOpen 
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30' 
-                      : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 border-gray-200/50'
-                    }
-                  `}
-                  title="Gerenciar Calendários"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
+                {/* Menu Configurações */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                    className={`
+                      p-2.5 rounded-xl transition-all duration-200 border
+                      ${showSettingsMenu 
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30' 
+                        : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 border-gray-200/50'
+                      }
+                    `}
+                    title="Configurações"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showSettingsMenu && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setShowSettingsMenu(false)}
+                      />
+                      <div className="absolute right-0 top-12 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                        <button
+                          onClick={() => {
+                            setIsSidebarOpen(true)
+                            setShowSettingsMenu(false)
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                        >
+                          <Users className="w-4 h-4 text-gray-600" />
+                          <span className="font-medium text-gray-700">Agendas Compartilhadas</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            setShowActivityTypesModal(true)
+                            setShowSettingsMenu(false)
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                        >
+                          <Tag className="w-4 h-4 text-gray-600" />
+                          <span className="font-medium text-gray-700">Tipos de Atividade</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <ViewSelector
                   currentView={currentView}
@@ -393,6 +431,17 @@ export const Calendar: React.FC = () => {
             setSelectedActivity(null)
           }}
           onSave={handleActivitySaved}
+        />
+      )}
+
+      {/* Activity Types Modal */}
+      {showActivityTypesModal && (
+        <ActivityTypesModal
+          onClose={() => setShowActivityTypesModal(false)}
+          onSave={() => {
+            // Recarregar atividades se necessário
+            fetchActivities()
+          }}
         />
       )}
     </div>
