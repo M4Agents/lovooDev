@@ -10,31 +10,31 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { activity_id } = req.body;
-    if (!activity_id) return res.status(400).json({ error: 'activity_id required' });
+    const { google_event_id, owner_user_id } = req.body;
+    
+    if (!google_event_id) {
+      return res.status(400).json({ error: 'google_event_id required' });
+    }
+    
+    if (!owner_user_id) {
+      return res.status(400).json({ error: 'owner_user_id required' });
+    }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: activity } = await supabaseAdmin
-      .from('lead_activities')
-      .select('*')
-      .eq('id', activity_id)
-      .single();
-
-    if (!activity) return res.status(404).json({ error: 'Activity not found' });
-    if (!activity.google_event_id) {
-      return res.json({ success: true, message: 'Not synced to Google' });
-    }
-
+    // Buscar conexão do Google Calendar do usuário
     const { data: connection } = await supabaseAdmin
       .from('google_calendar_connections')
       .select('*')
-      .eq('user_id', activity.owner_user_id)
+      .eq('user_id', owner_user_id)
       .eq('is_active', true)
       .single();
 
-    if (!connection) return res.status(400).json({ error: 'Not connected' });
+    if (!connection) {
+      return res.status(400).json({ error: 'Google Calendar not connected' });
+    }
 
+    // Configurar OAuth2
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -46,24 +46,22 @@ export default async function handler(req, res) {
       refresh_token: connection.refresh_token
     });
 
+    // Deletar evento do Google Calendar
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     await calendar.events.delete({
       calendarId: 'primary',
-      eventId: activity.google_event_id
+      eventId: google_event_id
     });
 
-    await supabaseAdmin
-      .from('lead_activities')
-      .update({ 
-        google_event_id: null,
-        sync_to_google: false,
-        last_synced_at: null
-      })
-      .eq('id', activity_id);
-
-    return res.json({ success: true, message: 'Event deleted from Google' });
+    return res.json({ 
+      success: true, 
+      message: 'Event deleted from Google Calendar' 
+    });
   } catch (error) {
     console.error('Delete error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ 
+      error: error.message,
+      details: 'Failed to delete event from Google Calendar'
+    });
   }
 }

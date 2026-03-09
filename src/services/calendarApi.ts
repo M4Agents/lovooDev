@@ -354,9 +354,20 @@ export class CalendarApi {
       // Buscar atividade antes de deletar para verificar se tem google_event_id
       const { data: activity } = await supabase
         .from('lead_activities')
-        .select('google_event_id')
+        .select('google_event_id, owner_user_id')
         .eq('id', activityId)
         .single()
+
+      // Deletar do Google Calendar ANTES de deletar do banco
+      if (activity?.google_event_id && activity?.owner_user_id) {
+        await this.deleteGoogleCalendarEvent(
+          activity.google_event_id,
+          activity.owner_user_id
+        ).catch(err => {
+          console.error('Erro ao deletar evento no Google Calendar:', err)
+          // Não falhar a deleção da atividade se sincronização falhar
+        })
+      }
 
       // Deletar do banco
       const { error } = await supabase
@@ -365,14 +376,6 @@ export class CalendarApi {
         .eq('id', activityId)
 
       if (error) throw error
-
-      // Deletar do Google Calendar se estava sincronizado
-      if (activity?.google_event_id) {
-        this.deleteGoogleCalendarEvent(activityId).catch(err => {
-          console.error('Erro ao deletar evento no Google Calendar:', err)
-          // Não falhar a deleção da atividade se sincronização falhar
-        })
-      }
     } catch (error) {
       console.error('Error deleting activity:', error)
       throw error
@@ -382,7 +385,10 @@ export class CalendarApi {
   /**
    * Deletar evento no Google Calendar
    */
-  private static async deleteGoogleCalendarEvent(activityId: string): Promise<void> {
+  private static async deleteGoogleCalendarEvent(
+    googleEventId: string,
+    ownerUserId: string
+  ): Promise<void> {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
@@ -396,7 +402,10 @@ export class CalendarApi {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ activity_id: activityId })
+        body: JSON.stringify({ 
+          google_event_id: googleEventId,
+          owner_user_id: ownerUserId
+        })
       })
 
       if (!response.ok) {
