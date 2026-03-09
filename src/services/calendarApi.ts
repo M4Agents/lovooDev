@@ -31,16 +31,13 @@ export class CalendarApi {
     data: CreateActivityForm
   ): Promise<LeadActivity> {
     try {
-      // Filtrar campos de sincronização Google que podem vir como undefined
-      const { google_event_id, sync_to_google, last_synced_at, ...activityData } = data as any;
-      
       const { data: result, error } = await supabase
         .from('lead_activities')
         .insert({
           company_id: companyId,
           owner_user_id: userId,
           created_by: userId,
-          ...activityData
+          ...data
         })
         .select(`
           *,
@@ -169,13 +166,10 @@ export class CalendarApi {
     data: UpdateActivityForm
   ): Promise<LeadActivity> {
     try {
-      // Filtrar campos de sincronização Google que podem vir como undefined
-      const { google_event_id, sync_to_google, last_synced_at, ...activityData } = data as any;
-      
       const { data: result, error } = await supabase
         .from('lead_activities')
         .update({
-          ...activityData,
+          ...data,
           updated_at: new Date().toISOString()
         })
         .eq('id', activityId)
