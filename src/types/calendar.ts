@@ -132,7 +132,7 @@ export interface CalendarSettings {
 // =====================================================
 
 export interface CreateActivityForm {
-  lead_id?: number | null
+  lead_id: number
   title: string
   description?: string
   activity_type: ActivityType
