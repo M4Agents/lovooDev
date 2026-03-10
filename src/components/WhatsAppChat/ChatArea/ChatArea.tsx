@@ -303,12 +303,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           company_id: conv.company_id
         });
         
+        console.log('🔍 DEBUG - Conversa COMPLETA (JSON):', JSON.stringify(conv, null, 2));
+        
         setLeadId(conv.lead_id || null)
         
         if (conv.lead_id) {
           console.log('✅ lead_id encontrado:', conv.lead_id);
         } else {
           console.warn('⚠️ lead_id NULL na conversa - Badge/Banner não aparecerão');
+          console.warn('🔍 Verificar se RPC retorna lead_id. Objeto conv:', conv);
         }
       } else {
         setContactPhotoUrl(null)
