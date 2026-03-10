@@ -18,7 +18,7 @@ interface Activity {
 interface ActivityBadgeProps {
   leadId: number
   companyId: string
-  onActivityClick?: () => void
+  onActivityClick?: (activity: Activity) => void
 }
 
 export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
