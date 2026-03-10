@@ -5,6 +5,7 @@ import { calendarApi } from '../../services/calendarApi'
 import { supabase } from '../../lib/supabase'
 import type { LeadActivity, CreateActivityForm } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES, DURATION_OPTIONS, REMINDER_OPTIONS } from '../../types/calendar'
+import ChatModalSimple from '../SalesFunnel/ChatModalSimple'
 
 interface ActivityModalProps {
   activity: LeadActivity | null
@@ -45,6 +46,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [selectedResponsible, setSelectedResponsible] = useState<CompanyUser | null>(null)
   const [hasGoogleConnection, setHasGoogleConnection] = useState(false)
+  const [showChatModal, setShowChatModal] = useState(false)
   
   const [formData, setFormData] = useState<CreateActivityForm>({
     title: '',
@@ -256,6 +258,12 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     }
   }
 
+  const handleOpenChat = () => {
+    if (selectedLead) {
+      setShowChatModal(true)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -306,13 +314,23 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   <p className="text-sm font-medium text-slate-900">{selectedLead.name}</p>
                   <p className="text-xs text-slate-600">{selectedLead.phone || selectedLead.email}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedLead(null)}
-                  className="text-red-600 hover:text-red-800 text-xs font-medium"
-                >
-                  Remover
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenChat}
+                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5"
+                    title="Abrir chat do WhatsApp"
+                  >
+                    💬 Abrir Chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="text-red-600 hover:text-red-800 text-xs font-medium"
+                  >
+                    Remover
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
@@ -612,6 +630,17 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Modal de Chat do Lead */}
+      {selectedLead && user && company && (
+        <ChatModalSimple
+          leadId={selectedLead.id}
+          companyId={company.id}
+          userId={user.id}
+          isOpen={showChatModal}
+          onClose={() => setShowChatModal(false)}
+        />
+      )}
     </div>
   )
 }
