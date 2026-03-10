@@ -294,20 +294,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           setContactPhotoUrl(null)
         }
 
-        // Buscar leadId através do telefone
-        try {
-          const { data: lead } = await supabase
-            .from('leads')
-            .select('id')
-            .eq('company_id', companyId)
-            .eq('phone', conv.contact_phone)
-            .single()
-          
-          setLeadId(lead?.id || null)
-        } catch (error) {
-          console.error('Erro ao buscar lead')
-          setLeadId(null)
-        }
+        // Usar lead_id direto da conversa
+        setLeadId(conv.lead_id || null)
       } else {
         setContactPhotoUrl(null)
         setLeadId(null)

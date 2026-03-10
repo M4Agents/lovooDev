@@ -634,6 +634,10 @@ async function processMessage(payload) {
           } else {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
           }
+          
+          if (leadResult.lead_id && conversationId) {
+            await supabase.from('chat_conversations').update({ lead_id: leadResult.lead_id }).eq('id', conversationId);
+          }
         } else {
           console.error('❌ RPC retornou erro:', leadResult);
         }
