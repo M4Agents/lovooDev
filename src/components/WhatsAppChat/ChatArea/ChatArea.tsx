@@ -13,6 +13,9 @@ import type { ChatMessage, SendMessageForm, ChatAreaProps, ChatConversation } fr
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
+import { ActivityBadge } from './ActivityBadge'
+import { ActivityBanner } from './ActivityBanner'
+import { supabase } from '../../../lib/supabase'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -33,6 +36,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showDateIndicator, setShowDateIndicator] = useState(false)
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
+  const [leadId, setLeadId] = useState<number | null>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
   
@@ -289,8 +293,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           console.error('Erro ao carregar foto')
           setContactPhotoUrl(null)
         }
+
+        // Buscar leadId através do telefone
+        try {
+          const { data: lead } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('phone', conv.contact_phone)
+            .single()
+          
+          setLeadId(lead?.id || null)
+        } catch (error) {
+          console.error('Erro ao buscar lead')
+          setLeadId(null)
+        }
       } else {
         setContactPhotoUrl(null)
+        setLeadId(null)
       }
     } catch (error) {
       console.error('Erro ao carregar conversa')
@@ -945,6 +965,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Badge de Atividades */}
+            {leadId && (
+              <ActivityBadge
+                leadId={leadId}
+                companyId={companyId}
+              />
+            )}
+
             {conversation?.assigned_to && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                 Atribuída
@@ -976,6 +1004,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Banner de Atividade Urgente */}
+      {leadId && (
+        <ActivityBanner
+          leadId={leadId}
+          companyId={companyId}
+        />
+      )}
 
       {/* Overlay de Drag & Drop - Cobertura total como WhatsApp Web */}
       {isDragOver && (
