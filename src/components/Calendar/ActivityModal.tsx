@@ -192,7 +192,11 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Lead é opcional - pode ser evento pessoal
+    // Validar lead obrigatório
+    if (!selectedLead) {
+      alert('Por favor, selecione um lead para a atividade')
+      return
+    }
 
     // Validar data/hora não pode ser no passado
     const scheduledDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
@@ -294,7 +298,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center gap-1.5">
               <span className="text-sm">👤</span>
-              <span>Lead <span className="text-xs text-slate-400">(opcional)</span></span>
+              <span>Lead <span className="text-red-500">*</span></span>
             </label>
             {selectedLead ? (
               <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg hover:shadow-sm transition-shadow">
