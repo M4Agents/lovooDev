@@ -295,7 +295,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }
 
         // Usar lead_id direto da conversa
+        console.log('🔍 DEBUG - Conversa carregada:', {
+          id: conv.id,
+          contact_phone: conv.contact_phone,
+          contact_name: conv.contact_name,
+          lead_id: conv.lead_id,
+          company_id: conv.company_id
+        });
+        
         setLeadId(conv.lead_id || null)
+        
+        if (conv.lead_id) {
+          console.log('✅ lead_id encontrado:', conv.lead_id);
+        } else {
+          console.warn('⚠️ lead_id NULL na conversa - Badge/Banner não aparecerão');
+        }
       } else {
         setContactPhotoUrl(null)
         setLeadId(null)
