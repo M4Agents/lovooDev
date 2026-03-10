@@ -1,11 +1,11 @@
-const { createClient } = require('@supabase/supabase-js')
+import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   console.log('API Activities:', req.query.leadId, req.headers['x-company-id'])
   
   if (req.method !== 'GET') {
@@ -23,20 +23,9 @@ module.exports = async function handler(req, res) {
 
     console.log('Fetching activities...')
 
-    // Buscar atividades pendentes do lead
     const { data: activities, error } = await supabase
       .from('lead_activities')
-      .select(`
-        id,
-        title,
-        description,
-        activity_type,
-        scheduled_date,
-        scheduled_time,
-        priority,
-        status,
-        created_at
-      `)
+      .select('id,title,description,activity_type,scheduled_date,scheduled_time,priority,status,created_at')
       .eq('lead_id', leadId)
       .eq('company_id', companyId)
       .in('status', ['pending', 'in_progress'])
@@ -51,7 +40,6 @@ module.exports = async function handler(req, res) {
 
     console.log('Activities found:', activities?.length || 0)
 
-    // Processar atividades para adicionar informações de urgência
     const now = new Date()
     const processedActivities = (activities || []).map(activity => {
       if (!activity.scheduled_date || !activity.scheduled_time) {
