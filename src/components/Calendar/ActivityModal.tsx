@@ -44,6 +44,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [selectedResponsible, setSelectedResponsible] = useState<CompanyUser | null>(null)
+  const [hasGoogleConnection, setHasGoogleConnection] = useState(false)
   
   const [formData, setFormData] = useState<CreateActivityForm>({
     title: '',
@@ -54,8 +55,32 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     duration_minutes: 30,
     reminder_minutes: 15,
     priority: 'medium',
-    visibility: 'public'
+    visibility: 'public',
+    sync_to_google: false
   })
+
+  // Verificar conexão com Google Calendar
+  useEffect(() => {
+    const checkGoogleConnection = async () => {
+      if (!user?.id) return
+
+      try {
+        const { data, error } = await supabase
+          .from('google_calendar_connections')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .single()
+
+        setHasGoogleConnection(!!data && !error)
+      } catch (error) {
+        console.error('Error checking Google connection:', error)
+        setHasGoogleConnection(false)
+      }
+    }
+
+    checkGoogleConnection()
+  }, [user?.id])
 
   // Buscar usuários da empresa
   useEffect(() => {
@@ -120,7 +145,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       setFormData(prev => ({
         ...prev,
         scheduled_date: minDate,
-        scheduled_time: minTime
+        scheduled_time: minTime,
+        sync_to_google: hasGoogleConnection // Marcar por padrão se houver conexão
       }))
       
       // Pré-selecionar lead se fornecido (integração com Chat)
@@ -136,7 +162,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
     }
-  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate])
+  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, hasGoogleConnection])
 
   // Buscar leads
   useEffect(() => {
@@ -510,22 +536,33 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           </div>
 
           {/* Sincronizar com Google Calendar */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3">
+          <div className={`bg-gradient-to-r ${hasGoogleConnection ? 'from-blue-50 to-indigo-50 border-blue-200' : 'from-gray-50 to-slate-50 border-gray-300'} border rounded-lg p-3`}>
             <label className="flex items-center gap-3 cursor-pointer group">
               <input
                 type="checkbox"
                 checked={formData.sync_to_google || false}
                 onChange={(e) => setFormData({ ...formData, sync_to_google: e.target.checked })}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                disabled={!hasGoogleConnection}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <div className="flex items-center gap-2 flex-1">
-                <span className="text-lg">📅</span>
-                <div>
-                  <p className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">
-                    Sincronizar com Google Calendar
-                  </p>
+                <span className="text-lg">{hasGoogleConnection ? '📅' : '🔌'}</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">
+                      Sincronizar com Google Calendar
+                    </p>
+                    {hasGoogleConnection && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                        ✓ Conectado
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-600">
-                    Evento será criado automaticamente no seu Google Calendar
+                    {hasGoogleConnection 
+                      ? 'Evento será criado automaticamente no seu Google Calendar'
+                      : 'Conecte sua conta Google para sincronizar eventos automaticamente'
+                    }
                   </p>
                 </div>
               </div>
