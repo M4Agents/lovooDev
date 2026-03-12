@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Bell, Check, Calendar, Clock, User, ChevronDown, Filter, Search } from 'lucide-react'
+import { ActivityModal } from '../components/Calendar/ActivityModal'
+import type { LeadActivity } from '../types/calendar'
 
 interface CompanyUser {
   user_id: string
@@ -40,6 +42,8 @@ export const Notifications: React.FC = () => {
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'sent' | 'read'>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
+  const [showActivityModal, setShowActivityModal] = useState(false)
 
   const isMaster = currentRole === 'super_admin' || 
                    currentRole === 'support' || 
@@ -439,9 +443,32 @@ export const Notifications: React.FC = () => {
                           ? 'border-blue-200 hover:border-blue-300 shadow-sm'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      onClick={() => {
+                      onClick={async () => {
+                        // Marcar como lida se for própria notificação
                         if (isViewingOwnNotifications && notification.status === 'sent') {
                           markAsRead(notification.id)
+                        }
+                        
+                        // Abrir modal da atividade
+                        if (notification.activity_id) {
+                          try {
+                            const { data, error } = await supabase
+                              .from('lead_activities')
+                              .select(`
+                                *,
+                                lead:leads(id, name, phone, email, company_name)
+                              `)
+                              .eq('id', notification.activity_id)
+                              .single()
+                            
+                            if (error) throw error
+                            if (data) {
+                              setSelectedActivity(data as LeadActivity)
+                              setShowActivityModal(true)
+                            }
+                          } catch (error) {
+                            console.error('Erro ao carregar atividade:', error)
+                          }
                         }
                       }}
                     >
@@ -514,6 +541,27 @@ export const Notifications: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de Atividade */}
+      {showActivityModal && selectedActivity && (
+        <ActivityModal
+          activity={selectedActivity}
+          onClose={() => {
+            setShowActivityModal(false)
+            setSelectedActivity(null)
+          }}
+          onSave={() => {
+            setShowActivityModal(false)
+            setSelectedActivity(null)
+            loadNotifications(selectedUserId)
+          }}
+          onDelete={() => {
+            setShowActivityModal(false)
+            setSelectedActivity(null)
+            loadNotifications(selectedUserId)
+          }}
+        />
+      )}
     </div>
   )
 }
