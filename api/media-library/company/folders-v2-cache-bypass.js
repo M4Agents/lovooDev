@@ -1,9 +1,10 @@
 // =====================================================
-// API: PASTAS DA BIBLIOTECA DA EMPRESA
+// API: PASTAS DA BIBLIOTECA DA EMPRESA - V2 CACHE BYPASS
 // =====================================================
 // Endpoint para gerenciar pastas da biblioteca da empresa
 // CRUD completo com estrutura hierárquica
-// Atualizado: 29/12/2025 - Forçar redeploy para resolver cache Vercel
+// V2 - Cache Bypass para resolver problema do Vercel
+// Data: 12/01/2026 10:20
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -103,14 +104,17 @@ const calculateFolderPath = async (parentId, folderName, companyId) => {
 }
 
 // =====================================================
-// HANDLER PRINCIPAL
+// HANDLER PRINCIPAL - V2 CACHE BYPASS
 // =====================================================
 
 export default async function handler(req, res) {
-  // Log para confirmar versão atualizada - 12/01/2026 10:50
-  console.log('🔄 API FOLDERS ATUALIZADA - PUT/DELETE DISPONÍVEIS - 12/01/2026 10:50')
-  console.log(`📡 Método: ${req.method} - Company: ${req.query.company_id}`)
-  
+  // Log identificador único para confirmar versão V2
+  const timestamp = new Date().toISOString()
+  console.log('🔥🔥🔥 FOLDERS API V2 - CACHE BYPASS - 12/01/2026 10:20 🔥🔥🔥')
+  console.log(`⚡ TIMESTAMP: ${timestamp}`)
+  console.log('✅ MÉTODOS SUPORTADOS: GET, POST, PUT, DELETE')
+  console.log('🚀 BYPASS TOTAL DE CACHE DO VERCEL')
+
   try {
     // Validação de inicialização do Supabase
     if (!supabase) {
@@ -131,12 +135,14 @@ export default async function handler(req, res) {
       })
     }
 
+    console.log(`🔧 Processando ${req.method} para company_id: ${company_id}`)
+
     // =====================================================
     // GET: LISTAR PASTAS
     // =====================================================
 
     if (req.method === 'GET') {
-      console.log('📁 Listando pastas da empresa:', company_id)
+      console.log('📁 V2 - Listando pastas da empresa:', company_id)
 
       let folders = []
 
@@ -157,7 +163,7 @@ export default async function handler(req, res) {
 
         // Se não há pastas, criar as padrão
         if (folders.length === 0) {
-          console.log('📁 Criando pastas padrão para empresa')
+          console.log('📁 V2 - Criando pastas padrão para empresa')
           const defaultFolders = generateDefaultFolders(company_id)
           
           const { data: insertedFolders, error: insertError } = await supabase
@@ -171,7 +177,7 @@ export default async function handler(req, res) {
         }
 
       } catch (dbError) {
-        console.log('⚠️ Erro ao acessar banco, retornando lista vazia:', dbError.message)
+        console.log('⚠️ V2 - Erro ao acessar banco, retornando lista vazia:', dbError.message)
         folders = []
       }
 
@@ -180,7 +186,8 @@ export default async function handler(req, res) {
         data: {
           folders,
           totalCount: folders.length,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: timestamp,
+          version: 'v2-cache-bypass'
         }
       })
     }
@@ -199,7 +206,7 @@ export default async function handler(req, res) {
         })
       }
 
-      console.log('📁 Criando nova pasta:', { name, parent_id, company_id })
+      console.log('📁 V2 - Criando nova pasta:', { name, parent_id, company_id })
 
       try {
         // Calcular path hierárquico
@@ -239,16 +246,17 @@ export default async function handler(req, res) {
           throw error
         }
 
-        console.log('✅ Pasta criada com sucesso:', data.name, 'Path:', data.path)
+        console.log('✅ V2 - Pasta criada com sucesso:', data.name, 'Path:', data.path)
 
         return res.status(201).json({
           success: true,
           data: data,
-          message: 'Pasta criada com sucesso'
+          message: 'Pasta criada com sucesso',
+          version: 'v2-cache-bypass'
         })
 
       } catch (dbError) {
-        console.error('❌ Erro ao criar pasta:', dbError)
+        console.error('❌ V2 - Erro ao criar pasta:', dbError)
         
         return res.status(500).json({
           error: 'Erro ao criar pasta',
@@ -278,7 +286,7 @@ export default async function handler(req, res) {
         })
       }
 
-      console.log('✏️ Editando pasta:', { folder_id, name, company_id })
+      console.log('✏️ V2 - Editando pasta:', { folder_id, name, company_id })
 
       try {
         // Verificar se pasta existe e pertence à empresa
@@ -338,16 +346,17 @@ export default async function handler(req, res) {
           throw error
         }
 
-        console.log('✅ Pasta editada com sucesso:', data.name, 'Path:', data.path)
+        console.log('✅ V2 - Pasta editada com sucesso:', data.name, 'Path:', data.path)
 
         return res.status(200).json({
           success: true,
           data: data,
-          message: 'Pasta editada com sucesso'
+          message: 'Pasta editada com sucesso',
+          version: 'v2-cache-bypass'
         })
 
       } catch (dbError) {
-        console.error('❌ Erro ao editar pasta:', dbError)
+        console.error('❌ V2 - Erro ao editar pasta:', dbError)
         
         return res.status(500).json({
           error: 'Erro ao editar pasta',
@@ -370,7 +379,7 @@ export default async function handler(req, res) {
         })
       }
 
-      console.log('🗑️ Tentando excluir pasta:', { folder_id, company_id })
+      console.log('🗑️ V2 - Tentando excluir pasta:', { folder_id, company_id })
 
       try {
         // Verificar se pasta existe e pertence à empresa
@@ -419,7 +428,7 @@ export default async function handler(req, res) {
           .eq('folder_id', folder_id)
 
         if (companyFilesError) {
-          console.warn('⚠️ Erro ao verificar company_media_library:', companyFilesError)
+          console.warn('⚠️ V2 - Erro ao verificar company_media_library:', companyFilesError)
         }
 
         const companyFilesCount = companyFiles ? companyFiles.length : 0
@@ -432,7 +441,7 @@ export default async function handler(req, res) {
           .eq('folder_id', folder_id)
 
         if (leadFilesError) {
-          console.warn('⚠️ Erro ao verificar lead_media_unified:', leadFilesError)
+          console.warn('⚠️ V2 - Erro ao verificar lead_media_unified:', leadFilesError)
         }
 
         const leadFilesCount = leadFiles ? leadFiles.length : 0
@@ -462,18 +471,19 @@ export default async function handler(req, res) {
           throw deleteError
         }
 
-        console.log('✅ Pasta excluída com sucesso:', existingFolder.name)
+        console.log('✅ V2 - Pasta excluída com sucesso:', existingFolder.name)
 
         return res.status(200).json({
           success: true,
           message: `Pasta "${existingFolder.name}" excluída com sucesso`,
           data: {
             deleted_folder: existingFolder
-          }
+          },
+          version: 'v2-cache-bypass'
         })
 
       } catch (dbError) {
-        console.error('❌ Erro ao excluir pasta:', dbError)
+        console.error('❌ V2 - Erro ao excluir pasta:', dbError)
         
         return res.status(500).json({
           error: 'Erro ao excluir pasta',
@@ -483,21 +493,25 @@ export default async function handler(req, res) {
     }
 
     // =====================================================
-    // MÉTODO NÃO PERMITIDO
+    // MÉTODO NÃO PERMITIDO - V2
     // =====================================================
 
+    console.log(`❌ V2 - Método ${req.method} não permitido`)
     return res.status(405).json({
       error: 'Method not allowed',
-      message: 'Apenas GET, POST, PUT e DELETE são permitidos neste endpoint'
+      message: 'Apenas GET, POST, PUT e DELETE são permitidos neste endpoint V2',
+      version: 'v2-cache-bypass',
+      timestamp: timestamp
     })
 
   } catch (error) {
-    console.error('❌ Erro na API de pastas da empresa:', error)
+    console.error('❌ V2 - Erro na API de pastas da empresa:', error)
     
     return res.status(500).json({
       error: 'Erro interno do servidor',
       message: 'Erro ao processar solicitação',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      version: 'v2-cache-bypass'
     })
   }
 }

@@ -32,14 +32,6 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!supabaseServiceKey) {
-      console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY not configured');
-      return res.status(500).json({ 
-        error: 'Configuração do servidor incompleta',
-        message: 'SUPABASE_SERVICE_ROLE_KEY não configurada no Vercel'
-      });
-    }
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verificar se funil existe
@@ -55,7 +47,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // Validar dados
+    // Atualizar posições em lote
+    const updates = [];
     for (const stage of stages) {
       if (!stage.id || stage.position === undefined) {
         return res.status(400).json({ 
@@ -63,41 +56,28 @@ export default async function handler(req, res) {
           field: 'stages'
         });
       }
-    }
 
-    // ETAPA 1: Definir posições temporárias altas para evitar conflito de unique constraint
-    for (let i = 0; i < stages.length; i++) {
-      const stage = stages[i];
-      const tempPosition = 10000 + i;
-      
-      const { error: tempError } = await supabase
-        .from('funnel_stages')
-        .update({ position: tempPosition })
-        .eq('id', stage.id)
-        .eq('funnel_id', funnel_id);
-
-      if (tempError) throw tempError;
-    }
-
-    // ETAPA 2: Atualizar para posições finais
-    for (const stage of stages) {
       const { error: updateError } = await supabase
         .from('funnel_stages')
         .update({ position: stage.position })
         .eq('id', stage.id)
         .eq('funnel_id', funnel_id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        throw updateError;
+      }
+
+      updates.push({ id: stage.id, position: stage.position });
     }
 
     return res.status(200).json({
       success: true,
       message: 'Etapas reordenadas com sucesso',
-      updated_count: stages.length
+      updated_count: updates.length
     });
 
   } catch (error) {
-    console.error('Error reordering stages:', error.message);
+    console.error('Error in reorder stages API:', error);
     return res.status(500).json({ 
       error: 'Erro ao reordenar etapas',
       message: error.message

@@ -2,17 +2,8 @@
 // Created: 2025-12-22
 // Purpose: Generate signed URLs for S3 media files with authentication
 
-import { createClient } from '@supabase/supabase-js';
-
-// Configuração do Supabase
-const supabaseUrl = process.env.VITE_SUPABASE_URL
-const supabaseServiceKey = process.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Supabase configuration missing')
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
+import { S3Storage } from '../../../services/aws';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -28,96 +19,199 @@ export default async function handler(req, res) {
   try {
     console.log('🔗 S3 Media Request:', { filename });
 
-    // Buscar s3_key no banco e gerar URL direta do AWS S3
-    console.log('📄 Arquivo solicitado:', filename);
-    
-    try {
-      const { data: fileData, error: dbError } = await supabase
-        .from('lead_media_unified')
-        .select('original_filename, s3_key, file_type')
-        .eq('original_filename', filename)
-        .single();
-      
-      if (dbError || !fileData) {
-        console.log('❌ Arquivo não encontrado no banco:', filename);
-        return res.status(404).json({ 
-          error: 'File not found in database',
-          filename
-        });
-      }
-      
-      console.log('✅ Arquivo encontrado no banco:', fileData);
-      
-      // Limpar prefixo "supabase/" da chave S3
-      let cleanS3Key = fileData.s3_key;
-      if (cleanS3Key && cleanS3Key.startsWith('supabase/')) {
-        cleanS3Key = cleanS3Key.replace('supabase/', '');
-      }
-      
-      console.log('🔑 S3 Key original:', fileData.s3_key);
-      console.log('🔑 S3 Key limpa:', cleanS3Key);
-      
-      // Fazer proxy do arquivo do AWS S3 (contorna CORS)
-      const s3Url = `https://aws-lovoocrm-media.s3.sa-east-1.amazonaws.com/${cleanS3Key}`;
-      
-      console.log('🔗 Fazendo proxy do AWS S3:', s3Url);
-      
-      try {
-        // Fazer requisição server-side para o S3
-        const s3Response = await fetch(s3Url);
-        
-        if (!s3Response.ok) {
-          console.error('❌ Erro ao buscar arquivo no S3:', s3Response.status, s3Response.statusText);
-          return res.status(404).json({ 
-            error: 'File not found in S3',
-            s3Status: s3Response.status,
-            s3StatusText: s3Response.statusText
-          });
-        }
-        
-        console.log('✅ Arquivo obtido do S3 com sucesso');
-        
-        // Obter tipo de conteúdo do S3
-        const contentType = s3Response.headers.get('content-type') || 'application/octet-stream';
-        const contentLength = s3Response.headers.get('content-length');
-        
-        // Configurar headers da resposta
-        res.setHeader('Content-Type', contentType);
-        if (contentLength) {
-          res.setHeader('Content-Length', contentLength);
-        }
-        res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache por 1 ano
-        
-        // Fazer stream do arquivo do S3 para o cliente
-        const reader = s3Response.body.getReader();
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(Buffer.from(value));
-        }
-        
-        res.end();
-        return;
-        
-      } catch (fetchError) {
-        console.error('❌ Erro ao fazer proxy do S3:', fetchError);
-        return res.status(500).json({ 
-          error: 'Failed to proxy file from S3',
-          details: fetchError.message
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro ao buscar arquivo no banco:', error);
+    // Create Supabase client with cookies for authentication
+    const supabase = createServerSupabaseClient({ req, res });
+
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error('❌ Authentication failed:', authError);
+      return res.status(401).json({ error: 'Authentication required' });
     }
+
+    console.log('✅ User authenticated:', user.id);
+
+    // Get user's company_id with fallback
+    let companyId;
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('❌ User data not found, trying company_users:', userError);
+        
+        // Fallback: try company_users table
+        const { data: companyUserData, error: companyUserError } = await supabase
+          .from('company_users')
+          .select('company_id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .single();
+          
+        if (companyUserError || !companyUserData) {
+          console.error('❌ Company user data not found:', companyUserError);
+          return res.status(403).json({ error: 'User company not found' });
+        }
+        
+        companyId = companyUserData.company_id;
+      } else {
+        companyId = userData.company_id;
+      }
+    } catch (dbError) {
+      console.error('❌ Database error:', dbError);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    console.log('🏢 Company ID:', companyId);
+
+    // Extract S3 key from filename with intelligent search
+    let s3Key = filename;
     
-    // Se chegou aqui, arquivo não encontrado
-    console.error('❌ Arquivo não encontrado:', filename);
-    return res.status(404).json({ 
-      error: 'File not found',
-      filename
-    });
+    console.log('🔍 Processing filename:', filename);
+    
+    // If filename doesn't contain the full path, try to construct it
+    if (!filename.startsWith('clientes/')) {
+      // Try to find the file by searching recent dates
+      const today = new Date();
+      const searchDates = [];
+      
+      // Search last 7 days
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        searchDates.push(`${year}/${month}/${day}`);
+      }
+      
+      console.log('🔍 Searching dates:', searchDates);
+      
+      // Try to find the file in recent dates
+      let foundKey = null;
+      for (const dateStr of searchDates) {
+        const testKey = `clientes/${companyId}/whatsapp/${dateStr}`;
+        console.log('🔍 Testing key pattern:', testKey);
+        
+        // For now, construct the most likely key
+        // In a real implementation, you'd search S3 or store mappings
+        const possibleKey = `${testKey}/msg-${Date.now()}/${filename}`;
+        foundKey = possibleKey;
+        break; // Use first attempt for now
+      }
+      
+      if (foundKey) {
+        s3Key = foundKey;
+      } else {
+        // Fallback: assume it's a direct filename
+        s3Key = filename;
+      }
+    }
+
+    console.log('🔑 S3 Key:', s3Key);
+
+    // Verify the S3 key belongs to the user's company
+    if (s3Key.includes('clientes/') && !s3Key.includes(`clientes/${companyId}/`)) {
+      console.error('❌ Access denied - wrong company');
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Generate signed URL with multiple attempts
+    console.log('🔗 Attempting to generate signed URL for:', s3Key);
+    
+    let signedUrlResult = await S3Storage.generateSignedUrl(
+      companyId,
+      s3Key,
+      { expiresIn: 7200 } // 2 hours
+    );
+
+    // If first attempt fails, try simpler key patterns
+    if (!signedUrlResult.success) {
+      console.log('⚠️ First attempt failed, trying alternative keys');
+      
+      const alternativeKeys = [
+        filename, // Direct filename
+        `clientes/${companyId}/whatsapp/${filename}`, // Simple path
+        `${filename}` // Just the filename
+      ];
+      
+      for (const altKey of alternativeKeys) {
+        console.log('🔄 Trying alternative key:', altKey);
+        
+        const altResult = await S3Storage.generateSignedUrl(
+          companyId,
+          altKey,
+          { expiresIn: 7200 }
+        );
+        
+        if (altResult.success && altResult.data) {
+          signedUrlResult = altResult;
+          s3Key = altKey;
+          console.log('✅ Alternative key worked:', altKey);
+          break;
+        }
+      }
+    }
+
+    if (!signedUrlResult.success || !signedUrlResult.data) {
+      console.log('⚠️ S3 failed, trying Supabase Storage fallback');
+      
+      // FALLBACK: Try Supabase Storage for existing media
+      try {
+        // Check if this looks like a Supabase Storage URL pattern
+        if (filename.includes('supabase.co') || filename.includes('chat-media') || filename.includes('.jpg') || filename.includes('.png') || filename.includes('.jpeg')) {
+          console.log('🔄 Attempting Supabase Storage fallback for:', filename);
+          
+          // Extract just the filename from Supabase URL if needed
+          let supabaseFilename = filename;
+          if (filename.includes('/storage/v1/object/public/chat-media/')) {
+            supabaseFilename = filename.split('/storage/v1/object/public/chat-media/')[1];
+          } else if (filename.includes('chat-media/')) {
+            supabaseFilename = filename.split('chat-media/')[1];
+          }
+          
+          console.log('📁 Supabase filename:', supabaseFilename);
+          
+          // Create Supabase client for storage access
+          const { data: { publicUrl } } = supabase.storage
+            .from('chat-media')
+            .getPublicUrl(supabaseFilename);
+          
+          if (publicUrl) {
+            console.log('✅ Supabase Storage fallback successful');
+            return res.redirect(302, publicUrl);
+          }
+        }
+      } catch (supabaseError) {
+        console.error('❌ Supabase Storage fallback failed:', supabaseError);
+      }
+      
+      console.error('❌ All attempts failed to generate signed URL:', {
+        originalKey: s3Key,
+        error: signedUrlResult.error,
+        companyId
+      });
+      
+      // Return a more helpful error
+      return res.status(404).json({ 
+        error: 'File not found',
+        details: {
+          filename,
+          companyId,
+          attemptedKey: s3Key,
+          s3Error: signedUrlResult.error
+        }
+      });
+    }
+
+    console.log('✅ Signed URL generated successfully for key:', s3Key);
+
+    // Redirect to the signed URL
+    return res.redirect(302, signedUrlResult.data);
 
   } catch (error) {
     console.error('❌ S3 Media endpoint error:', error);
