@@ -27,6 +27,15 @@ export default async function handler(req, res) {
       return res.json({ success: true, google_event_id: activity.google_event_id });
     }
 
+    // Buscar timezone da empresa
+    const { data: company } = await supabaseAdmin
+      .from('companies')
+      .select('timezone')
+      .eq('id', activity.company_id)
+      .single();
+
+    const timezone = company?.timezone || 'America/Sao_Paulo';
+
     const { data: connection } = await supabaseAdmin
       .from('google_calendar_connections')
       .select('*')
@@ -50,7 +59,7 @@ export default async function handler(req, res) {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     const { data: event } = await calendar.events.insert({
       calendarId: 'primary',
-      requestBody: activityToGoogleEvent(activity)
+      requestBody: activityToGoogleEvent(activity, timezone)
     });
 
     await supabaseAdmin

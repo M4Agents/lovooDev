@@ -7,20 +7,13 @@
  * Converte atividade do sistema para evento do Google Calendar
  */
 export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') {
-  // Combinar data e hora - assumindo que já está no timezone local (America/Sao_Paulo)
-  const startDateTime = `${activity.scheduled_date}T${activity.scheduled_time}`;
-  
-  // Criar Date object e ajustar para timezone correto
-  // O horário vem do banco como horário local (America/Sao_Paulo = UTC-3)
-  const start = new Date(startDateTime);
-  
-  // Adicionar offset de timezone manualmente (UTC-3 = -180 minutos)
-  // Isso compensa a conversão automática do toISOString() para UTC
-  const offsetMinutes = 180; // UTC-3
-  const adjustedStart = new Date(start.getTime() + (offsetMinutes * 60 * 1000));
+  // O horário no banco está em UTC (scheduled_date + scheduled_time)
+  // Precisamos criar um Date object UTC e deixar o Google Calendar converter para o timezone
+  const utcDateTime = `${activity.scheduled_date}T${activity.scheduled_time}Z`;
+  const start = new Date(utcDateTime);
   
   // Calcular fim baseado na duração
-  const end = new Date(adjustedStart);
+  const end = new Date(start);
   end.setMinutes(end.getMinutes() + (activity.duration_minutes || 30));
 
   // Mapear tipo de atividade para cor do Google Calendar
@@ -33,7 +26,7 @@ export function activityToGoogleEvent(activity, timezone = 'America/Sao_Paulo') 
     summary: activity.title,
     description: description,
     start: {
-      dateTime: adjustedStart.toISOString(),
+      dateTime: start.toISOString(),
       timeZone: timezone
     },
     end: {
