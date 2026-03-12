@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell } from 'lucide-react'
-import { NotificationsModal } from './NotificationsModal'
 
 interface ActivityNotificationButtonProps {
   isMaster: boolean
@@ -15,7 +15,7 @@ export const ActivityNotificationButton: React.FC<ActivityNotificationButtonProp
   companyId,
   collapsed = false
 }) => {
-  const [showModal, setShowModal] = useState(false)
+  const navigate = useNavigate()
   const [unreadCount, setUnreadCount] = useState(0)
 
   // Buscar contador de notificações não lidas
@@ -49,45 +49,27 @@ export const ActivityNotificationButton: React.FC<ActivityNotificationButtonProp
     return () => clearInterval(interval)
   }, [currentUserId])
 
-  // Atualizar contador quando modal fechar
-  const handleCloseModal = () => {
-    setShowModal(false)
-    loadUnreadCount()
-  }
-
   return (
-    <>
-      <button
-        onClick={() => setShowModal(true)}
-        className={`
-          w-full flex items-center justify-between px-3 py-2 rounded-lg 
-          hover:bg-slate-700/50 transition-colors
-          ${collapsed ? 'justify-center' : ''}
-        `}
-        title={collapsed ? 'Notificações' : undefined}
-      >
-        <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-slate-300" />
-          {!collapsed && (
-            <span className="text-sm text-slate-300">Notificações</span>
-          )}
-        </div>
-        {unreadCount > 0 && (
-          <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+    <button
+      onClick={() => navigate('/notificacoes')}
+      className={`
+        w-full flex items-center justify-between px-3 py-2 rounded-lg 
+        hover:bg-slate-700/50 transition-colors
+        ${collapsed ? 'justify-center' : ''}
+      `}
+      title={collapsed ? 'Notificações' : undefined}
+    >
+      <div className="flex items-center gap-2">
+        <Bell className="w-4 h-4 text-slate-300" />
+        {!collapsed && (
+          <span className="text-sm text-slate-300">Notificações</span>
         )}
-      </button>
-
-      {showModal && (
-        <NotificationsModal
-          isOpen={showModal}
-          onClose={handleCloseModal}
-          isMaster={isMaster}
-          currentUserId={currentUserId}
-          companyId={companyId}
-        />
+      </div>
+      {unreadCount > 0 && (
+        <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">
+          {unreadCount > 9 ? '9+' : unreadCount}
+        </span>
       )}
-    </>
+    </button>
   )
 }

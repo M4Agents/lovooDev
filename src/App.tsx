@@ -14,6 +14,7 @@ import { MediaLibrary } from './pages/MediaLibrary';
 import Chat from './pages/Chat';
 import SalesFunnel from './pages/SalesFunnel';
 import { Calendar } from './pages/Calendar';
+import { Notifications } from './pages/Notifications';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
@@ -184,6 +185,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notificacoes"
+        element={
+          <ProtectedRoute>
+            <Notifications />
           </ProtectedRoute>
         }
       />
