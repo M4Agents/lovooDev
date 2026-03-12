@@ -150,7 +150,13 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       // Definir data/hora mínima como agora ou usar data pré-selecionada
       const now = new Date()
       const minDate = preSelectedDate || now.toISOString().split('T')[0]
-      const minTime = '09:00' // Hora padrão quando clica na data
+      // Obter hora atual no timezone de São Paulo (Brasil)
+      const minTime = now.toLocaleTimeString('pt-BR', { 
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+      })
       
       setFormData(prev => ({
         ...prev,
