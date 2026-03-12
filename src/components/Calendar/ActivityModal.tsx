@@ -111,13 +111,18 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   // Carregar dados da atividade se estiver editando
   useEffect(() => {
     if (activity) {
+      // Converter UTC para timezone local do usuário
+      const utcDateTime = new Date(`${activity.scheduled_date}T${activity.scheduled_time}Z`)
+      const localDate = utcDateTime.toLocaleDateString('en-CA') // YYYY-MM-DD
+      const localTime = utcDateTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) // HH:mm
+      
       setFormData({
         lead_id: activity.lead_id,
         title: activity.title,
         description: activity.description || '',
         activity_type: activity.activity_type,
-        scheduled_date: activity.scheduled_date,
-        scheduled_time: activity.scheduled_time,
+        scheduled_date: localDate,
+        scheduled_time: localTime,
         duration_minutes: activity.duration_minutes,
         assigned_to: activity.assigned_to,
         reminder_minutes: activity.reminder_minutes,
@@ -203,9 +208,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       return
     }
 
-    // Validar data/hora não pode ser no passado
-    const scheduledDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
-    if (scheduledDateTime < new Date()) {
+    // Validar data/hora não pode ser no passado (em horário local)
+    const localDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
+    if (localDateTime < new Date()) {
       alert('A data e hora não podem ser no passado')
       return
     }
@@ -213,8 +218,15 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     try {
       setLoading(true)
 
+      // Converter horário local para UTC antes de salvar
+      const localDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
+      const utcDate = localDateTime.toISOString().split('T')[0] // YYYY-MM-DD em UTC
+      const utcTime = localDateTime.toISOString().split('T')[1].substring(0, 8) // HH:mm:ss em UTC
+
       const dataToSave = {
         ...formData,
+        scheduled_date: utcDate,
+        scheduled_time: utcTime,
         lead_id: selectedLead?.id || null,
         assigned_to: selectedResponsible?.user_id || user.id
       }
