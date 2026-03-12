@@ -319,6 +319,23 @@ export class CalendarApi {
         .single()
 
       if (error) throw error
+
+      // Marcar notificações relacionadas como lidas
+      const { error: notificationError } = await supabase
+        .from('activity_notifications')
+        .update({
+          status: 'read',
+          read_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('activity_id', activityId)
+        .in('status', ['pending', 'sent'])
+
+      if (notificationError) {
+        console.error('Error updating notifications:', notificationError)
+        // Não falhar a conclusão da atividade por erro nas notificações
+      }
+
       return this.mapActivity(result)
     } catch (error) {
       console.error('Error completing activity:', error)
