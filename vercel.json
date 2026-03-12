@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/process-scheduled-messages",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-activity-notifications",
+      "schedule": "* * * * *"
     }
   ],
   "rewrites": [
