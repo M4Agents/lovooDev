@@ -12,8 +12,6 @@ import {
   Activity,
   Building2,
   ChevronLeft,
-  Bell,
-  Search,
   User,
   Users,
   Crown,
@@ -24,13 +22,14 @@ import {
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
+import { ActivityNotificationButton } from './ActivityNotificationButton';
 
 type ModernLayoutProps = {
   children: React.ReactNode;
 };
 
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
-  const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles } = useAuth();
+  const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles, currentRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -237,17 +236,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               </div>
 
               {/* Notificações */}
-              <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-700/50 transition-colors">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-slate-300" />
-                  <span className="text-sm text-slate-300">Notificações</span>
-                </div>
-                {realtimeStats?.activeVisitors > 0 && (
-                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">
-                    {realtimeStats.activeVisitors}
-                  </span>
-                )}
-              </button>
+              <ActivityNotificationButton
+                isMaster={currentRole === 'super_admin' || currentRole === 'support' || currentRole === 'admin'}
+                currentUserId={user?.id || ''}
+                companyId={company?.id || ''}
+                collapsed={false}
+              />
             </div>
           ) : (
             /* Sidebar Colapsada - Apenas Avatar e Sininho */
