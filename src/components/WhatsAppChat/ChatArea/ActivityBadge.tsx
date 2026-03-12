@@ -89,8 +89,7 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
   return (
     <div className="relative">
       <button
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
+        onClick={() => setShowTooltip(!showTooltip)}
         className={`
           inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
           border transition-all hover:shadow-md cursor-pointer
@@ -106,11 +105,15 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
 
       {/* Tooltip com todas as atividades */}
       {showTooltip && (
-        <div 
-          className="absolute top-full left-0 mt-2 z-50 w-72 bg-white rounded-lg shadow-xl border border-gray-200 max-h-96 overflow-hidden"
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
-        >
+        <>
+          {/* Backdrop para fechar ao clicar fora */}
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setShowTooltip(false)}
+          />
+          <div 
+            className="absolute top-full left-0 mt-2 z-50 w-72 bg-white rounded-lg shadow-xl border border-gray-200 max-h-96 overflow-hidden"
+          >
           <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 sticky top-0">
             <p className="text-xs font-semibold text-gray-700">
               {totalCount} {totalCount === 1 ? 'Atividade' : 'Atividades'}
@@ -154,7 +157,8 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
           <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-center">
             <p className="text-xs text-gray-500">Clique para ver detalhes</p>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   )
