@@ -37,7 +37,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   preSelectedLead,
   preSelectedDate
 }) => {
-  const { user, company } = useAuth()
+  const { user, company, companyTimezone } = useAuth()
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -150,9 +150,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       // Definir data/hora mínima como agora ou usar data pré-selecionada
       const now = new Date()
       const minDate = preSelectedDate || now.toISOString().split('T')[0]
-      // Obter hora atual no timezone de São Paulo (Brasil)
+      // Obter hora atual no timezone da empresa
       const minTime = now.toLocaleTimeString('pt-BR', { 
-        timeZone: 'America/Sao_Paulo',
+        timeZone: companyTimezone,
         hour: '2-digit', 
         minute: '2-digit',
         hour12: false 

@@ -32,6 +32,7 @@ export type Company = {
   parent_company_id: string | null;
   company_type: 'parent' | 'client';
   is_super_admin: boolean;
+  timezone: string;
   created_at: string;
   updated_at: string;
   

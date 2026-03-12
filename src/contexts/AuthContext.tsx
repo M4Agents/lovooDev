@@ -6,6 +6,7 @@ import { UserRole, CompanyUser, UserPermissions, LegacyUserInfo } from '../types
 type AuthContextType = {
   user: User | null;
   company: Company | null;
+  companyTimezone: string;
   loading: boolean;
   isLoadingCompany: boolean;
   isImpersonating: boolean;
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [companyTimezone, setCompanyTimezone] = useState<string>('America/Sao_Paulo');
   const [loading, setLoading] = useState(true);
   const [isLoadingCompany, setIsLoadingCompany] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(() => {
@@ -241,6 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!impError && impersonatedCompany) {
             console.log('AuthContext: Found impersonated company:', impersonatedCompany.name);
             setCompany(impersonatedCompany);
+            setCompanyTimezone(impersonatedCompany.timezone || 'America/Sao_Paulo');
             setIsImpersonating(true); // Garantir que o estado está correto
             
             // Sincronizar currentCompanyId no localStorage para analytics
@@ -311,6 +314,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                                    allCompanies.find(c => c.is_super_admin) || 
                                    allCompanies[0];
           setCompany(superAdminCompany);
+          setCompanyTimezone(superAdminCompany.timezone || 'America/Sao_Paulo');
           
           // Sincronizar currentCompanyId no localStorage para analytics
           localStorage.setItem('currentCompanyId', superAdminCompany.id);
@@ -395,6 +399,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           
           setCompany(selectedCompany as any);
+          setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
           localStorage.setItem('currentCompanyId', selectedCompany.id);
           
           // CRÍTICO: Verificar se é empresa do sistema antigo
@@ -513,6 +518,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             
             setCompany(selectedCompany as any);
+            setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
             localStorage.setItem('currentCompanyId', selectedCompany.id);
             return; // SAIR IMEDIATAMENTE
           }
@@ -616,6 +622,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!forceCompanyError && forceCompanyData) {
               console.log('🔧 AuthContext: FORCE LOAD SUCCESS (NEW system) - Setting company:', forceCompanyData.name);
               setCompany(forceCompanyData);
+              setCompanyTimezone(forceCompanyData.timezone || 'America/Sao_Paulo');
               setAvailableCompanies([forceCompanyData]);
               localStorage.setItem('currentCompanyId', forceCompanyData.id);
               return;
@@ -650,6 +657,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           
           setCompany(selectedCompany as any);
+          setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
           localStorage.setItem('currentCompanyId', selectedCompany.id);
           return;
         }
@@ -659,6 +667,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (recoveredCompany) {
           console.log('AuthContext: Orphan user recovered successfully:', recoveredCompany.name);
           setCompany(recoveredCompany);
+          setCompanyTimezone(recoveredCompany.timezone || 'America/Sao_Paulo');
           setAvailableCompanies([recoveredCompany]);
         } else {
           console.log('AuthContext: Could not recover orphan user');
@@ -723,6 +732,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!error && impersonatedCompany) {
           console.log('AuthContext: Refreshed impersonated company:', impersonatedCompany.name);
           setCompany(impersonatedCompany);
+          setCompanyTimezone(impersonatedCompany.timezone || 'America/Sao_Paulo');
           setIsImpersonating(true);
           
           // Sincronizar currentCompanyId no localStorage para analytics
@@ -1095,6 +1105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Definir estados imediatamente
         setIsImpersonating(true);
         setCompany(targetCompany);
+        setCompanyTimezone(targetCompany.timezone || 'America/Sao_Paulo');
         
         // Sincronizar currentCompanyId no localStorage para analytics
         localStorage.setItem('currentCompanyId', targetCompany.id);
@@ -1137,6 +1148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (targetCompany) {
       console.log('AuthContext: Switching to company:', targetCompany);
       setCompany(targetCompany);
+      setCompanyTimezone(targetCompany.timezone || 'America/Sao_Paulo');
       
       // Sincronizar currentCompanyId no localStorage para analytics
       localStorage.setItem('currentCompanyId', targetCompany.id);
@@ -1332,7 +1344,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{ 
       user, 
-      company, 
+      company,
+      companyTimezone,
       loading, 
       isLoadingCompany,
       isImpersonating,
