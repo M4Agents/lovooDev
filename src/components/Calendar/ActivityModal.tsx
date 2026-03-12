@@ -40,6 +40,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const { user, company } = useAuth()
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [leads, setLeads] = useState<Lead[]>([])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
@@ -47,6 +48,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [selectedResponsible, setSelectedResponsible] = useState<CompanyUser | null>(null)
   const [hasGoogleConnection, setHasGoogleConnection] = useState(false)
   const [showChatModal, setShowChatModal] = useState(false)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [completionNotes, setCompletionNotes] = useState('')
   
   const [formData, setFormData] = useState<CreateActivityForm>({
     title: '',
@@ -255,6 +258,27 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       alert('Erro ao excluir atividade')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleComplete = async () => {
+    if (!activity?.id || !user?.id) return
+
+    try {
+      setCompleting(true)
+      await calendarApi.completeActivity(
+        activity.id,
+        user.id,
+        completionNotes ? { completion_notes: completionNotes } : undefined
+      )
+      setShowCompletionModal(false)
+      onSave()
+      onClose()
+    } catch (error) {
+      console.error('Error completing activity:', error)
+      alert('Erro ao concluir atividade')
+    } finally {
+      setCompleting(false)
     }
   }
 
@@ -594,14 +618,26 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             {activity && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-              >
-                {deleting ? '🗑️ Excluindo...' : '🗑️ Excluir'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                >
+                  {deleting ? '🗑️ Excluindo...' : '🗑️ Excluir'}
+                </button>
+                {activity.status !== 'completed' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletionModal(true)}
+                    disabled={completing}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                  >
+                    ✅ Concluir
+                  </button>
+                )}
+              </>
             )}
             <button
               type="button"
@@ -640,6 +676,58 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           isOpen={showChatModal}
           onClose={() => setShowChatModal(false)}
         />
+      )}
+
+      {/* Mini-Modal de Conclusão */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <span className="text-2xl">✅</span>
+              Concluir Atividade
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Adicione notas sobre a conclusão desta atividade (opcional):
+            </p>
+            <textarea
+              value={completionNotes}
+              onChange={(e) => setCompletionNotes(e.target.value)}
+              placeholder="Ex: Cliente confirmou interesse, agendar próxima reunião..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+              rows={4}
+            />
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCompletionModal(false)
+                  setCompletionNotes('')
+                }}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={completing}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {completing ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Concluindo...
+                  </span>
+                ) : (
+                  '✅ Confirmar Conclusão'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
