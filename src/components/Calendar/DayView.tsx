@@ -1,6 +1,7 @@
 import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES } from '../../types/calendar'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface DayViewProps {
   currentDate: Date
@@ -15,10 +16,64 @@ export const DayView: React.FC<DayViewProps> = ({
   availableCalendars,
   onEditActivity
 }) => {
+  const { companyTimezone } = useAuth()
+  
   // Função para parse de data sem conversão de timezone
   const parseLocalDate = (dateString: string): Date => {
     const [year, month, day] = dateString.split('-').map(Number)
     return new Date(year, month - 1, day)
+  }
+
+  // Função para converter horário UTC para timezone da empresa
+  const convertUTCToLocal = (date: string, time: string): string => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      return utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    } catch (error) {
+      console.error('Error converting time:', error)
+      return time.slice(0, 5)
+    }
+  }
+
+  // Função para obter hora local para posicionamento
+  const getLocalHour = (date: string, time: string): number => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      const [hours] = localTimeStr.split(':').map(Number)
+      return hours
+    } catch (error) {
+      const [hours] = time.split(':').map(Number)
+      return hours
+    }
+  }
+
+  // Função para obter minutos locais para posicionamento
+  const getLocalMinutes = (date: string, time: string): number => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      const [, minutes] = localTimeStr.split(':').map(Number)
+      return minutes
+    } catch (error) {
+      const [, minutes] = time.split(':').map(Number)
+      return minutes
+    }
   }
 
   // Filtrar atividades do dia
@@ -49,7 +104,8 @@ export const DayView: React.FC<DayViewProps> = ({
   }
 
   const getActivityPosition = (activity: LeadActivity) => {
-    const [hours, minutes] = activity.scheduled_time.split(':').map(Number)
+    const hours = getLocalHour(activity.scheduled_date, activity.scheduled_time)
+    const minutes = getLocalMinutes(activity.scheduled_date, activity.scheduled_time)
     const totalMinutes = (hours - 8) * 60 + minutes
     const top = (totalMinutes / 30) * 50 // 50px por slot de 30min
     const height = (activity.duration_minutes / 30) * 50
@@ -139,7 +195,7 @@ export const DayView: React.FC<DayViewProps> = ({
                           {activity.title}
                         </p>
                         <p className="text-gray-600 text-xs mt-1">
-                          {activity.scheduled_time.slice(0, 5)} - {activity.duration_minutes} min
+                          {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)} - {activity.duration_minutes} min
                         </p>
                         {activity.lead && (
                           <p className="text-gray-500 text-xs mt-1 truncate">

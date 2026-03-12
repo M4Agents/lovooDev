@@ -1,6 +1,7 @@
 import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES } from '../../types/calendar'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface WeekViewProps {
   currentDate: Date
@@ -15,10 +16,64 @@ export const WeekView: React.FC<WeekViewProps> = ({
   availableCalendars,
   onEditActivity
 }) => {
+  const { companyTimezone } = useAuth()
+  
   // Função para parse de data sem conversão de timezone
   const parseLocalDate = (dateString: string): Date => {
     const [year, month, day] = dateString.split('-').map(Number)
     return new Date(year, month - 1, day)
+  }
+
+  // Função para converter horário UTC para timezone da empresa
+  const convertUTCToLocal = (date: string, time: string): string => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      return utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    } catch (error) {
+      console.error('Error converting time:', error)
+      return time.slice(0, 5)
+    }
+  }
+
+  // Função para obter hora local para posicionamento
+  const getLocalHour = (date: string, time: string): number => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      const [hours] = localTimeStr.split(':').map(Number)
+      return hours
+    } catch (error) {
+      const [hours] = time.split(':').map(Number)
+      return hours
+    }
+  }
+
+  // Função para obter minutos locais para posicionamento
+  const getLocalMinutes = (date: string, time: string): number => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      const [, minutes] = localTimeStr.split(':').map(Number)
+      return minutes
+    } catch (error) {
+      const [, minutes] = time.split(':').map(Number)
+      return minutes
+    }
   }
 
   // Calcular início da semana (domingo)
@@ -64,7 +119,8 @@ export const WeekView: React.FC<WeekViewProps> = ({
   }
 
   const getActivityPosition = (activity: LeadActivity) => {
-    const [hours, minutes] = activity.scheduled_time.split(':').map(Number)
+    const hours = getLocalHour(activity.scheduled_date, activity.scheduled_time)
+    const minutes = getLocalMinutes(activity.scheduled_date, activity.scheduled_time)
     const totalMinutes = (hours - 8) * 60 + minutes
     const top = (totalMinutes / 60) * 60 // 60px por hora
     const height = (activity.duration_minutes / 60) * 60
@@ -164,7 +220,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                               {activity.title}
                             </p>
                             <p className="text-gray-600 truncate text-[10px] mt-0.5">
-                              {activity.scheduled_time.slice(0, 5)}
+                              {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)}
                             </p>
                           </div>
                         </div>

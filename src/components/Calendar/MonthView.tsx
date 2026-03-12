@@ -1,5 +1,6 @@
 import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface MonthViewProps {
   currentDate: Date
@@ -18,6 +19,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
   onViewDay,
   onCreateActivity
 }) => {
+  const { companyTimezone } = useAuth()
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
@@ -25,6 +27,22 @@ export const MonthView: React.FC<MonthViewProps> = ({
   const parseLocalDate = (dateString: string): Date => {
     const [year, month, day] = dateString.split('-').map(Number)
     return new Date(year, month - 1, day)
+  }
+
+  // Função para converter horário UTC para timezone da empresa
+  const convertUTCToLocal = (date: string, time: string): string => {
+    try {
+      const utcDateTime = new Date(`${date}T${time}Z`)
+      return utcDateTime.toLocaleTimeString('pt-BR', {
+        timeZone: companyTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    } catch (error) {
+      console.error('Error converting time:', error)
+      return time.slice(0, 5)
+    }
   }
 
   // Primeiro dia do mês
@@ -168,7 +186,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                             )}
                           </div>
                           <p className="text-[10px] text-gray-600">
-                            {activity.scheduled_time.slice(0, 5)}
+                            {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)}
                           </p>
                         </button>
                       )
