@@ -18,7 +18,7 @@ interface Activity {
 interface ActivityBannerProps {
   leadId: number
   companyId: string
-  onViewDetails?: () => void
+  onViewDetails?: (activity: Activity) => void
 }
 
 export const ActivityBanner: React.FC<ActivityBannerProps> = ({
@@ -120,7 +120,7 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
       <div className="flex items-center gap-2 ml-3">
         {onViewDetails && (
           <button
-            onClick={onViewDetails}
+            onClick={() => onViewDetails(urgentActivity)}
             className={`
               px-3 py-1.5 text-xs font-medium rounded-md transition-colors
               ${isOverdue 

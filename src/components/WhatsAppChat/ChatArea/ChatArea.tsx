@@ -15,6 +15,7 @@ import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { ActivityBadge } from './ActivityBadge'
 import { ActivityBanner } from './ActivityBanner'
+import { ActivityModal } from '../../Calendar/ActivityModal'
 import { supabase } from '../../../lib/supabase'
 
 // =====================================================
@@ -37,6 +38,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   const [leadId, setLeadId] = useState<number | null>(null)
+  // Estados para modal de atividades
+  const [showActivityModal, setShowActivityModal] = useState(false)
+  const [selectedActivity, setSelectedActivity] = useState<any>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
   
@@ -320,6 +324,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     } catch (error) {
       console.error('Erro ao carregar conversa')
     }
+  }
+
+  // =====================================================
+  // MODAL DE ATIVIDADES
+  // =====================================================
+
+  const handleOpenActivity = (activity?: any) => {
+    setSelectedActivity(activity || null)
+    setShowActivityModal(true)
   }
 
   // =====================================================
@@ -975,6 +988,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <ActivityBadge
                 leadId={leadId}
                 companyId={companyId}
+                onActivityClick={handleOpenActivity}
               />
             )}
 
@@ -1015,6 +1029,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <ActivityBanner
           leadId={leadId}
           companyId={companyId}
+          onViewDetails={handleOpenActivity}
         />
       )}
 
@@ -1218,6 +1233,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           conversationId={conversationId}
         />
       </div>
+
+      {/* Modal de Atividade */}
+      {showActivityModal && (
+        <ActivityModal
+          activity={selectedActivity}
+          onClose={() => setShowActivityModal(false)}
+          onSave={() => {
+            setShowActivityModal(false)
+            // Recarregar atividades se necessário
+          }}
+        />
+      )}
     </div>
   )
 }
