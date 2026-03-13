@@ -39,6 +39,9 @@ interface FlowCanvasProps {
   onSave: (nodes: Node[], edges: Edge[]) => Promise<void>
   onToggleActive: (isActive: boolean) => Promise<void>
   onDelete: () => Promise<void>
+  selectedNode: Node | null
+  onNodeSelect: (node: Node | null) => void
+  onNodeConfigSave: (nodeId: string, config: any) => void
 }
 
 const nodeTypes: NodeTypes = {
@@ -57,16 +60,62 @@ function FlowCanvasInner({
   isActive,
   onSave,
   onToggleActive,
-  onDelete
+  onDelete,
+  selectedNode,
+  onNodeSelect,
+  onNodeConfigSave
 }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isSaving, setIsSaving] = useState(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
+  )
+
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      onNodeSelect(node)
+    },
+    [onNodeSelect]
+  )
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+
+      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect()
+      const data = event.dataTransfer.getData('application/reactflow')
+
+      if (!data || !reactFlowBounds || !reactFlowInstance) return
+
+      const blockData = JSON.parse(data)
+      const position = reactFlowInstance.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top
+      })
+
+      const newNode: Node = {
+        id: `${blockData.type}-${Date.now()}`,
+        type: blockData.type,
+        position,
+        data: {
+          label: blockData.label,
+          config: {}
+        }
+      }
+
+      setNodes((nds) => nds.concat(newNode))
+    },
+    [reactFlowInstance, setNodes]
   )
 
   const handleSave = async () => {
@@ -109,6 +158,10 @@ function FlowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        onInit={setReactFlowInstance}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-left"

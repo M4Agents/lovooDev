@@ -9,6 +9,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
 import { ArrowLeft, Loader } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
+import BlockLibrary from '../components/Automation/BlockLibrary'
+import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
 import { automationApi } from '../services/automationApi'
 import type { AutomationFlow } from '../types/automation'
 
@@ -18,6 +20,7 @@ export default function FlowEditor() {
   const [flow, setFlow] = useState<AutomationFlow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
 
   useEffect(() => {
     loadFlow()
@@ -62,6 +65,16 @@ export default function FlowEditor() {
 
     await automationApi.deleteFlow(id)
     navigate('/automations')
+  }
+
+  const handleNodeConfigSave = (nodeId: string, config: any) => {
+    if (!flow) return
+
+    const updatedNodes = flow.nodes.map((node: any) =>
+      node.id === nodeId ? { ...node, data: { ...node.data, config } } : node
+    )
+
+    setFlow({ ...flow, nodes: updatedNodes })
   }
 
   if (loading) {
@@ -121,17 +134,30 @@ export default function FlowEditor() {
         </div>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1">
-        <FlowCanvas
-          flowId={flow.id}
-          initialNodes={flow.nodes as Node[]}
-          initialEdges={flow.edges as Edge[]}
-          isActive={flow.is_active}
-          onSave={handleSave}
-          onToggleActive={handleToggleActive}
-          onDelete={handleDelete}
-        />
+      {/* Canvas with Sidebar */}
+      <div className="flex-1 flex">
+        <BlockLibrary />
+        <div className="flex-1">
+          <FlowCanvas
+            flowId={flow.id}
+            initialNodes={flow.nodes as Node[]}
+            initialEdges={flow.edges as Edge[]}
+            isActive={flow.is_active}
+            onSave={handleSave}
+            onToggleActive={handleToggleActive}
+            onDelete={handleDelete}
+            selectedNode={selectedNode}
+            onNodeSelect={setSelectedNode}
+            onNodeConfigSave={handleNodeConfigSave}
+          />
+        </div>
+        {selectedNode && (
+          <NodeConfigPanel
+            selectedNode={selectedNode}
+            onClose={() => setSelectedNode(null)}
+            onSave={handleNodeConfigSave}
+          />
+        )}
       </div>
     </div>
   )
