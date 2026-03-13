@@ -15,6 +15,7 @@ import Chat from './pages/Chat';
 import SalesFunnel from './pages/SalesFunnel';
 import { Calendar } from './pages/Calendar';
 import { Notifications } from './pages/Notifications';
+import Automations from './pages/Automations';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
@@ -185,6 +186,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automations"
+        element={
+          <ProtectedRoute>
+            <Automations />
           </ProtectedRoute>
         }
       />
