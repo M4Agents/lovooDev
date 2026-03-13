@@ -57,9 +57,135 @@ export default function FlowEditor() {
     return true
   }, [])
 
+  // FASE 6.2: Copiar/Colar blocos
+  const handleCopyNode = useCallback(() => {
+    if (selectedNode) {
+      setClipboard(selectedNode)
+    }
+  }, [selectedNode])
+
+  const handlePasteNode = useCallback(() => {
+    if (clipboard && flow) {
+      const newNode: Node = {
+        ...clipboard,
+        id: `${clipboard.type}-${Date.now()}`,
+        position: {
+          x: clipboard.position.x + 50,
+          y: clipboard.position.y + 50
+        }
+      }
+      
+      const updatedNodes = [...(flow.nodes as Node[]), newNode]
+      handleSave(updatedNodes, flow.edges as Edge[])
+      takeSnapshot(updatedNodes, flow.edges as Edge[])
+    }
+  }, [clipboard, flow])
+
+  // FASE 6.4: Aplicar template
+  const handleApplyTemplate = useCallback((nodes: Node[], edges: Edge[]) => {
+    if (flow) {
+      handleSave(nodes, edges)
+      takeSnapshot(nodes, edges)
+    }
+  }, [flow])
+
+  // FASE 6.5: Exportar fluxo como JSON
+  const handleExportFlow = useCallback(() => {
+    if (!flow) return
+
+    const exportData = {
+      name: flow.name,
+      description: flow.description,
+      nodes: flow.nodes,
+      edges: flow.edges,
+      variables: flow.variables || {},
+      exportedAt: new Date().toISOString(),
+      version: '1.0'
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${flow.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [flow])
+
+  // FASE 6.5: Importar fluxo de JSON
+  const handleImportFlow = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      try {
+        const text = await file.text()
+        const importData = JSON.parse(text)
+
+        if (!importData.nodes || !importData.edges) {
+          alert('❌ Arquivo JSON inválido. Certifique-se de que contém nodes e edges.')
+          return
+        }
+
+        const proceed = confirm(
+          `📥 Importar fluxo?\n\n` +
+          `Nome: ${importData.name || 'Sem nome'}\n` +
+          `Blocos: ${importData.nodes.length}\n` +
+          `Conexões: ${importData.edges.length}\n\n` +
+          `Isso substituirá o fluxo atual. Deseja continuar?`
+        )
+
+        if (proceed) {
+          handleSave(importData.nodes, importData.edges)
+          takeSnapshot(importData.nodes, importData.edges)
+        }
+      } catch (error) {
+        console.error('Erro ao importar:', error)
+        alert('❌ Erro ao importar arquivo. Verifique se é um JSON válido.')
+      }
+    }
+
+    input.click()
+  }, [])
+
   useEffect(() => {
     loadFlow()
   }, [id])
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Z = Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+      // Ctrl/Cmd + Shift + Z = Redo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault()
+        redo()
+      }
+      // Ctrl/Cmd + C = Copy
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault()
+        handleCopyNode()
+      }
+      // Ctrl/Cmd + V = Paste
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault()
+        handlePasteNode()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo, handleCopyNode, handlePasteNode])
 
   const loadFlow = async () => {
     if (!id) return
@@ -143,132 +269,6 @@ export default function FlowEditor() {
       </div>
     )
   }
-
-  // FASE 6.2: Copiar/Colar blocos
-  const handleCopyNode = useCallback(() => {
-    if (selectedNode) {
-      setClipboard(selectedNode)
-    }
-  }, [selectedNode])
-
-  const handlePasteNode = useCallback(() => {
-    if (clipboard && flow) {
-      const newNode: Node = {
-        ...clipboard,
-        id: `${clipboard.type}-${Date.now()}`,
-        position: {
-          x: clipboard.position.x + 50,
-          y: clipboard.position.y + 50
-        }
-      }
-      
-      const updatedNodes = [...(flow.nodes as Node[]), newNode]
-      handleSave(updatedNodes, flow.edges as Edge[])
-      takeSnapshot(updatedNodes, flow.edges as Edge[])
-    }
-  }, [clipboard, flow, handleSave, takeSnapshot])
-
-  // FASE 6.4: Aplicar template
-  const handleApplyTemplate = useCallback((nodes: Node[], edges: Edge[]) => {
-    if (flow) {
-      handleSave(nodes, edges)
-      takeSnapshot(nodes, edges)
-    }
-  }, [flow, handleSave, takeSnapshot])
-
-  // FASE 6.5: Exportar fluxo como JSON
-  const handleExportFlow = useCallback(() => {
-    if (!flow) return
-
-    const exportData = {
-      name: flow.name,
-      description: flow.description,
-      nodes: flow.nodes,
-      edges: flow.edges,
-      variables: flow.variables || {},
-      exportedAt: new Date().toISOString(),
-      version: '1.0'
-    }
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${flow.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, [flow])
-
-  // FASE 6.5: Importar fluxo de JSON
-  const handleImportFlow = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0]
-      if (!file) return
-
-      try {
-        const text = await file.text()
-        const importData = JSON.parse(text)
-
-        if (!importData.nodes || !importData.edges) {
-          alert('❌ Arquivo JSON inválido. Certifique-se de que contém nodes e edges.')
-          return
-        }
-
-        const proceed = confirm(
-          `📥 Importar fluxo?\n\n` +
-          `Nome: ${importData.name || 'Sem nome'}\n` +
-          `Blocos: ${importData.nodes.length}\n` +
-          `Conexões: ${importData.edges.length}\n\n` +
-          `Isso substituirá o fluxo atual. Deseja continuar?`
-        )
-
-        if (proceed) {
-          handleSave(importData.nodes, importData.edges)
-          takeSnapshot(importData.nodes, importData.edges)
-        }
-      } catch (error) {
-        console.error('Erro ao importar:', error)
-        alert('❌ Erro ao importar arquivo. Verifique se é um JSON válido.')
-      }
-    }
-
-    input.click()
-  }, [handleSave, takeSnapshot])
-
-  // Atalhos de teclado
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Z = Undo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        undo()
-      }
-      // Ctrl/Cmd + Shift + Z = Redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
-        e.preventDefault()
-        redo()
-      }
-      // Ctrl/Cmd + C = Copy
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        e.preventDefault()
-        handleCopyNode()
-      }
-      // Ctrl/Cmd + V = Paste
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-        e.preventDefault()
-        handlePasteNode()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, handleCopyNode, handlePasteNode])
 
   return (
     <div className="flex flex-col h-screen">
