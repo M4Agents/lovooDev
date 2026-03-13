@@ -9,10 +9,13 @@ import type {
   AutomationFlow,
   AutomationExecution,
   AutomationLog,
+  AutomationSchedule,
   AutomationTemplate,
   CreateFlowForm,
   UpdateFlowForm,
-  SaveFlowForm
+  FlowCanvas,
+  CompanyStats,
+  FlowStats
 } from '../types/automation'
 
 // =====================================================
@@ -372,41 +375,113 @@ export const templateApi = {
 // =====================================================
 
 export const statsApi = {
-  // Estatísticas de um fluxo
-  async getFlowStats(flowId: string) {
-    const { data, error } = await supabase
+  async getCompanyStats(companyId: string): Promise<CompanyStats> {
+    const { data: flows } = await supabase
       .from('automation_flows')
-      .select('execution_count, success_count, error_count, last_executed_at')
-      .eq('id', flowId)
-      .single()
-
-    if (error) throw error
-    return data
-  },
-
-  // Estatísticas gerais da empresa
-  async getCompanyStats(companyId: string) {
-    const { data: flows, error: flowsError } = await supabase
-      .from('automation_flows')
-      .select('id, execution_count, success_count, error_count, is_active')
+      .select('*')
       .eq('company_id', companyId)
-
-    if (flowsError) throw flowsError
 
     const totalFlows = flows?.length || 0
     const activeFlows = flows?.filter((f: any) => f.is_active).length || 0
     const totalExecutions = flows?.reduce((sum: number, f: any) => sum + (f.execution_count || 0), 0) || 0
     const totalSuccess = flows?.reduce((sum: number, f: any) => sum + (f.success_count || 0), 0) || 0
-    const totalErrors = flows?.reduce((sum: number, f: any) => sum + (f.error_count || 0), 0) || 0
     const successRate = totalExecutions > 0 ? (totalSuccess / totalExecutions) * 100 : 0
 
     return {
       totalFlows,
       activeFlows,
       totalExecutions,
-      totalSuccess,
-      totalErrors,
-      successRate: Math.round(successRate * 100) / 100
+      successRate: Math.round(successRate * 10) / 10
     }
+  },
+
+  async getFlowStats(flowId: string): Promise<FlowStats> {
+    const { data: flow } = await supabase
+      .from('automation_flows')
+      .select('*')
+      .eq('id', flowId)
+      .single()
+
+    if (!flow) {
+      throw new Error('Fluxo não encontrado')
+    }
+
+    return {
+      executionCount: flow.execution_count || 0,
+      successCount: flow.success_count || 0,
+      errorCount: flow.error_count || 0,
+      successRate: flow.execution_count > 0 
+        ? Math.round((flow.success_count / flow.execution_count) * 100 * 10) / 10
+        : 0,
+      lastExecutedAt: flow.last_executed_at
+    }
+  }
+}
+
+// Execução (FASE 4 - Motor de Execução)
+export const executionApi = {
+  async executeFlow(flowId: string, companyId: string, triggerData?: any): Promise<string> {
+    const response = await fetch('/api/automation/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        flowId,
+        companyId,
+        triggerData: triggerData || {}
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error('Erro ao executar fluxo')
+    }
+
+    const data = await response.json()
+    return data.executionId
+  },
+
+  async getExecutions(flowId: string, limit = 50): Promise<AutomationExecution[]> {
+    const { data, error } = await supabase
+      .from('automation_executions')
+      .select('*')
+      .eq('flow_id', flowId)
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
+  },
+
+  async getExecution(executionId: string): Promise<AutomationExecution | null> {
+    const { data, error } = await supabase
+      .from('automation_executions')
+      .select('*')
+      .eq('id', executionId)
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  async getLogs(executionId: string): Promise<AutomationLog[]> {
+    const { data, error } = await supabase
+      .from('automation_logs')
+      .select('*')
+      .eq('execution_id', executionId)
+      .order('executed_at', { ascending: true })
+
+    if (error) throw error
+    return data || []
+  },
+
+  async getFlowLogs(flowId: string, limit = 100): Promise<AutomationLog[]> {
+    const { data, error } = await supabase
+      .from('automation_logs')
+      .select('*')
+      .eq('flow_id', flowId)
+      .order('executed_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
   }
 }

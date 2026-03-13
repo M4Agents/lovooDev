@@ -446,3 +446,40 @@ export const validateFlowName = (name: string): { valid: boolean; error?: string
   }
   return { valid: true }
 }
+
+export interface CompanyStats {
+  totalFlows: number
+  activeFlows: number
+  totalExecutions: number
+  successRate: number
+}
+
+export interface FlowStats {
+  executionCount: number
+  successCount: number
+  errorCount: number
+  successRate: number
+  lastExecutedAt?: string
+}
+
+// Helper para validar fluxo
+export const validateFlow = (flow: AutomationFlow): { valid: boolean; errors: string[] } => {
+  const errors: string[] = []
+
+  if (!flow.name || flow.name.trim() === '') {
+    errors.push('Nome do fluxo é obrigatório')
+  }
+
+  if (!flow.trigger_type) {
+    errors.push('Tipo de gatilho é obrigatório')
+  }
+
+  if (!flow.nodes || flow.nodes.length === 0) {
+    errors.push('Fluxo deve ter pelo menos um bloco')
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  }
+}
