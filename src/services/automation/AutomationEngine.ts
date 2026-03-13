@@ -10,6 +10,7 @@ import type { AutomationFlow, AutomationExecution, AutomationLog } from '../../t
 import { Node, Edge } from 'reactflow'
 import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
+import { scheduleService } from './ScheduleService'
 
 interface ExecutionContext {
   executionId: string
@@ -250,9 +251,8 @@ export class AutomationEngine {
         return { result: true } // Por enquanto sempre true
 
       case 'delay':
-        // TODO: Implementar delay (agendar próxima execução)
-        console.log('⏱️ Delay:', node.data.config)
-        return { delayed: true, duration: node.data.config?.duration }
+        // Implementar delay REAL com agendamento
+        return await this.scheduleDelay(node, context)
 
       case 'end':
         // Fim do fluxo
@@ -540,6 +540,60 @@ export class AutomationEngine {
       }
     } catch (error: any) {
       console.error('❌ Erro ao executar ação CRM:', error)
+      throw error
+    }
+  }
+
+  /**
+   * FASE 5.3: Agenda delay REAL
+   */
+  private async scheduleDelay(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      console.log('⏱️ Agendando delay...')
+
+      const duration = node.data.config?.duration || 1
+      const unit = node.data.config?.unit || 'minutes'
+      const businessHoursOnly = node.data.config?.businessHoursOnly || false
+
+      // Calcular quando retomar
+      const resumeAt = scheduleService.calculateResumeAt(duration, unit)
+
+      // Criar agendamento
+      const scheduleId = await scheduleService.createSchedule({
+        executionId: context.executionId,
+        flowId: context.flowId,
+        companyId: context.companyId,
+        currentNodeId: node.id,
+        resumeAt,
+        delayConfig: {
+          duration,
+          unit,
+          businessHoursOnly
+        }
+      })
+
+      console.log('✅ Delay agendado:', {
+        scheduleId,
+        resumeAt: resumeAt.toISOString(),
+        duration,
+        unit
+      })
+
+      // Retornar informação do agendamento
+      // IMPORTANTE: Quando há delay, a execução é pausada
+      // e será retomada pelo cron job
+      return {
+        delayed: true,
+        scheduleId,
+        resumeAt: resumeAt.toISOString(),
+        duration,
+        unit,
+        businessHoursOnly,
+        // Flag especial para indicar que a execução deve pausar
+        pauseExecution: true
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao agendar delay:', error)
       throw error
     }
   }
