@@ -7,10 +7,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
-import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, AlertTriangle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upload } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
 import BlockLibrary from '../components/Automation/BlockLibrary'
 import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
+import TemplateModal from '../components/Automation/TemplateModal'
 import { automationApi } from '../services/automationApi'
 import type { AutomationFlow } from '../types/automation'
 import { useUndoRedo } from '../hooks/useUndoRedo'
@@ -26,6 +27,7 @@ export default function FlowEditor() {
   const [clipboard, setClipboard] = useState<Node | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [showValidation, setShowValidation] = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
@@ -166,6 +168,79 @@ export default function FlowEditor() {
     }
   }, [clipboard, flow, handleSave, takeSnapshot])
 
+  // FASE 6.4: Aplicar template
+  const handleApplyTemplate = useCallback((nodes: Node[], edges: Edge[]) => {
+    if (flow) {
+      handleSave(nodes, edges)
+      takeSnapshot(nodes, edges)
+    }
+  }, [flow, handleSave, takeSnapshot])
+
+  // FASE 6.5: Exportar fluxo como JSON
+  const handleExportFlow = useCallback(() => {
+    if (!flow) return
+
+    const exportData = {
+      name: flow.name,
+      description: flow.description,
+      nodes: flow.nodes,
+      edges: flow.edges,
+      variables: flow.variables || {},
+      exportedAt: new Date().toISOString(),
+      version: '1.0'
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${flow.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [flow])
+
+  // FASE 6.5: Importar fluxo de JSON
+  const handleImportFlow = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      try {
+        const text = await file.text()
+        const importData = JSON.parse(text)
+
+        if (!importData.nodes || !importData.edges) {
+          alert('❌ Arquivo JSON inválido. Certifique-se de que contém nodes e edges.')
+          return
+        }
+
+        const proceed = confirm(
+          `📥 Importar fluxo?\n\n` +
+          `Nome: ${importData.name || 'Sem nome'}\n` +
+          `Blocos: ${importData.nodes.length}\n` +
+          `Conexões: ${importData.edges.length}\n\n` +
+          `Isso substituirá o fluxo atual. Deseja continuar?`
+        )
+
+        if (proceed) {
+          handleSave(importData.nodes, importData.edges)
+          takeSnapshot(importData.nodes, importData.edges)
+        }
+      } catch (error) {
+        console.error('Erro ao importar:', error)
+        alert('❌ Erro ao importar arquivo. Verifique se é um JSON válido.')
+      }
+    }
+
+    input.click()
+  }, [handleSave, takeSnapshot])
+
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -263,6 +338,31 @@ export default function FlowEditor() {
               </button>
             </div>
 
+            {/* FASE 6.4 e 6.5: Templates e Importar/Exportar */}
+            <div className="flex items-center gap-2 border-r border-gray-300 pr-4">
+              <button
+                onClick={() => setShowTemplateModal(true)}
+                className="p-2 rounded hover:bg-gray-100"
+                title="Templates prontos"
+              >
+                <FileText className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleExportFlow}
+                className="p-2 rounded hover:bg-gray-100"
+                title="Exportar JSON"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleImportFlow}
+                className="p-2 rounded hover:bg-gray-100"
+                title="Importar JSON"
+              >
+                <Upload className="w-5 h-5" />
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span>Execuções: {flow.execution_count}</span>
               <span>•</span>
@@ -299,6 +399,13 @@ export default function FlowEditor() {
           />
         )}
       </div>
+
+      {/* FASE 6.4: Template Modal */}
+      <TemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSelectTemplate={handleApplyTemplate}
+      />
     </div>
   )
 }
