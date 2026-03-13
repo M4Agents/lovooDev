@@ -18,7 +18,8 @@ import {
   MessageCircle,
   FolderOpen,
   TrendingUp,
-  Calendar
+  Calendar,
+  Zap
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
@@ -86,6 +87,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
     { path: '/sales-funnel', icon: TrendingUp, label: 'Funil de Vendas' },
     { path: '/leads', icon: Users, label: 'Leads' },
     { path: '/calendar', icon: Calendar, label: 'Calendário' },
+    { path: '/automations', icon: Zap, label: 'Automações' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
     ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),
