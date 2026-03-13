@@ -8,6 +8,7 @@
 import { supabase } from '../../lib/supabase'
 import type { AutomationFlow, AutomationExecution, AutomationLog } from '../../types/automation'
 import { Node, Edge } from 'reactflow'
+import { whatsAppService } from './WhatsAppService'
 
 interface ExecutionContext {
   executionId: string
@@ -240,9 +241,8 @@ export class AutomationEngine {
         return { executed: true, action: node.data.config?.actionType }
 
       case 'message':
-        // TODO: Implementar envio de mensagem WhatsApp
-        console.log('💬 Mensagem:', node.data.config?.message)
-        return { sent: true, message: node.data.config?.message }
+        // Enviar mensagem WhatsApp REAL
+        return await this.sendWhatsAppMessage(node, context)
 
       case 'condition':
         // TODO: Implementar avaliação de condição
@@ -398,6 +398,82 @@ export class AutomationEngine {
       console.log(`✅ Execução ${status}:`, executionId)
     } catch (error) {
       console.error('Erro ao completar execução:', error)
+    }
+  }
+
+  /**
+   * FASE 5.1: Envia mensagem WhatsApp REAL
+   */
+  private async sendWhatsAppMessage(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      console.log('💬 Enviando mensagem WhatsApp...')
+
+      // Validar se tem leadId
+      if (!context.leadId) {
+        throw new Error('Lead ID não encontrado no contexto')
+      }
+
+      // Buscar dados do lead para telefone e variáveis
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('phone, name, email, company, city, state')
+        .eq('id', context.leadId)
+        .single()
+
+      if (leadError || !lead) {
+        throw new Error('Lead não encontrado')
+      }
+
+      if (!lead.phone) {
+        throw new Error('Lead não possui telefone cadastrado')
+      }
+
+      // Buscar variáveis do lead
+      const leadVariables = await whatsAppService.getLeadVariables(context.leadId)
+
+      // Mesclar variáveis do contexto com variáveis do lead
+      const allVariables = {
+        ...context.variables,
+        ...leadVariables
+      }
+
+      // Obter mensagem configurada
+      let message = node.data.config?.message || ''
+
+      // Substituir variáveis se habilitado
+      if (node.data.config?.useVariables) {
+        message = whatsAppService.replaceVariables(message, allVariables)
+      }
+
+      if (!message.trim()) {
+        throw new Error('Mensagem vazia')
+      }
+
+      // Enviar mensagem
+      const result = await whatsAppService.sendMessage({
+        phone: lead.phone,
+        message,
+        leadId: context.leadId,
+        companyId: context.companyId,
+        mediaUrl: node.data.config?.mediaUrl,
+        buttons: node.data.config?.buttons
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao enviar mensagem')
+      }
+
+      console.log('✅ Mensagem WhatsApp enviada com sucesso')
+
+      return {
+        sent: true,
+        messageId: result.messageId,
+        to: lead.phone,
+        message: message.substring(0, 100) // Primeiros 100 caracteres para log
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao enviar mensagem WhatsApp:', error)
+      throw error
     }
   }
 }
