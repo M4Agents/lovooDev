@@ -444,6 +444,7 @@ export const Calendar: React.FC = () => {
             setPreSelectedDate(null)
           }}
           onSave={handleActivitySaved}
+          showChatButton={true}
         />
       )}
 

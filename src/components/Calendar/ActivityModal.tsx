@@ -13,6 +13,7 @@ interface ActivityModalProps {
   onSave: () => void
   preSelectedLead?: Lead
   preSelectedDate?: string | null
+  showChatButton?: boolean
 }
 
 interface Lead {
@@ -35,7 +36,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   onClose,
   onSave,
   preSelectedLead,
-  preSelectedDate
+  preSelectedDate,
+  showChatButton = false
 }) => {
   const { user, company, companyTimezone } = useAuth()
   const [loading, setLoading] = useState(false)
@@ -357,14 +359,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   <p className="text-xs text-slate-600">{selectedLead.phone || selectedLead.email}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleOpenChat}
-                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5"
-                    title="Abrir chat do WhatsApp"
-                  >
-                    💬 Abrir Chat
-                  </button>
+                  {showChatButton && (
+                    <button
+                      type="button"
+                      onClick={handleOpenChat}
+                      className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5"
+                      title="Abrir chat do WhatsApp"
+                    >
+                      💬 Abrir Chat
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedLead(null)}
