@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { automationApi, statsApi } from '../services/automationApi'
 import type { AutomationFlow, CreateFlowForm } from '../types/automation'
@@ -13,6 +14,7 @@ import CreateFlowModal from '../components/Automation/CreateFlowModal'
 
 export default function Automations() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [flows, setFlows] = useState<AutomationFlow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -262,7 +264,7 @@ export default function Automations() {
                           {flow.is_active ? 'Desativar' : 'Ativar'}
                         </button>
                         <button
-                          onClick={() => console.log('Editar', flow.id)}
+                          onClick={() => navigate(`/automations/${flow.id}/edit`)}
                           className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium hover:bg-blue-200"
                         >
                           Editar
