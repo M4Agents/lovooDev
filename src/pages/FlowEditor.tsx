@@ -7,13 +7,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
-import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard } from 'lucide-react'
+import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, AlertTriangle, CheckCircle } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
 import BlockLibrary from '../components/Automation/BlockLibrary'
 import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
 import { automationApi } from '../services/automationApi'
 import type { AutomationFlow } from '../types/automation'
 import { useUndoRedo } from '../hooks/useUndoRedo'
+import { validateFlow, formatValidationMessages, type ValidationResult } from '../utils/flowValidation'
 
 export default function FlowEditor() {
   const { id } = useParams<{ id: string }>()
@@ -23,12 +24,36 @@ export default function FlowEditor() {
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [clipboard, setClipboard] = useState<Node | null>(null)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [showValidation, setShowValidation] = useState(false)
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
     flow?.nodes as Node[] || [],
     flow?.edges as Edge[] || []
   )
+
+  // FASE 6.3: Validar fluxo ao salvar
+  const validateAndSave = useCallback(async (nodes: Node[], edges: Edge[]) => {
+    const result = validateFlow(nodes, edges)
+    setValidationResult(result)
+    
+    if (!result.isValid) {
+      setShowValidation(true)
+      alert('❌ O fluxo contém erros que precisam ser corrigidos:\n\n' + formatValidationMessages(result))
+      return false
+    }
+    
+    if (result.warnings.length > 0) {
+      const proceed = confirm('⚠️ O fluxo contém avisos:\n\n' + formatValidationMessages(result) + '\n\nDeseja salvar mesmo assim?')
+      if (!proceed) {
+        setShowValidation(true)
+        return false
+      }
+    }
+    
+    return true
+  }, [])
 
   useEffect(() => {
     loadFlow()
@@ -52,6 +77,10 @@ export default function FlowEditor() {
 
   const handleSave = async (nodes: Node[], edges: Edge[]) => {
     if (!id) return
+
+    // FASE 6.3: Validar antes de salvar
+    const canSave = await validateAndSave(nodes, edges)
+    if (!canSave) return
 
     await automationApi.saveFlowCanvas(id, {
       nodes: nodes as any,
