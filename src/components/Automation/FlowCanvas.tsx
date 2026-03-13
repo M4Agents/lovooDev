@@ -17,6 +17,7 @@ import ReactFlow, {
   addEdge,
   Connection,
   NodeTypes,
+  EdgeTypes,
   Panel,
   ReactFlowProvider
 } from 'reactflow'
@@ -30,6 +31,9 @@ import ConditionNode from './nodes/ConditionNode'
 import MessageNode from './nodes/MessageNode'
 import DelayNode from './nodes/DelayNode'
 import EndNode from './nodes/EndNode'
+
+// Custom Edge Component
+import CustomEdge from './edges/CustomEdge'
 
 interface FlowCanvasProps {
   flowId: string
@@ -53,6 +57,10 @@ const nodeTypes: NodeTypes = {
   end: EndNode
 }
 
+const edgeTypes: EdgeTypes = {
+  custom: CustomEdge
+}
+
 function FlowCanvasInner({
   flowId,
   initialNodes = [],
@@ -72,7 +80,33 @@ function FlowCanvasInner({
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      // Adicionar label baseado no tipo de conexão
+      let label = ''
+      let color = '#94a3b8' // gray-400
+      
+      // Se vem de uma condição
+      if (params.sourceHandle === 'true') {
+        label = '✓ Sim'
+        color = '#16a34a' // green-600
+      } else if (params.sourceHandle === 'false') {
+        label = '✗ Não'
+        color = '#dc2626' // red-600
+      } else if (params.sourceHandle?.startsWith('button-')) {
+        // Se vem de um botão de mensagem
+        const buttonIndex = parseInt(params.sourceHandle.replace('button-', ''))
+        label = `Opção ${buttonIndex + 1}`
+        color = '#9333ea' // purple-600
+      }
+      
+      const newEdge = {
+        ...params,
+        type: 'custom',
+        data: { label, color }
+      }
+      
+      setEdges((eds) => addEdge(newEdge, eds))
+    },
     [setEdges]
   )
 
@@ -163,6 +197,7 @@ function FlowCanvasInner({
         onDrop={onDrop}
         onDragOver={onDragOver}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         attributionPosition="bottom-left"
       >
