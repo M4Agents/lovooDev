@@ -246,9 +246,8 @@ export class AutomationEngine {
         return await this.sendWhatsAppMessage(node, context)
 
       case 'condition':
-        // TODO: Implementar avaliação de condição
-        console.log('❓ Condição:', node.data.config)
-        return { result: true } // Por enquanto sempre true
+        // Avaliar condição REAL
+        return await this.evaluateCondition(node, context)
 
       case 'delay':
         // Implementar delay REAL com agendamento
@@ -542,6 +541,114 @@ export class AutomationEngine {
       console.error('❌ Erro ao executar ação CRM:', error)
       throw error
     }
+  }
+
+  /**
+   * FASE 5.4: Avalia condição REAL
+   */
+  private async evaluateCondition(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      console.log('❓ Avaliando condição...')
+
+      const field = node.data.config?.field
+      const operator = node.data.config?.operator || 'equals'
+      const value = node.data.config?.value
+
+      if (!field) {
+        throw new Error('Campo não especificado na condição')
+      }
+
+      // Buscar valor do campo no lead
+      let fieldValue: any = null
+
+      if (context.leadId) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('id', context.leadId)
+          .single()
+
+        if (lead) {
+          // Suportar campos aninhados (ex: "company.name")
+          fieldValue = this.getNestedValue(lead, field)
+        }
+      }
+
+      // Avaliar condição baseado no operador
+      let result = false
+
+      switch (operator) {
+        case 'equals':
+          result = fieldValue == value
+          break
+
+        case 'not_equals':
+          result = fieldValue != value
+          break
+
+        case 'contains':
+          result = String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+          break
+
+        case 'not_contains':
+          result = !String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+          break
+
+        case 'is_empty':
+          result = !fieldValue || fieldValue === '' || fieldValue === null
+          break
+
+        case 'is_not_empty':
+          result = !!fieldValue && fieldValue !== ''
+          break
+
+        case 'greater_than':
+          result = Number(fieldValue) > Number(value)
+          break
+
+        case 'less_than':
+          result = Number(fieldValue) < Number(value)
+          break
+
+        case 'greater_or_equal':
+          result = Number(fieldValue) >= Number(value)
+          break
+
+        case 'less_or_equal':
+          result = Number(fieldValue) <= Number(value)
+          break
+
+        default:
+          console.warn('⚠️ Operador desconhecido:', operator)
+          result = false
+      }
+
+      console.log('✅ Condição avaliada:', {
+        field,
+        operator,
+        value,
+        fieldValue,
+        result
+      })
+
+      return {
+        result,
+        field,
+        operator,
+        expectedValue: value,
+        actualValue: fieldValue
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao avaliar condição:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Obtém valor de campo aninhado (ex: "company.name")
+   */
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj)
   }
 
   /**
