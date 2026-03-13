@@ -7,14 +7,16 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { automationApi, statsApi } from '../services/automationApi'
-import type { AutomationFlow } from '../types/automation'
+import type { AutomationFlow, CreateFlowForm } from '../types/automation'
 import { Plus, Zap, Activity, TrendingUp, AlertCircle } from 'lucide-react'
+import CreateFlowModal from '../components/Automation/CreateFlowModal'
 
 export default function Automations() {
   const { user } = useAuth()
   const [flows, setFlows] = useState<AutomationFlow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [stats, setStats] = useState({
     totalFlows: 0,
     activeFlows: 0,
@@ -28,11 +30,12 @@ export default function Automations() {
   }, [user])
 
   const loadFlows = async () => {
-    if (!user?.companyId) return
+    const companyId = (user as any)?.company?.id
+    if (!companyId) return
 
     try {
       setLoading(true)
-      const data = await automationApi.getFlows(user.companyId)
+      const data = await automationApi.getFlows(companyId)
       setFlows(data)
       setError(null)
     } catch (err) {
@@ -44,19 +47,29 @@ export default function Automations() {
   }
 
   const loadStats = async () => {
-    if (!user?.companyId) return
+    const companyId = (user as any)?.company?.id
+    if (!companyId) return
 
     try {
-      const data = await statsApi.getCompanyStats(user.companyId)
+      const data = await statsApi.getCompanyStats(companyId)
       setStats(data)
     } catch (err) {
       console.error('Erro ao carregar estatísticas:', err)
     }
   }
 
-  const handleCreateFlow = () => {
-    // TODO: Abrir modal de criação
-    console.log('Criar novo fluxo')
+  const handleCreateFlow = async (data: CreateFlowForm) => {
+    const companyId = (user as any)?.company?.id
+    if (!companyId) return
+
+    try {
+      await automationApi.createFlow(companyId, data)
+      await loadFlows()
+      await loadStats()
+    } catch (err) {
+      console.error('Erro ao criar fluxo:', err)
+      throw err
+    }
   }
 
   const handleToggleActive = async (flowId: string, currentStatus: boolean) => {
@@ -110,7 +123,7 @@ export default function Automations() {
               </p>
             </div>
             <button
-              onClick={handleCreateFlow}
+              onClick={() => setIsCreateModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <Plus className="w-5 h-5 mr-2" />
@@ -192,7 +205,7 @@ export default function Automations() {
             </p>
             <div className="mt-6">
               <button
-                onClick={handleCreateFlow}
+                onClick={() => setIsCreateModalOpen(true)}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
               >
                 <Plus className="w-5 h-5 mr-2" />
@@ -269,6 +282,13 @@ export default function Automations() {
           </div>
         )}
       </div>
+
+      {/* Create Flow Modal */}
+      <CreateFlowModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateFlow}
+      />
     </div>
   )
 }
