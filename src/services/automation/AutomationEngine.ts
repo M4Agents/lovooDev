@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import type { AutomationFlow, AutomationExecution, AutomationLog } from '../../types/automation'
 import { Node, Edge } from 'reactflow'
 import { whatsAppService } from './WhatsAppService'
+import { crmService } from './CRMService'
 
 interface ExecutionContext {
   executionId: string
@@ -236,9 +237,8 @@ export class AutomationEngine {
         return { triggered: true, data: context.triggerData }
 
       case 'action':
-        // TODO: Implementar ações (criar oportunidade, atualizar lead, etc)
-        console.log('🎯 Ação:', node.data.config)
-        return { executed: true, action: node.data.config?.actionType }
+        // Executar ação CRM REAL
+        return await this.executeCRMAction(node, context)
 
       case 'message':
         // Enviar mensagem WhatsApp REAL
@@ -398,6 +398,149 @@ export class AutomationEngine {
       console.log(`✅ Execução ${status}:`, executionId)
     } catch (error) {
       console.error('Erro ao completar execução:', error)
+    }
+  }
+
+  /**
+   * FASE 5.2: Executa ação CRM REAL
+   */
+  private async executeCRMAction(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      const actionType = node.data.config?.actionType
+      console.log('🎯 Executando ação CRM:', actionType)
+
+      if (!context.leadId) {
+        throw new Error('Lead ID não encontrado no contexto')
+      }
+
+      switch (actionType) {
+        case 'create_opportunity':
+          // Criar oportunidade
+          const opportunityResult = await crmService.createOpportunity({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            funnelId: node.data.config?.funnelId,
+            stageId: node.data.config?.stageId,
+            title: node.data.config?.title,
+            value: node.data.config?.value,
+            probability: node.data.config?.probability
+          })
+
+          // Atualizar contexto com ID da oportunidade criada
+          context.opportunityId = opportunityResult.opportunityId
+
+          return {
+            executed: true,
+            action: 'create_opportunity',
+            opportunityId: opportunityResult.opportunityId
+          }
+
+        case 'update_lead':
+          // Atualizar lead
+          await crmService.updateLead({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            fields: node.data.config?.fields || {}
+          })
+
+          return {
+            executed: true,
+            action: 'update_lead',
+            fields: Object.keys(node.data.config?.fields || {})
+          }
+
+        case 'add_tag':
+          // Adicionar tag
+          const tagName = node.data.config?.tagName
+          if (!tagName) {
+            throw new Error('Nome da tag não especificado')
+          }
+
+          await crmService.addTag({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            tagName
+          })
+
+          return {
+            executed: true,
+            action: 'add_tag',
+            tagName
+          }
+
+        case 'remove_tag':
+          // Remover tag
+          const removeTagName = node.data.config?.tagName
+          if (!removeTagName) {
+            throw new Error('Nome da tag não especificado')
+          }
+
+          await crmService.removeTag({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            tagName: removeTagName
+          })
+
+          return {
+            executed: true,
+            action: 'remove_tag',
+            tagName: removeTagName
+          }
+
+        case 'assign_owner':
+          // Atribuir responsável
+          const ownerId = node.data.config?.ownerId
+          if (!ownerId) {
+            throw new Error('ID do responsável não especificado')
+          }
+
+          const ownerResult = await crmService.assignOwner({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            ownerId
+          })
+
+          return {
+            executed: true,
+            action: 'assign_owner',
+            ownerId,
+            ownerName: ownerResult.ownerName
+          }
+
+        case 'move_opportunity':
+          // Mover oportunidade
+          if (!context.opportunityId) {
+            throw new Error('ID da oportunidade não encontrado no contexto')
+          }
+
+          const stageId = node.data.config?.stageId
+          if (!stageId) {
+            throw new Error('ID da etapa não especificado')
+          }
+
+          await crmService.moveOpportunity(
+            context.opportunityId,
+            stageId,
+            context.companyId
+          )
+
+          return {
+            executed: true,
+            action: 'move_opportunity',
+            opportunityId: context.opportunityId,
+            stageId
+          }
+
+        default:
+          console.warn('⚠️ Tipo de ação desconhecido:', actionType)
+          return {
+            executed: false,
+            error: 'Tipo de ação desconhecido'
+          }
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao executar ação CRM:', error)
+      throw error
     }
   }
 
