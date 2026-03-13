@@ -13,7 +13,7 @@ import { Plus, Zap, Activity, TrendingUp, AlertCircle } from 'lucide-react'
 import CreateFlowModal from '../components/Automation/CreateFlowModal'
 
 export default function Automations() {
-  const { user } = useAuth()
+  const { user, company } = useAuth()
   const navigate = useNavigate()
   const [flows, setFlows] = useState<AutomationFlow[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,7 +32,7 @@ export default function Automations() {
   }, [user])
 
   const loadFlows = async () => {
-    const companyId = (user as any)?.company?.id
+    const companyId = company?.id
     if (!companyId) return
 
     try {
@@ -49,7 +49,7 @@ export default function Automations() {
   }
 
   const loadStats = async () => {
-    const companyId = (user as any)?.company?.id
+    const companyId = company?.id
     if (!companyId) return
 
     try {
@@ -61,7 +61,7 @@ export default function Automations() {
   }
 
   const handleCreateFlow = async (data: CreateFlowForm) => {
-    const companyId = (user as any)?.company?.id
+    const companyId = company?.id
     if (!companyId) return
 
     try {
