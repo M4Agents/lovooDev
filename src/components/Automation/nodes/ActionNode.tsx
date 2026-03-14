@@ -4,7 +4,6 @@
 // Objetivo: Nó de ação para o canvas
 // =====================================================
 
-import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2 } from 'lucide-react'
 
@@ -98,4 +97,5 @@ const ActionNode = ({ data, selected }: NodeProps) => {
   )
 }
 
-export default memo(ActionNode)
+// Temporariamente sem memo() para forçar re-renderização
+export default ActionNode

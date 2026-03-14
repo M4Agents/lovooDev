@@ -5,7 +5,6 @@
 // FASE 7.5 - UX Melhorada com preview de conteúdo
 // =====================================================
 
-import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { MessageSquare, CheckCircle, AlertTriangle } from 'lucide-react'
 
@@ -93,4 +92,5 @@ const MessageNode = ({ data, selected }: NodeProps) => {
   )
 }
 
-export default memo(MessageNode)
+// Temporariamente sem memo() para forçar re-renderização
+export default MessageNode
