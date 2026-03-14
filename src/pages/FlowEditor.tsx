@@ -234,15 +234,20 @@ export default function FlowEditor() {
     navigate('/automations')
   }
 
-  const handleNodeConfigSave = (nodeId: string, config: any) => {
-    if (!flow) return
+  const handleNodeConfigSave = async (nodeId: string, config: any) => {
+    if (!flow || !id) return
 
     const updatedNodes = flow.nodes.map((node: any) =>
       node.id === nodeId ? { ...node, data: { ...node.data, config } } : node
     )
 
+    // Salvar direto sem validação (apenas configuração de nó)
+    await automationApi.saveFlowCanvas(id, {
+      nodes: updatedNodes as any,
+      edges: flow.edges as any
+    })
+
     setFlow({ ...flow, nodes: updatedNodes })
-    handleSave(updatedNodes, flow.edges as Edge[])
   }
 
   const handleNodeSelect = (node: Node | null) => {
