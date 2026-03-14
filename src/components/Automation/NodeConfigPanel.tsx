@@ -7,6 +7,8 @@
 import { useState, useEffect } from 'react'
 import { X, Save } from 'lucide-react'
 import { Node } from 'reactflow'
+import { useAuth } from '../../contexts/AuthContext'
+import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -16,6 +18,8 @@ interface NodeConfigPanelProps {
 
 export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<any>({})
+  const { company } = useAuth()
+  const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
 
   useEffect(() => {
     if (selectedNode) {
@@ -100,6 +104,43 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
       case 'message':
         return (
           <div className="space-y-4">
+            {/* Seleção de Instância WhatsApp */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Instância WhatsApp *
+              </label>
+              {loadingInstances ? (
+                <div className="text-sm text-gray-500">Carregando instâncias...</div>
+              ) : instances.length === 0 ? (
+                <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
+                  ⚠️ Nenhuma instância WhatsApp conectada. Configure uma instância primeiro.
+                </div>
+              ) : (
+                <select
+                  value={config.instanceId || ''}
+                  onChange={(e) => {
+                    const selectedInstance = instances.find(inst => inst.id === e.target.value)
+                    setConfig({ 
+                      ...config, 
+                      instanceId: e.target.value,
+                      instanceName: selectedInstance?.instance_name || ''
+                    })
+                  }}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                  required
+                >
+                  <option value="">Selecione uma instância</option>
+                  {instances
+                    .filter(inst => inst.status === 'connected')
+                    .map(inst => (
+                      <option key={inst.id} value={inst.id}>
+                        📱 {inst.instance_name} {inst.phone_number ? `(${inst.phone_number})` : ''}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Mensagem

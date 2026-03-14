@@ -38,6 +38,12 @@ const MessageNode = ({ data, selected }: NodeProps) => {
             <AlertTriangle className="w-4 h-4 text-yellow-300" />
           )}
         </div>
+        {/* Instância WhatsApp */}
+        {data.config?.instanceName && (
+          <div className="mt-1 text-xs text-purple-100">
+            📱 {data.config.instanceName}
+          </div>
+        )}
       </div>
       
       {/* Content Preview */}
