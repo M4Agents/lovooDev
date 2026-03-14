@@ -222,7 +222,7 @@ function FlowCanvasInner({
         fitView
         attributionPosition="bottom-left"
       >
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={0.5} />
         <Controls />
         <MiniMap
           nodeStrokeWidth={3}
@@ -288,23 +288,50 @@ function FlowCanvasInner({
         {/* Empty State - Botão Adicionar Gatilho */}
         {nodes.length === 0 && (
           <Panel position="center">
-            <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-lg border-2 border-dashed border-gray-300">
-              <div className="text-center mb-6">
-                <div className="text-4xl mb-3">⚡</div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 w-80">
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-green-600 text-lg">▷</span>
+                <h3 className="text-base font-semibold text-gray-900">
                   Início
                 </h3>
-                <p className="text-sm text-gray-500 max-w-xs">
-                  O gatilho é responsável por acionar a automação. Clique para adicionar um gatilho.
-                </p>
               </div>
+
+              {/* Descrição */}
+              <p className="text-sm text-gray-500 mb-4 leading-relaxed">
+                O gatilho é responsável por acionar a automação. Clique para adicionar um gatilho:
+              </p>
+
+              {/* Botão */}
               <button
                 onClick={() => setIsAddTriggerModalOpen(true)}
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-dashed border-blue-400 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium text-sm mb-4"
               >
-                <Plus className="w-5 h-5 mr-2" />
+                <Plus className="w-4 h-4" />
                 Adicionar gatilho
               </button>
+
+              {/* Info adicional */}
+              <div className="flex items-center justify-center gap-1 text-xs text-gray-400 mb-4">
+                <span>Quando o evento ocorrer, então</span>
+                <span className="inline-block w-3 h-3 border border-gray-300 rounded-full"></span>
+              </div>
+
+              {/* Estatísticas */}
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                <div className="text-center flex-1">
+                  <div className="text-xl font-semibold text-gray-900">0</div>
+                  <div className="text-xs text-blue-600">Sucessos</div>
+                </div>
+                <div className="text-center flex-1">
+                  <div className="text-xl font-semibold text-gray-900">0</div>
+                  <div className="text-xs text-blue-600">Alertas</div>
+                </div>
+                <div className="text-center flex-1">
+                  <div className="text-xl font-semibold text-gray-900">0</div>
+                  <div className="text-xs text-blue-600">Erros</div>
+                </div>
+              </div>
             </div>
           </Panel>
         )}

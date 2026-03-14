@@ -9,7 +9,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
 import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upload } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
-import BlockLibrary from '../components/Automation/BlockLibrary'
 import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
 import TriggerConfigPanel from '../components/Automation/TriggerConfigPanel'
 import TemplateModal from '../components/Automation/TemplateModal'
@@ -393,9 +392,8 @@ export default function FlowEditor() {
         </div>
       </div>
 
-      {/* Canvas with Sidebar */}
+      {/* Canvas Full Width */}
       <div className="flex-1 flex overflow-hidden">
-        <BlockLibrary />
         <div className="flex-1 h-full">
           <FlowCanvas
             flowId={flow.id}
