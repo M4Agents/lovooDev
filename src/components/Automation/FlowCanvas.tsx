@@ -22,7 +22,7 @@ import ReactFlow, {
   ReactFlowProvider
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Save, Play, Pause, Trash2 } from 'lucide-react'
+import { Save, Play, Pause, Trash2, Plus } from 'lucide-react'
 
 // Custom Node Components
 import TriggerNode from './nodes/TriggerNode'
@@ -34,6 +34,9 @@ import EndNode from './nodes/EndNode'
 
 // Custom Edge Component
 import CustomEdge from './edges/CustomEdge'
+
+// Add Trigger Modal
+import AddTriggerModal from './AddTriggerModal'
 
 interface FlowCanvasProps {
   flowId: string
@@ -76,6 +79,7 @@ function FlowCanvasInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isSaving, setIsSaving] = useState(false)
+  const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
 
@@ -184,6 +188,23 @@ function FlowCanvasInner({
     }
   }
 
+  const handleAddTrigger = (triggerType: string, triggerLabel: string) => {
+    // Criar novo nó de gatilho no centro do canvas
+    const newNode: Node = {
+      id: `trigger-${Date.now()}`,
+      type: 'trigger',
+      position: { x: 250, y: 100 },
+      data: {
+        label: triggerLabel,
+        config: {
+          triggerType: triggerType
+        }
+      }
+    }
+
+    setNodes((nds) => nds.concat(newNode))
+  }
+
   return (
     <div className="w-full h-full" ref={reactFlowWrapper}>
       <ReactFlow
@@ -263,7 +284,38 @@ function FlowCanvasInner({
             {isActive ? '✓ Ativo' : '○ Inativo'}
           </div>
         </Panel>
+
+        {/* Empty State - Botão Adicionar Gatilho */}
+        {nodes.length === 0 && (
+          <Panel position="center">
+            <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-lg border-2 border-dashed border-gray-300">
+              <div className="text-center mb-6">
+                <div className="text-4xl mb-3">⚡</div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Início
+                </h3>
+                <p className="text-sm text-gray-500 max-w-xs">
+                  O gatilho é responsável por acionar a automação. Clique para adicionar um gatilho.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAddTriggerModalOpen(true)}
+                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Adicionar gatilho
+              </button>
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
+
+      {/* Modal Adicionar Gatilho */}
+      <AddTriggerModal
+        isOpen={isAddTriggerModalOpen}
+        onClose={() => setIsAddTriggerModalOpen(false)}
+        onSelectTrigger={handleAddTrigger}
+      />
     </div>
   )
 }
