@@ -18,20 +18,30 @@ interface TriggerConfigPanelProps {
 }
 
 export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: TriggerConfigPanelProps) {
-  const [config, setConfig] = useState<any>({})
+  const [config, setConfig] = useState<any>({
+    triggerType: 'message.received',
+    comparisonType: 'contains',
+    keywords: [],
+    sessionControl: 'if_not_active',
+    listenGroups: false,
+    receiveMetadata: false
+  })
   const [currentKeyword, setCurrentKeyword] = useState('')
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
 
   useEffect(() => {
     if (selectedNode) {
-      setConfig(selectedNode.data.config || {
-        triggerType: 'message.received',
-        comparisonType: 'contains',
-        keywords: [],
-        sessionControl: 'if_not_active',
-        listenGroups: false,
-        receiveMetadata: false
+      const nodeConfig = selectedNode.data.config || {}
+      setConfig({
+        triggerType: nodeConfig.triggerType || 'message.received',
+        comparisonType: nodeConfig.comparisonType || 'contains',
+        keywords: nodeConfig.keywords || [],
+        sessionControl: nodeConfig.sessionControl || 'if_not_active',
+        listenGroups: nodeConfig.listenGroups || false,
+        receiveMetadata: nodeConfig.receiveMetadata || false,
+        instanceId: nodeConfig.instanceId || '',
+        instanceName: nodeConfig.instanceName || ''
       })
     }
   }, [selectedNode])

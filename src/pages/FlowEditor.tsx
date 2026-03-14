@@ -412,6 +412,7 @@ export default function FlowEditor() {
         </div>
         {selectedNode && showTriggerConfig ? (
           <TriggerConfigPanel
+            key={selectedNode.id}
             selectedNode={selectedNode}
             onClose={() => {
               setSelectedNode(null)
