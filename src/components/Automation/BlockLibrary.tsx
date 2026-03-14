@@ -150,7 +150,7 @@ export default function BlockLibrary() {
   }
 
   return (
-    <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+    <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-lg font-semibold text-gray-900">Biblioteca de Blocos</h2>
         <p className="text-sm text-gray-500 mt-1">Arraste os blocos para o canvas</p>
