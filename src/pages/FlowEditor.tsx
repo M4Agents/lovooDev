@@ -11,6 +11,7 @@ import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upl
 import FlowCanvas from '../components/Automation/FlowCanvas'
 import BlockLibrary from '../components/Automation/BlockLibrary'
 import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
+import TriggerConfigPanel from '../components/Automation/TriggerConfigPanel'
 import TemplateModal from '../components/Automation/TemplateModal'
 import { automationApi } from '../services/automationApi'
 import type { AutomationFlow } from '../types/automation'
@@ -28,6 +29,7 @@ export default function FlowEditor() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [showValidation, setShowValidation] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
@@ -240,6 +242,18 @@ export default function FlowEditor() {
     )
 
     setFlow({ ...flow, nodes: updatedNodes })
+    handleSave(updatedNodes, flow.edges as Edge[])
+  }
+
+  const handleNodeSelect = (node: Node | null) => {
+    setSelectedNode(node)
+    
+    // Se for TriggerNode, abrir TriggerConfigPanel
+    if (node?.type === 'trigger') {
+      setShowTriggerConfig(true)
+    } else {
+      setShowTriggerConfig(false)
+    }
   }
 
   if (loading) {
@@ -387,17 +401,26 @@ export default function FlowEditor() {
             onToggleActive={handleToggleActive}
             onDelete={handleDelete}
             selectedNode={selectedNode}
-            onNodeSelect={setSelectedNode}
+            onNodeSelect={handleNodeSelect}
             onNodeConfigSave={handleNodeConfigSave}
           />
         </div>
-        {selectedNode && (
+        {selectedNode && showTriggerConfig ? (
+          <TriggerConfigPanel
+            selectedNode={selectedNode}
+            onClose={() => {
+              setSelectedNode(null)
+              setShowTriggerConfig(false)
+            }}
+            onSave={handleNodeConfigSave}
+          />
+        ) : selectedNode && !showTriggerConfig ? (
           <NodeConfigPanel
             selectedNode={selectedNode}
             onClose={() => setSelectedNode(null)}
             onSave={handleNodeConfigSave}
           />
-        )}
+        ) : null}
       </div>
 
       {/* FASE 6.4: Template Modal */}

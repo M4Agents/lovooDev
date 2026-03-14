@@ -6,7 +6,7 @@
 
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { Zap, CheckCircle, AlertTriangle, MessageCircle, UserPlus, Calendar } from 'lucide-react'
+import { Zap, CheckCircle, AlertTriangle, MessageCircle, UserPlus, Calendar, Tag, TrendingUp } from 'lucide-react'
 
 const TriggerNode = ({ data, selected }: NodeProps) => {
   const hasConfig = data.config?.triggerType
@@ -14,6 +14,17 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
   
   const getTriggerIcon = () => {
     switch (triggerType) {
+      case 'message.received': return <MessageCircle className="w-4 h-4 text-white" />
+      case 'message.sent': return <MessageCircle className="w-4 h-4 text-white" />
+      case 'lead.created': return <UserPlus className="w-4 h-4 text-white" />
+      case 'tag.added':
+      case 'tag.removed': return <Tag className="w-4 h-4 text-white" />
+      case 'deal.created':
+      case 'deal.moved':
+      case 'deal.won':
+      case 'deal.lost': return <TrendingUp className="w-4 h-4 text-white" />
+      case 'schedule.time': return <Calendar className="w-4 h-4 text-white" />
+      // Compatibilidade com tipos antigos
       case 'new_message': return <MessageCircle className="w-4 h-4 text-white" />
       case 'new_lead': return <UserPlus className="w-4 h-4 text-white" />
       case 'schedule': return <Calendar className="w-4 h-4 text-white" />
@@ -23,6 +34,17 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
   
   const getTriggerLabel = () => {
     switch (triggerType) {
+      case 'message.received': return 'Mensagem Recebida'
+      case 'message.sent': return 'Mensagem Enviada'
+      case 'lead.created': return 'Lead Criado'
+      case 'tag.added': return 'Tag Adicionada'
+      case 'tag.removed': return 'Tag Removida'
+      case 'deal.created': return 'Negócio Criado'
+      case 'deal.moved': return 'Negócio Movido'
+      case 'deal.won': return 'Negócio Ganho'
+      case 'deal.lost': return 'Negócio Perdido'
+      case 'schedule.time': return 'Agendamento'
+      // Compatibilidade com tipos antigos
       case 'new_message': return 'Nova Mensagem'
       case 'new_lead': return 'Novo Lead'
       case 'schedule': return 'Agendamento'
@@ -30,16 +52,60 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
     }
   }
   
+  const getComparisonLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'contains': 'Contém',
+      'equals': 'É igual',
+      'starts_with': 'Começa com',
+      'ends_with': 'Termina com',
+      'regex': 'Regex',
+      'not_contains': 'Não contém',
+      'not_equals': 'Diferente de'
+    }
+    return labels[type] || type
+  }
+  
   const getTriggerPreview = () => {
     if (!hasConfig) return 'Clique para configurar gatilho'
     
     switch (triggerType) {
+      case 'message.received':
+        const keywords = data.config.keywords || []
+        const comparisonType = data.config.comparisonType || 'contains'
+        const instanceName = data.config.instanceName
+        
+        let preview = '📥 Quando receber mensagem'
+        if (keywords.length > 0) {
+          const keywordText = keywords.slice(0, 2).map((k: string) => `"${k}"`).join(', ')
+          const moreText = keywords.length > 2 ? ` +${keywords.length - 2}` : ''
+          preview += `\n🔑 ${getComparisonLabel(comparisonType)}: ${keywordText}${moreText}`
+        }
+        if (instanceName) {
+          preview += `\n📱 ${instanceName}`
+        }
+        return preview
+        
+      case 'lead.created':
+        return `👤 Quando novo lead for criado`
+        
+      case 'tag.added':
+        const tagName = data.config.tagName
+        return `🏷️ Quando tag for adicionada${tagName ? `: ${tagName}` : ''}`
+        
+      case 'deal.created':
+        return `💼 Quando negócio for criado`
+        
+      case 'deal.moved':
+        return `➡️ Quando negócio mudar de etapa`
+        
+      // Compatibilidade com tipos antigos
       case 'new_message':
         return `💬 Quando receber mensagem${data.config.keyword ? `: "${data.config.keyword}"` : ''}`
       case 'new_lead':
         return `👤 Quando novo lead entrar${data.config.source ? ` via ${data.config.source}` : ''}`
       case 'schedule':
         return `📅 ${data.config.schedule || 'Agendamento configurado'}`
+        
       default:
         return 'Gatilho configurado'
     }

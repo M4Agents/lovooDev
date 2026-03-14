@@ -255,6 +255,74 @@ export interface TemplateResponse extends AutomationApiResponse {
 // TYPES PARA CONFIGURAÇÃO DE BLOCOS
 // =====================================================
 
+// =====================================================
+// TYPES PARA TRIGGERS CONFIGURÁVEIS (FASE 7.5+)
+// =====================================================
+
+export type TriggerType = 
+  | 'message.received'
+  | 'message.sent'
+  | 'lead.created'
+  | 'tag.added'
+  | 'tag.removed'
+  | 'deal.created'
+  | 'deal.moved'
+  | 'deal.won'
+  | 'deal.lost'
+  | 'manual.execution'
+  | 'schedule.time'
+
+export type ComparisonType = 
+  | 'contains'
+  | 'equals'
+  | 'starts_with'
+  | 'ends_with'
+  | 'regex'
+  | 'not_contains'
+  | 'not_equals'
+
+export type SessionControl = 
+  | 'always'
+  | 'if_not_active'
+  | 'new_conversation'
+
+export interface MessageReceivedTriggerConfig {
+  triggerType: 'message.received'
+  instanceId?: string
+  instanceName?: string
+  comparisonType: ComparisonType
+  keywords: string[]
+  sessionControl: SessionControl
+  listenGroups: boolean
+  receiveMetadata: boolean
+}
+
+export interface DealTriggerConfig {
+  triggerType: 'deal.created' | 'deal.moved' | 'deal.won' | 'deal.lost'
+  funnelId?: string
+  stageId?: string
+  fromStageId?: string
+  toStageId?: string
+}
+
+export interface TagTriggerConfig {
+  triggerType: 'tag.added' | 'tag.removed'
+  tagId?: string
+  tagName?: string
+}
+
+export interface ScheduleTriggerConfig {
+  triggerType: 'schedule.time'
+  schedule: string
+  timezone?: string
+}
+
+export type TriggerConfigUnion = 
+  | MessageReceivedTriggerConfig
+  | DealTriggerConfig
+  | TagTriggerConfig
+  | ScheduleTriggerConfig
+
 export interface TriggerConfig {
   type: 'lead.created' | 'message.received' | 'opportunity.created' | 'opportunity.stage_changed' | 'tag.added' | 'schedule.time'
   filters?: {
