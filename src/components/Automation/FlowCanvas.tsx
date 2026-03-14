@@ -28,7 +28,7 @@ import { Save, Play, Pause, Trash2 } from 'lucide-react'
 import TriggerNode from './nodes/TriggerNode'
 import ActionNode from './nodes/ActionNode'
 import ConditionNode from './nodes/ConditionNode'
-import MessageNode from './nodes/MessageNodeNew'
+import MessageNode from './nodes/MessageNode'
 import DelayNode from './nodes/DelayNode'
 import EndNode from './nodes/EndNode'
 

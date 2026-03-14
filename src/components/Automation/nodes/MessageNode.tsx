@@ -1,6 +1,6 @@
 // =====================================================
 // COMPONENT: MESSAGE NODE
-// Data: 13/03/2026
+// Data: 14/03/2026
 // Objetivo: Nó de mensagem para o canvas
 // FASE 7.5 - UX Melhorada com preview de conteúdo
 // =====================================================
@@ -9,7 +9,6 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { MessageSquare, CheckCircle, AlertTriangle } from 'lucide-react'
 
 const MessageNode = ({ data, selected }: NodeProps) => {
-  // FASE 7.5 - Novo design implementado em 14/03/2026
   const hasConfig = data.config?.message || data.config?.buttons?.length > 0
   const messagePreview = data.config?.message || 'Clique para configurar mensagem'
   const buttons = data.config?.buttons || []
@@ -92,5 +91,4 @@ const MessageNode = ({ data, selected }: NodeProps) => {
   )
 }
 
-// Temporariamente sem memo() para forçar re-renderização
 export default MessageNode
