@@ -4,7 +4,7 @@
 // Objetivo: Canvas visual para edição de fluxos com React Flow
 // =====================================================
 
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -25,6 +25,7 @@ import 'reactflow/dist/style.css'
 import { Save, Play, Pause, Trash2, Plus } from 'lucide-react'
 
 // Custom Node Components
+import StartNode from './nodes/StartNode'
 import TriggerNode from './nodes/TriggerNode'
 import ActionNode from './nodes/ActionNode'
 import ConditionNode from './nodes/ConditionNode'
@@ -52,6 +53,7 @@ interface FlowCanvasProps {
 }
 
 const nodeTypes: NodeTypes = {
+  start: StartNode,
   trigger: TriggerNode,
   action: ActionNode,
   condition: ConditionNode,
@@ -82,6 +84,22 @@ function FlowCanvasInner({
   const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
+
+  // Criar nó start automaticamente quando fluxo está vazio
+  useEffect(() => {
+    if (nodes.length === 0 && initialNodes.length === 0) {
+      const startNode: Node = {
+        id: 'start-node',
+        type: 'start',
+        position: { x: 250, y: 100 },
+        data: {
+          onAddTrigger: () => setIsAddTriggerModalOpen(true)
+        },
+        draggable: true
+      }
+      setNodes([startNode])
+    }
+  }, [initialNodes.length])
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -284,57 +302,6 @@ function FlowCanvasInner({
             {isActive ? '✓ Ativo' : '○ Inativo'}
           </div>
         </Panel>
-
-        {/* Empty State - Botão Adicionar Gatilho */}
-        {nodes.length === 0 && (
-          <Panel position="center">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 w-80">
-              {/* Header */}
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-green-600 text-lg">▷</span>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Início
-                </h3>
-              </div>
-
-              {/* Descrição */}
-              <p className="text-sm text-gray-500 mb-4 leading-relaxed">
-                O gatilho é responsável por acionar a automação. Clique para adicionar um gatilho:
-              </p>
-
-              {/* Botão */}
-              <button
-                onClick={() => setIsAddTriggerModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-dashed border-blue-400 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium text-sm mb-4"
-              >
-                <Plus className="w-4 h-4" />
-                Adicionar gatilho
-              </button>
-
-              {/* Info adicional */}
-              <div className="flex items-center justify-center gap-1 text-xs text-gray-400 mb-4">
-                <span>Quando o evento ocorrer, então</span>
-                <span className="inline-block w-3 h-3 border border-gray-300 rounded-full"></span>
-              </div>
-
-              {/* Estatísticas */}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                <div className="text-center flex-1">
-                  <div className="text-xl font-semibold text-gray-900">0</div>
-                  <div className="text-xs text-blue-600">Sucessos</div>
-                </div>
-                <div className="text-center flex-1">
-                  <div className="text-xl font-semibold text-gray-900">0</div>
-                  <div className="text-xs text-blue-600">Alertas</div>
-                </div>
-                <div className="text-center flex-1">
-                  <div className="text-xl font-semibold text-gray-900">0</div>
-                  <div className="text-xs text-blue-600">Erros</div>
-                </div>
-              </div>
-            </div>
-          </Panel>
-        )}
       </ReactFlow>
 
       {/* Modal Adicionar Gatilho */}
