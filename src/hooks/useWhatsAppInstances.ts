@@ -62,39 +62,6 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   }, [companyId]);
 
   // =====================================================
-  // GERAR QR CODE (WEBHOOK 100% - VERSÃO OTIMIZADA)
-  // =====================================================
-
-      if (error) {
-        console.error('[useWhatsAppInstances] Erro RPC:', error);
-        return {
-          success: false,
-          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
-        };
-      }
-
-      if (data?.success) {
-        return {
-          success: true,
-          data: data.data,
-        };
-      } else {
-        return {
-          success: false,
-          error: data?.error || 'Erro desconhecido',
-          planInfo: data?.planInfo,
-        };
-      }
-    } catch (err) {
-      console.error('[useWhatsAppInstances] Erro ao gerar QR Code:', err);
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Erro ao gerar QR Code',
-      };
-    }
-  }, [companyId]);
-
-  // =====================================================
   // CONFIRMAR CONEXÃO E CRIAR INSTÂNCIA
   // =====================================================
   const confirmConnection = useCallback(async (
