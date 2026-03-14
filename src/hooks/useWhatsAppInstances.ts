@@ -187,76 +187,6 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
   }, []);
 
   // =====================================================
-  // MANTER COMPATIBILIDADE: createInstance (DEPRECATED)
-  // =====================================================
-  const createInstance = useCallback(async (name: string): Promise<CreateInstanceResponse> => {
-    console.warn('[useWhatsAppInstances] createInstance is deprecated. Use generateQRCode + confirmConnection instead.');
-    
-    // Para compatibilidade, gerar QR Code
-    const qrResult = await generateQRCode(name);
-    if (!qrResult.success) {
-      return {
-        success: false,
-        error: qrResult.error || 'Erro ao gerar QR Code',
-        planInfo: qrResult.planInfo,
-      };
-    }
-
-    return {
-      success: true,
-      instanceId: qrResult.data?.temp_instance_id || '',
-      message: 'QR Code gerado. Escaneie para conectar.',
-      tempData: qrResult.data,
-    };
-  }, [generateQRCode]);
-
-  // =====================================================
-  // OBTER QR CODE (ANTI-CORS)
-  // =====================================================
-  const getQRCode = useCallback(async (instanceId: string): Promise<{
-    success: boolean;
-    data?: { qrcode: string; expires_at?: string };
-    error?: string;
-  }> => {
-    try {
-      console.log('[useWhatsAppInstances] Getting QR Code for:', instanceId);
-      
-      // ✅ ANTI-CORS: Chamar apenas RPC Function
-      const { data, error } = await supabase.rpc('get_whatsapp_life_qrcode_rpc', {
-        p_instance_id: instanceId,
-      });
-
-      console.log('[useWhatsAppInstances] RPC QR response:', { data, error });
-
-      if (error) {
-        console.error('[useWhatsAppInstances] Erro RPC QR:', error);
-        return {
-          success: false,
-          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
-        };
-      }
-
-      if (data?.success) {
-        return {
-          success: true,
-          data: data.data,
-        };
-      } else {
-        return {
-          success: false,
-          error: data?.error || 'Erro ao obter QR Code',
-        };
-      }
-    } catch (err) {
-      console.error('[useWhatsAppInstances] Erro ao obter QR Code:', err);
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Erro ao obter QR Code',
-      };
-    }
-  }, []);
-
-  // =====================================================
   // GERAR QR CODE (NOVO FLUXO)
   // =====================================================
   const generateQRCode = useCallback(async (name: string): Promise<{
@@ -334,6 +264,76 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
       };
     }
   }, [companyId]);
+
+  // =====================================================
+  // MANTER COMPATIBILIDADE: createInstance (DEPRECATED)
+  // =====================================================
+  const createInstance = useCallback(async (name: string): Promise<CreateInstanceResponse> => {
+    console.warn('[useWhatsAppInstances] createInstance is deprecated. Use generateQRCode + confirmConnection instead.');
+    
+    // Para compatibilidade, gerar QR Code
+    const qrResult = await generateQRCode(name);
+    if (!qrResult.success) {
+      return {
+        success: false,
+        error: qrResult.error || 'Erro ao gerar QR Code',
+        planInfo: qrResult.planInfo,
+      };
+    }
+
+    return {
+      success: true,
+      instanceId: qrResult.data?.temp_instance_id || '',
+      message: 'QR Code gerado. Escaneie para conectar.',
+      tempData: qrResult.data,
+    };
+  }, [generateQRCode]);
+
+  // =====================================================
+  // OBTER QR CODE (ANTI-CORS)
+  // =====================================================
+  const getQRCode = useCallback(async (instanceId: string): Promise<{
+    success: boolean;
+    data?: { qrcode: string; expires_at?: string };
+    error?: string;
+  }> => {
+    try {
+      console.log('[useWhatsAppInstances] Getting QR Code for:', instanceId);
+      
+      // ✅ ANTI-CORS: Chamar apenas RPC Function
+      const { data, error } = await supabase.rpc('get_whatsapp_life_qrcode_rpc', {
+        p_instance_id: instanceId,
+      });
+
+      console.log('[useWhatsAppInstances] RPC QR response:', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstances] Erro RPC QR:', error);
+        return {
+          success: false,
+          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
+        };
+      }
+
+      if (data?.success) {
+        return {
+          success: true,
+          data: data.data,
+        };
+      } else {
+        return {
+          success: false,
+          error: data?.error || 'Erro ao obter QR Code',
+        };
+      }
+    } catch (err) {
+      console.error('[useWhatsAppInstances] Erro ao obter QR Code:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao obter QR Code',
+      };
+    }
+  }, []);
 
   // =====================================================
   // ATUALIZAR INSTÂNCIA
