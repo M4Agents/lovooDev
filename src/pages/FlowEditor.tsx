@@ -375,9 +375,9 @@ export default function FlowEditor() {
       </div>
 
       {/* Canvas with Sidebar */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         <BlockLibrary />
-        <div className="flex-1">
+        <div className="flex-1 h-full">
           <FlowCanvas
             flowId={flow.id}
             initialNodes={flow.nodes as Node[]}
