@@ -9,6 +9,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2 } from 'lucide-react'
 
 const ActionNode = ({ data, selected }: NodeProps) => {
+  // FASE 7.5 - Novo design implementado em 14/03/2026
   const hasConfig = data.config?.actionType
   const actionType = data.config?.actionType
   

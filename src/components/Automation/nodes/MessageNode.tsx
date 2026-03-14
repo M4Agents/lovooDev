@@ -10,6 +10,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { MessageSquare, CheckCircle, AlertTriangle } from 'lucide-react'
 
 const MessageNode = ({ data, selected }: NodeProps) => {
+  // FASE 7.5 - Novo design implementado em 14/03/2026
   const hasConfig = data.config?.message || data.config?.buttons?.length > 0
   const messagePreview = data.config?.message || 'Clique para configurar mensagem'
   const buttons = data.config?.buttons || []
