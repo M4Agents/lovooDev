@@ -2,6 +2,7 @@
 // COMPONENT: MESSAGE NODE
 // Data: 13/03/2026
 // Objetivo: Nó de mensagem para o canvas
+// FASE 7.5 - UX Melhorada com preview de conteúdo
 // =====================================================
 
 import { memo } from 'react'
