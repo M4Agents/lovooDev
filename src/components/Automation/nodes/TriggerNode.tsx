@@ -112,37 +112,37 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
   }
   
   return (
-    <div className={`bg-white rounded-lg shadow-lg border-2 min-w-[280px] max-w-[320px] transition-all ${
+    <div className={`bg-white rounded-lg shadow-lg border-2 min-w-[200px] max-w-[240px] transition-all ${
       selected ? 'border-green-600 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-400'
     }`}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 rounded-t-lg">
+      <div className="bg-gradient-to-r from-green-500 to-green-600 px-3 py-1.5 rounded-t-lg">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {getTriggerIcon()}
-            <span className="text-xs font-semibold text-white uppercase tracking-wide">
+            <span className="text-[10px] font-semibold text-white uppercase tracking-wide">
               {getTriggerLabel()}
             </span>
           </div>
           {hasConfig ? (
-            <CheckCircle className="w-4 h-4 text-green-300" />
+            <CheckCircle className="w-3 h-3 text-green-300" />
           ) : (
-            <AlertTriangle className="w-4 h-4 text-yellow-300" />
+            <AlertTriangle className="w-3 h-3 text-yellow-300" />
           )}
         </div>
       </div>
       
       {/* Content Preview */}
-      <div className="px-4 py-4 bg-gray-50">
-        <div className="text-sm text-gray-700">
+      <div className="px-3 py-2 bg-gray-50">
+        <div className="text-xs text-gray-700 whitespace-pre-line">
           {getTriggerPreview()}
         </div>
       </div>
       
       {/* Stats */}
       {data.stats && (
-        <div className="px-4 py-2 bg-blue-50 border-t border-gray-200 rounded-b-lg">
-          <div className="flex items-center justify-center text-xs text-blue-700">
+        <div className="px-3 py-1.5 bg-blue-50 border-t border-gray-200 rounded-b-lg">
+          <div className="flex items-center justify-center text-[10px] text-blue-700">
             <span>📊 Ativado: {data.stats.triggered || 0}x</span>
           </div>
         </div>
@@ -151,7 +151,7 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3 h-3 !bg-green-600 !border-2 !border-white"
+        className="w-2.5 h-2.5 !bg-green-600 !border-2 !border-white"
       />
     </div>
   )
