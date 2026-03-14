@@ -9,7 +9,9 @@ import { X, Save, Plus, Trash2 } from 'lucide-react'
 import { Node } from 'reactflow'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
-import type { TriggerType, ComparisonType, SessionControl } from '../../types/automation'
+import { useSalesFunnels } from '../../hooks/useSalesFunnels'
+import { useFunnelStages } from '../../hooks/useFunnelStages'
+import type { TriggerType, ComparisonType, SessionControl, LostReason } from '../../types/automation'
 
 interface TriggerConfigPanelProps {
   selectedNode: Node | null
@@ -24,11 +26,29 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     keywords: [],
     sessionControl: 'if_not_active',
     listenGroups: false,
-    receiveMetadata: false
+    receiveMetadata: false,
+    funnelId: '',
+    funnelName: '',
+    fromStageId: '',
+    fromStageName: '',
+    toStageId: '',
+    toStageName: '',
+    initialStageId: '',
+    initialStageName: '',
+    lostReason: '',
+    stageId: '',
+    stageName: '',
+    minValue: undefined,
+    maxValue: undefined,
+    ownerId: '',
+    ownerName: '',
+    previousStatus: 'won'
   })
   const [currentKeyword, setCurrentKeyword] = useState('')
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
+  const { funnels, loading: loadingFunnels } = useSalesFunnels(company?.id)
+  const { stages, loading: loadingStages } = useFunnelStages(config.funnelId || '')
 
   useEffect(() => {
     if (selectedNode) {
@@ -41,7 +61,23 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         listenGroups: nodeConfig.listenGroups || false,
         receiveMetadata: nodeConfig.receiveMetadata || false,
         instanceId: nodeConfig.instanceId || '',
-        instanceName: nodeConfig.instanceName || ''
+        instanceName: nodeConfig.instanceName || '',
+        funnelId: nodeConfig.funnelId || '',
+        funnelName: nodeConfig.funnelName || '',
+        fromStageId: nodeConfig.fromStageId || '',
+        fromStageName: nodeConfig.fromStageName || '',
+        toStageId: nodeConfig.toStageId || '',
+        toStageName: nodeConfig.toStageName || '',
+        initialStageId: nodeConfig.initialStageId || '',
+        initialStageName: nodeConfig.initialStageName || '',
+        lostReason: nodeConfig.lostReason || '',
+        stageId: nodeConfig.stageId || '',
+        stageName: nodeConfig.stageName || '',
+        minValue: nodeConfig.minValue,
+        maxValue: nodeConfig.maxValue,
+        ownerId: nodeConfig.ownerId || '',
+        ownerName: nodeConfig.ownerName || '',
+        previousStatus: nodeConfig.previousStatus || 'won'
       })
     }
   }, [selectedNode])
@@ -77,16 +113,36 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     }
   }
 
+  const handleFunnelChange = (funnelId: string) => {
+    const funnel = funnels.find(f => f.id === funnelId)
+    setConfig({
+      ...config,
+      funnelId,
+      funnelName: funnel?.name || '',
+      fromStageId: '',
+      fromStageName: '',
+      toStageId: '',
+      toStageName: '',
+      initialStageId: '',
+      initialStageName: '',
+      stageId: '',
+      stageName: ''
+    })
+  }
+
   const triggerTypes: { value: TriggerType; label: string }[] = [
     { value: 'message.received', label: '📥 Mensagem Recebida' },
     { value: 'message.sent', label: '📤 Mensagem Enviada' },
     { value: 'lead.created', label: '👤 Lead Criado' },
     { value: 'tag.added', label: '🏷️ Tag Adicionada' },
     { value: 'tag.removed', label: '🏷️ Tag Removida' },
-    { value: 'deal.created', label: '💼 Negócio Criado' },
-    { value: 'deal.moved', label: '➡️ Negócio Movido' },
-    { value: 'deal.won', label: '🎉 Negócio Ganho' },
-    { value: 'deal.lost', label: '😔 Negócio Perdido' },
+    { value: 'opportunity.created', label: '💼 Oportunidade Criada' },
+    { value: 'opportunity.stage_changed', label: '➡️ Oportunidade Movida' },
+    { value: 'opportunity.won', label: '🎉 Oportunidade Ganha' },
+    { value: 'opportunity.lost', label: '😔 Oportunidade Perdida' },
+    { value: 'opportunity.owner_assigned', label: '👤 Vendedor Atribuído' },
+    { value: 'opportunity.owner_removed', label: '👤 Vendedor Removido' },
+    { value: 'opportunity.restored', label: '🔄 Oportunidade Restaurada' },
   ]
 
   const comparisonTypes: { value: ComparisonType; label: string }[] = [
@@ -116,6 +172,500 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
       description: 'Executa apenas em novas conversas (24h sem mensagens)'
     },
   ]
+
+  const lostReasons: { value: LostReason; label: string }[] = [
+    { value: 'price', label: '💰 Preço' },
+    { value: 'timing', label: '⏰ Timing' },
+    { value: 'competitor', label: '🏆 Concorrente' },
+    { value: 'no_interest', label: '❌ Sem Interesse' },
+    { value: 'other', label: '📝 Outro' },
+  ]
+
+  const renderOpportunityCreatedConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Etapa Inicial */}
+      {config.funnelId && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Etapa Inicial (opcional)
+          </label>
+          {loadingStages ? (
+            <div className="text-sm text-gray-500">Carregando etapas...</div>
+          ) : (
+            <select
+              value={config.initialStageId || ''}
+              onChange={(e) => {
+                const stage = stages.find(s => s.id === e.target.value)
+                setConfig({
+                  ...config,
+                  initialStageId: e.target.value,
+                  initialStageName: stage?.name || ''
+                })
+              }}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Qualquer etapa</option>
+              {stages.map(stage => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Valor Mínimo/Máximo */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Mínimo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.minValue || ''}
+            onChange={(e) => setConfig({ ...config, minValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Máximo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.maxValue || ''}
+            onChange={(e) => setConfig({ ...config, maxValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderOpportunityStageChangedConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil *
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : funnels.length === 0 ? (
+          <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
+            ⚠️ Nenhum funil encontrado. Crie um funil primeiro.
+          </div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Selecione um funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* De qual etapa */}
+      {config.funnelId && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              De qual etapa (opcional)
+            </label>
+            {loadingStages ? (
+              <div className="text-sm text-gray-500">Carregando etapas...</div>
+            ) : (
+              <select
+                value={config.fromStageId || ''}
+                onChange={(e) => {
+                  const stage = stages.find(s => s.id === e.target.value)
+                  setConfig({
+                    ...config,
+                    fromStageId: e.target.value,
+                    fromStageName: stage?.name || ''
+                  })
+                }}
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              >
+                <option value="">Qualquer etapa</option>
+                {stages.map(stage => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Deixe vazio para disparar quando mover de qualquer etapa
+            </p>
+          </div>
+
+          {/* Para qual etapa */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Para qual etapa *
+            </label>
+            {loadingStages ? (
+              <div className="text-sm text-gray-500">Carregando etapas...</div>
+            ) : (
+              <select
+                value={config.toStageId || ''}
+                onChange={(e) => {
+                  const stage = stages.find(s => s.id === e.target.value)
+                  setConfig({
+                    ...config,
+                    toStageId: e.target.value,
+                    toStageName: stage?.name || ''
+                  })
+                }}
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              >
+                <option value="">Selecione uma etapa</option>
+                {stages.map(stage => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Valor Mínimo/Máximo */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Valor Mínimo (R$)
+              </label>
+              <input
+                type="number"
+                value={config.minValue || ''}
+                onChange={(e) => setConfig({ ...config, minValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+                placeholder="0.00"
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Valor Máximo (R$)
+              </label>
+              <input
+                type="number"
+                value={config.maxValue || ''}
+                onChange={(e) => setConfig({ ...config, maxValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+                placeholder="0.00"
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+
+  const renderOpportunityWonConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Valor Mínimo/Máximo */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Mínimo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.minValue || ''}
+            onChange={(e) => setConfig({ ...config, minValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Máximo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.maxValue || ''}
+            onChange={(e) => setConfig({ ...config, maxValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+      </div>
+
+      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+        ℹ️ Este gatilho dispara quando uma oportunidade é marcada como "Ganha"
+      </div>
+    </div>
+  )
+
+  const renderOpportunityLostConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Motivo da Perda */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Motivo da Perda (opcional)
+        </label>
+        <select
+          value={config.lostReason || ''}
+          onChange={(e) => setConfig({ ...config, lostReason: e.target.value })}
+          className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+        >
+          <option value="">Qualquer motivo</option>
+          {lostReasons.map(reason => (
+            <option key={reason.value} value={reason.value}>
+              {reason.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Etapa em que foi perdida */}
+      {config.funnelId && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Etapa em que foi perdida (opcional)
+          </label>
+          {loadingStages ? (
+            <div className="text-sm text-gray-500">Carregando etapas...</div>
+          ) : (
+            <select
+              value={config.stageId || ''}
+              onChange={(e) => {
+                const stage = stages.find(s => s.id === e.target.value)
+                setConfig({
+                  ...config,
+                  stageId: e.target.value,
+                  stageName: stage?.name || ''
+                })
+              }}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Qualquer etapa</option>
+              {stages.map(stage => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Valor Mínimo/Máximo */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Mínimo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.minValue || ''}
+            onChange={(e) => setConfig({ ...config, minValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Valor Máximo (R$)
+          </label>
+          <input
+            type="number"
+            value={config.maxValue || ''}
+            onChange={(e) => setConfig({ ...config, maxValue: e.target.value ? parseFloat(e.target.value) : undefined })}
+            placeholder="0.00"
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          />
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderOpportunityOwnerAssignedConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+        ℹ️ Este gatilho dispara quando um vendedor é atribuído a uma oportunidade
+      </div>
+    </div>
+  )
+
+  const renderOpportunityOwnerRemovedConfig = () => (
+    <div className="space-y-4">
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+        ℹ️ Este gatilho dispara quando um vendedor é removido de uma oportunidade
+      </div>
+    </div>
+  )
+
+  const renderOpportunityRestoredConfig = () => (
+    <div className="space-y-4">
+      {/* Status Anterior */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Status Anterior *
+        </label>
+        <select
+          value={config.previousStatus || 'won'}
+          onChange={(e) => setConfig({ ...config, previousStatus: e.target.value })}
+          className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+        >
+          <option value="won">🎉 Ganha</option>
+          <option value="lost">😔 Perdida</option>
+        </select>
+      </div>
+
+      {/* Funil */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Funil (opcional)
+        </label>
+        {loadingFunnels ? (
+          <div className="text-sm text-gray-500">Carregando funis...</div>
+        ) : (
+          <select
+            value={config.funnelId || ''}
+            onChange={(e) => handleFunnelChange(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+            <option value="">Qualquer funil</option>
+            {funnels.map(funnel => (
+              <option key={funnel.id} value={funnel.id}>
+                {funnel.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+        ℹ️ Este gatilho dispara quando uma oportunidade ganha/perdida é reaberta
+      </div>
+    </div>
+  )
 
   const renderMessageReceivedConfig = () => (
     <div className="space-y-4">
@@ -323,11 +873,14 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             </div>
           )}
 
-          {(config.triggerType?.startsWith('deal.')) && (
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
-              ℹ️ Configuração de negócios será implementada em breve.
-            </div>
-          )}
+          {/* Gatilhos de Oportunidades */}
+          {config.triggerType === 'opportunity.created' && renderOpportunityCreatedConfig()}
+          {config.triggerType === 'opportunity.stage_changed' && renderOpportunityStageChangedConfig()}
+          {config.triggerType === 'opportunity.won' && renderOpportunityWonConfig()}
+          {config.triggerType === 'opportunity.lost' && renderOpportunityLostConfig()}
+          {config.triggerType === 'opportunity.owner_assigned' && renderOpportunityOwnerAssignedConfig()}
+          {config.triggerType === 'opportunity.owner_removed' && renderOpportunityOwnerRemovedConfig()}
+          {config.triggerType === 'opportunity.restored' && renderOpportunityRestoredConfig()}
         </div>
       </div>
 

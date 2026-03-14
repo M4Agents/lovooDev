@@ -19,10 +19,13 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
       case 'lead.created': return <UserPlus className="w-4 h-4 text-white" />
       case 'tag.added':
       case 'tag.removed': return <Tag className="w-4 h-4 text-white" />
-      case 'deal.created':
-      case 'deal.moved':
-      case 'deal.won':
-      case 'deal.lost': return <TrendingUp className="w-4 h-4 text-white" />
+      case 'opportunity.created':
+      case 'opportunity.stage_changed':
+      case 'opportunity.won':
+      case 'opportunity.lost':
+      case 'opportunity.owner_assigned':
+      case 'opportunity.owner_removed':
+      case 'opportunity.restored': return <TrendingUp className="w-4 h-4 text-white" />
       case 'schedule.time': return <Calendar className="w-4 h-4 text-white" />
       // Compatibilidade com tipos antigos
       case 'new_message': return <MessageCircle className="w-4 h-4 text-white" />
@@ -39,10 +42,13 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
       case 'lead.created': return 'Lead Criado'
       case 'tag.added': return 'Tag Adicionada'
       case 'tag.removed': return 'Tag Removida'
-      case 'deal.created': return 'Negócio Criado'
-      case 'deal.moved': return 'Negócio Movido'
-      case 'deal.won': return 'Negócio Ganho'
-      case 'deal.lost': return 'Negócio Perdido'
+      case 'opportunity.created': return 'Oportunidade Criada'
+      case 'opportunity.stage_changed': return 'Oportunidade Movida'
+      case 'opportunity.won': return 'Oportunidade Ganha'
+      case 'opportunity.lost': return 'Oportunidade Perdida'
+      case 'opportunity.owner_assigned': return 'Vendedor Atribuído'
+      case 'opportunity.owner_removed': return 'Vendedor Removido'
+      case 'opportunity.restored': return 'Oportunidade Restaurada'
       case 'schedule.time': return 'Agendamento'
       // Compatibilidade com tipos antigos
       case 'new_message': return 'Nova Mensagem'
@@ -92,11 +98,96 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
         const tagName = data.config.tagName
         return `🏷️ Quando tag for adicionada${tagName ? `: ${tagName}` : ''}`
         
-      case 'deal.created':
-        return `💼 Quando negócio for criado`
+      // Gatilhos de Oportunidades
+      case 'opportunity.created':
+        let oppCreatedPreview = '💼 Quando oportunidade for criada'
+        if (data.config.funnelName) {
+          oppCreatedPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        if (data.config.initialStageName) {
+          oppCreatedPreview += `\n📍 Etapa: ${data.config.initialStageName}`
+        }
+        if (data.config.minValue || data.config.maxValue) {
+          const min = data.config.minValue ? `R$ ${data.config.minValue}` : '0'
+          const max = data.config.maxValue ? `R$ ${data.config.maxValue}` : '∞'
+          oppCreatedPreview += `\n💰 Valor: ${min} - ${max}`
+        }
+        return oppCreatedPreview
         
-      case 'deal.moved':
-        return `➡️ Quando negócio mudar de etapa`
+      case 'opportunity.stage_changed':
+        let oppMovedPreview = '➡️ Quando oportunidade mudar de etapa'
+        if (data.config.funnelName) {
+          oppMovedPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        if (data.config.fromStageName && data.config.toStageName) {
+          oppMovedPreview += `\n📍 De: ${data.config.fromStageName}`
+          oppMovedPreview += `\n� Para: ${data.config.toStageName}`
+        } else if (data.config.toStageName) {
+          oppMovedPreview += `\n📍 Para: ${data.config.toStageName}`
+        }
+        if (data.config.minValue || data.config.maxValue) {
+          const min = data.config.minValue ? `R$ ${data.config.minValue}` : '0'
+          const max = data.config.maxValue ? `R$ ${data.config.maxValue}` : '∞'
+          oppMovedPreview += `\n💰 ${min} - ${max}`
+        }
+        return oppMovedPreview
+        
+      case 'opportunity.won':
+        let oppWonPreview = '🎉 Quando oportunidade for ganha'
+        if (data.config.funnelName) {
+          oppWonPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        if (data.config.minValue || data.config.maxValue) {
+          const min = data.config.minValue ? `R$ ${data.config.minValue}` : '0'
+          const max = data.config.maxValue ? `R$ ${data.config.maxValue}` : '∞'
+          oppWonPreview += `\n💰 Valor: ${min} - ${max}`
+        }
+        return oppWonPreview
+        
+      case 'opportunity.lost':
+        let oppLostPreview = '😔 Quando oportunidade for perdida'
+        if (data.config.funnelName) {
+          oppLostPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        if (data.config.lostReason) {
+          const reasons: Record<string, string> = {
+            'price': '💰 Preço',
+            'timing': '⏰ Timing',
+            'competitor': '🏆 Concorrente',
+            'no_interest': '❌ Sem Interesse',
+            'other': '📝 Outro'
+          }
+          oppLostPreview += `\n${reasons[data.config.lostReason] || data.config.lostReason}`
+        }
+        if (data.config.stageName) {
+          oppLostPreview += `\n📍 Etapa: ${data.config.stageName}`
+        }
+        return oppLostPreview
+        
+      case 'opportunity.owner_assigned':
+        let oppOwnerPreview = '👤 Quando vendedor for atribuído'
+        if (data.config.funnelName) {
+          oppOwnerPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        return oppOwnerPreview
+        
+      case 'opportunity.owner_removed':
+        let oppOwnerRemovedPreview = '👤 Quando vendedor for removido'
+        if (data.config.funnelName) {
+          oppOwnerRemovedPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        return oppOwnerRemovedPreview
+        
+      case 'opportunity.restored':
+        let oppRestoredPreview = '🔄 Quando oportunidade for restaurada'
+        if (data.config.previousStatus) {
+          const status = data.config.previousStatus === 'won' ? '🎉 Ganha' : '😔 Perdida'
+          oppRestoredPreview += `\n📊 Status anterior: ${status}`
+        }
+        if (data.config.funnelName) {
+          oppRestoredPreview += `\n📊 Funil: ${data.config.funnelName}`
+        }
+        return oppRestoredPreview
         
       // Compatibilidade com tipos antigos
       case 'new_message':

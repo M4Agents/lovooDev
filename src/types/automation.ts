@@ -265,10 +265,13 @@ export type TriggerType =
   | 'lead.created'
   | 'tag.added'
   | 'tag.removed'
-  | 'deal.created'
-  | 'deal.moved'
-  | 'deal.won'
-  | 'deal.lost'
+  | 'opportunity.created'
+  | 'opportunity.stage_changed'
+  | 'opportunity.won'
+  | 'opportunity.lost'
+  | 'opportunity.owner_assigned'
+  | 'opportunity.owner_removed'
+  | 'opportunity.restored'
   | 'manual.execution'
   | 'schedule.time'
 
@@ -286,6 +289,13 @@ export type SessionControl =
   | 'if_not_active'
   | 'new_conversation'
 
+export type LostReason = 
+  | 'price'
+  | 'timing'
+  | 'competitor'
+  | 'no_interest'
+  | 'other'
+
 export interface MessageReceivedTriggerConfig {
   triggerType: 'message.received'
   instanceId?: string
@@ -297,12 +307,74 @@ export interface MessageReceivedTriggerConfig {
   receiveMetadata: boolean
 }
 
-export interface DealTriggerConfig {
-  triggerType: 'deal.created' | 'deal.moved' | 'deal.won' | 'deal.lost'
+// Gatilho: Oportunidade Criada
+export interface OpportunityCreatedTriggerConfig {
+  triggerType: 'opportunity.created'
   funnelId?: string
-  stageId?: string
+  funnelName?: string
+  initialStageId?: string
+  initialStageName?: string
+  minValue?: number
+  maxValue?: number
+  source?: string
+}
+
+// Gatilho: Oportunidade Movida de Etapa
+export interface OpportunityStageChangedTriggerConfig {
+  triggerType: 'opportunity.stage_changed'
+  funnelId: string
+  funnelName: string
   fromStageId?: string
-  toStageId?: string
+  fromStageName?: string
+  toStageId: string
+  toStageName: string
+  minValue?: number
+  maxValue?: number
+}
+
+// Gatilho: Oportunidade Ganha
+export interface OpportunityWonTriggerConfig {
+  triggerType: 'opportunity.won'
+  funnelId?: string
+  funnelName?: string
+  minValue?: number
+  maxValue?: number
+}
+
+// Gatilho: Oportunidade Perdida
+export interface OpportunityLostTriggerConfig {
+  triggerType: 'opportunity.lost'
+  funnelId?: string
+  funnelName?: string
+  lostReason?: LostReason
+  stageId?: string
+  stageName?: string
+  minValue?: number
+  maxValue?: number
+}
+
+// Gatilho: Vendedor Atribuído
+export interface OpportunityOwnerAssignedTriggerConfig {
+  triggerType: 'opportunity.owner_assigned'
+  funnelId?: string
+  funnelName?: string
+  ownerId?: string
+  ownerName?: string
+}
+
+// Gatilho: Vendedor Removido
+export interface OpportunityOwnerRemovedTriggerConfig {
+  triggerType: 'opportunity.owner_removed'
+  funnelId?: string
+  funnelName?: string
+}
+
+// Gatilho: Oportunidade Restaurada
+export interface OpportunityRestoredTriggerConfig {
+  triggerType: 'opportunity.restored'
+  previousStatus: 'won' | 'lost'
+  funnelId?: string
+  funnelName?: string
 }
 
 export interface TagTriggerConfig {
@@ -319,7 +391,13 @@ export interface ScheduleTriggerConfig {
 
 export type TriggerConfigUnion = 
   | MessageReceivedTriggerConfig
-  | DealTriggerConfig
+  | OpportunityCreatedTriggerConfig
+  | OpportunityStageChangedTriggerConfig
+  | OpportunityWonTriggerConfig
+  | OpportunityLostTriggerConfig
+  | OpportunityOwnerAssignedTriggerConfig
+  | OpportunityOwnerRemovedTriggerConfig
+  | OpportunityRestoredTriggerConfig
   | TagTriggerConfig
   | ScheduleTriggerConfig
 
