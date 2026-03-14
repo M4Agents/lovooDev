@@ -112,6 +112,49 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                 placeholder="Digite a mensagem que será enviada..."
               />
             </div>
+            
+            {/* Botões */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Botões de Resposta
+              </label>
+              <div className="space-y-2">
+                {(config.buttons || []).map((button: any, index: number) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={button.text || ''}
+                      onChange={(e) => {
+                        const newButtons = [...(config.buttons || [])]
+                        newButtons[index] = { ...button, text: e.target.value }
+                        setConfig({ ...config, buttons: newButtons })
+                      }}
+                      className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder={`Botão ${index + 1}`}
+                    />
+                    <button
+                      onClick={() => {
+                        const newButtons = (config.buttons || []).filter((_: any, i: number) => i !== index)
+                        setConfig({ ...config, buttons: newButtons })
+                      }}
+                      className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-md"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newButtons = [...(config.buttons || []), { text: '' }]
+                    setConfig({ ...config, buttons: newButtons })
+                  }}
+                  className="w-full px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50"
+                >
+                  + Adicionar Botão
+                </button>
+              </div>
+            </div>
+            
             <div>
               <label className="flex items-center gap-2">
                 <input
