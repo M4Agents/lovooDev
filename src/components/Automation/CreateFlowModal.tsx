@@ -14,45 +14,6 @@ interface CreateFlowModalProps {
   onSubmit: (data: CreateFlowForm) => Promise<void>
 }
 
-const TRIGGER_TYPES = [
-  {
-    value: 'lead.created',
-    label: 'Novo Lead Criado',
-    description: 'Dispara quando um novo lead é criado no sistema',
-    icon: '👤'
-  },
-  {
-    value: 'message.received',
-    label: 'Mensagem Recebida',
-    description: 'Dispara quando uma mensagem do WhatsApp é recebida',
-    icon: '💬'
-  },
-  {
-    value: 'opportunity.created',
-    label: 'Oportunidade Criada',
-    description: 'Dispara quando uma nova oportunidade é criada',
-    icon: '🎯'
-  },
-  {
-    value: 'opportunity.stage_changed',
-    label: 'Mudança de Etapa',
-    description: 'Dispara quando uma oportunidade muda de etapa no funil',
-    icon: '🔄'
-  },
-  {
-    value: 'tag.added',
-    label: 'Tag Adicionada',
-    description: 'Dispara quando uma tag é adicionada a um lead',
-    icon: '🏷️'
-  },
-  {
-    value: 'schedule.time',
-    label: 'Horário Agendado',
-    description: 'Dispara em um horário específico (diário, semanal)',
-    icon: '⏰'
-  }
-]
-
 const CATEGORIES = [
   { value: 'vendas', label: 'Vendas' },
   { value: 'marketing', label: 'Marketing' },
@@ -82,10 +43,6 @@ export default function CreateFlowModal({ isOpen, onClose, onSubmit }: CreateFlo
       newErrors.name = 'Nome do fluxo é obrigatório'
     } else if (formData.name.length > 255) {
       newErrors.name = 'Nome deve ter no máximo 255 caracteres'
-    }
-
-    if (!formData.trigger_type) {
-      newErrors.trigger_type = 'Selecione um gatilho'
     }
 
     setErrors(newErrors)
@@ -226,57 +183,20 @@ export default function CreateFlowModal({ isOpen, onClose, onSubmit }: CreateFlo
                 </select>
               </div>
 
-              {/* Gatilho */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Gatilho (Quando executar) <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 gap-3">
-                  {TRIGGER_TYPES.map((trigger) => (
-                    <label
-                      key={trigger.value}
-                      className={`relative flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
-                        formData.trigger_type === trigger.value
-                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500'
-                          : 'border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="trigger_type"
-                        value={trigger.value}
-                        checked={formData.trigger_type === trigger.value}
-                        onChange={(e) =>
-                          setFormData({ ...formData, trigger_type: e.target.value })
-                        }
-                        className="sr-only"
-                      />
-                      <div className="flex items-start flex-1">
-                        <span className="text-2xl mr-3">{trigger.icon}</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{trigger.label}</p>
-                          <p className="text-xs text-gray-500 mt-1">{trigger.description}</p>
-                        </div>
-                      </div>
-                      {formData.trigger_type === trigger.value && (
-                        <div className="flex-shrink-0 ml-3">
-                          <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center">
-                            <svg
-                              className="h-3 w-3 text-white"
-                              fill="currentColor"
-                              viewBox="0 0 12 12"
-                            >
-                              <path d="M3.707 5.293a1 1 0 00-1.414 1.414l1.414-1.414zM5 8l-.707.707a1 1 0 001.414 0L5 8zm4.707-3.293a1 1 0 00-1.414-1.414l1.414 1.414zm-7.414 2l2 2 1.414-1.414-2-2-1.414 1.414zm3.414 2l4-4-1.414-1.414-4 4 1.414 1.414z" />
-                            </svg>
-                          </div>
-                        </div>
-                      )}
-                    </label>
-                  ))}
+              {/* Info sobre gatilho */}
+              <div className="rounded-md bg-blue-50 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm text-blue-700">
+                      O gatilho será configurado no card <strong>Início</strong> dentro do editor de fluxo.
+                    </p>
+                  </div>
                 </div>
-                {errors.trigger_type && (
-                  <p className="mt-2 text-sm text-red-600">{errors.trigger_type}</p>
-                )}
               </div>
             </div>
 
