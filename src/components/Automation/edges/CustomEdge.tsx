@@ -6,7 +6,7 @@
 // =====================================================
 
 import { memo } from 'react'
-import { EdgeProps, getBezierPath, EdgeLabelRenderer } from 'reactflow'
+import { EdgeProps, getSmoothStepPath, EdgeLabelRenderer } from 'reactflow'
 
 const CustomEdge = ({
   id,
@@ -20,13 +20,14 @@ const CustomEdge = ({
   markerEnd,
   selected
 }: EdgeProps) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 0, // Cantos retos 90° - estilo Datacraz
   })
 
   const label = data?.label || ''
@@ -41,7 +42,8 @@ const CustomEdge = ({
         markerEnd={markerEnd}
         style={{
           stroke: selected ? '#3b82f6' : edgeColor,
-          strokeWidth: selected ? 3 : 2,
+          strokeWidth: selected ? 2 : 1,
+          strokeDasharray: '5, 5',
           transition: 'stroke 0.2s, stroke-width 0.2s'
         }}
       />

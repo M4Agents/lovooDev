@@ -6,66 +6,201 @@
 // =====================================================
 
 import { Handle, Position, NodeProps } from 'reactflow'
-import { MessageSquare, CheckCircle, AlertTriangle } from 'lucide-react'
+import { MessageSquare, CheckCircle, AlertTriangle, AlignLeft, Clock, Mic, Paperclip, Link } from 'lucide-react'
+import { useReactFlow } from 'reactflow'
+import NodeToolbar from './NodeToolbar'
 
-const MessageNode = ({ data, selected }: NodeProps) => {
-  const hasConfig = data.config?.message || data.config?.buttons?.length > 0
-  const messagePreview = data.config?.message || 'Clique para configurar mensagem'
+// =====================================================
+// HELPER: Traduzir unidades de tempo
+// =====================================================
+const getUnitLabel = (unit?: string): string => {
+  switch (unit) {
+    case 'seconds':
+      return 'segundos'
+    case 'minutes':
+      return 'minutos'
+    case 'hours':
+      return 'horas'
+    case 'days':
+      return 'dias'
+    default:
+      return 'minutos'
+  }
+}
+
+// =====================================================
+// HELPER: Gerar preview dinâmico baseado no tipo
+// =====================================================
+const getMessagePreview = (config: any) => {
+  if (!config || !config.messageType) {
+    return {
+      icon: <MessageSquare className="w-2.5 h-2.5 text-white" />,
+      title: 'WhatsApp',
+      preview: 'Clique para configurar mensagem',
+      hasConfig: false
+    }
+  }
+
+  switch (config.messageType) {
+    case 'text':
+      return {
+        icon: <AlignLeft className="w-2.5 h-2.5 text-white" />,
+        title: 'Mensagem de texto',
+        preview: config.message || 'Clique para configurar mensagem',
+        hasConfig: !!config.message
+      }
+    
+    case 'user_input':
+      return {
+        icon: <MessageSquare className="w-2.5 h-2.5 text-white" />,
+        title: 'Entrada do usuário',
+        preview: config.question || 'Aguardando resposta do usuário',
+        hasConfig: !!config.question
+      }
+    
+    case 'delay':
+      return {
+        icon: <Clock className="w-2.5 h-2.5 text-white" />,
+        title: 'Atraso de tempo',
+        preview: `Atraso de ${config.duration ?? 0} ${getUnitLabel(config.unit)}`,
+        hasConfig: (config.duration !== undefined && config.duration !== null)
+      }
+    
+    case 'audio':
+      return {
+        icon: <Mic className="w-2.5 h-2.5 text-white" />,
+        title: 'Mensagem de áudio',
+        preview: (config.audioFile || config.audioUrl) ? '🎤 Áudio configurado' : '✕ Áudio ausente',
+        hasConfig: !!(config.audioFile || config.audioUrl)
+      }
+    
+    case 'file':
+      const fileTypeLabel = config.fileType === 'image' ? 'Imagem' : config.fileType === 'video' ? 'Vídeo' : 'Documento'
+      return {
+        icon: <Paperclip className="w-2.5 h-2.5 text-white" />,
+        title: 'Arquivo anexo',
+        preview: (config.file || config.fileUrl) ? `📎 ${fileTypeLabel} configurado` : '✕ Arquivo ausente',
+        hasConfig: !!(config.file || config.fileUrl)
+      }
+    
+    case 'dynamic_url':
+      return {
+        icon: <Link className="w-2.5 h-2.5 text-white" />,
+        title: 'Arquivo URL Dinâmica',
+        preview: config.url || '🔗 URL não configurada',
+        hasConfig: !!config.url
+      }
+    
+    default:
+      return {
+        icon: <MessageSquare className="w-2.5 h-2.5 text-white" />,
+        title: 'WhatsApp',
+        preview: 'Tipo desconhecido',
+        hasConfig: false
+      }
+  }
+}
+
+const MessageNode = ({ data, selected, id }: NodeProps) => {
+  // DEBUG: Verificar config recebido
+  console.log('🔍 MessageNode DEBUG:', {
+    nodeId: id,
+    messageType: data.config?.messageType,
+    duration: data.config?.duration,
+    unit: data.config?.unit,
+    fullConfig: data.config
+  })
+  
+  const preview = getMessagePreview(data.config)
   const buttons = data.config?.buttons || []
+  const { setNodes, setEdges } = useReactFlow()
+
+  const handleDelete = () => {
+    setNodes((nodes) => nodes.filter((node) => node.id !== id))
+    setEdges((edges) => edges.filter((edge) => edge.source !== id && edge.target !== id))
+  }
+
+  const handleDuplicate = () => {
+    setNodes((nodes) => {
+      const nodeToDuplicate = nodes.find((node) => node.id === id)
+      if (!nodeToDuplicate) return nodes
+
+      const newNode = {
+        ...nodeToDuplicate,
+        id: `${nodeToDuplicate.type}-${Date.now()}`,
+        position: {
+          x: nodeToDuplicate.position.x + 50,
+          y: nodeToDuplicate.position.y + 50
+        },
+        selected: false
+      }
+
+      return [...nodes, newNode]
+    })
+  }
+
+  const handleOpen = () => {
+    // Trigger node selection to open config panel
+    if (data.onSelect) {
+      data.onSelect()
+    }
+  }
   
   return (
-    <div className={`bg-white rounded-lg shadow-lg border-2 min-w-[280px] max-w-[320px] transition-all ${
+    <div className={`bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative ${
       selected ? 'border-purple-600 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-400'
     }`}>
+      {/* Toolbar - aparece apenas quando selecionado */}
+      {selected && (
+        <NodeToolbar
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          onOpen={handleOpen}
+        />
+      )}
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 !bg-purple-600 !border-2 !border-white"
+        className="w-2 h-2 !bg-purple-600 !border-2 !border-white"
       />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-4 py-2 rounded-t-lg">
+      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-2 py-1 rounded-t">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-white" />
-            <span className="text-xs font-semibold text-white uppercase tracking-wide">
-              Enviar WhatsApp
+          <div className="flex items-center gap-1">
+            {preview.icon}
+            <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
+              {preview.title}
             </span>
           </div>
-          {hasConfig ? (
-            <CheckCircle className="w-4 h-4 text-green-300" />
+          {preview.hasConfig ? (
+            <CheckCircle className="w-2.5 h-2.5 text-green-300" />
           ) : (
-            <AlertTriangle className="w-4 h-4 text-yellow-300" />
+            <AlertTriangle className="w-2.5 h-2.5 text-yellow-300" />
           )}
         </div>
-        {/* Instância WhatsApp */}
-        {data.config?.instanceName && (
-          <div className="mt-1 text-xs text-purple-100">
-            📱 {data.config.instanceName}
-          </div>
-        )}
       </div>
       
       {/* Content Preview */}
-      <div className="px-4 py-3 bg-gray-50">
-        <div className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
-          {messagePreview}
+      <div className="px-2 py-1.5 bg-gray-50">
+        <div className="text-[8px] text-gray-700 line-clamp-2 leading-tight">
+          {preview.preview}
         </div>
       </div>
       
       {/* Buttons Preview */}
       {buttons.length > 0 && (
-        <div className="px-4 py-2 space-y-1 border-t border-gray-200">
+        <div className="px-2 py-1 space-y-0.5 border-t border-gray-200">
           {buttons.slice(0, 3).map((button: any, index: number) => (
-            <div key={index} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-purple-400" />
-              <span className="text-xs text-gray-600 truncate">{button.text}</span>
+            <div key={index} className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+              <span className="text-[7px] text-gray-600 truncate">{button.text}</span>
               <Handle
                 type="source"
                 position={Position.Right}
                 id={`button-${index}`}
                 className="!w-2 !h-2 !bg-purple-500 !border !border-white !right-[-8px]"
-                style={{ top: `${60 + (index * 28)}px` }}
+                style={{ top: `${40 + (index * 20)}px` }}
               />
             </div>
           ))}
@@ -75,24 +210,45 @@ const MessageNode = ({ data, selected }: NodeProps) => {
         </div>
       )}
       
-      {/* Stats */}
-      {data.stats && (
-        <div className="px-4 py-2 bg-blue-50 border-t border-gray-200 rounded-b-lg">
-          <div className="flex items-center justify-between text-xs text-blue-700">
-            <span>📊 Enviado: {data.stats.sent || 0}</span>
-            <span>Aberto: {data.stats.opened || 0}</span>
-          </div>
+      {/* Opções de fluxo (estilo Datacraz) */}
+      <div className="px-2 py-1 space-y-1 border-t border-gray-200 text-[7px] overflow-visible relative">
+        <div className="flex items-center justify-between pr-2">
+          <span className="text-gray-600">Erro envio</span>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="error"
+            className="absolute -right-1 w-2 h-2 rounded-full !bg-red-500 !border-2 !border-white"
+            style={{ top: '8px' }}
+          />
         </div>
-      )}
+        <div className="flex items-center justify-between pr-2">
+          <span className="text-gray-600">Próximo</span>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="next"
+            className="absolute -right-1 w-2 h-2 rounded-full !bg-blue-500 !border-2 !border-white"
+            style={{ top: '22px' }}
+          />
+        </div>
+      </div>
       
-      {/* Default source handle (when no buttons) */}
-      {buttons.length === 0 && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          className="w-3 h-3 !bg-purple-600 !border-2 !border-white"
-        />
-      )}
+      {/* Estatísticas */}
+      <div className="flex items-center justify-between px-2 py-1 border-t border-gray-200 rounded-b">
+        <div className="text-center flex-1">
+          <div className="text-[10px] font-semibold text-gray-900">0</div>
+          <div className="text-[7px] text-blue-600">Sucessos</div>
+        </div>
+        <div className="text-center flex-1">
+          <div className="text-[10px] font-semibold text-gray-900">0</div>
+          <div className="text-[7px] text-blue-600">Alertas</div>
+        </div>
+        <div className="text-center flex-1">
+          <div className="text-[10px] font-semibold text-gray-900">0</div>
+          <div className="text-[7px] text-blue-600">Erros</div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -39,6 +39,12 @@ import CustomEdge from './edges/CustomEdge'
 // Add Trigger Modal
 import AddTriggerModal from './AddTriggerModal'
 
+// Action Menu
+import ActionMenu from './ActionMenu'
+
+// Message Config Modal
+import MessageConfigModal from './MessageConfigModal'
+
 interface FlowCanvasProps {
   flowId: string
   initialNodes?: Node[]
@@ -82,8 +88,36 @@ function FlowCanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
+  const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | undefined>()
+  const [connectionLineStart, setConnectionLineStart] = useState<{ x: number; y: number } | null>(null)
+  const [connectingFromNode, setConnectingFromNode] = useState<{
+    nodeId: string
+    handleId: string
+  } | null>(null)
+  const [isMessageConfigOpen, setIsMessageConfigOpen] = useState(false)
+  const [editingMessageNode, setEditingMessageNode] = useState<Node | null>(null)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
+
+  // Calcular posição da bolinha baseado no tipo de handle
+  const calculateHandlePosition = (rect: DOMRect, handleId: string): { x: number; y: number } => {
+    if (handleId === 'trigger-output') {
+      // StartNode: bolinha à direita, centro vertical
+      return {
+        x: rect.right - 6,
+        y: rect.top + rect.height / 2
+      }
+    } else if (handleId === 'next') {
+      // MessageNode/ActionNode: bolinha "Próximo" (segunda opção de fluxo)
+      return {
+        x: rect.right - 4,
+        y: rect.bottom - 35 // Aproximadamente onde está a bolinha "Próximo"
+      }
+    }
+    
+    return { x: rect.right, y: rect.top }
+  }
 
   // Criar nó start automaticamente quando fluxo está vazio
   useEffect(() => {
@@ -93,7 +127,16 @@ function FlowCanvasInner({
         type: 'start',
         position: { x: 250, y: 100 },
         data: {
-          onAddTrigger: () => setIsAddTriggerModalOpen(true)
+          onAddTrigger: () => setIsAddTriggerModalOpen(true),
+          onOpenActionMenu: () => {
+            // Calcular posição do menu próximo ao nó
+            const nodeElement = document.querySelector('[data-id="start-node"]')
+            if (nodeElement) {
+              const rect = nodeElement.getBoundingClientRect()
+              setActionMenuPosition({ x: rect.right + 10, y: rect.top })
+            }
+            setIsActionMenuOpen(true)
+          }
         },
         draggable: true
       }
@@ -132,8 +175,73 @@ function FlowCanvasInner({
     [setEdges]
   )
 
+  // Detectar quando usuário começa a arrastar handle
+  const onConnectStart = useCallback(
+    (_: any, params: any) => {
+      // Detectar arrasto de handles que devem abrir menu de ações
+      if (params.handleId === 'trigger-output' || params.handleId === 'next') {
+        setConnectingFromNode({
+          nodeId: params.nodeId,
+          handleId: params.handleId
+        })
+      }
+    },
+    []
+  )
+
+  // Detectar quando usuário arrasta handle e solta em área vazia
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      // Se estava conectando de algum nó e soltou em área vazia
+      if (connectingFromNode) {
+        const target = event.target as HTMLElement
+        const isOverNode = target.closest('.react-flow__node')
+        
+        // Verificar se não soltou em um nó
+        if (!isOverNode) {
+          // Calcular posição da bolinha do nó de origem
+          const sourceNodeElement = document.querySelector(`[data-id="${connectingFromNode.nodeId}"]`)
+          if (sourceNodeElement) {
+            const rect = sourceNodeElement.getBoundingClientRect()
+            const bolinhaPos = calculateHandlePosition(rect, connectingFromNode.handleId)
+            setConnectionLineStart(bolinhaPos)
+          }
+          
+          // Calcular posição do menu próximo ao cursor
+          const clientX = 'clientX' in event ? event.clientX : 0
+          const clientY = 'clientY' in event ? event.clientY : 0
+          
+          const position = {
+            x: clientX,
+            y: clientY
+          }
+          setActionMenuPosition(position)
+          setIsActionMenuOpen(true)
+          // NÃO limpar connectingFromNode aqui - será limpo ao selecionar ação ou fechar menu
+        } else {
+          // Limpar apenas se não abriu menu
+          setConnectingFromNode(null)
+        }
+      }
+    },
+    [connectingFromNode, calculateHandlePosition]
+  )
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      // Não abrir configuração para StartNode (não tem configurações)
+      if (node.type === 'start') {
+        return
+      }
+      
+      // Abrir MessageConfigModal apenas para MessageNode
+      if (node.type === 'message') {
+        setEditingMessageNode(node)
+        setIsMessageConfigOpen(true)
+        return
+      }
+      
+      // Para todos os outros nós (delay, action, condition), usar NodeConfigPanel
       onNodeSelect(node)
     },
     [onNodeSelect]
@@ -206,21 +314,97 @@ function FlowCanvasInner({
     }
   }
 
-  const handleAddTrigger = (triggerType: string, triggerLabel: string) => {
-    // Criar novo nó de gatilho no centro do canvas
-    const newNode: Node = {
-      id: `trigger-${Date.now()}`,
-      type: 'trigger',
-      position: { x: 250, y: 100 },
-      data: {
-        label: triggerLabel,
-        config: {
-          triggerType: triggerType
+  const handleMessageConfigSave = (config: any) => {
+    if (!editingMessageNode) return
+
+    console.log('🔄 FlowCanvas SALVANDO CONFIG:', {
+      nodeId: editingMessageNode.id,
+      messageType: config.messageType,
+      duration: config.duration,
+      unit: config.unit,
+      fullConfig: config
+    })
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === editingMessageNode.id) {
+          const updatedNode = {
+            ...node,
+            data: {
+              ...node.data,
+              config
+            }
+          }
+          console.log('✅ Nó atualizado:', updatedNode)
+          return updatedNode
         }
+        return node
+      })
+    )
+
+    setIsMessageConfigOpen(false)
+    setEditingMessageNode(null)
+  }
+
+  const handleAddTrigger = (triggerType: string, triggerLabel: string, triggerDescription?: string) => {
+    // Atualizar o StartNode com o gatilho selecionado
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === 'start-node') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              selectedTrigger: {
+                type: triggerType,
+                label: triggerLabel,
+                description: triggerDescription
+              }
+            }
+          }
+        }
+        return node
+      })
+    )
+  }
+
+  const handleSelectAction = (actionType: string) => {
+    // Usar nó de origem armazenado
+    if (!connectingFromNode) return
+    
+    const sourceNode = nodes.find((n) => n.id === connectingFromNode.nodeId)
+    if (!sourceNode) return
+
+    // Criar nó de ação conectado ao nó de origem
+    const newNode: Node = {
+      id: `${actionType}-${Date.now()}`,
+      type: actionType,
+      position: { 
+        x: sourceNode.position.x + 200, 
+        y: sourceNode.position.y 
+      },
+      data: {
+        label: actionType === 'message' ? 'Mensagem' : 
+               actionType === 'action' ? 'Ação' :
+               actionType === 'condition' ? 'Condição' :
+               actionType === 'delay' ? 'Espera' : 'Ação',
+        config: {}
       }
     }
 
+    // Criar edge conectando nó de origem ao novo nó
+    const newEdge: Edge = {
+      id: `edge-${Date.now()}`,
+      source: connectingFromNode.nodeId,
+      sourceHandle: connectingFromNode.handleId,
+      target: newNode.id,
+      type: 'custom',
+      data: { label: '', color: '#94a3b8' }
+    }
+
     setNodes((nds) => nds.concat(newNode))
+    setEdges((eds) => eds.concat(newEdge))
+    setConnectingFromNode(null) // Limpar estado após criar nó
   }
 
   return (
@@ -231,6 +415,8 @@ function FlowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         onNodeClick={onNodeClick}
         onInit={setReactFlowInstance}
         onDrop={onDrop}
@@ -309,6 +495,30 @@ function FlowCanvasInner({
         isOpen={isAddTriggerModalOpen}
         onClose={() => setIsAddTriggerModalOpen(false)}
         onSelectTrigger={handleAddTrigger}
+      />
+
+      {/* Menu de Ações */}
+      <ActionMenu
+        isOpen={isActionMenuOpen}
+        onClose={() => {
+          setIsActionMenuOpen(false)
+          setConnectionLineStart(null)
+          setConnectingFromNode(null) // Limpar estado de conexão
+        }}
+        onSelectAction={handleSelectAction}
+        position={actionMenuPosition}
+        lineStart={connectionLineStart}
+      />
+
+      {/* Modal de Configuração de Mensagem */}
+      <MessageConfigModal
+        isOpen={isMessageConfigOpen}
+        onClose={() => {
+          setIsMessageConfigOpen(false)
+          setEditingMessageNode(null)
+        }}
+        config={editingMessageNode?.data?.config || {}}
+        onSave={handleMessageConfigSave}
       />
     </div>
   )
