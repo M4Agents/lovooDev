@@ -245,11 +245,9 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               oldStageId,
               newStageId,
               {
+                ...opportunity,
                 funnel_id: newFunnelId,
-                lead_id: leadId,
-                value: opportunity?.value,
-                title: opportunity?.title,
-                status: opportunity?.status
+                lead_id: leadId
               }
             )
           } catch (automationError) {
