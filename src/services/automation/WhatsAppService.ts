@@ -48,29 +48,53 @@ export class WhatsAppService {
       // Formatar telefone (remover caracteres especiais)
       const cleanPhone = this.cleanPhone(params.phone)
 
-      // Preparar payload para Uazapi
-      const payload: any = {
-        number: cleanPhone,
-        text: params.message
+      // Buscar conversa existente para este telefone
+      const { data: conversation, error: convError } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('company_id', params.companyId)
+        .eq('contact_phone', cleanPhone)
+        .single()
+
+      if (convError || !conversation) {
+        console.error('❌ Conversa não encontrada para telefone:', cleanPhone)
+        return {
+          success: false,
+          error: 'Conversa não encontrada. O contato precisa ter enviado uma mensagem primeiro.'
+        }
       }
 
-      // Adicionar mídia se fornecida
-      if (params.mediaUrl) {
-        payload.mediaUrl = params.mediaUrl
+      // Criar mensagem no banco via RPC
+      const { data: messageData, error: messageError } = await supabase.rpc('chat_create_message', {
+        p_conversation_id: conversation.id,
+        p_company_id: params.companyId,
+        p_content: params.message,
+        p_message_type: params.mediaUrl ? 'image' : 'text',
+        p_direction: 'outbound',
+        p_sent_by: params.companyId, // Usar companyId como fallback
+        p_media_url: params.mediaUrl || null
+      })
+
+      if (messageError || !messageData?.success) {
+        console.error('❌ Erro ao criar mensagem:', messageError)
+        return {
+          success: false,
+          error: messageError?.message || 'Erro ao criar mensagem'
+        }
       }
 
-      // Adicionar botões se fornecidos
-      if (params.buttons && params.buttons.length > 0) {
-        payload.buttons = params.buttons
-      }
+      const messageId = messageData.message_id
 
-      // Enviar via Uazapi
-      const response = await fetch(`${this.UAZAPI_BASE_URL}/message/send`, {
+      // Enviar via endpoint interno (mesmo que o chat usa)
+      const response = await fetch('/api/uazapi-send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          message_id: messageId,
+          company_id: params.companyId
+        })
       })
 
       if (!response.ok) {
@@ -78,21 +102,16 @@ export class WhatsAppService {
         console.error('❌ Erro ao enviar mensagem:', errorData)
         return {
           success: false,
-          error: errorData.message || 'Erro ao enviar mensagem'
+          error: errorData.error || 'Erro ao enviar mensagem'
         }
       }
 
       const data = await response.json()
-      console.log('✅ Mensagem enviada com sucesso:', data.id)
-
-      // Registrar mensagem enviada (opcional, para histórico)
-      if (params.leadId) {
-        await this.saveMessageToHistory(params)
-      }
+      console.log('✅ Mensagem enviada com sucesso:', messageId)
 
       return {
         success: true,
-        messageId: data.id
+        messageId: messageId
       }
     } catch (error: any) {
       console.error('❌ Erro ao enviar mensagem WhatsApp:', error)
