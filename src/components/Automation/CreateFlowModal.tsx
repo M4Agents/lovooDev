@@ -135,7 +135,7 @@ export default function CreateFlowModal({ isOpen, onClose, onSubmit }: CreateFlo
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                  className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm px-3 py-2 ${
                     errors.name
                       ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
                       : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
@@ -158,7 +158,7 @@ export default function CreateFlowModal({ isOpen, onClose, onSubmit }: CreateFlo
                   rows={3}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2"
                   placeholder="Descreva o objetivo deste fluxo..."
                 />
               </div>
@@ -172,7 +172,7 @@ export default function CreateFlowModal({ isOpen, onClose, onSubmit }: CreateFlo
                   id="category"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2"
                 >
                   <option value="">Selecione uma categoria</option>
                   {CATEGORIES.map((cat) => (

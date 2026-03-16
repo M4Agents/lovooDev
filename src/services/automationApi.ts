@@ -56,7 +56,8 @@ export const automationApi = {
         name: flowData.name,
         description: flowData.description,
         category: flowData.category,
-        trigger_type: flowData.trigger_type || 'pending', // Valor padrão até configurar no StartNode
+        triggers: flowData.triggers || [],
+        trigger_type: flowData.trigger_type || 'pending', // Legado - manter compatibilidade
         trigger_config: flowData.trigger_config || {},
         nodes: [],
         edges: [],

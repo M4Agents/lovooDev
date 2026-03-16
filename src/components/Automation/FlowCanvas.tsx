@@ -45,6 +45,11 @@ import ActionMenu from './ActionMenu'
 // Message Config Modal
 import MessageConfigModal from './MessageConfigModal'
 
+// Trigger Selector Modal
+import TriggerSelectorModal from './TriggerSelectorModal'
+
+import type { TriggerConfig } from '../../types/automation'
+
 interface FlowCanvasProps {
   flowId: string
   initialNodes?: Node[]
@@ -88,8 +93,10 @@ function FlowCanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
+  const [isTriggerSelectorOpen, setIsTriggerSelectorOpen] = useState(false)
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
   const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | undefined>()
+  const [flowTriggers, setFlowTriggers] = useState<TriggerConfig[]>([])
   const [connectionLineStart, setConnectionLineStart] = useState<{ x: number; y: number } | null>(null)
   const [connectingFromNode, setConnectingFromNode] = useState<{
     nodeId: string
@@ -127,7 +134,11 @@ function FlowCanvasInner({
         type: 'start',
         position: { x: 250, y: 100 },
         data: {
-          onAddTrigger: () => setIsAddTriggerModalOpen(true),
+          triggers: flowTriggers,
+          onAddTrigger: () => setIsTriggerSelectorOpen(true),
+          onRemoveTrigger: (triggerId: string) => {
+            setFlowTriggers(prev => prev.filter(t => t.id !== triggerId))
+          },
           onOpenActionMenu: () => {
             // Calcular posição do menu próximo ao nó
             const nodeElement = document.querySelector('[data-id="start-node"]')
@@ -143,6 +154,24 @@ function FlowCanvasInner({
       setNodes([startNode])
     }
   }, [initialNodes.length])
+
+  // Atualizar StartNode quando triggers mudar
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === 'start-node') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              triggers: flowTriggers
+            }
+          }
+        }
+        return node
+      })
+    )
+  }, [flowTriggers])
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -519,6 +548,16 @@ function FlowCanvasInner({
         }}
         config={editingMessageNode?.data?.config || {}}
         onSave={handleMessageConfigSave}
+      />
+
+      {/* Modal Seletor de Gatilho */}
+      <TriggerSelectorModal
+        isOpen={isTriggerSelectorOpen}
+        onClose={() => setIsTriggerSelectorOpen(false)}
+        onSelect={(trigger) => {
+          setFlowTriggers(prev => [...prev, trigger])
+          setIsTriggerSelectorOpen(false)
+        }}
       />
     </div>
   )

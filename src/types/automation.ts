@@ -8,6 +8,16 @@
 // INTERFACES PRINCIPAIS
 // =====================================================
 
+export interface TriggerConfig {
+  id: string
+  type: string
+  label: string
+  description?: string
+  icon?: string
+  config?: Record<string, any>
+  enabled: boolean
+}
+
 export interface AutomationFlow {
   id: string
   company_id: string
@@ -20,8 +30,11 @@ export interface AutomationFlow {
   edges: FlowEdge[]
   variables?: Record<string, any>
   
-  // Configuração do Gatilho
-  trigger_type: string
+  // Configuração de Gatilhos (Múltiplos)
+  triggers: TriggerConfig[]
+  
+  // Campos legados (manter compatibilidade)
+  trigger_type?: string
   trigger_config?: Record<string, any>
   
   // Controle
@@ -189,7 +202,9 @@ export interface CreateFlowForm {
   name: string
   description?: string
   category?: string
-  trigger_type: string
+  triggers?: TriggerConfig[]
+  // Campos legados
+  trigger_type?: string
   trigger_config?: Record<string, any>
 }
 
