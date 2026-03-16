@@ -566,7 +566,7 @@ export class AutomationEngine {
         const { data: lead } = await supabase
           .from('leads')
           .select('*')
-          .eq('id', context.leadId)
+          .eq('id', Number(context.leadId))
           .single()
 
         if (lead) {
@@ -722,7 +722,7 @@ export class AutomationEngine {
       const { data: lead, error: leadError } = await supabase
         .from('leads')
         .select('phone, name, email, company, city, state')
-        .eq('id', context.leadId)
+        .eq('id', Number(context.leadId))
         .single()
 
       if (leadError || !lead) {
