@@ -105,8 +105,8 @@ export class AutomationEngine {
       return false
     }
 
-    // Verificar se tem um trigger node
-    const hasTrigger = flow.nodes.some((node: any) => node.type === 'trigger')
+    // Verificar se tem um trigger/start node
+    const hasTrigger = flow.nodes.some((node: any) => node.type === 'trigger' || node.type === 'start')
     if (!hasTrigger) {
       return false
     }
@@ -169,10 +169,10 @@ export class AutomationEngine {
         opportunityId: execution.opportunity_id
       }
 
-      // Encontrar o nó trigger (ponto de partida)
-      const triggerNode = flow.nodes.find((node: any) => node.type === 'trigger')
+      // Encontrar o nó trigger/start (ponto de partida)
+      const triggerNode = flow.nodes.find((node: any) => node.type === 'trigger' || node.type === 'start')
       if (!triggerNode) {
-        throw new Error('Nó trigger não encontrado')
+        throw new Error('Nó trigger/start não encontrado')
       }
 
       // Processar a partir do trigger
@@ -234,7 +234,8 @@ export class AutomationEngine {
 
     switch (node.type) {
       case 'trigger':
-        // Trigger não executa ação, apenas inicia o fluxo
+      case 'start':
+        // Trigger/Start não executa ação, apenas inicia o fluxo
         return { triggered: true, data: context.triggerData }
 
       case 'action':
