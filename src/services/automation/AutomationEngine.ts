@@ -713,28 +713,16 @@ export class AutomationEngine {
     try {
       console.log('💬 Enviando mensagem WhatsApp...')
 
-      // Validar se tem leadId ou opportunityId
-      if (!context.leadId && !context.opportunityId) {
-        throw new Error('Lead ID ou Opportunity ID não encontrado no contexto')
-      }
+      // Tentar obter dados do lead do triggerData primeiro (evita problema de RLS)
+      let lead: any = context.triggerData?.lead || context.triggerData?.opportunity?.lead
 
-      let lead: any = null
-
-      // Se tiver opportunityId, buscar lead via opportunity (evita problema de RLS)
-      if (context.opportunityId) {
-        const { data: opportunity, error: oppError } = await supabase
-          .from('opportunities')
-          .select('lead_id, leads(phone, name, email, company, city, state)')
-          .eq('id', context.opportunityId)
-          .single()
-
-        if (oppError || !opportunity) {
-          throw new Error('Oportunidade não encontrada')
+      // Se não tiver no triggerData, validar se tem IDs para buscar
+      if (!lead) {
+        if (!context.leadId && !context.opportunityId) {
+          throw new Error('Lead ID ou Opportunity ID não encontrado no contexto')
         }
 
-        lead = opportunity.leads
-      } else {
-        // Fallback: buscar lead diretamente
+        // Fallback: buscar lead diretamente (pode falhar por RLS)
         const { data: leadData, error: leadError } = await supabase
           .from('leads')
           .select('phone, name, email, company, city, state')
@@ -742,14 +730,14 @@ export class AutomationEngine {
           .single()
 
         if (leadError || !leadData) {
-          throw new Error('Lead não encontrado')
+          throw new Error('Lead não encontrado - certifique-se de incluir dados do lead no triggerData')
         }
 
         lead = leadData
       }
 
       if (!lead) {
-        throw new Error('Lead não encontrado')
+        throw new Error('Dados do lead não disponíveis')
       }
 
       if (!lead.phone) {

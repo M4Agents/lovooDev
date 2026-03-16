@@ -231,6 +231,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               .eq('id', opportunityId)
               .single()
             
+            // Buscar telefone do lead para automação
+            const { data: lead } = await supabase
+              .from('leads')
+              .select('phone, name, email, company, city, state')
+              .eq('id', leadId)
+              .single()
+            
             console.log('🔔 Disparando trigger de automação:', {
               opportunityId,
               oldStage: oldStageId,
@@ -247,7 +254,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               {
                 ...opportunity,
                 funnel_id: newFunnelId,
-                lead_id: leadId
+                lead_id: leadId,
+                lead: lead  // Incluir dados do lead no triggerData
               }
             )
           } catch (automationError) {
