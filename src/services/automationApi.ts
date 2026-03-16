@@ -57,7 +57,7 @@ export const automationApi = {
         description: flowData.description,
         category: flowData.category,
         triggers: flowData.triggers || [],
-        trigger_type: flowData.trigger_type || 'pending', // Legado - manter compatibilidade
+        trigger_type: flowData.trigger_type || 'pending',
         trigger_config: flowData.trigger_config || {},
         nodes: [],
         edges: [],
