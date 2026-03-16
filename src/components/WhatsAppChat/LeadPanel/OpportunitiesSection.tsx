@@ -12,6 +12,8 @@ import { formatCurrency } from '../../../types/sales-funnel'
 import type { SalesFunnel, FunnelStage, OpportunityFunnelPosition } from '../../../types/sales-funnel'
 import { supabase } from '../../../lib/supabase'
 import { funnelApi } from '../../../services/funnelApi'
+import { triggerManager } from '../../../services/automation/TriggerManager'
+import toast from 'react-hot-toast'
 
 interface OpportunitiesSectionProps {
   phoneNumber: string
@@ -200,6 +202,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
       setUpdatingPosition(opportunityId)
       
       const currentPosition = positions[opportunityId]
+      const oldStageId = currentPosition?.stage_id
       
       // Se mudou de funil, precisa remover do antigo e adicionar no novo
       if (currentPosition && currentPosition.funnel_id !== newFunnelId) {
@@ -217,6 +220,43 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           to_stage_id: newStageId,
           position_in_stage: 0
         })
+        
+        // Disparar trigger de automação se mudou de etapa
+        if (oldStageId && oldStageId !== newStageId) {
+          try {
+            // Buscar dados completos da oportunidade
+            const { data: opportunity } = await supabase
+              .from('opportunities')
+              .select('*')
+              .eq('id', opportunityId)
+              .single()
+            
+            console.log('🔔 Disparando trigger de automação:', {
+              opportunityId,
+              oldStage: oldStageId,
+              newStage: newStageId,
+              funnel: newFunnelId
+            })
+            
+            // Disparar trigger de automação
+            await triggerManager.onOpportunityStageChanged(
+              companyId,
+              opportunityId,
+              oldStageId,
+              newStageId,
+              {
+                funnel_id: newFunnelId,
+                lead_id: leadId,
+                value: opportunity?.value,
+                title: opportunity?.title,
+                status: opportunity?.status
+              }
+            )
+          } catch (automationError) {
+            console.error('❌ Erro ao disparar automação:', automationError)
+            // Não bloquear movimentação se automação falhar
+          }
+        }
       } else {
         // Primeira vez adicionando ao funil
         await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)

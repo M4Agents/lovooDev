@@ -126,12 +126,221 @@ export class TriggerManager {
         .eq('trigger_type', event.type)
 
       if (error) throw error
+      if (!flows || flows.length === 0) return []
 
-      return flows || []
+      // Filtrar fluxos que correspondem às condições específicas
+      const matchingFlows = flows.filter(flow => {
+        return this.matchesTriggerConditions(flow, event)
+      })
+
+      console.log(`🔍 Encontrados ${matchingFlows.length} de ${flows.length} fluxos que correspondem às condições`)
+
+      return matchingFlows
     } catch (error) {
       console.error('Erro ao buscar fluxos:', error)
       return []
     }
+  }
+
+  /**
+   * Valida se o fluxo corresponde às condições do trigger
+   */
+  private matchesTriggerConditions(flow: AutomationFlow, event: TriggerEvent): boolean {
+    // Buscar configuração do trigger no StartNode
+    const startNode = flow.nodes.find((node: any) => node.type === 'start')
+    if (!startNode) return false
+    
+    const triggers = startNode.data?.triggers || []
+    if (triggers.length === 0) return false
+    
+    // Para cada trigger configurado no fluxo
+    for (const trigger of triggers) {
+      if (trigger.type !== event.type) continue
+      
+      // Validar condições específicas por tipo de trigger
+      switch (event.type) {
+        case 'opportunity.stage_changed':
+          return this.matchesOpportunityStageChanged(trigger, event.data)
+        
+        case 'opportunity.created':
+          return this.matchesOpportunityCreated(trigger, event.data)
+        
+        case 'opportunity.won':
+          return this.matchesOpportunityWon(trigger, event.data)
+        
+        case 'opportunity.lost':
+          return this.matchesOpportunityLost(trigger, event.data)
+        
+        case 'opportunity.owner_assigned':
+        case 'opportunity.owner_removed':
+          return this.matchesOpportunityOwner(trigger, event.data)
+        
+        case 'tag.added':
+        case 'tag.removed':
+          return this.matchesTag(trigger, event.data)
+        
+        default:
+          // Triggers sem validação específica (lead.created, message.received, etc)
+          return true
+      }
+    }
+    
+    return false
+  }
+
+  /**
+   * Valida condições para opportunity.stage_changed
+   */
+  private matchesOpportunityStageChanged(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar funil (se especificado)
+    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
+      console.log('❌ Funil não corresponde:', config.funnelId, '!=', eventData.opportunity?.funnel_id)
+      return false
+    }
+    
+    // Validar etapa de destino (obrigatório)
+    if (config.toStageId && config.toStageId !== eventData.new_stage) {
+      console.log('❌ Etapa destino não corresponde:', config.toStageId, '!=', eventData.new_stage)
+      return false
+    }
+    
+    // Validar etapa de origem (se especificado)
+    if (config.fromStageId && config.fromStageId !== eventData.old_stage) {
+      console.log('❌ Etapa origem não corresponde:', config.fromStageId, '!=', eventData.old_stage)
+      return false
+    }
+    
+    // Validar valor mínimo (se especificado)
+    if (config.minValue && eventData.opportunity?.value < config.minValue) {
+      console.log('❌ Valor abaixo do mínimo:', eventData.opportunity?.value, '<', config.minValue)
+      return false
+    }
+    
+    // Validar valor máximo (se especificado)
+    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
+      console.log('❌ Valor acima do máximo:', eventData.opportunity?.value, '>', config.maxValue)
+      return false
+    }
+    
+    console.log('✅ Condições de opportunity.stage_changed correspondem')
+    return true
+  }
+
+  /**
+   * Valida condições para opportunity.created
+   */
+  private matchesOpportunityCreated(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar funil (se especificado)
+    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
+      return false
+    }
+    
+    // Validar etapa inicial (se especificado)
+    if (config.initialStageId && config.initialStageId !== eventData.opportunity?.stage_id) {
+      return false
+    }
+    
+    // Validar valor mínimo (se especificado)
+    if (config.minValue && eventData.opportunity?.value < config.minValue) {
+      return false
+    }
+    
+    // Validar valor máximo (se especificado)
+    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Valida condições para opportunity.won
+   */
+  private matchesOpportunityWon(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar funil (se especificado)
+    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
+      return false
+    }
+    
+    // Validar valor mínimo (se especificado)
+    if (config.minValue && eventData.opportunity?.value < config.minValue) {
+      return false
+    }
+    
+    // Validar valor máximo (se especificado)
+    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Valida condições para opportunity.lost
+   */
+  private matchesOpportunityLost(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar funil (se especificado)
+    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
+      return false
+    }
+    
+    // Validar motivo da perda (se especificado)
+    if (config.lostReason && config.lostReason !== eventData.lost_reason) {
+      return false
+    }
+    
+    // Validar valor mínimo (se especificado)
+    if (config.minValue && eventData.opportunity?.value < config.minValue) {
+      return false
+    }
+    
+    // Validar valor máximo (se especificado)
+    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Valida condições para opportunity.owner_assigned/removed
+   */
+  private matchesOpportunityOwner(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar funil (se especificado)
+    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
+      return false
+    }
+    
+    // Validar vendedor específico (se especificado)
+    if (config.ownerId && config.ownerId !== eventData.owner_id) {
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Valida condições para tag.added/removed
+   */
+  private matchesTag(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar tag específica (se especificado)
+    if (config.tagId && config.tagId !== eventData.tag_id) {
+      return false
+    }
+    
+    return true
   }
 
   /**
