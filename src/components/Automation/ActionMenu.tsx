@@ -4,7 +4,7 @@
 // Objetivo: Menu lateral de ações estilo Datacraz
 // =====================================================
 
-import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Brain, FileCode } from 'lucide-react'
+import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Brain, FileCode, Flag } from 'lucide-react'
 
 interface ActionMenuProps {
   isOpen: boolean
@@ -68,6 +68,12 @@ const ACTIONS = [
     label: 'JavaScript',
     icon: FileCode,
     description: 'Executar código JavaScript'
+  },
+  {
+    type: 'end',
+    label: 'Fim',
+    icon: Flag,
+    description: 'Finalizar o fluxo de automação'
   }
 ]
 

@@ -48,6 +48,9 @@ import MessageConfigModal from './MessageConfigModal'
 // Trigger Selector Modal
 import TriggerSelectorModal from './TriggerSelectorModal'
 
+// Trigger Config Modal
+import TriggerConfigModal from './TriggerConfigModal'
+
 import type { TriggerConfig } from '../../types/automation'
 
 interface FlowCanvasProps {
@@ -104,6 +107,8 @@ function FlowCanvasInner({
   } | null>(null)
   const [isMessageConfigOpen, setIsMessageConfigOpen] = useState(false)
   const [editingMessageNode, setEditingMessageNode] = useState<Node | null>(null)
+  const [isTriggerConfigOpen, setIsTriggerConfigOpen] = useState(false)
+  const [editingTrigger, setEditingTrigger] = useState<TriggerConfig | null>(null)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
 
@@ -126,6 +131,16 @@ function FlowCanvasInner({
     return { x: rect.right, y: rect.top }
   }
 
+  // Inicializar triggers do StartNode ao carregar
+  useEffect(() => {
+    if (initialNodes.length > 0) {
+      const startNode = initialNodes.find(n => n.id === 'start-node')
+      if (startNode?.data?.triggers && Array.isArray(startNode.data.triggers)) {
+        setFlowTriggers(startNode.data.triggers)
+      }
+    }
+  }, [initialNodes])
+
   // Criar nó start automaticamente quando fluxo está vazio
   useEffect(() => {
     if (nodes.length === 0 && initialNodes.length === 0) {
@@ -138,6 +153,13 @@ function FlowCanvasInner({
           onAddTrigger: () => setIsTriggerSelectorOpen(true),
           onRemoveTrigger: (triggerId: string) => {
             setFlowTriggers(prev => prev.filter(t => t.id !== triggerId))
+          },
+          onEditTrigger: (triggerId: string) => {
+            const trigger = flowTriggers.find(t => t.id === triggerId)
+            if (trigger) {
+              setEditingTrigger(trigger)
+              setIsTriggerConfigOpen(true)
+            }
           },
           onOpenActionMenu: () => {
             // Calcular posição do menu próximo ao nó
@@ -164,7 +186,18 @@ function FlowCanvasInner({
             ...node,
             data: {
               ...node.data,
-              triggers: flowTriggers
+              triggers: flowTriggers,
+              onAddTrigger: () => setIsTriggerSelectorOpen(true),
+              onRemoveTrigger: (triggerId: string) => {
+                setFlowTriggers(prev => prev.filter(t => t.id !== triggerId))
+              },
+              onEditTrigger: (triggerId: string) => {
+                const trigger = flowTriggers.find(t => t.id === triggerId)
+                if (trigger) {
+                  setEditingTrigger(trigger)
+                  setIsTriggerConfigOpen(true)
+                }
+              }
             }
           }
         }
@@ -314,7 +347,22 @@ function FlowCanvasInner({
   const handleSave = async () => {
     try {
       setIsSaving(true)
-      await onSave(nodes, edges)
+      
+      // Garantir que StartNode tem triggers atualizados antes de salvar
+      const updatedNodes = nodes.map(node => {
+        if (node.id === 'start-node') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              triggers: flowTriggers
+            }
+          }
+        }
+        return node
+      })
+      
+      await onSave(updatedNodes, edges)
     } catch (error) {
       console.error('Erro ao salvar fluxo:', error)
       alert('Erro ao salvar fluxo')
@@ -452,6 +500,11 @@ function FlowCanvasInner({
         onDragOver={onDragOver}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        defaultEdgeOptions={{
+          type: 'custom',
+          selectable: true,
+          focusable: true
+        }}
         fitView
         attributionPosition="bottom-left"
       >
@@ -557,6 +610,23 @@ function FlowCanvasInner({
         onSelect={(trigger) => {
           setFlowTriggers(prev => [...prev, trigger])
           setIsTriggerSelectorOpen(false)
+        }}
+      />
+
+      {/* Modal de Configuração de Gatilho */}
+      <TriggerConfigModal
+        isOpen={isTriggerConfigOpen}
+        onClose={() => {
+          setIsTriggerConfigOpen(false)
+          setEditingTrigger(null)
+        }}
+        trigger={editingTrigger}
+        onSave={(triggerId, config) => {
+          setFlowTriggers(prev => prev.map(t => 
+            t.id === triggerId ? { ...t, config } : t
+          ))
+          setIsTriggerConfigOpen(false)
+          setEditingTrigger(null)
         }}
       />
     </div>

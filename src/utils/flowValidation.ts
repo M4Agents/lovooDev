@@ -35,23 +35,27 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
     return { isValid: false, errors, warnings }
   }
 
-  // 2. Verificar se tem um trigger
-  const triggerNodes = nodes.filter(n => n.type === 'trigger')
-  if (triggerNodes.length === 0) {
+  // 2. Verificar se tem um StartNode com triggers configurados
+  const startNode = nodes.find(n => n.type === 'start')
+  if (!startNode) {
     errors.push({
       type: 'error',
-      message: 'O fluxo deve ter pelo menos um bloco de gatilho (Trigger)'
+      message: 'O fluxo deve ter um nó inicial (Start)'
     })
-  } else if (triggerNodes.length > 1) {
-    warnings.push({
-      type: 'warning',
-      message: 'O fluxo tem múltiplos gatilhos. Apenas o primeiro será usado.'
-    })
+  } else {
+    // Verificar se o StartNode tem triggers configurados
+    const triggers = startNode.data?.triggers || []
+    if (triggers.length === 0) {
+      errors.push({
+        type: 'error',
+        message: 'O fluxo deve ter pelo menos um gatilho configurado no nó inicial'
+      })
+    }
   }
 
   // 3. Verificar nós órfãos (sem conexões)
   nodes.forEach(node => {
-    if (node.type === 'trigger') return // Trigger não precisa de entrada
+    if (node.type === 'start') return // StartNode não precisa de entrada
 
     const hasIncoming = edges.some(e => e.target === node.id)
     const hasOutgoing = edges.some(e => e.source === node.id)
@@ -79,12 +83,71 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
 
     switch (node.type) {
       case 'message':
-        if (!config.message || config.message.trim() === '') {
+        // Verificar se tem tipo de mensagem configurado
+        if (!config.messageType) {
           errors.push({
             nodeId: node.id,
             type: 'error',
-            message: `Bloco de mensagem "${node.data.label}" não tem mensagem configurada`
+            message: `Bloco de mensagem "${node.data.label}" não tem tipo de mensagem configurado`
           })
+        } else {
+          // Validar configuração específica por tipo
+          switch (config.messageType) {
+            case 'text':
+              if (!config.message || config.message.trim() === '') {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de mensagem "${node.data.label}" não tem mensagem configurada`
+                })
+              }
+              break
+            case 'user_input':
+              if (!config.question || config.question.trim() === '') {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de entrada "${node.data.label}" não tem pergunta configurada`
+                })
+              }
+              break
+            case 'delay':
+              if (!config.duration || config.duration <= 0) {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de atraso "${node.data.label}" não tem duração configurada`
+                })
+              }
+              break
+            case 'audio':
+              if (!config.audioFile && !config.audioUrl) {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de áudio "${node.data.label}" não tem arquivo configurado`
+                })
+              }
+              break
+            case 'file':
+              if (!config.file && !config.fileUrl) {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de arquivo "${node.data.label}" não tem arquivo configurado`
+                })
+              }
+              break
+            case 'dynamic_url':
+              if (!config.url || config.url.trim() === '') {
+                errors.push({
+                  nodeId: node.id,
+                  type: 'error',
+                  message: `Bloco de URL dinâmica "${node.data.label}" não tem URL configurada`
+                })
+              }
+              break
+          }
         }
         break
 

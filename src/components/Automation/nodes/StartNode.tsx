@@ -13,6 +13,7 @@ interface StartNodeProps {
   data: {
     onAddTrigger?: () => void
     onRemoveTrigger?: (triggerId: string) => void
+    onEditTrigger?: (triggerId: string) => void
     onOpenActionMenu?: () => void
     triggers?: TriggerConfig[]
     // Legado - manter compatibilidade
@@ -56,7 +57,11 @@ export default function StartNode({ data }: StartNodeProps) {
       ) : (
         <div className="mb-1.5 space-y-1 max-h-20 overflow-y-auto">
           {triggers.filter(t => t.enabled).map((trigger) => (
-            <div key={trigger.id} className="p-1.5 bg-gray-50 rounded border border-gray-200 group">
+            <div 
+              key={trigger.id} 
+              className="p-1.5 bg-gray-50 rounded border border-gray-200 group cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+              onClick={() => data.onEditTrigger?.(trigger.id)}
+            >
               <div className="flex items-start gap-1">
                 <div className="text-gray-700 mt-0.5">
                   {getTriggerIcon(trigger.type)}

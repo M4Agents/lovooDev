@@ -90,14 +90,15 @@ const DelayNode = ({ data, selected, id }: NodeProps) => {
           onOpen={handleOpen}
         />
       )}
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-2 h-2 !bg-orange-600 !border-2 !border-white"
-      />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-2 py-1 rounded-t">
+      <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-2 py-1 rounded-t relative">
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="absolute -left-1 w-2 h-2 rounded-full !bg-orange-600 !border-2 !border-white"
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             <Clock className="w-2.5 h-2.5 text-white" />
@@ -125,8 +126,8 @@ const DelayNode = ({ data, selected, id }: NodeProps) => {
       
       {/* Opções de fluxo (estilo Datacraz) */}
       <div className="px-2 py-1 space-y-1 border-t border-gray-200 text-[7px] overflow-visible relative">
-        <div className="flex items-center justify-between pr-2">
-          <span className="text-gray-600">Próximo</span>
+        <div className="flex items-center justify-end pr-2">
+          <span className="text-gray-600">Próximo passo</span>
           <Handle
             type="source"
             position={Position.Right}

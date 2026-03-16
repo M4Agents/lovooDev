@@ -82,14 +82,15 @@ const ConditionNode = ({ data, selected, id }: NodeProps) => {
           onOpen={handleOpen}
         />
       )}
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-2 h-2 !bg-yellow-600 !border-2 !border-white"
-      />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 px-2 py-1 rounded-t">
+      <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 px-2 py-1 rounded-t relative">
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="absolute -left-1 w-2 h-2 rounded-full !bg-yellow-600 !border-2 !border-white"
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             <GitBranch className="w-2.5 h-2.5 text-white" />

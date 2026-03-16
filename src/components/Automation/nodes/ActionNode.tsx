@@ -90,14 +90,15 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
           onOpen={handleOpen}
         />
       )}
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-2 h-2 !bg-blue-600 !border-2 !border-white"
-      />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-2 py-1 rounded-t">
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-2 py-1 rounded-t relative">
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="absolute -left-1 w-2 h-2 rounded-full !bg-blue-600 !border-2 !border-white"
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 text-white">{getActionIcon()}</div>
@@ -122,8 +123,8 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       
       {/* Opções de fluxo (estilo Datacraz) */}
       <div className="px-2 py-1 space-y-1 border-t border-gray-200 text-[7px] overflow-visible relative">
-        <div className="flex items-center justify-between pr-2">
-          <span className="text-gray-600">Erro execução</span>
+        <div className="flex items-center justify-end pr-2">
+          <span className="text-gray-600">Caso ocorrer erro no envio</span>
           <Handle
             type="source"
             position={Position.Right}
@@ -132,8 +133,8 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
             style={{ top: '8px' }}
           />
         </div>
-        <div className="flex items-center justify-between pr-2">
-          <span className="text-gray-600">Próximo</span>
+        <div className="flex items-center justify-end pr-2">
+          <span className="text-gray-600">Próximo passo</span>
           <Handle
             type="source"
             position={Position.Right}

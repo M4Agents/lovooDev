@@ -18,14 +18,15 @@ const MessageNode = ({ data, selected }: NodeProps) => {
     <div className={`bg-white rounded-lg shadow-lg border-2 min-w-[280px] max-w-[320px] transition-all ${
       selected ? 'border-purple-600 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-400'
     }`}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-3 h-3 !bg-purple-600 !border-2 !border-white"
-      />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-4 py-2 rounded-t-lg">
+      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-4 py-2 rounded-t-lg relative">
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="absolute -left-1 w-3 h-3 rounded-full !bg-purple-600 !border-2 !border-white"
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-white" />

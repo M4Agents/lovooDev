@@ -6,7 +6,7 @@
 // =====================================================
 
 import { Handle, Position, NodeProps } from 'reactflow'
-import { MessageSquare, CheckCircle, AlertTriangle, AlignLeft, Clock, Mic, Paperclip, Link } from 'lucide-react'
+import { MessageSquare, MessageCircle, CheckCircle, AlertTriangle, AlignLeft, Clock, Mic, Paperclip, Link } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
 
@@ -44,7 +44,7 @@ const getMessagePreview = (config: any) => {
   switch (config.messageType) {
     case 'text':
       return {
-        icon: <AlignLeft className="w-2.5 h-2.5 text-white" />,
+        icon: <MessageCircle className="w-2.5 h-2.5 text-white" />,
         title: 'Mensagem de texto',
         preview: config.message || 'Clique para configurar mensagem',
         hasConfig: !!config.message
@@ -158,14 +158,15 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
           onOpen={handleOpen}
         />
       )}
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-2 h-2 !bg-purple-600 !border-2 !border-white"
-      />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-2 py-1 rounded-t">
+      <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-2 py-1 rounded-t relative">
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="absolute -left-1 w-2 h-2 rounded-full !bg-purple-600 !border-2 !border-white"
+          style={{ top: '50%', transform: 'translateY(-50%)' }}
+        />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             {preview.icon}
@@ -183,8 +184,11 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
       
       {/* Content Preview */}
       <div className="px-2 py-1.5 bg-gray-50">
-        <div className="text-[8px] text-gray-700 line-clamp-2 leading-tight">
-          {preview.preview}
+        <div className="flex items-start gap-1">
+          <AlignLeft className="w-2.5 h-2.5 text-gray-400 flex-shrink-0 mt-0.5" />
+          <span className="text-[8px] text-gray-700 line-clamp-2 leading-tight">
+            {preview.preview}
+          </span>
         </div>
       </div>
       
@@ -212,8 +216,8 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
       
       {/* Opções de fluxo (estilo Datacraz) */}
       <div className="px-2 py-1 space-y-1 border-t border-gray-200 text-[7px] overflow-visible relative">
-        <div className="flex items-center justify-between pr-2">
-          <span className="text-gray-600">Erro envio</span>
+        <div className="flex items-center justify-end pr-2">
+          <span className="text-gray-600">Caso ocorrer erro no envio</span>
           <Handle
             type="source"
             position={Position.Right}
@@ -222,8 +226,8 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
             style={{ top: '8px' }}
           />
         </div>
-        <div className="flex items-center justify-between pr-2">
-          <span className="text-gray-600">Próximo</span>
+        <div className="flex items-center justify-end pr-2">
+          <span className="text-gray-600">Próximo passo</span>
           <Handle
             type="source"
             position={Position.Right}
