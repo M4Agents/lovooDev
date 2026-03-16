@@ -232,16 +232,15 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               .single()
             
             // Tentar buscar dados do lead (pode falhar por RLS)
+            const { data: lead, error: leadError } = await supabase
+              .from('leads')
+              .select('phone, name, email, company, city, state')
+              .eq('id', leadId)
+              .single()
+            
             let leadData: any = null
-            try {
-              const { data: lead } = await supabase
-                .from('leads')
-                .select('phone, name, email, company, city, state')
-                .eq('id', leadId)
-                .single()
-              leadData = lead
-            } catch (leadError) {
-              console.warn('⚠️ Não foi possível buscar dados do lead, usando dados disponíveis do componente')
+            if (leadError || !lead) {
+              console.warn('⚠️ Não foi possível buscar dados do lead, usando dados disponíveis do componente:', leadError?.message)
               // Usar dados disponíveis do componente
               leadData = {
                 phone: phoneNumber,
@@ -251,6 +250,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                 city: null,
                 state: null
               }
+            } else {
+              leadData = lead
             }
             
             console.log('🔔 Disparando trigger de automação:', {
