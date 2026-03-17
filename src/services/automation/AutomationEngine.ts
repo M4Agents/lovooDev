@@ -825,6 +825,20 @@ export class AutomationEngine {
           caption: message.substring(0, 50),
           messageTypeForApi: messageTypeForApi
         })
+      } else if (messageType === 'audio') {
+        // Processar áudio gravado ou anexado
+        mediaUrl = node.data.config?.audioUrl
+        
+        if (!mediaUrl) {
+          throw new Error('Áudio não configurado - audioUrl ausente')
+        }
+        
+        messageTypeForApi = 'audio'
+        
+        console.log('🎙️ AutomationEngine: Enviando áudio:', {
+          audioUrl: mediaUrl.substring(0, 50) + '...',
+          messageTypeForApi: messageTypeForApi
+        })
       } else {
         // Mensagem de texto pode ter mediaUrl opcional (retrocompatibilidade)
         mediaUrl = node.data.config?.mediaUrl
