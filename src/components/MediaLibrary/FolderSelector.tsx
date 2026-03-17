@@ -67,7 +67,7 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
               selectedFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
             }`}
           >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pointer-events-none">
             <div className="flex items-center space-x-3">
               <span className="text-2xl">{folder.icon}</span>
               <div>
