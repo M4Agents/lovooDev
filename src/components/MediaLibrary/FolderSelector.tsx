@@ -29,6 +29,12 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
   selectedFolderId,
   onFolderSelect
 }) => {
+  console.log('📁 FolderSelector RENDERIZANDO:', { 
+    totalFolders: folders.length, 
+    selectedFolderId,
+    hasOnFolderSelect: typeof onFolderSelect === 'function'
+  })
+  
   if (folders.length === 0) {
     return (
       <div className="text-center py-8 px-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -37,20 +43,30 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
     )
   }
 
+  console.log('✅ FolderSelector renderizando', folders.length, 'pastas')
+  
   return (
     <div className="space-y-2 max-h-64 overflow-y-auto">
-      {folders.map(folder => (
-        <button
-          key={folder.id}
-          type="button"
-          onClick={() => {
-            console.log('🖱️ FolderSelector onClick:', { folderId: folder.id, folderName: folder.name })
-            onFolderSelect(folder.id, folder.name)
-          }}
-          className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
-            selectedFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-          }`}
-        >
+      {folders.map((folder, index) => {
+        console.log(`📝 Renderizando pasta ${index + 1}:`, folder.name)
+        
+        return (
+          <button
+            key={folder.id}
+            type="button"
+            onClick={(e) => {
+              console.log('🖱️ FolderSelector onClick DISPARADO:', { 
+                folderId: folder.id, 
+                folderName: folder.name,
+                event: e.type,
+                target: e.target
+              })
+              onFolderSelect(folder.id, folder.name)
+            }}
+            className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
+              selectedFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+            }`}
+          >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <span className="text-2xl">{folder.icon}</span>
@@ -65,8 +81,9 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
               {folder.file_count || 0} arquivos
             </div>
           </div>
-        </button>
-      ))}
+          </button>
+        )
+      })}
     </div>
   )
 }
