@@ -76,7 +76,7 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
       case 'delay':
         return <DelayForm config={currentConfig} onChange={handleConfigChange} />
       case 'audio':
-        return <AudioMessageForm config={currentConfig} onChange={handleConfigChange} />
+        return <AudioMessageForm config={currentConfig} onChange={handleConfigChange} companyId={company?.id || ''} />
       case 'file':
         return <FileAttachmentForm config={currentConfig} onChange={handleConfigChange} companyId={company?.id || ''} />
       case 'dynamic_url':

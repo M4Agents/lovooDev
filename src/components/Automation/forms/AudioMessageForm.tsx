@@ -8,7 +8,6 @@ import { useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import AudioRecorder from '../AudioRecorder'
 import { ensureAudiosFolderExists, uploadToLibrary } from '../../../utils/mediaLibraryHelpers'
-import { useAuth } from '../../../contexts/AuthContext'
 
 interface AudioMessageFormProps {
   config: {
@@ -17,10 +16,10 @@ interface AudioMessageFormProps {
     libraryFileId?: string
   }
   onChange: (config: any) => void
+  companyId: string
 }
 
-export default function AudioMessageForm({ config, onChange }: AudioMessageFormProps) {
-  const { user } = useAuth()
+export default function AudioMessageForm({ config, onChange, companyId }: AudioMessageFormProps) {
   const [audioUrl, setAudioUrl] = useState(config.audioUrl || '')
   const [fileName, setFileName] = useState('')
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
@@ -45,18 +44,18 @@ export default function AudioMessageForm({ config, onChange }: AudioMessageFormP
       setIsUploading(true)
       setUploadError(null)
       
-      if (!user?.companyId) {
+      if (!companyId) {
         throw new Error('Company ID não encontrado')
       }
       
       console.log('🎙️ Áudio gravado, iniciando upload:', file.name)
       
       // 1. Garantir que pasta Audios existe
-      const audiosFolderId = await ensureAudiosFolderExists(user.companyId)
+      const audiosFolderId = await ensureAudiosFolderExists(companyId)
       console.log('📁 Pasta Audios garantida:', audiosFolderId)
       
       // 2. Upload para biblioteca
-      const uploadResult = await uploadToLibrary(file, user.companyId, audiosFolderId)
+      const uploadResult = await uploadToLibrary(file, companyId, audiosFolderId)
       
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || 'Erro no upload')
