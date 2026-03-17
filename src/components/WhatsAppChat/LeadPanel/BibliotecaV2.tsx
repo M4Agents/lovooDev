@@ -187,8 +187,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     try {
       console.log('📁 Buscando pastas via API...')
       
-      // Usar API (mesma que o menu principal usa - já funciona)
-      const response = await fetch(`/api/media-library/company/folders?company_id=${companyId}`)
+      // Usar API V2 (novo arquivo para bypass cache Vercel)
+      const response = await fetch(`/api/media-library/company/folders-v2?company_id=${companyId}`)
       
       if (!response.ok) {
         console.error('❌ Erro na API:', response.status)
@@ -439,7 +439,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     try {
       console.log('📁 Criando pasta:', newFolderName)
       
-      const response = await fetch(`/api/media-library/company/folders?company_id=${companyId}`, {
+      const response = await fetch(`/api/media-library/company/folders-v2?company_id=${companyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
