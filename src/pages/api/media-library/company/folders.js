@@ -155,6 +155,43 @@ export default async function handler(req, res) {
 
         folders = data || []
 
+        // ✅ CALCULAR file_count para cada pasta
+        console.log('📊 Calculando file_count para', folders.length, 'pastas')
+        
+        for (const folder of folders) {
+          try {
+            // Contar arquivos em company_media_library
+            const { count: companyCount, error: companyError } = await supabase
+              .from('company_media_library')
+              .select('*', { count: 'exact', head: true })
+              .eq('company_id', company_id)
+              .eq('folder_id', folder.id)
+            
+            if (companyError) {
+              console.warn('⚠️ Erro ao contar company_media_library:', companyError)
+            }
+            
+            // Contar arquivos em lead_media_unified
+            const { count: leadCount, error: leadError } = await supabase
+              .from('lead_media_unified')
+              .select('*', { count: 'exact', head: true })
+              .eq('company_id', company_id)
+              .eq('folder_id', folder.id)
+            
+            if (leadError) {
+              console.warn('⚠️ Erro ao contar lead_media_unified:', leadError)
+            }
+            
+            folder.file_count = (companyCount || 0) + (leadCount || 0)
+            console.log(`📁 ${folder.name}: ${folder.file_count} arquivos (company: ${companyCount || 0}, lead: ${leadCount || 0})`)
+          } catch (countError) {
+            console.error('❌ Erro ao calcular file_count para pasta', folder.name, ':', countError)
+            folder.file_count = 0
+          }
+        }
+        
+        console.log('✅ file_count calculado para todas as pastas')
+
         // Se não há pastas, criar as padrão
         if (folders.length === 0) {
           console.log('📁 Criando pastas padrão para empresa')
