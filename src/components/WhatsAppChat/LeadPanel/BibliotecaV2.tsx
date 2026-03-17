@@ -821,9 +821,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                           )}
                         </div>
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {folder.file_count || 0} arquivos
-                      </div>
                     </div>
                   </div>
                 ))}

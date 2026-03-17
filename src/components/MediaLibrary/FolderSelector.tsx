@@ -77,9 +77,6 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
                 )}
               </div>
             </div>
-            <div className="text-sm text-gray-500">
-              {folder.file_count || 0} arquivos
-            </div>
           </div>
           </button>
         )
