@@ -68,51 +68,61 @@ export default async function handler(req, res) {
 
     console.log('🏢 Company ID:', companyId);
 
-    // Extract S3 key from filename with intelligent search
+    // ✅ BUSCAR S3_KEY NO BANCO DE DADOS
     let s3Key = filename;
     
-    console.log('🔍 Processing filename:', filename);
+    console.log('🔍 Buscando arquivo no banco:', filename);
     
-    // If filename doesn't contain the full path, try to construct it
-    if (!filename.startsWith('clientes/')) {
-      // Try to find the file by searching recent dates
-      const today = new Date();
-      const searchDates = [];
-      
-      // Search last 7 days
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        searchDates.push(`${year}/${month}/${day}`);
-      }
-      
-      console.log('🔍 Searching dates:', searchDates);
-      
-      // Try to find the file in recent dates
-      let foundKey = null;
-      for (const dateStr of searchDates) {
-        const testKey = `clientes/${companyId}/whatsapp/${dateStr}`;
-        console.log('🔍 Testing key pattern:', testKey);
+    // Se filename já é um s3_key completo, usar diretamente
+    if (filename.startsWith('clientes/')) {
+      s3Key = filename;
+      console.log('✅ Filename já é s3_key completo:', s3Key);
+    } else {
+      // Buscar s3_key no banco de dados
+      try {
+        // Tentar company_media_library primeiro
+        const { data: fileData, error: fileError } = await supabase
+          .from('company_media_library')
+          .select('s3_key')
+          .eq('company_id', companyId)
+          .eq('original_filename', filename)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         
-        // For now, construct the most likely key
-        // In a real implementation, you'd search S3 or store mappings
-        const possibleKey = `${testKey}/msg-${Date.now()}/${filename}`;
-        foundKey = possibleKey;
-        break; // Use first attempt for now
-      }
-      
-      if (foundKey) {
-        s3Key = foundKey;
-      } else {
-        // Fallback: assume it's a direct filename
+        if (fileData && fileData.s3_key) {
+          s3Key = fileData.s3_key;
+          console.log('✅ S3 key encontrado em company_media_library:', s3Key);
+        } else {
+          console.log('⚠️ Arquivo não encontrado em company_media_library, tentando lead_media_unified');
+          
+          // Fallback: tentar lead_media_unified
+          const { data: leadFileData, error: leadFileError } = await supabase
+            .from('lead_media_unified')
+            .select('s3_key')
+            .eq('company_id', companyId)
+            .eq('original_filename', filename)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadFileData && leadFileData.s3_key) {
+            s3Key = leadFileData.s3_key;
+            console.log('✅ S3 key encontrado em lead_media_unified:', s3Key);
+          } else {
+            console.log('❌ Arquivo não encontrado no banco de dados');
+            // Manter filename original como fallback
+            s3Key = filename;
+          }
+        }
+      } catch (dbError) {
+        console.error('❌ Erro ao buscar arquivo no banco:', dbError);
+        // Manter filename original como fallback
         s3Key = filename;
       }
     }
 
-    console.log('🔑 S3 Key:', s3Key);
+    console.log('🔑 S3 Key final:', s3Key);
 
     // Verify the S3 key belongs to the user's company
     if (s3Key.includes('clientes/') && !s3Key.includes(`clientes/${companyId}/`)) {
