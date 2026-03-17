@@ -81,7 +81,8 @@ const getMessagePreview = (config: any) => {
         title: 'Arquivo anexo',
         preview: (config.file || config.fileUrl) ? `📎 ${fileTypeLabel} configurado` : '✕ Arquivo ausente',
         hasConfig: !!(config.file || config.fileUrl),
-        thumbnailUrl: (config.fileType === 'image' || config.fileType === 'video') ? config.fileUrl : null
+        thumbnailUrl: (config.fileType === 'image' || config.fileType === 'video') ? config.fileUrl : null,
+        fileType: config.fileType
       }
     
     case 'dynamic_url':
@@ -187,18 +188,34 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
       <div className="px-2 py-1.5 bg-gray-50">
         {preview.thumbnailUrl ? (
           <div className="space-y-1">
-            <img 
-              src={preview.thumbnailUrl} 
-              alt="Preview"
-              className="w-full h-16 object-cover rounded border border-gray-200"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-                const parent = e.currentTarget.parentElement
-                if (parent) {
-                  parent.innerHTML = `<div class="flex items-start gap-1"><span class="text-[8px] text-gray-700">${preview.preview}</span></div>`
-                }
-              }}
-            />
+            {preview.fileType === 'video' ? (
+              <video 
+                src={preview.thumbnailUrl} 
+                className="w-full h-16 object-cover rounded border border-gray-200"
+                muted
+                preload="metadata"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  const parent = e.currentTarget.parentElement
+                  if (parent) {
+                    parent.innerHTML = `<div class="flex items-start gap-1"><span class="text-[8px] text-gray-700">${preview.preview}</span></div>`
+                  }
+                }}
+              />
+            ) : (
+              <img 
+                src={preview.thumbnailUrl} 
+                alt="Preview"
+                className="w-full h-16 object-cover rounded border border-gray-200"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  const parent = e.currentTarget.parentElement
+                  if (parent) {
+                    parent.innerHTML = `<div class="flex items-start gap-1"><span class="text-[8px] text-gray-700">${preview.preview}</span></div>`
+                  }
+                }}
+              />
+            )}
             <span className="text-[8px] text-gray-600 line-clamp-1 leading-tight">
               {preview.preview}
             </span>
