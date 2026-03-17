@@ -745,7 +745,9 @@ export class AutomationEngine {
       }
 
       // Buscar variáveis do lead
-      const leadVariables = await whatsAppService.getLeadVariables(context.leadId)
+      const leadVariables = context.leadId 
+        ? await whatsAppService.getLeadVariables(context.leadId)
+        : {}
 
       // Mesclar variáveis do contexto com variáveis do lead
       const allVariables = {
@@ -765,12 +767,17 @@ export class AutomationEngine {
         throw new Error('Mensagem vazia')
       }
 
+      // Buscar conversationId do triggerData (mais eficiente)
+      const conversationId = context.triggerData?.conversation_id || 
+                            context.triggerData?.opportunity?.conversation_id
+
       // Enviar mensagem
       const result = await whatsAppService.sendMessage({
         phone: lead.phone,
         message,
         leadId: context.leadId,
         companyId: context.companyId,
+        conversationId: conversationId, // Passar conversationId se disponível
         mediaUrl: node.data.config?.mediaUrl,
         buttons: node.data.config?.buttons
       })

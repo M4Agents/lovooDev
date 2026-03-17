@@ -19,12 +19,14 @@ interface OpportunitiesSectionProps {
   phoneNumber: string
   leadName: string
   companyId: string
+  conversationId?: string  // ID da conversa para passar ao trigger
 }
 
 export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   phoneNumber,
   leadName,
-  companyId
+  companyId,
+  conversationId
 }) => {
   console.log('💼 OpportunitiesSection - Rendered with phone:', phoneNumber)
   
@@ -271,7 +273,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                 ...opportunity,
                 funnel_id: newFunnelId,
                 lead_id: leadId,
-                lead: leadData  // Incluir dados do lead no triggerData
+                lead: leadData,  // Incluir dados do lead no triggerData
+                conversation_id: conversationId  // Incluir conversationId para envio eficiente
               }
             )
           } catch (automationError) {

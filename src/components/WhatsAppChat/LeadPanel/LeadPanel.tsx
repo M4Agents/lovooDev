@@ -777,6 +777,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             phoneNumber={conversation.contact_phone}
             leadName={contact?.name || conversation?.contact_name || 'Lead'}
             companyId={companyId}
+            conversationId={conversation.id}
           />
         </div>
       )}

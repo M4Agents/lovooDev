@@ -13,6 +13,7 @@ interface SendMessageParams {
   message: string
   leadId?: number
   companyId: string
+  conversationId?: string  // Conversation ID se já disponível (mais eficiente)
   mediaUrl?: string
   buttons?: Array<{ id: string; text: string }>
 }
@@ -33,7 +34,8 @@ export class WhatsAppService {
       console.log('📱 WhatsAppService: Enviando mensagem', {
         phone: params.phone,
         hasMedia: !!params.mediaUrl,
-        hasButtons: !!params.buttons
+        hasButtons: !!params.buttons,
+        hasConversationId: !!params.conversationId
       })
 
       // Validações
@@ -45,13 +47,38 @@ export class WhatsAppService {
         return { success: false, error: 'Mensagem ou mídia obrigatória' }
       }
 
-      // Formatar telefone
+      // Se conversationId foi fornecido, usar diretamente (mais eficiente)
+      if (params.conversationId) {
+        console.log('✅ Usando conversationId fornecido:', params.conversationId)
+        
+        const messageId = await ChatApi.sendMessage(
+          params.conversationId,
+          params.companyId,
+          {
+            content: params.message,
+            message_type: params.mediaUrl ? 'image' : 'text',
+            media_url: params.mediaUrl
+          },
+          params.companyId
+        )
+
+        console.log('✅ Mensagem enviada com sucesso via chatApi:', messageId)
+
+        return {
+          success: true,
+          messageId: messageId
+        }
+      }
+
+      // Fallback: buscar conversationId se não foi fornecido
+      console.warn('⚠️ conversationId não fornecido, buscando via telefone (menos eficiente)')
+      
       const cleanPhone = this.cleanPhone(params.phone)
 
       // Buscar conversa via RPC (RLS-safe)
       const { data: conversations, error: convError } = await supabase.rpc('chat_get_conversations', {
         p_company_id: params.companyId,
-        p_user_id: params.companyId, // Usar companyId como userId
+        p_user_id: params.companyId,
         p_filter_type: 'all',
         p_instance_id: null,
         p_limit: 1000,
@@ -88,7 +115,7 @@ export class WhatsAppService {
           message_type: params.mediaUrl ? 'image' : 'text',
           media_url: params.mediaUrl
         },
-        params.companyId // userId (usar companyId como fallback)
+        params.companyId
       )
 
       console.log('✅ Mensagem enviada com sucesso via chatApi:', messageId)
