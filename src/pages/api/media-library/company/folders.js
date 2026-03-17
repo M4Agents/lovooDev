@@ -107,14 +107,23 @@ const calculateFolderPath = async (parentId, folderName, companyId) => {
 // =====================================================
 
 export default async function handler(req, res) {
-  // Log de versão com file_count - 17/03/2026 14:58
-  console.log('🔥 API FOLDERS V2 - FILE_COUNT ATIVO - 17/03/2026 14:58')
+  // Log de versão ÚNICO para forçar deploy - 17/03/2026 16:00:00
+  console.log('�🚀🚀 API FOLDERS V3 - DEPLOY FORÇADO - 17/03/2026 16:00:00 🚀🚀🚀')
   console.log(`📡 Método: ${req.method} - Company: ${req.query.company_id}`)
+  console.log('🔍 ENV CHECK:', {
+    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    supabaseInitialized: !!supabase
+  })
   
   try {
     // Validação de inicialização do Supabase
     if (!supabase) {
       console.error('❌ Supabase não inicializado - verificar variáveis de ambiente')
+      console.error('🔍 ENV VARS:', {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'presente' : 'AUSENTE',
+        key: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'presente' : 'AUSENTE'
+      })
       return res.status(500).json({
         error: 'Configuração inválida',
         message: 'Serviço temporariamente indisponível - configuração ausente'
