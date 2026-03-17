@@ -80,7 +80,8 @@ const getMessagePreview = (config: any) => {
         icon: <Paperclip className="w-2.5 h-2.5 text-white" />,
         title: 'Arquivo anexo',
         preview: (config.file || config.fileUrl) ? `📎 ${fileTypeLabel} configurado` : '✕ Arquivo ausente',
-        hasConfig: !!(config.file || config.fileUrl)
+        hasConfig: !!(config.file || config.fileUrl),
+        thumbnailUrl: (config.fileType === 'image' || config.fileType === 'video') ? config.fileUrl : null
       }
     
     case 'dynamic_url':
@@ -184,12 +185,32 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
       
       {/* Content Preview */}
       <div className="px-2 py-1.5 bg-gray-50">
-        <div className="flex items-start gap-1">
-          <AlignLeft className="w-2.5 h-2.5 text-gray-400 flex-shrink-0 mt-0.5" />
-          <span className="text-[8px] text-gray-700 line-clamp-2 leading-tight">
-            {preview.preview}
-          </span>
-        </div>
+        {preview.thumbnailUrl ? (
+          <div className="space-y-1">
+            <img 
+              src={preview.thumbnailUrl} 
+              alt="Preview"
+              className="w-full h-16 object-cover rounded border border-gray-200"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                const parent = e.currentTarget.parentElement
+                if (parent) {
+                  parent.innerHTML = `<div class="flex items-start gap-1"><span class="text-[8px] text-gray-700">${preview.preview}</span></div>`
+                }
+              }}
+            />
+            <span className="text-[8px] text-gray-600 line-clamp-1 leading-tight">
+              {preview.preview}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-1">
+            <AlignLeft className="w-2.5 h-2.5 text-gray-400 flex-shrink-0 mt-0.5" />
+            <span className="text-[8px] text-gray-700 line-clamp-2 leading-tight">
+              {preview.preview}
+            </span>
+          </div>
+        )}
       </div>
       
       {/* Buttons Preview */}
