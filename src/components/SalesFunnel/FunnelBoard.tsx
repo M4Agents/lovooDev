@@ -231,29 +231,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         })
 
         try {
-          // Buscar dados do lead
-          const { data: leadData, error: leadError } = await supabase
-            .from('leads')
-            .select('id, name, phone, email')
-            .eq('id', leadId)
-            .single()
-
-          if (leadError) {
-            console.error('❌ Erro ao buscar dados do lead:', leadError)
-          }
-
-          // Buscar conversationId via chatApi (RLS-safe)
-          let conversationId: string | undefined
-          if (leadData?.phone) {
-            const cleanPhone = leadData.phone.replace(/\D/g, '')
-            try {
-              const contact = await chatApi.getContactInfo(companyId, cleanPhone)
-              conversationId = contact?.conversation_id
-              console.log('📞 ConversationId encontrado via chatApi:', conversationId)
-            } catch (error) {
-              console.error('❌ Erro ao buscar contact info:', error)
-            }
-          }
+          // Buscar conversationId direto de positions (mesma estrutura do OpportunitiesSection)
+          const conversationId = currentPosition?.opportunity?.lead?.chat_contacts?.[0]?.conversation_id
+          
+          console.log('📞 ConversationId encontrado via positions:', conversationId)
 
           // Disparar trigger com mesma estrutura do OpportunitiesSection
           await triggerManager.onOpportunityStageChanged(
@@ -265,7 +246,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
               opportunity_id: opportunityId,
               funnel_id: funnelId,
               lead_id: leadId,
-              lead: leadData,
+              lead: currentPosition?.opportunity?.lead,
               conversation_id: conversationId
             }
           )

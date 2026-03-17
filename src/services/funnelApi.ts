@@ -778,7 +778,8 @@ class FunnelApiService {
               origin,
               status,
               record_type,
-              last_contact_at
+              last_contact_at,
+              chat_contacts(conversation_id)
             )
           )
         `)
