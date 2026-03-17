@@ -15,6 +15,8 @@ import { useLeadPositions } from '../../hooks/useLeadPositions'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { chatApi } from '../../services/chat/chatApi'
+import { triggerManager } from '../../services/automation/TriggerManager'
+import { supabase } from '../../lib/supabase'
 import type { LeadFunnelPosition, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 
 interface FunnelBoardProps {
@@ -206,8 +208,76 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const newPosition = destination.index
 
     try {
+      // Buscar dados da posição atual antes de mover
+      const currentPosition = positions.find(p => p.lead_id === leadId)
+      if (!currentPosition) {
+        console.error('Posição atual não encontrada para lead:', leadId)
+        return
+      }
+
+      const oldStageId = currentPosition.stage_id
+      const opportunityId = currentPosition.opportunity_id
+
       // Mover lead para nova etapa
       await moveLeadToStage(leadId, toStageId, newPosition)
+      
+      // Disparar trigger de automação se mudou de etapa
+      if (companyId && opportunityId && oldStageId !== toStageId) {
+        console.log('🔔 Disparando trigger de automação do Funil:', {
+          opportunityId,
+          oldStage: oldStageId,
+          newStage: toStageId,
+          funnel: funnelId
+        })
+
+        try {
+          // Buscar dados do lead
+          const { data: leadData, error: leadError } = await supabase
+            .from('leads')
+            .select('id, name, phone, email')
+            .eq('id', leadId)
+            .single()
+
+          if (leadError) {
+            console.error('❌ Erro ao buscar dados do lead:', leadError)
+          }
+
+          // Buscar conversationId via telefone
+          let conversationId: string | undefined
+          if (leadData?.phone) {
+            const cleanPhone = leadData.phone.replace(/\D/g, '')
+            const { data: contact } = await supabase
+              .from('chat_contacts')
+              .select('conversation_id')
+              .eq('company_id', companyId)
+              .eq('phone', cleanPhone)
+              .single()
+            
+            conversationId = contact?.conversation_id
+            console.log('📞 ConversationId encontrado:', conversationId)
+          }
+
+          // Disparar trigger com mesma estrutura do OpportunitiesSection
+          await triggerManager.onOpportunityStageChanged(
+            companyId,
+            opportunityId,
+            oldStageId,
+            toStageId,
+            {
+              opportunity_id: opportunityId,
+              funnel_id: funnelId,
+              lead_id: leadId,
+              lead: leadData,
+              conversation_id: conversationId
+            }
+          )
+
+          console.log('✅ Trigger de automação disparado com sucesso')
+        } catch (automationError) {
+          console.error('❌ Erro ao disparar automação:', automationError)
+          // Não bloquear movimentação se automação falhar
+        }
+      }
       
       // Atualizar posições
       await refreshPositions()
