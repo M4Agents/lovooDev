@@ -78,7 +78,7 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
       case 'audio':
         return <AudioMessageForm config={currentConfig} onChange={handleConfigChange} />
       case 'file':
-        return <FileAttachmentForm config={currentConfig} onChange={handleConfigChange} />
+        return <FileAttachmentForm config={currentConfig} onChange={handleConfigChange} companyId={company?.id || ''} />
       case 'dynamic_url':
         return <DynamicUrlForm config={currentConfig} onChange={handleConfigChange} />
       default:
