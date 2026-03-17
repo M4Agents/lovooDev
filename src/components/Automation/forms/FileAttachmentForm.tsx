@@ -85,14 +85,46 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
   const fetchFolderFiles = async () => {
     try {
       setLoadingFiles(true)
-      const result = await mediaManagement.getFiles(companyId, {
-        folder_id: selectedFolderId,
-        page: 1,
-        limit: 100
+      console.log('📁 Buscando arquivos da pasta:', selectedFolderId)
+      
+      // ✅ USAR FETCH DIRETO (mesma abordagem do BibliotecaV2)
+      const response = await fetch(
+        `/api/media-management/files/list?company_id=${companyId}&folder_id=${selectedFolderId}`
+      )
+      
+      if (!response.ok) {
+        console.error('❌ Erro na API:', response.status)
+        setLibraryFiles([])
+        return
+      }
+      
+      const data = await response.json()
+      const files = data.data?.files || []
+      
+      console.log('📊 API retornou:', files.length, 'arquivos')
+      console.log('📁 Pasta solicitada:', selectedFolderId)
+      
+      // Debug: mostrar folder_id dos arquivos retornados
+      if (files.length > 0) {
+        console.log('📋 Primeiros arquivos:', files.slice(0, 3).map((f: any) => ({
+          filename: f.original_filename,
+          folder_id: f.folder_id,
+          folder_id_type: typeof f.folder_id,
+          match: String(f.folder_id) === String(selectedFolderId)
+        })))
+      }
+      
+      // ✅ FILTRO FRONTEND (mesma lógica do BibliotecaV2)
+      const filteredFiles = files.filter((file: any) => {
+        const fileFolderId = String(file.folder_id || '')
+        const targetFolderId = String(selectedFolderId || '')
+        return fileFolderId === targetFolderId
       })
-      setLibraryFiles(result.files)
+      
+      console.log('✅ Após filtro frontend:', filteredFiles.length, 'arquivos')
+      setLibraryFiles(filteredFiles)
     } catch (error) {
-      console.error('Erro ao buscar arquivos:', error)
+      console.error('❌ Erro ao buscar arquivos:', error)
       setLibraryFiles([])
     } finally {
       setLoadingFiles(false)
