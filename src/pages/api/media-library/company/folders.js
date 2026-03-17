@@ -11,14 +11,17 @@ import { createClient } from '@supabase/supabase-js'
 // CONFIGURAÇÃO SUPABASE
 // =====================================================
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+// Usar variáveis do Vercel (VITE_*) com fallback para NEXT_PUBLIC_*
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 // Validação robusta para prevenir falhas silenciosas
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('❌ Supabase configuration missing:', { 
     hasUrl: !!supabaseUrl, 
-    hasKey: !!supabaseServiceKey 
+    hasKey: !!supabaseServiceKey,
+    viteUrl: !!process.env.VITE_SUPABASE_URL,
+    nextUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL
   })
 }
 
@@ -107,12 +110,14 @@ const calculateFolderPath = async (parentId, folderName, companyId) => {
 // =====================================================
 
 export default async function handler(req, res) {
-  // Log de versão ÚNICO para forçar deploy - 17/03/2026 16:00:00
-  console.log('�🚀🚀 API FOLDERS V3 - DEPLOY FORÇADO - 17/03/2026 16:00:00 🚀🚀🚀')
+  // Log de versão V4 - CORREÇÃO VARIÁVEIS VERCEL - 17/03/2026 16:10:00
+  console.log('��🔥 API FOLDERS V4 - VITE ENV VARS - 17/03/2026 16:10:00 ���')
   console.log(`📡 Método: ${req.method} - Company: ${req.query.company_id}`)
-  console.log('🔍 ENV CHECK:', {
-    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+  console.log('🔍 ENV CHECK DETALHADO:', {
+    viteUrl: !!process.env.VITE_SUPABASE_URL,
+    nextUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    urlUsada: process.env.VITE_SUPABASE_URL ? 'VITE' : (process.env.NEXT_PUBLIC_SUPABASE_URL ? 'NEXT_PUBLIC' : 'NENHUMA'),
     supabaseInitialized: !!supabase
   })
   
