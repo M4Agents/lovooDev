@@ -40,13 +40,14 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
   return (
     <div className="space-y-2 max-h-64 overflow-y-auto">
       {folders.map(folder => (
-        <div
+        <button
           key={folder.id}
+          type="button"
           onClick={() => {
             console.log('🖱️ FolderSelector onClick:', { folderId: folder.id, folderName: folder.name })
             onFolderSelect(folder.id, folder.name)
           }}
-          className={`p-4 border rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
+          className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
             selectedFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
           }`}
         >
@@ -64,7 +65,7 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
               {folder.file_count || 0} arquivos
             </div>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   )
