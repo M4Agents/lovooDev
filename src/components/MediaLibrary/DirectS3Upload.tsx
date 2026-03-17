@@ -11,7 +11,7 @@ import { Upload } from 'lucide-react'
 interface DirectS3UploadProps {
   companyId: string
   folderId?: string
-  onUploadComplete: (fileId: string) => void
+  onUploadComplete: (uploadedFile: any) => void
   showDragDrop?: boolean // Mostrar área de drag & drop expandida
 }
 
@@ -155,8 +155,8 @@ export const DirectS3Upload: React.FC<DirectS3UploadProps> = ({
         folder_id: metadataResult.data.folder_id
       })
 
-      // Chamar callback de sucesso
-      onUploadComplete(metadataResult.data.id)
+      // Chamar callback de sucesso com objeto completo
+      onUploadComplete(metadataResult.data)
 
     } catch (err) {
       console.error('❌ Erro no upload direto S3:', err)

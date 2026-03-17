@@ -138,27 +138,22 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
     }
   }
 
-  const handleUploadComplete = async (fileId: string) => {
+  const handleUploadComplete = (uploadedFile: any) => {
     try {
-      // Buscar dados do arquivo recém-uploadado
-      const result = await mediaManagement.getFiles(companyId, {
-        page: 1,
-        limit: 1
+      console.log('✅ Upload completo, salvando no config:', uploadedFile)
+      
+      // Usar dados retornados pelo upload direto
+      onChange({
+        ...config,
+        fileUrl: uploadedFile.preview_url,
+        folderId: selectedFolderId,
+        folderName: selectedFolderName,
+        libraryFileId: uploadedFile.id,
+        fileType: uploadedFile.file_type
       })
       
-      if (result.files.length > 0) {
-        const file = result.files[0]
-        onChange({
-          ...config,
-          fileUrl: file.preview_url,
-          folderId: selectedFolderId,
-          folderName: selectedFolderName,
-          libraryFileId: file.id,
-          fileType: file.file_type
-        })
-      }
     } catch (error) {
-      console.error('Erro ao buscar arquivo uploadado:', error)
+      console.error('Erro ao processar arquivo uploadado:', error)
     }
   }
 
