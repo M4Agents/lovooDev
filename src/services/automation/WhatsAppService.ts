@@ -2,10 +2,11 @@
 // SERVICE: WHATSAPP SERVICE (AUTOMATION)
 // Data: 13/03/2026
 // Objetivo: Envio de mensagens WhatsApp via automação
-// IMPORTANTE: Não altera sistema existente, apenas adiciona funcionalidade
+// IMPORTANTE: Usa infraestrutura de chat existente (RLS-safe)
 // =====================================================
 
 import { supabase } from '../../lib/supabase'
+import { ChatApi } from '../chat/chatApi'
 
 interface SendMessageParams {
   phone: string
@@ -23,10 +24,9 @@ interface SendMessageResult {
 }
 
 export class WhatsAppService {
-  private readonly UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
-
   /**
    * Envia mensagem de texto via WhatsApp
+   * Usa chatApi.sendMessage que já funciona com RLS via SECURITY DEFINER
    */
   async sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
     try {
@@ -45,37 +45,33 @@ export class WhatsAppService {
         return { success: false, error: 'Mensagem ou mídia obrigatória' }
       }
 
-      // Formatar telefone (remover caracteres especiais)
+      // Formatar telefone
       const cleanPhone = this.cleanPhone(params.phone)
 
-      // Buscar conversation_id via lead (evita RLS em chat_conversations)
-      let conversationId: string | null = null
-      
-      if (params.leadId) {
-        // Buscar via lead_id se disponível
-        const { data: contact } = await supabase
-          .from('chat_contacts')
-          .select('conversation_id')
-          .eq('lead_id', params.leadId)
-          .eq('company_id', params.companyId)
-          .single()
-        
-        conversationId = contact?.conversation_id || null
-      }
-      
-      // Se não encontrou via lead, buscar via telefone
-      if (!conversationId) {
-        const { data: contact } = await supabase
-          .from('chat_contacts')
-          .select('conversation_id')
-          .eq('phone', cleanPhone)
-          .eq('company_id', params.companyId)
-          .single()
-        
-        conversationId = contact?.conversation_id || null
+      // Buscar conversa via RPC (RLS-safe)
+      const { data: conversations, error: convError } = await supabase.rpc('chat_get_conversations', {
+        p_company_id: params.companyId,
+        p_user_id: params.companyId, // Usar companyId como userId
+        p_filter_type: 'all',
+        p_instance_id: null,
+        p_limit: 1000,
+        p_offset: 0
+      })
+
+      if (convError || !conversations?.success) {
+        console.error('❌ Erro ao buscar conversas:', convError)
+        return {
+          success: false,
+          error: 'Erro ao buscar conversas'
+        }
       }
 
-      if (!conversationId) {
+      // Encontrar conversa do telefone
+      const conversation = conversations.data?.find((c: any) => 
+        c.contact_phone === cleanPhone || c.contact_phone === params.phone
+      )
+
+      if (!conversation) {
         console.error('❌ Conversa não encontrada para telefone:', cleanPhone)
         return {
           success: false,
@@ -83,50 +79,19 @@ export class WhatsAppService {
         }
       }
 
-      // Criar mensagem no banco via RPC
-      const { data: messageData, error: messageError } = await supabase.rpc('chat_create_message', {
-        p_conversation_id: conversationId,
-        p_company_id: params.companyId,
-        p_content: params.message,
-        p_message_type: params.mediaUrl ? 'image' : 'text',
-        p_direction: 'outbound',
-        p_sent_by: params.companyId, // Usar companyId como fallback
-        p_media_url: params.mediaUrl || null
-      })
-
-      if (messageError || !messageData?.success) {
-        console.error('❌ Erro ao criar mensagem:', messageError)
-        return {
-          success: false,
-          error: messageError?.message || 'Erro ao criar mensagem'
-        }
-      }
-
-      const messageId = messageData.message_id
-
-      // Enviar via endpoint interno (mesmo que o chat usa)
-      const response = await fetch('/api/uazapi-send-message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      // Usar chatApi.sendMessage (RLS-safe via SECURITY DEFINER)
+      const messageId = await ChatApi.sendMessage(
+        conversation.id,
+        params.companyId,
+        {
+          content: params.message,
+          message_type: params.mediaUrl ? 'image' : 'text',
+          media_url: params.mediaUrl
         },
-        body: JSON.stringify({
-          message_id: messageId,
-          company_id: params.companyId
-        })
-      })
+        params.companyId // userId (usar companyId como fallback)
+      )
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('❌ Erro ao enviar mensagem:', errorData)
-        return {
-          success: false,
-          error: errorData.error || 'Erro ao enviar mensagem'
-        }
-      }
-
-      const data = await response.json()
-      console.log('✅ Mensagem enviada com sucesso:', messageId)
+      console.log('✅ Mensagem enviada com sucesso via chatApi:', messageId)
 
       return {
         success: true,
@@ -201,43 +166,6 @@ export class WhatsAppService {
     }
 
     return clean
-  }
-
-  /**
-   * Salva mensagem no histórico (opcional)
-   */
-  private async saveMessageToHistory(params: SendMessageParams): Promise<void> {
-    try {
-      // Buscar conversation_id do lead
-      const { data: contact } = await supabase
-        .from('chat_contacts')
-        .select('conversation_id')
-        .eq('lead_id', params.leadId)
-        .eq('company_id', params.companyId)
-        .single()
-
-      if (!contact) {
-        console.warn('Contato não encontrado para lead:', params.leadId)
-        return
-      }
-
-      // Salvar mensagem
-      await supabase.from('chat_messages').insert({
-        conversation_id: contact.conversation_id,
-        company_id: params.companyId,
-        message_text: params.message,
-        from_me: true,
-        message_type: params.mediaUrl ? 'image' : 'text',
-        media_url: params.mediaUrl,
-        timestamp: new Date().toISOString(),
-        status: 'sent'
-      })
-
-      console.log('✅ Mensagem salva no histórico')
-    } catch (error) {
-      console.error('Erro ao salvar mensagem no histórico:', error)
-      // Não falhar a execução se não conseguir salvar no histórico
-    }
   }
 
   /**
