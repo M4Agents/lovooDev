@@ -7,13 +7,12 @@
 import { useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import AudioRecorder from '../AudioRecorder'
-import { ensureAudiosFolderExists, uploadToLibrary } from '../../../utils/mediaLibraryHelpers'
+import { ChatApi } from '../../../services/chat/chatApi'
 
 interface AudioMessageFormProps {
   config: {
     audioFile?: File
     audioUrl?: string
-    libraryFileId?: string
   }
   onChange: (config: any) => void
   companyId: string
@@ -36,7 +35,7 @@ export default function AudioMessageForm({ config, onChange, companyId }: AudioM
 
   const handleUrlChange = (value: string) => {
     setAudioUrl(value)
-    onChange({ ...config, audioUrl: value, audioFile: undefined, libraryFileId: undefined })
+    onChange({ ...config, audioUrl: value, audioFile: undefined })
   }
 
   const handleRecordingComplete = async (file: File) => {
@@ -50,20 +49,16 @@ export default function AudioMessageForm({ config, onChange, companyId }: AudioM
       
       console.log('🎙️ Áudio gravado, iniciando upload:', file.name)
       
-      // 1. Garantir que pasta Audios existe
-      const audiosFolderId = await ensureAudiosFolderExists(companyId)
-      console.log('📁 Pasta Audios garantida:', audiosFolderId)
+      // Upload direto para S3 (igual ao chat)
+      const mediaUrl = await ChatApi.uploadMedia(
+        file,
+        companyId,
+        `automation-audio-${Date.now()}`
+      )
       
-      // 2. Upload para biblioteca
-      const uploadResult = await uploadToLibrary(file, companyId, audiosFolderId)
+      console.log('✅ Upload concluído:', mediaUrl)
       
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Erro no upload')
-      }
-      
-      console.log('✅ Upload concluído:', uploadResult)
-      
-      // 3. Salvar no config
+      // Salvar no config
       setRecordedFile(file)
       setFileName(file.name)
       setAudioUrl('')  // Limpar URL manual
@@ -71,8 +66,7 @@ export default function AudioMessageForm({ config, onChange, companyId }: AudioM
       onChange({ 
         ...config, 
         audioFile: file,
-        audioUrl: uploadResult.mediaUrl,
-        libraryFileId: uploadResult.fileId
+        audioUrl: mediaUrl
       })
       
     } catch (error) {
@@ -120,7 +114,7 @@ export default function AudioMessageForm({ config, onChange, companyId }: AudioM
             <div className="flex items-start gap-2">
               <div className="flex-1">
                 <p className="text-sm font-medium text-green-700 mb-2">
-                  ✅ Áudio gravado e salvo na biblioteca
+                  ✅ Áudio gravado e salvo
                 </p>
                 <p className="text-xs text-green-600 mb-2">
                   {fileName}
