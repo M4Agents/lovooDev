@@ -48,15 +48,34 @@ export class WhatsAppService {
       // Formatar telefone (remover caracteres especiais)
       const cleanPhone = this.cleanPhone(params.phone)
 
-      // Buscar conversa existente para este telefone
-      const { data: conversation, error: convError } = await supabase
-        .from('chat_conversations')
-        .select('id')
-        .eq('company_id', params.companyId)
-        .eq('contact_phone', cleanPhone)
-        .single()
+      // Buscar conversation_id via lead (evita RLS em chat_conversations)
+      let conversationId: string | null = null
+      
+      if (params.leadId) {
+        // Buscar via lead_id se disponível
+        const { data: contact } = await supabase
+          .from('chat_contacts')
+          .select('conversation_id')
+          .eq('lead_id', params.leadId)
+          .eq('company_id', params.companyId)
+          .single()
+        
+        conversationId = contact?.conversation_id || null
+      }
+      
+      // Se não encontrou via lead, buscar via telefone
+      if (!conversationId) {
+        const { data: contact } = await supabase
+          .from('chat_contacts')
+          .select('conversation_id')
+          .eq('phone', cleanPhone)
+          .eq('company_id', params.companyId)
+          .single()
+        
+        conversationId = contact?.conversation_id || null
+      }
 
-      if (convError || !conversation) {
+      if (!conversationId) {
         console.error('❌ Conversa não encontrada para telefone:', cleanPhone)
         return {
           success: false,
@@ -66,7 +85,7 @@ export class WhatsAppService {
 
       // Criar mensagem no banco via RPC
       const { data: messageData, error: messageError } = await supabase.rpc('chat_create_message', {
-        p_conversation_id: conversation.id,
+        p_conversation_id: conversationId,
         p_company_id: params.companyId,
         p_content: params.message,
         p_message_type: params.mediaUrl ? 'image' : 'text',
