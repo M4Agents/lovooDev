@@ -65,8 +65,15 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
 
   // Buscar arquivos quando pasta for selecionada (modo biblioteca)
   useEffect(() => {
+    console.log('🔄 useEffect disparado:', { selectedFolderId, uploadMode })
     if (selectedFolderId && uploadMode === 'library') {
+      console.log('✅ Condições atendidas, chamando fetchFolderFiles')
       fetchFolderFiles()
+    } else {
+      console.log('⚠️ Condições NÃO atendidas:', { 
+        temFolderId: !!selectedFolderId, 
+        modoLibrary: uploadMode === 'library' 
+      })
     }
   }, [selectedFolderId, uploadMode])
 
@@ -167,6 +174,7 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
   }
 
   const handleFolderSelect = (folderId: string, folderName: string) => {
+    console.log('🎯 Pasta selecionada:', { folderId, folderName, uploadMode })
     setSelectedFolderId(folderId)
     setSelectedFolderName(folderName)
   }

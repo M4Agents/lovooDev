@@ -42,7 +42,10 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
       {folders.map(folder => (
         <div
           key={folder.id}
-          onClick={() => onFolderSelect(folder.id, folder.name)}
+          onClick={() => {
+            console.log('🖱️ FolderSelector onClick:', { folderId: folder.id, folderName: folder.name })
+            onFolderSelect(folder.id, folder.name)
+          }}
           className={`p-4 border rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
             selectedFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
           }`}
