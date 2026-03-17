@@ -232,7 +232,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
         try {
           // Buscar conversationId direto de positions (mesma estrutura do OpportunitiesSection)
-          const conversationId = currentPosition?.opportunity?.lead?.chat_contacts?.[0]?.conversation_id
+          const conversationId = currentPosition?.opportunity?.lead?.chat_conversations?.[0]?.id
           
           console.log('📞 ConversationId encontrado via positions:', conversationId)
 

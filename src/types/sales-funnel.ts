@@ -136,8 +136,8 @@ export interface LeadCardData {
   record_type?: string
   days_in_stage?: number
   last_contact_at?: Date
-  chat_contacts?: Array<{
-    conversation_id: string
+  chat_conversations?: Array<{
+    id: string
   }>
 }
 
