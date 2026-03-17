@@ -243,6 +243,10 @@ export class AutomationEngine {
         return await this.executeCRMAction(node, context)
 
       case 'message':
+        // Verificar se é delay ou mensagem real
+        if (node.data.config?.messageType === 'delay') {
+          return await this.executeDelay(node, context)
+        }
         // Enviar mensagem WhatsApp REAL
         return await this.sendWhatsAppMessage(node, context)
 
@@ -650,6 +654,41 @@ export class AutomationEngine {
    */
   private getNestedValue(obj: any, path: string): any {
     return path.split('.').reduce((current, key) => current?.[key], obj)
+  }
+
+  /**
+   * FASE 5.2: Executa delay síncrono (para delays curtos)
+   */
+  private async executeDelay(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      const duration = node.data.config?.duration || 1
+      const unit = node.data.config?.unit || 'seconds'
+
+      // Converter para milissegundos
+      let delayMs = duration * 1000 // padrão: segundos
+      if (unit === 'minutes') {
+        delayMs = duration * 60 * 1000
+      } else if (unit === 'hours') {
+        delayMs = duration * 60 * 60 * 1000
+      }
+
+      console.log(`⏱️ Aguardando ${duration} ${unit}...`)
+
+      // Aguardar o tempo configurado
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+
+      console.log(`✅ Delay de ${duration} ${unit} concluído`)
+
+      return {
+        delayed: true,
+        duration,
+        unit,
+        delayMs
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao executar delay:', error)
+      throw error
+    }
   }
 
   /**
