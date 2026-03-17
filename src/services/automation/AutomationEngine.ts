@@ -794,15 +794,45 @@ export class AutomationEngine {
         ...leadVariables
       }
 
-      // Obter mensagem configurada
-      let message = node.data.config?.message || ''
+      // Obter mensagem/caption configurada
+      let message = node.data.config?.message || node.data.config?.caption || ''
 
       // Substituir variáveis se habilitado
       if (node.data.config?.useVariables) {
         message = whatsAppService.replaceVariables(message, allVariables)
       }
 
-      if (!message.trim()) {
+      // Detectar tipo de mensagem e preparar dados
+      const messageType = node.data.config?.messageType || 'text'
+      let mediaUrl = null
+      let messageTypeForApi = 'text'
+
+      // Processar arquivo se tipo for 'file'
+      if (messageType === 'file') {
+        mediaUrl = node.data.config?.fileUrl
+        
+        if (!mediaUrl) {
+          throw new Error('Arquivo não configurado - fileUrl ausente')
+        }
+        
+        // Mapear fileType para message_type da API
+        const fileType = node.data.config?.fileType
+        messageTypeForApi = fileType || 'document'  // image, video, audio, document
+        
+        console.log('📎 AutomationEngine: Enviando arquivo:', {
+          fileType: fileType,
+          fileUrl: mediaUrl.substring(0, 50) + '...',
+          caption: message.substring(0, 50),
+          messageTypeForApi: messageTypeForApi
+        })
+      } else {
+        // Mensagem de texto pode ter mediaUrl opcional (retrocompatibilidade)
+        mediaUrl = node.data.config?.mediaUrl
+        messageTypeForApi = mediaUrl ? 'image' : 'text'
+      }
+
+      // Validar mensagem apenas se não for arquivo sem caption
+      if (!message.trim() && !mediaUrl) {
         throw new Error('Mensagem vazia')
       }
 
@@ -816,8 +846,9 @@ export class AutomationEngine {
         message,
         leadId: context.leadId,
         companyId: context.companyId,
-        conversationId: conversationId, // Passar conversationId se disponível
-        mediaUrl: node.data.config?.mediaUrl,
+        conversationId: conversationId,
+        mediaUrl: mediaUrl,
+        messageType: messageTypeForApi,  // Passar tipo correto para API
         buttons: node.data.config?.buttons
       })
 

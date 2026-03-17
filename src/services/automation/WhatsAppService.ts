@@ -15,6 +15,7 @@ interface SendMessageParams {
   companyId: string
   conversationId?: string  // Conversation ID se já disponível (mais eficiente)
   mediaUrl?: string
+  messageType?: string  // Tipo de mensagem (text, image, video, audio, document) - opcional para retrocompatibilidade
   buttons?: Array<{ id: string; text: string }>
 }
 
@@ -51,12 +52,15 @@ export class WhatsAppService {
       if (params.conversationId) {
         console.log('✅ Usando conversationId fornecido:', params.conversationId)
         
+        // Determinar message_type: usar fornecido ou fallback para retrocompatibilidade
+        const messageType = params.messageType || (params.mediaUrl ? 'image' : 'text')
+        
         const messageId = await ChatApi.sendMessage(
           params.conversationId,
           params.companyId,
           {
             content: params.message,
-            message_type: params.mediaUrl ? 'image' : 'text',
+            message_type: messageType,
             media_url: params.mediaUrl
           },
           params.companyId
@@ -106,13 +110,16 @@ export class WhatsAppService {
         }
       }
 
+      // Determinar message_type: usar fornecido ou fallback para retrocompatibilidade
+      const messageType = params.messageType || (params.mediaUrl ? 'image' : 'text')
+      
       // Usar chatApi.sendMessage (RLS-safe via SECURITY DEFINER)
       const messageId = await ChatApi.sendMessage(
         conversation.id,
         params.companyId,
         {
           content: params.message,
-          message_type: params.mediaUrl ? 'image' : 'text',
+          message_type: messageType,
           media_url: params.mediaUrl
         },
         params.companyId
