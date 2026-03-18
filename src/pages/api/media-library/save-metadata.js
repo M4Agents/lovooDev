@@ -26,8 +26,20 @@ export default async function handler(req, res) {
       folder_id
     } = req.body
 
+    console.log('📥 API save-metadata recebeu:', {
+      company_id,
+      original_filename,
+      file_type,
+      mime_type,
+      file_size: file_size || 0,
+      s3_key: s3_key?.substring(0, 50) + '...',
+      preview_url: preview_url?.substring(0, 50) + '...',
+      folder_id
+    })
+
     // Validações
-    if (!company_id || !original_filename || !file_type || !s3_key || !preview_url) {
+    if (!company_id || !original_filename || !s3_key) {
+      console.error('❌ Campos obrigatórios faltando:', { company_id, original_filename, s3_key })
       return res.status(400).json({
         success: false,
         error: 'Campos obrigatórios faltando'
@@ -81,6 +93,13 @@ export default async function handler(req, res) {
     }
 
     console.log('✅ Metadados salvos com sucesso:', data.id)
+    console.log('📤 API save-metadata retornando:', {
+      id: data.id,
+      preview_url: data.preview_url?.substring(0, 50) + '...',
+      file_type: data.file_type,
+      s3_key: data.s3_key?.substring(0, 50) + '...',
+      folder_id: data.folder_id
+    })
 
     return res.status(200).json({
       success: true,
