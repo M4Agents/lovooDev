@@ -145,7 +145,7 @@ export class TriggerManager {
   /**
    * Valida se o fluxo corresponde às condições do trigger
    */
-  private matchesTriggerConditions(flow: AutomationFlow, event: TriggerEvent): boolean {
+    private matchesTriggerConditions(flow: AutomationFlow, event: TriggerEvent): boolean {
     // Buscar configuração do trigger no StartNode
     const startNode = flow.nodes.find((node: any) => node.type === 'start')
     if (!startNode) return false
@@ -153,11 +153,15 @@ export class TriggerManager {
     const triggers = startNode.data?.triggers || []
     if (triggers.length === 0) return false
     
-    // Para cada trigger configurado no fluxo
-    for (const trigger of triggers) {
-      if (trigger.type !== event.type) continue
-      
-      // Validar condições específicas por tipo de trigger
+    // Obter operador lógico (padrão: OR para compatibilidade)
+    const operator = startNode.data?.triggerOperator || flow.trigger_operator || 'OR'
+    
+    // Filtrar apenas triggers habilitados do tipo do evento
+    const relevantTriggers = triggers.filter((t: any) => t.enabled && t.type === event.type)
+    if (relevantTriggers.length === 0) return false
+    
+    // Avaliar cada trigger relevante
+    const results = relevantTriggers.map((trigger: any) => {
       switch (event.type) {
         case 'opportunity.stage_changed':
           return this.matchesOpportunityStageChanged(trigger, event.data)
@@ -183,9 +187,30 @@ export class TriggerManager {
           // Triggers sem validação específica (lead.created, message.received, etc)
           return true
       }
-    }
+    })
     
-    return false
+    // Aplicar operador lógico
+    if (operator === 'AND') {
+      // Todos os triggers devem corresponder
+      const allMatch = results.every(r => r === true)
+      console.log(`🔗 Operador AND: ${allMatch ? '✅ Todos correspondem' : '❌ Nem todos correspondem'}`, {
+        flowId: flow.id,
+        flowName: flow.name,
+        totalTriggers: relevantTriggers.length,
+        results
+      })
+      return allMatch
+    } else {
+      // Pelo menos um trigger deve corresponder (OR - comportamento atual)
+      const anyMatch = results.some(r => r === true)
+      console.log(`🔗 Operador OR: ${anyMatch ? '✅ Pelo menos um corresponde' : '❌ Nenhum corresponde'}`, {
+        flowId: flow.id,
+        flowName: flow.name,
+        totalTriggers: relevantTriggers.length,
+        results
+      })
+      return anyMatch
+    }
   }
 
   /**

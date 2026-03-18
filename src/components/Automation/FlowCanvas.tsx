@@ -99,7 +99,8 @@ function FlowCanvasInner({
   const [isTriggerSelectorOpen, setIsTriggerSelectorOpen] = useState(false)
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
   const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | undefined>()
-  const [flowTriggers, setFlowTriggers] = useState<TriggerConfig[]>([])
+   const [flowTriggers, setFlowTriggers] = useState<TriggerConfig[]>([])
+  const [triggerOperator, setTriggerOperator] = useState<'OR' | 'AND'>('OR')
   const [connectionLineStart, setConnectionLineStart] = useState<{ x: number; y: number } | null>(null)
   const [connectingFromNode, setConnectingFromNode] = useState<{
     nodeId: string
@@ -148,8 +149,9 @@ function FlowCanvasInner({
         id: 'start-node',
         type: 'start',
         position: { x: 250, y: 100 },
-        data: {
+                data: {
           triggers: flowTriggers,
+          triggerOperator,
           onAddTrigger: () => setIsTriggerSelectorOpen(true),
           onRemoveTrigger: (triggerId: string) => {
             setFlowTriggers(prev => prev.filter(t => t.id !== triggerId))
@@ -160,6 +162,9 @@ function FlowCanvasInner({
               setEditingTrigger(trigger)
               setIsTriggerConfigOpen(true)
             }
+          },
+          onOperatorChange: (operator: 'OR' | 'AND') => {
+            setTriggerOperator(operator)
           },
           onOpenActionMenu: () => {
             // Calcular posição do menu próximo ao nó
@@ -184,9 +189,10 @@ function FlowCanvasInner({
         if (node.id === 'start-node') {
           return {
             ...node,
-            data: {
+                        data: {
               ...node.data,
               triggers: flowTriggers,
+              triggerOperator,
               onAddTrigger: () => setIsTriggerSelectorOpen(true),
               onRemoveTrigger: (triggerId: string) => {
                 setFlowTriggers(prev => prev.filter(t => t.id !== triggerId))
@@ -197,6 +203,9 @@ function FlowCanvasInner({
                   setEditingTrigger(trigger)
                   setIsTriggerConfigOpen(true)
                 }
+              },
+              onOperatorChange: (operator: 'OR' | 'AND') => {
+                setTriggerOperator(operator)
               }
             }
           }
@@ -353,9 +362,10 @@ function FlowCanvasInner({
         if (node.id === 'start-node') {
           return {
             ...node,
-            data: {
+                        data: {
               ...node.data,
-              triggers: flowTriggers
+              triggers: flowTriggers,
+              triggerOperator
             }
           }
         }

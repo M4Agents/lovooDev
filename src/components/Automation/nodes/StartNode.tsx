@@ -90,6 +90,41 @@ export default function StartNode({ data }: StartNodeProps) {
                 </button>
               </div>
             </div>
+            
+            {/* Seletor de operador AND/OR entre gatilhos */}
+            {index < triggers.filter(t => t.enabled).length - 1 && (
+              <div className="flex justify-center my-1">
+                <div className="flex gap-1 bg-white border border-gray-300 rounded px-1.5 py-0.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      data.onOperatorChange?.('OR')
+                    }}
+                    className={`text-[7px] font-bold px-1 py-0.5 rounded ${
+                      triggerOperator === 'OR' 
+                        ? 'bg-blue-500 text-white' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    OU
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      data.onOperatorChange?.('AND')
+                    }}
+                    className={`text-[7px] font-bold px-1 py-0.5 rounded ${
+                      triggerOperator === 'AND' 
+                        ? 'bg-blue-500 text-white' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    E
+                  </button>
+                </div>
+              </div>
+            )}
+                   </div>
           ))}
         </div>
       )}
