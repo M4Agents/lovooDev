@@ -138,7 +138,7 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
     }
   }
 
-  const handleUploadComplete = (uploadedFile: any) => {
+  const handleUploadComplete = async (uploadedFile: any) => {
     try {
       console.log('✅ Upload completo, salvando no config:', uploadedFile)
       console.log('📊 Dados do arquivo:', {
@@ -161,6 +161,16 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
       console.log('💾 Novo config sendo salvo:', newConfig)
       onChange(newConfig)
       console.log('✅ onChange chamado com sucesso')
+      
+      // 🎯 AUTO-SWITCH PARA BIBLIOTECA APÓS UPLOAD
+      console.log('🔄 Mudando para modo biblioteca para mostrar arquivo...')
+      setUploadMode('library')
+      
+      // Buscar arquivos da pasta para mostrar o arquivo recém-uploadado
+      console.log('📁 Buscando arquivos da pasta:', selectedFolderId)
+      await fetchFolderFiles()
+      
+      console.log('✅ Arquivo agora deve aparecer na biblioteca!')
       
     } catch (error) {
       console.error('Erro ao processar arquivo uploadado:', error)
