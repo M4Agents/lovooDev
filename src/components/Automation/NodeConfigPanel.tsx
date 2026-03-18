@@ -38,23 +38,29 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }, [selectedNode])
 
   useEffect(() => {
+    const actionType = selectedNode?.data?.config?.actionType
+    
     if (selectedNode?.type === 'action' && company?.id && 
-        (config.actionType === 'add_tag' || config.actionType === 'remove_tag')) {
+        (actionType === 'add_tag' || actionType === 'remove_tag')) {
       loadTags()
     }
-  }, [selectedNode?.type, config.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
 
   useEffect(() => {
-    if (selectedNode?.type === 'action' && company?.id && config.actionType === 'assign_owner') {
+    const actionType = selectedNode?.data?.config?.actionType
+    
+    if (selectedNode?.type === 'action' && company?.id && actionType === 'assign_owner') {
       loadUsers()
     }
-  }, [selectedNode?.type, config.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
 
   useEffect(() => {
-    if (selectedNode?.type === 'action' && company?.id && config.actionType === 'move_opportunity') {
+    const actionType = selectedNode?.data?.config?.actionType
+    
+    if (selectedNode?.type === 'action' && company?.id && actionType === 'move_opportunity') {
       loadFunnels()
     }
-  }, [selectedNode?.type, config.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
 
   useEffect(() => {
     if (config.funnelId) {
