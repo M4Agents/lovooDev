@@ -57,7 +57,7 @@ export default function StartNode({ data }: StartNodeProps) {
           O gatilho aciona a automação. Clique para adicionar:
         </p>
       ) : (
-        <div className="mb-1.5 space-y-1 max-h-20 overflow-y-auto">
+        <div className="mb-1.5 space-y-1">
           {triggers.filter(t => t.enabled).map((trigger, index) => (
             <div key={trigger.id}>
               <div 
