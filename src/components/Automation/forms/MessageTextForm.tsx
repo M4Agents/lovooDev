@@ -274,7 +274,7 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
         )}
         
         <p className="text-xs text-gray-500 mt-1">
-          💡 Digite <code className="bg-gray-100 px-1 rounded">{{</code> ou <code className="bg-gray-100 px-1 rounded">[</code> para inserir variáveis
+          💡 Digite <code className="bg-gray-100 px-1 rounded">{'{{' }</code> ou <code className="bg-gray-100 px-1 rounded">[</code> para inserir variáveis
         </p>
       </div>
 
