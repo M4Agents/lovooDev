@@ -60,10 +60,11 @@ export class WhatsAppService {
           params.companyId,
           {
             content: params.message,
-            message_type: messageType,
+            message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document',
             media_url: params.mediaUrl
           },
-          params.companyId
+          params.companyId,
+          true  // AUTOMAÇÃO: aguardar envio completo para garantir ordem
         )
 
         console.log('✅ Mensagem enviada com sucesso via chatApi:', messageId)
@@ -119,10 +120,11 @@ export class WhatsAppService {
         params.companyId,
         {
           content: params.message,
-          message_type: messageType,
+          message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document',
           media_url: params.mediaUrl
         },
-        params.companyId
+        params.companyId,
+        true  // AUTOMAÇÃO: aguardar envio completo para garantir ordem
       )
 
       console.log('✅ Mensagem enviada com sucesso via chatApi:', messageId)

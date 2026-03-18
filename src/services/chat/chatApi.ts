@@ -242,7 +242,8 @@ export class ChatApi {
     conversationId: string,
     companyId: string,
     message: SendMessageForm,
-    userId: string
+    userId: string,
+    waitForSend: boolean = false  // AUTOMAÇÃO: aguardar envio completo para garantir ordem
   ): Promise<string> {
     try {
       console.log('💾 chatApi.sendMessage recebeu:', {
@@ -327,11 +328,19 @@ export class ChatApi {
       console.log('✅ Mensagem criada com sucesso:', messageId);
       // Mensagem criada no banco
 
-      // PASSO 2: Enviar via Uazapi de forma assíncrona (não bloqueia UI)
-      this.sendViaUazapiAsync(messageId, companyId).catch(error => {
-        console.error('Erro no envio via WhatsApp')
-        // Erro será tratado pela função SQL que atualiza status para 'failed'
-      })
+      // PASSO 2: Enviar via Uazapi
+      if (waitForSend) {
+        // AUTOMAÇÃO: Aguardar envio completo para garantir ordem sequencial
+        console.log('⏳ Aguardando envio via WhatsApp (automação)...')
+        await this.sendViaUazapiAsync(messageId, companyId)
+        console.log('✅ Envio via WhatsApp concluído (automação)')
+      } else {
+        // UI MANUAL: Envio assíncrono (não bloqueia interface)
+        this.sendViaUazapiAsync(messageId, companyId).catch(error => {
+          console.error('Erro no envio via WhatsApp')
+          // Erro será tratado pela função SQL que atualiza status para 'failed'
+        })
+      }
 
       // ✅ CORREÇÃO: Removido auto-refresh que causava loop e experiência ruim
       // O sistema de cache agora garante que mensagens permaneçam visíveis

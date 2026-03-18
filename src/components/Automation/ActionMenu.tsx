@@ -5,6 +5,7 @@
 // =====================================================
 
 import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Brain, FileCode, Flag } from 'lucide-react'
+import { useMemo } from 'react'
 
 interface ActionMenuProps {
   isOpen: boolean
@@ -85,6 +86,37 @@ export default function ActionMenu({ isOpen, onClose, onSelectAction, position, 
     onClose()
   }
 
+  // CORREÇÃO: Ajustar posição do menu para garantir que fique 100% visível
+  const adjustedPosition = useMemo(() => {
+    if (!position) return undefined
+    
+    const MENU_HEIGHT = 384 // max-h-96 em pixels
+    const MENU_WIDTH = 256 // w-64 em pixels
+    const MARGIN = 10 // Margem mínima das bordas
+    
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
+    
+    let adjustedX = position.x
+    let adjustedY = position.y
+    
+    // Ajustar posição vertical
+    const spaceBelow = viewportHeight - position.y
+    if (spaceBelow < MENU_HEIGHT + MARGIN) {
+      // Não há espaço suficiente abaixo, posicionar acima
+      adjustedY = Math.max(MARGIN, position.y - MENU_HEIGHT)
+    }
+    
+    // Ajustar posição horizontal
+    const spaceRight = viewportWidth - position.x
+    if (spaceRight < MENU_WIDTH + MARGIN) {
+      // Não há espaço suficiente à direita, posicionar à esquerda
+      adjustedX = Math.max(MARGIN, position.x - MENU_WIDTH)
+    }
+    
+    return { x: adjustedX, y: adjustedY }
+  }, [position])
+
   return (
     <>
       {/* Linha de conexão visual (estilo Datacraz) */}
@@ -115,9 +147,9 @@ export default function ActionMenu({ isOpen, onClose, onSelectAction, position, 
       <div 
         className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 w-64 max-h-96 overflow-y-auto"
         style={{
-          left: position?.x ? `${position.x}px` : '50%',
-          top: position?.y ? `${position.y}px` : '50%',
-          transform: position ? 'none' : 'translate(-50%, -50%)'
+          left: adjustedPosition?.x ? `${adjustedPosition.x}px` : '50%',
+          top: adjustedPosition?.y ? `${adjustedPosition.y}px` : '50%',
+          transform: adjustedPosition ? 'none' : 'translate(-50%, -50%)'
         }}
       >
         {/* Header */}
