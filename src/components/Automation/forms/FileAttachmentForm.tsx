@@ -141,16 +141,26 @@ export default function FileAttachmentForm({ config, onChange, companyId }: File
   const handleUploadComplete = (uploadedFile: any) => {
     try {
       console.log('✅ Upload completo, salvando no config:', uploadedFile)
+      console.log('📊 Dados do arquivo:', {
+        preview_url: uploadedFile.preview_url,
+        file_type: uploadedFile.file_type,
+        id: uploadedFile.id,
+        folder_id: selectedFolderId
+      })
       
       // Usar dados retornados pelo upload direto
-      onChange({
+      const newConfig = {
         ...config,
         fileUrl: uploadedFile.preview_url,
         folderId: selectedFolderId,
         folderName: selectedFolderName,
         libraryFileId: uploadedFile.id,
         fileType: uploadedFile.file_type
-      })
+      }
+      
+      console.log('💾 Novo config sendo salvo:', newConfig)
+      onChange(newConfig)
+      console.log('✅ onChange chamado com sucesso')
       
     } catch (error) {
       console.error('Erro ao processar arquivo uploadado:', error)
