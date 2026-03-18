@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
-import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upload } from 'lucide-react'
+import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upload, Edit2 } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
 import NodeConfigPanel from '../components/Automation/NodeConfigPanel'
 import TriggerConfigPanel from '../components/Automation/TriggerConfigPanel'
@@ -29,6 +29,8 @@ export default function FlowEditor() {
   const [showValidation, setShowValidation] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [tempName, setTempName] = useState('')
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
@@ -154,6 +156,23 @@ export default function FlowEditor() {
 
     input.click()
   }, [])
+
+  const handleNameUpdate = async () => {
+    if (!id || !tempName.trim()) {
+      setTempName(flow?.name || '')
+      setIsEditingName(false)
+      return
+    }
+    try {
+      await automationApi.updateFlow(id, { name: tempName.trim() })
+      await loadFlow()
+      setIsEditingName(false)
+    } catch (error) {
+      alert('Erro ao atualizar nome do fluxo')
+      setTempName(flow?.name || '')
+      setIsEditingName(false)
+    }
+  }
 
   useEffect(() => {
     loadFlow()
@@ -301,7 +320,33 @@ export default function FlowEditor() {
               <ArrowLeft className="w-6 h-6" />
             </button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{flow.name}</h1>
+              <div className="flex items-center gap-2">
+                {isEditingName ? (
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    onBlur={handleNameUpdate}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleNameUpdate()
+                      if (e.key === 'Escape') { setTempName(flow.name); setIsEditingName(false) }
+                    }}
+                    autoFocus
+                    className="text-xl font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none bg-transparent"
+                  />
+                ) : (
+                  <>
+                    <h1 className="text-xl font-bold text-gray-900">{flow.name}</h1>
+                    <button
+                      onClick={() => { setTempName(flow.name); setIsEditingName(true) }}
+                      className="p-1 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                      title="Editar nome do fluxo"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
               {flow.description && (
                 <p className="text-sm text-gray-500">{flow.description}</p>
               )}
