@@ -22,7 +22,7 @@ import ReactFlow, {
   ReactFlowProvider
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Save, Play, Pause, Trash2, Plus } from 'lucide-react'
+import { Save, Play, Pause, Trash2 } from 'lucide-react'
 
 // Custom Node Components
 import StartNode from './nodes/StartNode'
@@ -81,16 +81,13 @@ const edgeTypes: EdgeTypes = {
 }
 
 function FlowCanvasInner({
-  flowId,
   initialNodes = [],
   initialEdges = [],
   isActive,
   onSave,
   onToggleActive,
   onDelete,
-  selectedNode,
-  onNodeSelect,
-  onNodeConfigSave
+  onNodeSelect
 }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -512,7 +509,6 @@ function FlowCanvasInner({
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{
           type: 'custom',
-          selectable: true,
           focusable: true
         }}
         fitView

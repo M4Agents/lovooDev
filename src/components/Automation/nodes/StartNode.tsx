@@ -4,7 +4,6 @@
 // Objetivo: Nó inicial arrastável do fluxo (estilo Datacraz)
 // =====================================================
 
-import { useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import { Plus, TrendingUp, MessageCircle, Tag, UserPlus, X } from 'lucide-react'
 import type { TriggerConfig } from '../../../types/automation'
@@ -38,7 +37,7 @@ const getTriggerIcon = (type: string) => {
 }
 
 export default function StartNode({ data }: StartNodeProps) {
-  const { triggers = [], triggerOperator = 'OR', selectedTrigger } = data
+  const { triggers = [], triggerOperator = 'OR' } = data
   const hasTriggers = triggers.length > 0
 
   return (

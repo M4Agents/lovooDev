@@ -14,7 +14,12 @@ export type TriggerType =
   | 'message.received'
   | 'opportunity.created'
   | 'opportunity.stage_changed'
+  | 'opportunity.won'
+  | 'opportunity.lost'
+  | 'opportunity.owner_assigned'
+  | 'opportunity.owner_removed'
   | 'tag.added'
+  | 'tag.removed'
   | 'schedule.time'
 
 interface TriggerEvent {
@@ -192,7 +197,7 @@ export class TriggerManager {
     // Aplicar operador lógico
     if (operator === 'AND') {
       // Todos os triggers devem corresponder
-      const allMatch = results.every(r => r === true)
+      const allMatch = results.every((r: boolean) => r === true)
       console.log(`🔗 Operador AND: ${allMatch ? '✅ Todos correspondem' : '❌ Nem todos correspondem'}`, {
         flowId: flow.id,
         flowName: flow.name,
@@ -202,7 +207,7 @@ export class TriggerManager {
       return allMatch
     } else {
       // Pelo menos um trigger deve corresponder (OR - comportamento atual)
-      const anyMatch = results.some(r => r === true)
+      const anyMatch = results.some((r: boolean) => r === true)
       console.log(`🔗 Operador OR: ${anyMatch ? '✅ Pelo menos um corresponde' : '❌ Nenhum corresponde'}`, {
         flowId: flow.id,
         flowName: flow.name,
