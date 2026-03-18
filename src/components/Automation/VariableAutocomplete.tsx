@@ -8,14 +8,12 @@ import { Variable, getCategoryIcon, getCategoryLabel } from '../../hooks/useVari
 
 interface VariableAutocompleteProps {
   variables: Variable[]
-  position: { top: number; left: number }
   onSelect: (variableKey: string) => void
   filter: string
 }
 
 export default function VariableAutocomplete({
   variables,
-  position,
   onSelect,
   filter
 }: VariableAutocompleteProps) {
@@ -41,8 +39,13 @@ export default function VariableAutocomplete({
   if (filteredVariables.length === 0) {
     return (
       <div 
-        className="absolute bg-white border border-gray-300 shadow-lg rounded-lg p-3 z-50 w-80"
-        style={{ top: position.top + 25, left: position.left }}
+        className="absolute bg-white border border-gray-300 shadow-xl rounded-lg p-3 w-80"
+        style={{ 
+          top: '100%',
+          left: 0,
+          marginTop: '4px',
+          zIndex: 9999
+        }}
       >
         <p className="text-sm text-gray-500 text-center">
           Nenhuma variável encontrada
@@ -53,8 +56,13 @@ export default function VariableAutocomplete({
 
   return (
     <div 
-      className="absolute bg-white border border-gray-300 shadow-lg rounded-lg max-h-96 overflow-y-auto z-50 w-80"
-      style={{ top: position.top + 25, left: position.left }}
+      className="absolute bg-white border border-gray-300 shadow-xl rounded-lg max-h-96 overflow-y-auto w-80"
+      style={{ 
+        top: '100%',
+        left: 0,
+        marginTop: '4px',
+        zIndex: 9999
+      }}
     >
       {categoryOrder.map(category => {
         const categoryVars = groupedVariables[category]

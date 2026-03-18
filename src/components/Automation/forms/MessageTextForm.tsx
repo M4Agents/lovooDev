@@ -25,7 +25,6 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
   const [buttons, setButtons] = useState(config.buttons || [])
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showVariableAutocomplete, setShowVariableAutocomplete] = useState(false)
-  const [autocompletePosition, setAutocompletePosition] = useState({ top: 0, left: 0 })
   const [autocompleteFilter, setAutocompleteFilter] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
@@ -64,16 +63,6 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
       console.log('✅ Abrindo autocomplete com', variables.length, 'variáveis')
       setShowVariableAutocomplete(true)
       setAutocompleteFilter(match[1] || '')
-      
-      // Calcular posição do dropdown (aproximada)
-      if (textareaRef.current) {
-        const rect = textareaRef.current.getBoundingClientRect()
-        console.log('📍 Posição dropdown:', { top: rect.top, left: rect.left })
-        setAutocompletePosition({
-          top: rect.top,
-          left: rect.left
-        })
-      }
     } else {
       setShowVariableAutocomplete(false)
     }
@@ -273,7 +262,6 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
           {showVariableAutocomplete && (
             <VariableAutocomplete
               variables={variables}
-              position={autocompletePosition}
               onSelect={handleVariableSelect}
               filter={autocompleteFilter}
             />
