@@ -4,8 +4,9 @@
 // Objetivo: Formulário para mensagem de texto
 // =====================================================
 
-import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Plus, X, Bold, Italic, Strikethrough, Code, Link as LinkIcon, Smile } from 'lucide-react'
+import { formatWhatsAppText, applyFormatting, insertEmoji, COMMON_EMOJIS } from '../../../utils/whatsappFormatter'
 
 interface MessageTextFormProps {
   config: {
@@ -18,10 +19,51 @@ interface MessageTextFormProps {
 export default function MessageTextForm({ config, onChange }: MessageTextFormProps) {
   const [message, setMessage] = useState(config.message || '')
   const [buttons, setButtons] = useState(config.buttons || [])
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleMessageChange = (value: string) => {
     setMessage(value)
     onChange({ ...config, message: value, buttons })
+  }
+
+  const handleFormat = (formatType: 'bold' | 'italic' | 'strikethrough' | 'monospace' | 'link') => {
+    if (!textareaRef.current) return
+
+    const start = textareaRef.current.selectionStart
+    const end = textareaRef.current.selectionEnd
+
+    const { newText, newCursorPos } = applyFormatting(message, start, end, formatType)
+    
+    setMessage(newText)
+    onChange({ ...config, message: newText, buttons })
+
+    // Restaurar foco e posição do cursor
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
+      }
+    }, 0)
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    if (!textareaRef.current) return
+
+    const cursorPos = textareaRef.current.selectionStart
+    const { newText, newCursorPos } = insertEmoji(message, cursorPos, emoji)
+    
+    setMessage(newText)
+    onChange({ ...config, message: newText, buttons })
+    setShowEmojiPicker(false)
+
+    // Restaurar foco e posição do cursor
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
+      }
+    }, 0)
   }
 
   const handleAddButton = () => {
@@ -55,13 +97,97 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Mensagem
         </label>
+        
+        {/* Toolbar de Formatação */}
+        <div className="flex gap-1 mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+          <button
+            type="button"
+            onClick={() => handleFormat('bold')}
+            className="p-2 hover:bg-gray-200 rounded transition-colors"
+            title="Negrito (*texto*)"
+          >
+            <Bold className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('italic')}
+            className="p-2 hover:bg-gray-200 rounded transition-colors"
+            title="Itálico (_texto_)"
+          >
+            <Italic className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('strikethrough')}
+            className="p-2 hover:bg-gray-200 rounded transition-colors"
+            title="Riscado (~texto~)"
+          >
+            <Strikethrough className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('monospace')}
+            className="p-2 hover:bg-gray-200 rounded transition-colors"
+            title="Monoespaçado (```texto```)"
+          >
+            <Code className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFormat('link')}
+            className="p-2 hover:bg-gray-200 rounded transition-colors"
+            title="Inserir link"
+          >
+            <LinkIcon className="w-4 h-4" />
+          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="p-2 hover:bg-gray-200 rounded transition-colors"
+              title="Inserir emoji"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+            {showEmojiPicker && (
+              <div className="absolute top-full left-0 mt-1 p-2 bg-white border border-gray-300 rounded-lg shadow-lg z-10 w-64">
+                <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                  {COMMON_EMOJIS.map((emoji, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleEmojiSelect(emoji)}
+                      className="p-1 hover:bg-gray-100 rounded text-xl"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <textarea
+          ref={textareaRef}
           value={message}
           onChange={(e) => handleMessageChange(e.target.value)}
           placeholder="Digite a mensagem que será enviada..."
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           rows={4}
         />
+        
+        {/* Preview WhatsApp */}
+        {message && (
+          <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-xs font-medium text-green-700 mb-2">📱 Preview WhatsApp:</p>
+            <div 
+              className="text-sm text-gray-800 whitespace-pre-wrap"
+              dangerouslySetInnerHTML={{ __html: formatWhatsAppText(message) }}
+            />
+          </div>
+        )}
+        
         <p className="text-xs text-gray-500 mt-1">
           Use variáveis: {`{{nome_variavel}}`}
         </p>
