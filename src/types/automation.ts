@@ -32,6 +32,7 @@ export interface AutomationFlow {
   
   // Configuração de Gatilhos (Múltiplos)
   triggers: TriggerConfig[]
+  trigger_operator: 'OR' | 'AND'  // Operador lógico entre gatilhos
   
   // Campos legados (manter compatibilidade)
   trigger_type?: string

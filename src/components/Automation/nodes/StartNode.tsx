@@ -16,6 +16,8 @@ interface StartNodeProps {
     onEditTrigger?: (triggerId: string) => void
     onOpenActionMenu?: () => void
     triggers?: TriggerConfig[]
+    triggerOperator?: 'OR' | 'AND'
+    onOperatorChange?: (operator: 'OR' | 'AND') => void
     // Legado - manter compatibilidade
     selectedTrigger?: {
       type: string
@@ -36,7 +38,7 @@ const getTriggerIcon = (type: string) => {
 }
 
 export default function StartNode({ data }: StartNodeProps) {
-  const { triggers = [], selectedTrigger } = data
+  const { triggers = [], triggerOperator = 'OR', selectedTrigger } = data
   const hasTriggers = triggers.length > 0
 
   return (
@@ -56,9 +58,9 @@ export default function StartNode({ data }: StartNodeProps) {
         </p>
       ) : (
         <div className="mb-1.5 space-y-1 max-h-20 overflow-y-auto">
-          {triggers.filter(t => t.enabled).map((trigger) => (
-            <div 
-              key={trigger.id} 
+          {triggers.filter(t => t.enabled).map((trigger, index) => (
+            <div key={trigger.id}>
+              <div 
               className="p-1.5 bg-gray-50 rounded border border-gray-200 group cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
               onClick={() => data.onEditTrigger?.(trigger.id)}
             >
