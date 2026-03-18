@@ -9,6 +9,7 @@ import { X, Save } from 'lucide-react'
 import { Node } from 'reactflow'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
+import { supabase } from '../../lib/supabase'
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -20,12 +21,111 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   const [config, setConfig] = useState<any>({})
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
+  
+  const [tags, setTags] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
+  const [funnels, setFunnels] = useState<any[]>([])
+  const [stages, setStages] = useState<any[]>([])
+  const [loadingTags, setLoadingTags] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [loadingFunnels, setLoadingFunnels] = useState(false)
+  const [loadingStages, setLoadingStages] = useState(false)
 
   useEffect(() => {
     if (selectedNode) {
       setConfig(selectedNode.data.config || {})
     }
   }, [selectedNode])
+
+  useEffect(() => {
+    if (selectedNode?.type === 'action' && company?.id && 
+        (config.actionType === 'add_tag' || config.actionType === 'remove_tag')) {
+      loadTags()
+    }
+  }, [selectedNode?.type, config.actionType, company?.id])
+
+  useEffect(() => {
+    if (selectedNode?.type === 'action' && company?.id && config.actionType === 'assign_owner') {
+      loadUsers()
+    }
+  }, [selectedNode?.type, config.actionType, company?.id])
+
+  useEffect(() => {
+    if (selectedNode?.type === 'action' && company?.id && config.actionType === 'move_opportunity') {
+      loadFunnels()
+    }
+  }, [selectedNode?.type, config.actionType, company?.id])
+
+  useEffect(() => {
+    if (config.funnelId) {
+      loadStages(config.funnelId)
+    }
+  }, [config.funnelId])
+
+  const loadTags = async () => {
+    setLoadingTags(true)
+    try {
+      const { data } = await supabase
+        .from('tags')
+        .select('id, name, color')
+        .eq('company_id', company?.id)
+        .order('name')
+      setTags(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar tags:', error)
+    } finally {
+      setLoadingTags(false)
+    }
+  }
+
+  const loadUsers = async () => {
+    setLoadingUsers(true)
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('id, name, email')
+        .eq('company_id', company?.id)
+        .order('name')
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  const loadFunnels = async () => {
+    setLoadingFunnels(true)
+    try {
+      const { data } = await supabase
+        .from('sales_funnels')
+        .select('id, name')
+        .eq('company_id', company?.id)
+        .eq('is_active', true)
+        .order('name')
+      setFunnels(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar funis:', error)
+    } finally {
+      setLoadingFunnels(false)
+    }
+  }
+
+  const loadStages = async (funnelId: string) => {
+    setLoadingStages(true)
+    try {
+      const { data } = await supabase
+        .from('funnel_stages')
+        .select('id, name, order_index')
+        .eq('funnel_id', funnelId)
+        .order('order_index')
+      setStages(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar etapas:', error)
+    } finally {
+      setLoadingStages(false)
+    }
+  }
 
   if (!selectedNode) return null
 
@@ -83,21 +183,240 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                 <option value="create_opportunity">Criar Oportunidade</option>
                 <option value="update_lead">Atualizar Lead</option>
                 <option value="add_tag">Adicionar Tag</option>
+                <option value="remove_tag">Remover Tag</option>
                 <option value="assign_owner">Atribuir Responsável</option>
+                <option value="move_opportunity">Mover Oportunidade de Etapa</option>
+                <option value="win_opportunity">Ganhar Oportunidade</option>
+                <option value="lose_opportunity">Perder Oportunidade</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descrição
-              </label>
-              <textarea
-                value={config.description || ''}
-                onChange={(e) => setConfig({ ...config, description: e.target.value })}
-                rows={3}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Descreva o que esta ação fará..."
-              />
-            </div>
+
+            {/* ADICIONAR TAG */}
+            {config.actionType === 'add_tag' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecionar Tag Existente
+                  </label>
+                  {loadingTags ? (
+                    <div className="text-sm text-gray-500">Carregando tags...</div>
+                  ) : (
+                    <select
+                      value={config.tagId || ''}
+                      onChange={(e) => setConfig({ ...config, tagId: e.target.value, newTagName: '' })}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">-- Selecione uma tag --</option>
+                      {tags.map(tag => (
+                        <option key={tag.id} value={tag.id}>{tag.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="text-center text-gray-500 text-sm">ou</div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Criar Nova Tag
+                  </label>
+                  <input
+                    type="text"
+                    value={config.newTagName || ''}
+                    onChange={(e) => setConfig({ ...config, newTagName: e.target.value, tagId: '' })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Nome da nova tag"
+                  />
+                </div>
+                {config.newTagName && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cor da Tag
+                    </label>
+                    <input
+                      type="color"
+                      value={config.tagColor || '#3B82F6'}
+                      onChange={(e) => setConfig({ ...config, tagColor: e.target.value })}
+                      className="w-full h-10 rounded-md border-gray-300 shadow-sm"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* REMOVER TAG */}
+            {config.actionType === 'remove_tag' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecionar Tag para Remover
+                </label>
+                {loadingTags ? (
+                  <div className="text-sm text-gray-500">Carregando tags...</div>
+                ) : (
+                  <select
+                    value={config.tagId || ''}
+                    onChange={(e) => setConfig({ ...config, tagId: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">-- Selecione uma tag --</option>
+                    {tags.map(tag => (
+                      <option key={tag.id} value={tag.id}>{tag.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* ATRIBUIR RESPONSÁVEL */}
+            {config.actionType === 'assign_owner' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Responsável
+                </label>
+                {loadingUsers ? (
+                  <div className="text-sm text-gray-500">Carregando usuários...</div>
+                ) : (
+                  <select
+                    value={config.userId || ''}
+                    onChange={(e) => setConfig({ ...config, userId: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">-- Selecione um usuário --</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* MOVER OPORTUNIDADE */}
+            {config.actionType === 'move_opportunity' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Funil de Destino
+                  </label>
+                  {loadingFunnels ? (
+                    <div className="text-sm text-gray-500">Carregando funis...</div>
+                  ) : (
+                    <select
+                      value={config.funnelId || ''}
+                      onChange={(e) => setConfig({ ...config, funnelId: e.target.value, stageId: '' })}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">-- Selecione um funil --</option>
+                      {funnels.map(funnel => (
+                        <option key={funnel.id} value={funnel.id}>{funnel.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {config.funnelId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Etapa de Destino
+                    </label>
+                    {loadingStages ? (
+                      <div className="text-sm text-gray-500">Carregando etapas...</div>
+                    ) : (
+                      <select
+                        value={config.stageId || ''}
+                        onChange={(e) => setConfig({ ...config, stageId: e.target.value })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        <option value="">-- Selecione uma etapa --</option>
+                        {stages.map(stage => (
+                          <option key={stage.id} value={stage.id}>{stage.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* GANHAR OPORTUNIDADE */}
+            {config.actionType === 'win_opportunity' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Valor Final (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    value={config.finalValue || ''}
+                    onChange={(e) => setConfig({ ...config, finalValue: parseFloat(e.target.value) })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="R$ 0,00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observações
+                  </label>
+                  <textarea
+                    value={config.notes || ''}
+                    onChange={(e) => setConfig({ ...config, notes: e.target.value })}
+                    rows={3}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Observações sobre o fechamento..."
+                  />
+                </div>
+              </>
+            )}
+
+            {/* PERDER OPORTUNIDADE */}
+            {config.actionType === 'lose_opportunity' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Motivo da Perda
+                  </label>
+                  <select
+                    value={config.lossReason || ''}
+                    onChange={(e) => setConfig({ ...config, lossReason: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">-- Selecione um motivo --</option>
+                    <option value="Preço alto">Preço alto</option>
+                    <option value="Concorrência">Concorrência</option>
+                    <option value="Sem interesse">Sem interesse</option>
+                    <option value="Sem orçamento">Sem orçamento</option>
+                    <option value="Timing inadequado">Timing inadequado</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observações
+                  </label>
+                  <textarea
+                    value={config.notes || ''}
+                    onChange={(e) => setConfig({ ...config, notes: e.target.value })}
+                    rows={3}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Detalhes sobre a perda..."
+                  />
+                </div>
+              </>
+            )}
+
+            {/* DESCRIÇÃO GENÉRICA para outras ações */}
+            {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity'].includes(config.actionType) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descrição
+                </label>
+                <textarea
+                  value={config.description || ''}
+                  onChange={(e) => setConfig({ ...config, description: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Descreva o que esta ação fará..."
+                />
+              </div>
+            )}
           </div>
         )
 

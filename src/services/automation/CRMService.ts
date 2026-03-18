@@ -315,7 +315,7 @@ export class CRMService {
       const { data, error } = await supabase
         .from('leads')
         .update({
-          owner_id: params.ownerId,
+          responsible_user_id: params.ownerId,
           updated_at: new Date().toISOString()
         })
         .eq('id', params.leadId)
@@ -334,6 +334,105 @@ export class CRMService {
       }
     } catch (error: any) {
       console.error('❌ Erro ao atribuir responsável:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Marca oportunidade como ganha
+   */
+  async winOpportunity(opportunityId: string, companyId: string, params?: {
+    finalValue?: number;
+    closeDate?: string;
+    notes?: string;
+  }): Promise<any> {
+    try {
+      console.log('🎉 CRMService: Marcando oportunidade como ganha', {
+        opportunityId,
+        finalValue: params?.finalValue
+      })
+
+      const updateData: any = {
+        status: 'won',
+        closed_at: params?.closeDate || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      if (params?.finalValue !== undefined) {
+        updateData.value = params.finalValue
+      }
+
+      if (params?.notes) {
+        updateData.notes = params.notes
+      }
+
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update(updateData)
+        .eq('id', opportunityId)
+        .eq('company_id', companyId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      console.log('✅ Oportunidade marcada como ganha')
+
+      return {
+        success: true,
+        opportunity: data
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao marcar oportunidade como ganha:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Marca oportunidade como perdida
+   */
+  async loseOpportunity(opportunityId: string, companyId: string, params: {
+    lossReason?: string;
+    notes?: string;
+  }): Promise<any> {
+    try {
+      console.log('😞 CRMService: Marcando oportunidade como perdida', {
+        opportunityId,
+        lossReason: params.lossReason
+      })
+
+      const updateData: any = {
+        status: 'lost',
+        closed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      if (params.lossReason) {
+        updateData.loss_reason = params.lossReason
+      }
+
+      if (params.notes) {
+        updateData.notes = params.notes
+      }
+
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update(updateData)
+        .eq('id', opportunityId)
+        .eq('company_id', companyId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      console.log('✅ Oportunidade marcada como perdida')
+
+      return {
+        success: true,
+        opportunity: data
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao marcar oportunidade como perdida:', error)
       throw error
     }
   }

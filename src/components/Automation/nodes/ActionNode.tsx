@@ -5,7 +5,7 @@
 // =====================================================
 
 import { Handle, Position, NodeProps } from 'reactflow'
-import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2 } from 'lucide-react'
+import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2, ArrowRight, TrendingUp, TrendingDown, User } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
 
@@ -50,6 +50,10 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'add_tag': return <Tag className="w-4 h-4 text-white" />
       case 'remove_tag': return <Trash2 className="w-4 h-4 text-white" />
       case 'update_lead': return <UserPlus className="w-4 h-4 text-white" />
+      case 'assign_owner': return <User className="w-4 h-4 text-white" />
+      case 'move_opportunity': return <ArrowRight className="w-4 h-4 text-white" />
+      case 'win_opportunity': return <TrendingUp className="w-4 h-4 text-white" />
+      case 'lose_opportunity': return <TrendingDown className="w-4 h-4 text-white" />
       default: return <Target className="w-4 h-4 text-white" />
     }
   }
@@ -59,6 +63,10 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'add_tag': return 'Adicionar Tag'
       case 'remove_tag': return 'Remover Tag'
       case 'update_lead': return 'Atualizar Lead'
+      case 'assign_owner': return 'Atribuir Responsável'
+      case 'move_opportunity': return 'Mover Oportunidade'
+      case 'win_opportunity': return 'Ganhar Oportunidade'
+      case 'lose_opportunity': return 'Perder Oportunidade'
       default: return 'Ação CRM'
     }
   }
@@ -68,11 +76,19 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
     
     switch (actionType) {
       case 'add_tag':
-        return `🏷️ Adicionar: ${data.config.tagName || '(tag)'}`
+        return `🏷️ ${data.config.newTagName || data.config.tagId ? 'Tag configurada' : '(tag)'}`
       case 'remove_tag':
-        return `🗑️ Remover: ${data.config.tagName || '(tag)'}`
+        return `🗑️ ${data.config.tagId ? 'Tag configurada' : '(tag)'}`
       case 'update_lead':
-        return `👤 Atualizar: ${data.config.field || '(campo)'}`
+        return `👤 Atualizar lead`
+      case 'assign_owner':
+        return `👤 ${data.config.userId ? 'Responsável configurado' : '(usuário)'}`
+      case 'move_opportunity':
+        return `➡️ ${data.config.stageId ? 'Etapa configurada' : '(etapa)'}`
+      case 'win_opportunity':
+        return `📈 Marcar como ganha`
+      case 'lose_opportunity':
+        return `📉 Marcar como perdida`
       default:
         return 'Ação configurada'
     }

@@ -511,7 +511,7 @@ export class AutomationEngine {
 
         case 'assign_owner':
           // Atribuir responsável
-          const ownerId = node.data.config?.ownerId
+          const ownerId = node.data.config?.userId
           if (!ownerId) {
             throw new Error('ID do responsável não especificado')
           }
@@ -551,6 +551,48 @@ export class AutomationEngine {
             action: 'move_opportunity',
             opportunityId: context.opportunityId,
             stageId
+          }
+
+        case 'win_opportunity':
+          // Ganhar oportunidade
+          if (!context.opportunityId) {
+            throw new Error('ID da oportunidade não encontrado no contexto')
+          }
+
+          await crmService.winOpportunity(
+            context.opportunityId,
+            context.companyId,
+            {
+              finalValue: node.data.config?.finalValue,
+              notes: node.data.config?.notes
+            }
+          )
+
+          return {
+            executed: true,
+            action: 'win_opportunity',
+            opportunityId: context.opportunityId
+          }
+
+        case 'lose_opportunity':
+          // Perder oportunidade
+          if (!context.opportunityId) {
+            throw new Error('ID da oportunidade não encontrado no contexto')
+          }
+
+          await crmService.loseOpportunity(
+            context.opportunityId,
+            context.companyId,
+            {
+              lossReason: node.data.config?.lossReason,
+              notes: node.data.config?.notes
+            }
+          )
+
+          return {
+            executed: true,
+            action: 'lose_opportunity',
+            opportunityId: context.opportunityId
           }
 
         default:
