@@ -142,16 +142,54 @@ export class WhatsAppService {
 
   /**
    * Substitui variáveis na mensagem
-   * Exemplo: "Olá {nome}" -> "Olá João"
+   * Suporta formatos: {{lead.campo}}, {{empresa.campo}}, {{data.hoje}}, {{custom.campo}}
+   * Exemplo: "Olá {{lead.nome}}" -> "Olá João"
    */
   replaceVariables(message: string, variables: Record<string, any>): string {
     let result = message
 
-    // Substituir variáveis no formato {variavel}
+    console.log('🔄 Substituindo variáveis:', { 
+      message: message.substring(0, 100),
+      variablesKeys: Object.keys(variables)
+    })
+
+    // 1. Substituir variáveis de LEAD: {{lead.campo}}
+    result = result.replace(/\{\{lead\.nome\}\}/g, variables.nome || '')
+    result = result.replace(/\{\{lead\.email\}\}/g, variables.email || '')
+    result = result.replace(/\{\{lead\.telefone\}\}/g, variables.telefone || '')
+    result = result.replace(/\{\{lead\.empresa\}\}/g, variables.empresa || '')
+    result = result.replace(/\{\{lead\.cidade\}\}/g, variables.cidade || '')
+    result = result.replace(/\{\{lead\.estado\}\}/g, variables.estado || '')
+
+    // 2. Substituir variáveis de EMPRESA: {{empresa.campo}}
+    result = result.replace(/\{\{empresa\.nome\}\}/g, variables.empresa_nome || '')
+    result = result.replace(/\{\{empresa\.telefone\}\}/g, variables.empresa_telefone || '')
+    result = result.replace(/\{\{empresa\.email\}\}/g, variables.empresa_email || '')
+    result = result.replace(/\{\{empresa\.site\}\}/g, variables.empresa_site || '')
+    result = result.replace(/\{\{empresa\.endereco\}\}/g, variables.empresa_endereco || '')
+
+    // 3. Substituir variáveis de SISTEMA: {{data.hoje}} e {{data.hora}}
+    const now = new Date()
+    result = result.replace(/\{\{data\.hoje\}\}/g, now.toLocaleDateString('pt-BR'))
+    result = result.replace(/\{\{data\.hora\}\}/g, now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+    result = result.replace(/\{\{usuario\.nome\}\}/g, variables.usuario_nome || '')
+
+    // 4. Substituir campos PERSONALIZADOS: {{custom.campo}}
+    Object.keys(variables).forEach((key) => {
+      if (key.startsWith('custom_')) {
+        const fieldName = key.replace('custom_', '')
+        const regex = new RegExp(`\\{\\{custom\\.${fieldName}\\}\\}`, 'g')
+        result = result.replace(regex, String(variables[key] || ''))
+      }
+    })
+
+    // 5. Manter compatibilidade com formato ANTIGO: {variavel}
     Object.keys(variables).forEach((key) => {
       const regex = new RegExp(`\\{${key}\\}`, 'g')
       result = result.replace(regex, variables[key] || '')
     })
+
+    console.log('✅ Variáveis substituídas:', result.substring(0, 100))
 
     return result
   }

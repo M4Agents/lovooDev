@@ -271,6 +271,7 @@ export class AutomationEngine {
 
   /**
    * Encontra os próximos nós a serem executados
+   * IMPORTANTE: Ordena por position.y para respeitar ordem visual do fluxo
    */
   private getNextNodes(
     currentNode: Node,
@@ -282,6 +283,7 @@ export class AutomationEngine {
     const outgoingEdges = allEdges.filter((edge) => edge.source === currentNode.id)
 
     if (outgoingEdges.length === 0) {
+      console.log('📊 Nenhum próximo nó encontrado para:', currentNode.id)
       return []
     }
 
@@ -291,15 +293,29 @@ export class AutomationEngine {
       const edge = outgoingEdges.find((e) => e.sourceHandle === targetHandle)
       if (edge) {
         const nextNode = allNodes.find((n) => n.id === edge.target)
+        console.log('📊 Condição:', targetHandle, '→ Próximo nó:', nextNode?.id)
         return nextNode ? [nextNode] : []
       }
       return []
     }
 
-    // Para outros nós, seguir todas as conexões
+    // Para outros nós, seguir todas as conexões E ORDENAR pela posição Y
     const nextNodes = outgoingEdges
       .map((edge) => allNodes.find((n) => n.id === edge.target))
       .filter((node): node is Node => node !== undefined)
+      .sort((a, b) => {
+        // Ordenar pela posição Y (vertical) no canvas
+        const posA = a.position?.y || 0
+        const posB = b.position?.y || 0
+        return posA - posB  // Ordem crescente (de cima para baixo)
+      })
+
+    console.log('📊 Próximos nós ordenados por posição Y:', nextNodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      posY: n.position?.y,
+      label: n.data?.label || n.data?.config?.message?.substring(0, 30)
+    })))
 
     return nextNodes
   }
@@ -797,10 +813,8 @@ export class AutomationEngine {
       // Obter mensagem/caption configurada
       let message = node.data.config?.message || node.data.config?.caption || ''
 
-      // Substituir variáveis se habilitado
-      if (node.data.config?.useVariables) {
-        message = whatsAppService.replaceVariables(message, allVariables)
-      }
+      // Substituir variáveis SEMPRE (não depende de flag)
+      message = whatsAppService.replaceVariables(message, allVariables)
 
       // Detectar tipo de mensagem e preparar dados
       const messageType = node.data.config?.messageType || 'text'
