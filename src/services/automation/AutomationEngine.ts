@@ -299,16 +299,18 @@ export class AutomationEngine {
       return []
     }
 
-    // Para outros nós, seguir todas as conexões E ORDENAR pela posição Y
-    const nextNodes = outgoingEdges
+    // CORREÇÃO: Ordenar EDGES por posY do target ANTES de mapear
+    const sortedEdges = outgoingEdges.sort((edgeA, edgeB) => {
+      const nodeA = allNodes.find(n => n.id === edgeA.target)
+      const nodeB = allNodes.find(n => n.id === edgeB.target)
+      const posA = nodeA?.position?.y || 0
+      const posB = nodeB?.position?.y || 0
+      return posA - posB
+    })
+    
+    const nextNodes = sortedEdges
       .map((edge) => allNodes.find((n) => n.id === edge.target))
       .filter((node): node is Node => node !== undefined)
-      .sort((a, b) => {
-        // Ordenar pela posição Y (vertical) no canvas
-        const posA = a.position?.y || 0
-        const posB = b.position?.y || 0
-        return posA - posB  // Ordem crescente (de cima para baixo)
-      })
 
     console.log('📊 Próximos nós ordenados por posição Y:', nextNodes.map(n => ({
       id: n.id,
