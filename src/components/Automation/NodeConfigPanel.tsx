@@ -3,7 +3,7 @@
 // Data: 13/03/2026
 // Objetivo: Painel lateral para configurar blocos selecionados
 // =====================================================
-
+import { NotificationForm } from './NotificationForm'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
 import { Node } from 'reactflow'
@@ -763,9 +763,9 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                 {config.actionType === 'complete_activity' && <CompleteActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'cancel_activity' && <CancelActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'reschedule_activity' && <RescheduleActivityForm config={config} setConfig={setConfig} />}
-
+                {config.actionType === 'send_notification' && <NotificationForm config={config} setConfig={setConfig} users={users} />}
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

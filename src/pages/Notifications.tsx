@@ -14,12 +14,14 @@ interface CompanyUser {
 
 interface ActivityNotification {
   id: string
-  activity_id: string
+  activity_id?: string  // Tornar opcional
   title: string
   message: string
   status: 'pending' | 'sent' | 'read'
   sent_at: string
   created_at: string
+  source?: 'activity' | 'system'  // Adicionar
+  notification_type?: 'info' | 'success' | 'warning' | 'error'  // Adicionar
   activity?: {
     id: string
     title: string
@@ -75,31 +77,42 @@ export const Notifications: React.FC = () => {
     }
   }
 
-  // Buscar notificações do usuário selecionado
-  const loadNotifications = async (userId: string) => {
-    if (!userId) return
+ // Buscar notificações do usuário selecionado
+const loadNotifications = async (userId: string) => {
+  if (!userId) return
 
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/notifications/activities?user_id=${userId}&limit=200`)
-      const data = await response.json()
-
-      if (data.success) {
-        setNotifications(data.notifications || [])
-      }
-    } catch (error) {
-      console.error('Erro ao carregar notificações:', error)
-    } finally {
-      setLoading(false)
-    }
+  try {
+    setLoading(true)
+    
+    // Buscar notificações de atividades
+    const activityResponse = await fetch(`/api/notifications/activities?user_id=${userId}&limit=200`)
+    const activityData = await activityResponse.json()
+    
+    // Buscar notificações do sistema
+    const systemResponse = await fetch(`/api/notifications/system?user_id=${userId}&limit=200`)
+    const systemData = await systemResponse.json()
+    
+    // Mesclar e ordenar por data
+    const allNotifications = [
+      ...(activityData.notifications || []).map(n => ({ ...n, source: 'activity' })),
+      ...(systemData.notifications || []).map(n => ({ ...n, source: 'system' }))
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    
+    setNotifications(allNotifications)
+  } catch (error) {
+    console.error('Erro ao carregar notificações:', error)
+  } finally {
+    setLoading(false)
   }
-
+}
   // Marcar notificação como lida (apenas próprias notificações)
-  const markAsRead = async (notificationId: string) => {
-    if (selectedUserId !== user?.id) return
+  const markAsRead = async (notificationId: string, source: string = 'activity') => {
+  if (selectedUserId !== user?.id) return
 
-    try {
-      const response = await fetch('/api/notifications/activities', {
+  try {
+    const endpoint = source === 'system' ? '/api/notifications/system' : '/api/notifications/activities'
+    
+    const response = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,29 +122,38 @@ export const Notifications: React.FC = () => {
       })
 
       if (response.ok) {
-        setNotifications(prev =>
-          prev.map(n => n.id === notificationId ? { ...n, status: 'read' as const } : n)
-        )
-      }
-    } catch (error) {
-      console.error('Erro ao marcar notificação como lida:', error)
-    }
-  }
-
   // Marcar todas como lidas (apenas próprias notificações)
-  const markAllAsRead = async () => {
-    if (selectedUserId !== user?.id) return
+const markAllAsRead = async () => {
+  if (selectedUserId !== user?.id) return
 
-    try {
-      const response = await fetch('/api/notifications/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user?.id,
-          action: 'mark_all_read'
-        })
+  try {
+    // Marcar notificações de atividades
+    await fetch('/api/notifications/activities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: user?.id,
+        action: 'mark_all_read'
       })
+    })
+    
+    // Marcar notificações do sistema
+    await fetch('/api/notifications/system', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: user?.id,
+        action: 'mark_all_read'
+      })
+    })
 
+    setNotifications(prev =>
+      prev.map(n => ({ ...n, status: 'read' as const }))
+    )
+  } catch (error) {
+    console.error('Erro ao marcar todas como lidas:', error)
+  }
+}
       if (response.ok) {
         setNotifications(prev =>
           prev.map(n => ({ ...n, status: 'read' as const }))
@@ -444,13 +466,13 @@ export const Notifications: React.FC = () => {
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                       onClick={async () => {
-                        // Marcar como lida se for própria notificação
-                        if (isViewingOwnNotifications && notification.status === 'sent') {
-                          markAsRead(notification.id)
-                        }
-                        
-                        // Abrir modal da atividade
-                        if (notification.activity_id) {
+  // Marcar como lida se for própria notificação
+  if (isViewingOwnNotifications && notification.status === 'sent') {
+    markAsRead(notification.id, notification.source || 'activity')
+  }
+  
+  // Abrir modal da atividade (apenas para notificações de atividade)
+  if (notification.source === 'activity' && notification.activity_id) {
                           try {
                             const { data, error } = await supabase
                               .from('lead_activities')
@@ -476,12 +498,17 @@ export const Notifications: React.FC = () => {
                         <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
                           notification.status === 'sent' ? 'bg-indigo-100' : 'bg-gray-100'
                         }`}>
-                          <span className="text-2xl">
-                            {notification.activity?.activity_type 
-                              ? getActivityTypeEmoji(notification.activity.activity_type)
-                              : '🔔'
-                            }
-                          </span>
+                         <span className="text-2xl">
+  {notification.source === 'system' 
+    ? (notification.notification_type === 'success' ? '✅' :
+       notification.notification_type === 'warning' ? '⚠️' :
+       notification.notification_type === 'error' ? '❌' : 'ℹ️')
+    : (notification.activity?.activity_type 
+        ? getActivityTypeEmoji(notification.activity.activity_type)
+        : '🔔'
+      )
+  }
+</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-4">

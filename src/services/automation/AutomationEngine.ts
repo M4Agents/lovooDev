@@ -4,7 +4,7 @@
 // Objetivo: Motor de execução de fluxos de automação
 // IMPORTANTE: Implementação incremental e não-destrutiva
 // =====================================================
-
+import { notificationService } from './NotificationService'
 import { supabase } from '../../lib/supabase'
 import type { AutomationFlow, AutomationExecution, AutomationLog } from '../../types/automation'
 import { Node, Edge } from 'reactflow'
@@ -686,6 +686,31 @@ export class AutomationEngine {
             node.data.config?.newTime
           )
           return { executed: true, action: 'reschedule_activity', count: rescheduleCount }
+        case 'send_notification':
+          const recipientType = node.data.config?.recipientType || 'owner'
+          const recipients = await notificationService.resolveRecipients(recipientType, {
+            ...context,
+            specificUserId: node.data.config?.specificUserId
+          })
+          
+          for (const userId of recipients) {
+            await notificationService.sendNotification({
+              companyId: context.companyId,
+              userId,
+              title: node.data.config?.notificationTitle || 'Notificação',
+              message: node.data.config?.notificationMessage || '',
+              notificationType: node.data.config?.notificationType || 'info',
+              priority: node.data.config?.notificationPriority || 'normal',
+              actionType: 'open_lead',
+              actionData: { leadId: context.leadId },
+              source: 'automation',
+              sourceFlowId: context.flowId,
+              leadId: context.leadId,
+              opportunityId: context.opportunityId
+            })
+          }
+          
+          return { executed: true, action: 'send_notification', count: recipients.length }
 
         default:
           console.warn('⚠️ Tipo de ação desconhecido:', actionType)
