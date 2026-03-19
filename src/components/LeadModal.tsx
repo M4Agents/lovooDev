@@ -609,6 +609,64 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           </div>
         );
 
+      case 'number':
+        return (
+          <div key={field.id} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <Type className="w-4 h-4 inline mr-1" />
+              {field.field_label}
+              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+              required={field.is_required}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder={`Digite ${field.field_label.toLowerCase()}`}
+            />
+          </div>
+        );
+
+      case 'date':
+        return (
+          <div key={field.id} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <Type className="w-4 h-4 inline mr-1" />
+              {field.field_label}
+              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="date"
+              value={value}
+              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+              required={field.is_required}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        );
+
+      case 'boolean':
+        return (
+          <div key={field.id} className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <List className="w-4 h-4 inline mr-1" />
+              {field.field_label}
+              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <select
+              value={value}
+              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+              required={field.is_required}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Selecione</option>
+              <option value="true">Sim</option>
+              <option value="false">Não</option>
+            </select>
+          </div>
+        );
+
       case 'select':
         return (
           <div key={field.id} className="space-y-2">
