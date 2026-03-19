@@ -723,8 +723,42 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                   </>
                 )}
 
+                {/* DISPARAR WEBHOOK */}
+                {config.actionType === 'send_webhook' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        URL do Webhook *
+                      </label>
+                      <input
+                        type="url"
+                        value={config.webhookUrl || ''}
+                        onChange={(e) => setConfig({ ...config, webhookUrl: e.target.value })}
+                        placeholder="https://api.exemplo.com/webhook"
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Token de Autenticação (opcional)
+                      </label>
+                      <input
+                        type="password"
+                        value={config.authToken || ''}
+                        onChange={(e) => setConfig({ ...config, authToken: e.target.value })}
+                        placeholder="Bearer token123"
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Será enviado no header Authorization
+                      </p>
+                    </div>
+                  </>
+                )}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

@@ -6,19 +6,19 @@
 
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
-  ArrowRight, Trophy, XCircle, User, Briefcase, Settings 
+  ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook 
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook'
   label: string
   icon: React.ReactNode
   description?: string
-  category: 'lead' | 'opportunity'
+  category: 'lead' | 'opportunity' | 'integration'
 }
 
 export interface ActionCategory {
-  id: 'lead' | 'opportunity'
+  id: 'lead' | 'opportunity' | 'integration'
   label: string
   icon: React.ReactNode
 }
@@ -33,6 +33,11 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     id: 'opportunity',
     label: 'Oportunidade',
     icon: <Briefcase className="w-4 h-4" />
+  },
+  {
+    id: 'integration',
+    label: 'Integrações',
+    icon: <Webhook className="w-4 h-4" />
   }
 ]
 
@@ -99,6 +104,13 @@ export const ACTION_TYPES: ActionType[] = [
     icon: <XCircle className="w-4 h-4" />,
     description: 'Marque oportunidade como perdida',
     category: 'opportunity'
+  },
+  {
+    id: 'send_webhook',
+    label: 'Disparar Webhook',
+    icon: <Webhook className="w-4 h-4" />,
+    description: 'Envie dados para URL externa',
+    category: 'integration'
   }
 ]
 

@@ -11,6 +11,7 @@ import { Node, Edge } from 'reactflow'
 import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
 import { scheduleService } from './ScheduleService'
+import { webhookService } from './WebhookService'
 
 interface ExecutionContext {
   executionId: string
@@ -621,6 +622,37 @@ export class AutomationEngine {
             fieldId,
             value: fieldValue,
             actionType: customFieldResult.action
+          }
+
+        case 'send_webhook':
+          // Disparar webhook
+          const webhookUrl = node.data.config?.webhookUrl
+          const authToken = node.data.config?.authToken
+
+          if (!webhookUrl) {
+            throw new Error('URL do webhook não especificada')
+          }
+
+          // Construir payload com todos os dados disponíveis
+          const payload = webhookService.buildPayload(context)
+
+          // Enviar webhook
+          const webhookResult = await webhookService.sendWebhook(
+            webhookUrl,
+            payload,
+            authToken
+          )
+
+          if (!webhookResult.success) {
+            throw new Error(webhookResult.error || 'Falha ao enviar webhook')
+          }
+
+          return {
+            executed: true,
+            action: 'send_webhook',
+            url: webhookUrl,
+            status: webhookResult.status,
+            response: webhookResult.data
           }
 
         default:
