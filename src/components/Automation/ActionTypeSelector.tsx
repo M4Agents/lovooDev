@@ -6,7 +6,7 @@
 
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
-  ArrowRight, Trophy, XCircle 
+  ArrowRight, Trophy, XCircle, User, Briefcase 
 } from 'lucide-react'
 
 export interface ActionType {
@@ -14,56 +14,84 @@ export interface ActionType {
   label: string
   icon: React.ReactNode
   description?: string
+  category: 'lead' | 'opportunity'
 }
+
+export interface ActionCategory {
+  id: 'lead' | 'opportunity'
+  label: string
+  icon: React.ReactNode
+}
+
+export const ACTION_CATEGORIES: ActionCategory[] = [
+  {
+    id: 'lead',
+    label: 'Lead',
+    icon: <User className="w-4 h-4" />
+  },
+  {
+    id: 'opportunity',
+    label: 'Oportunidade',
+    icon: <Briefcase className="w-4 h-4" />
+  }
+]
 
 export const ACTION_TYPES: ActionType[] = [
   {
     id: 'add_tag',
     label: 'Adicionar Tag',
     icon: <Tag className="w-4 h-4" />,
-    description: 'Adicione uma tag ao lead'
+    description: 'Adicione uma tag ao lead',
+    category: 'lead'
   },
   {
     id: 'remove_tag',
     label: 'Remover Tag',
     icon: <Minus className="w-4 h-4" />,
-    description: 'Remova uma tag do lead'
+    description: 'Remova uma tag do lead',
+    category: 'lead'
   },
   {
     id: 'assign_owner',
     label: 'Atribuir Responsável',
     icon: <UserPlus className="w-4 h-4" />,
-    description: 'Atribua um responsável ao lead'
-  },
-  {
-    id: 'move_opportunity',
-    label: 'Mover Oportunidade',
-    icon: <ArrowRight className="w-4 h-4" />,
-    description: 'Mova oportunidade para outra etapa'
-  },
-  {
-    id: 'win_opportunity',
-    label: 'Ganhar Oportunidade',
-    icon: <Trophy className="w-4 h-4" />,
-    description: 'Marque oportunidade como ganha'
-  },
-  {
-    id: 'lose_opportunity',
-    label: 'Perder Oportunidade',
-    icon: <XCircle className="w-4 h-4" />,
-    description: 'Marque oportunidade como perdida'
-  },
-  {
-    id: 'create_opportunity',
-    label: 'Criar Oportunidade',
-    icon: <Plus className="w-4 h-4" />,
-    description: 'Crie uma nova oportunidade'
+    description: 'Atribua um responsável ao lead',
+    category: 'lead'
   },
   {
     id: 'update_lead',
     label: 'Atualizar Lead',
     icon: <Edit className="w-4 h-4" />,
-    description: 'Atualize dados do lead'
+    description: 'Atualize dados do lead',
+    category: 'lead'
+  },
+  {
+    id: 'create_opportunity',
+    label: 'Criar Oportunidade',
+    icon: <Plus className="w-4 h-4" />,
+    description: 'Crie uma nova oportunidade',
+    category: 'opportunity'
+  },
+  {
+    id: 'move_opportunity',
+    label: 'Mover Oportunidade',
+    icon: <ArrowRight className="w-4 h-4" />,
+    description: 'Mova oportunidade para outra etapa',
+    category: 'opportunity'
+  },
+  {
+    id: 'win_opportunity',
+    label: 'Ganhar Oportunidade',
+    icon: <Trophy className="w-4 h-4" />,
+    description: 'Marque oportunidade como ganha',
+    category: 'opportunity'
+  },
+  {
+    id: 'lose_opportunity',
+    label: 'Perder Oportunidade',
+    icon: <XCircle className="w-4 h-4" />,
+    description: 'Marque oportunidade como perdida',
+    category: 'opportunity'
   }
 ]
 
@@ -73,22 +101,38 @@ interface ActionTypeSelectorProps {
 
 export default function ActionTypeSelector({ onSelectType }: ActionTypeSelectorProps) {
   return (
-    <div className="space-y-1">
-      {ACTION_TYPES.map((type) => (
-        <button
-          key={type.id}
-          onClick={() => onSelectType(type.id)}
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-        >
-          <div className="text-blue-600">{type.icon}</div>
-          <div className="flex-1">
-            <div className="font-medium text-gray-900">{type.label}</div>
-            {type.description && (
-              <div className="text-xs text-gray-500 mt-0.5">{type.description}</div>
-            )}
+    <div className="space-y-4">
+      {ACTION_CATEGORIES.map((category) => {
+        const categoryActions = ACTION_TYPES.filter(action => action.category === category.id)
+        
+        return (
+          <div key={category.id}>
+            <div className="flex items-center gap-2 px-2 py-2 mb-2">
+              <div className="text-gray-600">{category.icon}</div>
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                {category.label}
+              </h4>
+            </div>
+            <div className="space-y-1">
+              {categoryActions.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => onSelectType(type.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                >
+                  <div className="text-blue-600">{type.icon}</div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">{type.label}</div>
+                    {type.description && (
+                      <div className="text-xs text-gray-500 mt-0.5">{type.description}</div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        </button>
-      ))}
+        )
+      })}
     </div>
   )
 }
