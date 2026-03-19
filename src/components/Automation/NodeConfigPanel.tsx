@@ -58,7 +58,7 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   useEffect(() => {
     const actionType = config.actionType || selectedNode?.data?.config?.actionType
     
-    if (selectedNode?.type === 'action' && company?.id && actionType === 'move_opportunity') {
+    if (selectedNode?.type === 'action' && company?.id && (actionType === 'move_opportunity' || actionType === 'create_opportunity')) {
       loadFunnels()
     }
   }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
@@ -420,8 +420,190 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
               </>
             )}
 
+                {/* CRIAR OPORTUNIDADE */}
+                {config.actionType === 'create_opportunity' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Funil *
+                      </label>
+                      {loadingFunnels ? (
+                        <div className="text-sm text-gray-500">Carregando funis...</div>
+                      ) : (
+                        <select
+                          value={config.funnelId || ''}
+                          onChange={(e) => setConfig({ ...config, funnelId: e.target.value, stageId: '' })}
+                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        >
+                          <option value="">-- Selecione um funil --</option>
+                          {funnels.map(funnel => (
+                            <option key={funnel.id} value={funnel.id}>{funnel.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    {config.funnelId && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Etapa Inicial *
+                        </label>
+                        {loadingStages ? (
+                          <div className="text-sm text-gray-500">Carregando etapas...</div>
+                        ) : (
+                          <select
+                            value={config.stageId || ''}
+                            onChange={(e) => setConfig({ ...config, stageId: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">-- Selecione uma etapa --</option>
+                            {stages.map(stage => (
+                              <option key={stage.id} value={stage.id}>{stage.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Título da Oportunidade (opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.title || ''}
+                        onChange={(e) => setConfig({ ...config, title: e.target.value })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Ex: Proposta Comercial - {lead.name}"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Valor Estimado (opcional)
+                      </label>
+                      <input
+                        type="number"
+                        value={config.value || ''}
+                        onChange={(e) => setConfig({ ...config, value: parseFloat(e.target.value) })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="R$ 0,00"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Probabilidade % (opcional)
+                      </label>
+                      <input
+                        type="number"
+                        value={config.probability || ''}
+                        onChange={(e) => setConfig({ ...config, probability: parseInt(e.target.value) })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="0-100"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* ATUALIZAR LEAD */}
+                {config.actionType === 'update_lead' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nome
+                      </label>
+                      <input
+                        type="text"
+                        value={config.fields?.name || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, name: e.target.value }
+                        })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Nome do lead"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        E-mail
+                      </label>
+                      <input
+                        type="email"
+                        value={config.fields?.email || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, email: e.target.value }
+                        })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="email@exemplo.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Telefone
+                      </label>
+                      <input
+                        type="tel"
+                        value={config.fields?.phone || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, phone: e.target.value }
+                        })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Empresa
+                      </label>
+                      <input
+                        type="text"
+                        value={config.fields?.company || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, company: e.target.value }
+                        })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Nome da empresa"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cargo
+                      </label>
+                      <input
+                        type="text"
+                        value={config.fields?.position || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, position: e.target.value }
+                        })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Cargo do lead"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Observações
+                      </label>
+                      <textarea
+                        value={config.fields?.notes || ''}
+                        onChange={(e) => setConfig({ 
+                          ...config, 
+                          fields: { ...config.fields, notes: e.target.value }
+                        })}
+                        rows={3}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Observações sobre o lead..."
+                      />
+                    </div>
+                  </>
+                )}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição
