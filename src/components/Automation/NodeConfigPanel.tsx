@@ -38,11 +38,28 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }, [selectedNode])
 
   useEffect(() => {
+    console.log('🔍 [useEffect loadTags] Disparado!', {
+      selectedNodeType: selectedNode?.type,
+      companyId: company?.id,
+      actionType: selectedNode?.data?.config?.actionType,
+      hasSelectedNode: !!selectedNode,
+      hasCompany: !!company?.id,
+      selectedNodeData: selectedNode?.data
+    })
+    
     const actionType = selectedNode?.data?.config?.actionType
     
     if (selectedNode?.type === 'action' && company?.id && 
         (actionType === 'add_tag' || actionType === 'remove_tag')) {
+      console.log('✅ [useEffect loadTags] Condições atendidas, chamando loadTags()')
       loadTags()
+    } else {
+      console.log('❌ [useEffect loadTags] Condições NÃO atendidas:', {
+        isAction: selectedNode?.type === 'action',
+        hasCompanyId: !!company?.id,
+        isAddOrRemoveTag: actionType === 'add_tag' || actionType === 'remove_tag',
+        actionType
+      })
     }
   }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
 
