@@ -6,19 +6,20 @@
 
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
-  ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook 
+  ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell 
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity'
   label: string
   icon: React.ReactNode
   description?: string
-  category: 'lead' | 'opportunity' | 'integration'
+  category: 'lead' | 'opportunity' | 'integration' | 'activity'
 }
 
 export interface ActionCategory {
-  id: 'lead' | 'opportunity' | 'integration'
+  id: 'lead' | 'opportunity' | 'integration' | 'activity'
   label: string
   icon: React.ReactNode
 }
@@ -38,6 +39,11 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     id: 'integration',
     label: 'Integrações',
     icon: <Webhook className="w-4 h-4" />
+  },
+  {
+    id: 'activity',
+    label: 'Atividades',
+    icon: <Calendar className="w-4 h-4" />
   }
 ]
 
@@ -111,6 +117,41 @@ export const ACTION_TYPES: ActionType[] = [
     icon: <Webhook className="w-4 h-4" />,
     description: 'Envie dados para URL externa',
     category: 'integration'
+  },
+  {
+    id: 'create_activity',
+    label: 'Criar Atividade',
+    icon: <Calendar className="w-4 h-4" />,
+    description: 'Agende uma nova atividade',
+    category: 'activity'
+  },
+  {
+    id: 'update_activity',
+    label: 'Atualizar Atividade',
+    icon: <Edit className="w-4 h-4" />,
+    description: 'Atualize atividades existentes',
+    category: 'activity'
+  },
+  {
+    id: 'complete_activity',
+    label: 'Concluir Atividade',
+    icon: <CalendarCheck className="w-4 h-4" />,
+    description: 'Marque atividades como concluídas',
+    category: 'activity'
+  },
+  {
+    id: 'cancel_activity',
+    label: 'Cancelar Atividade',
+    icon: <CalendarX className="w-4 h-4" />,
+    description: 'Cancele atividades pendentes',
+    category: 'activity'
+  },
+  {
+    id: 'reschedule_activity',
+    label: 'Reagendar Atividade',
+    icon: <CalendarClock className="w-4 h-4" />,
+    description: 'Reagende atividades para nova data',
+    category: 'activity'
   }
 ]
 

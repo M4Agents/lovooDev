@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { supabase } from '../../lib/supabase'
 import ActionTypeSelector, { ACTION_TYPES } from './ActionTypeSelector'
+import { CreateActivityForm, UpdateActivityForm, CompleteActivityForm, CancelActivityForm, RescheduleActivityForm } from './ActivityForms'
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -757,8 +758,14 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                   </>
                 )}
 
+                {config.actionType === 'create_activity' && <CreateActivityForm config={config} setConfig={setConfig} />}
+                {config.actionType === 'update_activity' && <UpdateActivityForm config={config} setConfig={setConfig} />}
+                {config.actionType === 'complete_activity' && <CompleteActivityForm config={config} setConfig={setConfig} />}
+                {config.actionType === 'cancel_activity' && <CancelActivityForm config={config} setConfig={setConfig} />}
+                {config.actionType === 'reschedule_activity' && <RescheduleActivityForm config={config} setConfig={setConfig} />}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

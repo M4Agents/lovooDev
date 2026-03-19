@@ -12,6 +12,7 @@ import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
 import { scheduleService } from './ScheduleService'
 import { webhookService } from './WebhookService'
+import { activityService } from './ActivityService'
 
 interface ExecutionContext {
   executionId: string
@@ -625,35 +626,66 @@ export class AutomationEngine {
           }
 
         case 'send_webhook':
-          // Disparar webhook
           const webhookUrl = node.data.config?.webhookUrl
           const authToken = node.data.config?.authToken
-
-          if (!webhookUrl) {
-            throw new Error('URL do webhook não especificada')
-          }
-
-          // Construir payload com todos os dados disponíveis
+          if (!webhookUrl) throw new Error('URL do webhook não especificada')
           const payload = webhookService.buildPayload(context)
+          const webhookResult = await webhookService.sendWebhook(webhookUrl, payload, authToken)
+          if (!webhookResult.success) throw new Error(webhookResult.error || 'Falha ao enviar webhook')
+          return { executed: true, action: 'send_webhook', url: webhookUrl, status: webhookResult.status }
 
-          // Enviar webhook
-          const webhookResult = await webhookService.sendWebhook(
-            webhookUrl,
-            payload,
-            authToken
+        case 'create_activity':
+          if (!context.leadId) throw new Error('Lead ID não encontrado')
+          const activityData = await activityService.createActivity({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            userId: context.triggerData.userId || context.triggerData.owner_user_id,
+            title: node.data.config?.activityTitle,
+            activityType: node.data.config?.activityType || 'call',
+            scheduledDate: node.data.config?.scheduledDate,
+            scheduledTime: node.data.config?.scheduledTime || '14:00',
+            description: node.data.config?.activityDescription,
+            priority: node.data.config?.activityPriority || 'medium'
+          })
+          return { executed: true, action: 'create_activity', activityId: activityData.id }
+
+        case 'update_activity':
+          if (!context.leadId) throw new Error('Lead ID não encontrado')
+          const updateCount = await activityService.updateActivities(
+            context.companyId,
+            { leadId: context.leadId, status: node.data.config?.filterStatus || 'pending' },
+            { priority: node.data.config?.newPriority }
           )
+          return { executed: true, action: 'update_activity', count: updateCount }
 
-          if (!webhookResult.success) {
-            throw new Error(webhookResult.error || 'Falha ao enviar webhook')
-          }
+        case 'complete_activity':
+          if (!context.leadId) throw new Error('Lead ID não encontrado')
+          const completeCount = await activityService.completeActivities(
+            context.companyId,
+            context.triggerData.userId || context.triggerData.owner_user_id,
+            { leadId: context.leadId, status: 'pending' },
+            node.data.config?.completionNotes
+          )
+          return { executed: true, action: 'complete_activity', count: completeCount }
 
-          return {
-            executed: true,
-            action: 'send_webhook',
-            url: webhookUrl,
-            status: webhookResult.status,
-            response: webhookResult.data
-          }
+        case 'cancel_activity':
+          if (!context.leadId) throw new Error('Lead ID não encontrado')
+          const cancelCount = await activityService.cancelActivities(
+            context.companyId,
+            { leadId: context.leadId, status: 'pending' },
+            node.data.config?.cancellationReason
+          )
+          return { executed: true, action: 'cancel_activity', count: cancelCount }
+
+        case 'reschedule_activity':
+          if (!context.leadId) throw new Error('Lead ID não encontrado')
+          const rescheduleCount = await activityService.rescheduleActivities(
+            context.companyId,
+            { leadId: context.leadId, status: 'pending' },
+            node.data.config?.daysOffset || 0,
+            node.data.config?.newTime
+          )
+          return { executed: true, action: 'reschedule_activity', count: rescheduleCount }
 
         default:
           console.warn('⚠️ Tipo de ação desconhecido:', actionType)
