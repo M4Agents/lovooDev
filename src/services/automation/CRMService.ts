@@ -182,10 +182,11 @@ export class CRMService {
       let tagId: string
 
       const { data: existingTag } = await supabase
-        .from('tags')
+        .from('lead_tags')
         .select('id')
         .eq('company_id', params.companyId)
         .eq('name', params.tagName)
+        .eq('is_active', true)
         .single()
 
       if (existingTag) {
@@ -193,11 +194,12 @@ export class CRMService {
       } else {
         // Criar nova tag
         const { data: newTag, error: tagError } = await supabase
-          .from('tags')
+          .from('lead_tags')
           .insert({
             company_id: params.companyId,
             name: params.tagName,
             color: this.getRandomColor(),
+            is_active: true,
             created_at: new Date().toISOString()
           })
           .select()
@@ -209,7 +211,7 @@ export class CRMService {
 
       // Verificar se já existe a relação
       const { data: existing } = await supabase
-        .from('lead_tags')
+        .from('lead_tag_assignments')
         .select('id')
         .eq('lead_id', params.leadId)
         .eq('tag_id', tagId)
@@ -226,7 +228,7 @@ export class CRMService {
 
       // Adicionar tag ao lead
       const { error } = await supabase
-        .from('lead_tags')
+        .from('lead_tag_assignments')
         .insert({
           lead_id: params.leadId,
           tag_id: tagId,
@@ -259,10 +261,11 @@ export class CRMService {
 
       // Buscar tag
       const { data: tag } = await supabase
-        .from('tags')
+        .from('lead_tags')
         .select('id')
         .eq('company_id', params.companyId)
         .eq('name', params.tagName)
+        .eq('is_active', true)
         .single()
 
       if (!tag) {
@@ -272,7 +275,7 @@ export class CRMService {
 
       // Remover relação
       const { error } = await supabase
-        .from('lead_tags')
+        .from('lead_tag_assignments')
         .delete()
         .eq('lead_id', params.leadId)
         .eq('tag_id', tag.id)

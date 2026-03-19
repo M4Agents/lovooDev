@@ -72,9 +72,10 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
     setLoadingTags(true)
     try {
       const { data, error } = await supabase
-        .from('tags')
+        .from('lead_tags')
         .select('id, name, color')
         .eq('company_id', company?.id)
+        .eq('is_active', true)
         .order('name')
       
       if (error) {
