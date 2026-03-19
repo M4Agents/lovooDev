@@ -5,11 +5,12 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { X, Save } from 'lucide-react'
+import { X, Save, ArrowLeft } from 'lucide-react'
 import { Node } from 'reactflow'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { supabase } from '../../lib/supabase'
+import ActionTypeSelector, { ACTION_TYPES } from './ActionTypeSelector'
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -183,28 +184,33 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
       case 'action':
         return (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo de Ação
-              </label>
-              <select
-                value={config.actionType || 'create_opportunity'}
-                onChange={(e) => setConfig({ ...config, actionType: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="create_opportunity">Criar Oportunidade</option>
-                <option value="update_lead">Atualizar Lead</option>
-                <option value="add_tag">Adicionar Tag</option>
-                <option value="remove_tag">Remover Tag</option>
-                <option value="assign_owner">Atribuir Responsável</option>
-                <option value="move_opportunity">Mover Oportunidade de Etapa</option>
-                <option value="win_opportunity">Ganhar Oportunidade</option>
-                <option value="lose_opportunity">Perder Oportunidade</option>
-              </select>
-            </div>
+            {!config.actionType ? (
+              <>
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Ações</h3>
+                  <p className="text-sm text-gray-500 mt-1">Escolha uma ação para executar no lead</p>
+                </div>
+                <ActionTypeSelector 
+                  onSelectType={(type) => setConfig({ ...config, actionType: type })} 
+                />
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {ACTION_TYPES.find(t => t.id === config.actionType)?.label || 'Ação'}
+                  </h3>
+                  <button
+                    onClick={() => setConfig({ ...config, actionType: undefined })}
+                    className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Voltar
+                  </button>
+                </div>
 
-            {/* ADICIONAR TAG */}
-            {config.actionType === 'add_tag' && (
+                {/* ADICIONAR TAG */}
+                {config.actionType === 'add_tag' && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -414,20 +420,22 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
               </>
             )}
 
-            {/* DESCRIÇÃO GENÉRICA para outras ações */}
-            {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity'].includes(config.actionType) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descrição
-                </label>
-                <textarea
-                  value={config.description || ''}
-                  onChange={(e) => setConfig({ ...config, description: e.target.value })}
-                  rows={3}
-                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Descreva o que esta ação fará..."
-                />
-              </div>
+                {/* DESCRIÇÃO GENÉRICA para outras ações */}
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity'].includes(config.actionType) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Descrição
+                    </label>
+                    <textarea
+                      value={config.description || ''}
+                      onChange={(e) => setConfig({ ...config, description: e.target.value })}
+                      rows={3}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Descreva o que esta ação fará..."
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         )
