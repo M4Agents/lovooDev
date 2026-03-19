@@ -466,6 +466,7 @@ export default function FlowEditor() {
         ) : selectedNode && !showTriggerConfig ? (
           <NodeConfigPanel
             selectedNode={selectedNode}
+            flowId={id}
             onClose={() => setSelectedNode(null)}
             onSave={handleNodeConfigSave}
           />

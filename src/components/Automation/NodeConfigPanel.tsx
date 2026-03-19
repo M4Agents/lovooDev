@@ -16,11 +16,12 @@ import { CreateActivityForm, UpdateActivityForm, CompleteActivityForm, CancelAct
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
+  flowId?: string
   onClose: () => void
   onSave: (nodeId: string, config: any) => void
 }
 
-export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeConfigPanelProps) {
+export default function NodeConfigPanel({ selectedNode, flowId, onClose, onSave }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<any>({})
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
@@ -160,12 +161,25 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }
 
   const loadFlows = async () => {
-    if (!company?.id) return
+    if (!company?.id) {
+      console.log('⚠️ loadFlows: company.id não disponível')
+      return
+    }
+    
+    console.log('🔄 loadFlows: Carregando automações para company:', company.id)
+    
     try {
-      const { data } = await supabase.from('automation_flows').select('*').eq('company_id', company.id)
+      const { data, error } = await supabase.from('automation_flows').select('*').eq('company_id', company.id)
+      
+      if (error) {
+        console.error('❌ loadFlows: Erro ao carregar:', error)
+        return
+      }
+      
+      console.log('✅ loadFlows: Carregadas', data?.length || 0, 'automações:', data)
       setFlows(data || [])
     } catch (error) {
-      console.error('Erro:', error)
+      console.error('❌ loadFlows: Exceção:', error)
     }
   }
 
@@ -778,7 +792,7 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                 {config.actionType === 'cancel_activity' && <CancelActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'reschedule_activity' && <RescheduleActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'send_notification' && <NotificationForm config={config} setConfig={setConfig} users={users} />}
-                {config.actionType === 'trigger_automation' && <TriggerAutomationForm config={config} setConfig={setConfig} flows={flows} currentFlowId={selectedNode?.id} />}
+                {config.actionType === 'trigger_automation' && <TriggerAutomationForm config={config} setConfig={setConfig} flows={flows} currentFlowId={flowId} />}
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
                 {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation'].includes(config.actionType) && (
                   <div>
