@@ -129,9 +129,9 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
     try {
       const { data } = await supabase
         .from('funnel_stages')
-        .select('id, name, order_index')
+        .select('id, name, position')
         .eq('funnel_id', funnelId)
-        .order('order_index')
+        .order('position')
       setStages(data || [])
     } catch (error) {
       console.error('Erro ao carregar etapas:', error)
