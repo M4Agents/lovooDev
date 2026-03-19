@@ -3,6 +3,7 @@
 // Data: 13/03/2026
 // Objetivo: Painel lateral para configurar blocos selecionados
 // =====================================================
+import { TriggerAutomationForm } from './TriggerAutomationForm'
 import { NotificationForm } from './NotificationForm'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
@@ -33,6 +34,7 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [loadingStages, setLoadingStages] = useState(false)
   const [customFields, setCustomFields] = useState<any[]>([])
+  const [flows, setFlows] = useState<any[]>([])
   const [loadingCustomFields, setLoadingCustomFields] = useState(false)
 
   useEffect(() => {
@@ -65,6 +67,12 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
       loadFunnels()
     }
   }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
+
+  useEffect(() => {
+    if (config.actionType === 'trigger_automation' && company?.id) {
+      loadFlows()
+    }
+  }, [config.actionType, company?.id])
 
   useEffect(() => {
     if (config.funnelId) {
@@ -151,17 +159,23 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
     }
   }
 
+  const loadFlows = async () => {
+    if (!company?.id) return
+    try {
+      const { data } = await supabase.from('automation_flows').select('*').eq('company_id', company.id)
+      setFlows(data || [])
+    } catch (error) {
+      console.error('Erro:', error)
+    }
+  }
+
   const loadCustomFields = async () => {
     setLoadingCustomFields(true)
     try {
-      const { data } = await supabase
-        .from('lead_custom_fields')
-        .select('id, field_name, field_label, field_type, options, is_required')
-        .eq('company_id', company?.id)
-        .order('field_label')
+      const { data } = await supabase.from('lead_custom_fields').select('*').eq('company_id', company?.id)
       setCustomFields(data || [])
     } catch (error) {
-      console.error('Erro ao carregar campos personalizados:', error)
+      console.error('Erro:', error)
     } finally {
       setLoadingCustomFields(false)
     }
@@ -764,8 +778,9 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                 {config.actionType === 'cancel_activity' && <CancelActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'reschedule_activity' && <RescheduleActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'send_notification' && <NotificationForm config={config} setConfig={setConfig} users={users} />}
+                {config.actionType === 'trigger_automation' && <TriggerAutomationForm config={config} setConfig={setConfig} flows={flows} currentFlowId={selectedNode?.id} />}
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

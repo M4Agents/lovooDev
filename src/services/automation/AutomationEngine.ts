@@ -709,8 +709,25 @@ export class AutomationEngine {
               opportunityId: context.opportunityId
             })
           }
-          
-          return { executed: true, action: 'send_notification', count: recipients.length }
+          case 'trigger_automation':
+  const targetFlowId = node.data.config?.targetFlowId
+  if (!targetFlowId) throw new Error('Automação não especificada')
+  
+  if (node.data.config?.onlyIfActive !== false) {
+    const targetFlow = await this.getFlow(targetFlowId)
+    if (!targetFlow?.is_active) {
+      return { executed: false, action: 'trigger_automation', reason: 'inactive' }
+    }
+  }
+  
+  const triggerData = node.data.config?.passCurrentContext ? {
+    ...context.triggerData,
+    leadId: context.leadId,
+    opportunityId: context.opportunityId
+  } : {}
+  
+  this.executeFlow(targetFlowId, triggerData, context.companyId)
+  return { executed: true, action: 'trigger_automation', targetFlowId }
 
         default:
           console.warn('⚠️ Tipo de ação desconhecido:', actionType)

@@ -7,11 +7,11 @@
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
   ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
-  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell 
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation'
   label: string
   icon: React.ReactNode
   description?: string
@@ -164,7 +164,14 @@ export const ACTION_TYPES: ActionType[] = [
     icon: <Bell className="w-4 h-4" />,
     description: 'Notifique usuários sobre eventos',
     category: 'system'
-  }
+  },
+  {
+  id: 'trigger_automation',
+  label: 'Iniciar Outra Automação',
+  icon: <Zap className="w-4 h-4" />,
+  description: 'Dispare outro fluxo de automação',
+  category: 'system'
+}
 ]
 
 interface ActionTypeSelectorProps {
