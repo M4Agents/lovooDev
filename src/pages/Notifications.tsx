@@ -105,14 +105,14 @@ const loadNotifications = async (userId: string) => {
     setLoading(false)
   }
 }
-  // Marcar notificação como lida (apenas próprias notificações)
+   // Marcar notificação como lida (apenas próprias notificações)
   const markAsRead = async (notificationId: string, source: string = 'activity') => {
-  if (selectedUserId !== user?.id) return
+    if (selectedUserId !== user?.id) return
 
-  try {
-    const endpoint = source === 'system' ? '/api/notifications/system' : '/api/notifications/activities'
-    
-    const response = await fetch(endpoint, {
+    try {
+      const endpoint = source === 'system' ? '/api/notifications/system' : '/api/notifications/activities'
+      
+      const response = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,48 +122,45 @@ const loadNotifications = async (userId: string) => {
       })
 
       if (response.ok) {
-  // Marcar todas como lidas (apenas próprias notificações)
-const markAllAsRead = async () => {
-  if (selectedUserId !== user?.id) return
-
-  try {
-    // Marcar notificações de atividades
-    await fetch('/api/notifications/activities', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: user?.id,
-        action: 'mark_all_read'
-      })
-    })
-    
-    // Marcar notificações do sistema
-    await fetch('/api/notifications/system', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: user?.id,
-        action: 'mark_all_read'
-      })
-    })
-
-    setNotifications(prev =>
-      prev.map(n => ({ ...n, status: 'read' as const }))
-    )
-  } catch (error) {
-    console.error('Erro ao marcar todas como lidas:', error)
-  }
-}
-      if (response.ok) {
         setNotifications(prev =>
-          prev.map(n => ({ ...n, status: 'read' as const }))
+          prev.map(n => n.id === notificationId ? { ...n, status: 'read' as const } : n)
         )
       }
+    } catch (error) {
+      console.error('Erro ao marcar notificação como lida:', error)
+    }
+  }
+
+  // Marcar todas como lidas (apenas próprias notificações)
+  const markAllAsRead = async () => {
+    if (selectedUserId !== user?.id) return
+
+    try {
+      await fetch('/api/notifications/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user?.id,
+          action: 'mark_all_read'
+        })
+      })
+      
+      await fetch('/api/notifications/system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user?.id,
+          action: 'mark_all_read'
+        })
+      })
+
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, status: 'read' as const }))
+      )
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error)
     }
   }
-
   // Carregar usuários ao montar (se Master)
   useEffect(() => {
     if (isMaster) {
