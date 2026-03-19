@@ -38,46 +38,29 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }, [selectedNode])
 
   useEffect(() => {
-    console.log('🔍 [useEffect loadTags] Disparado!', {
-      selectedNodeType: selectedNode?.type,
-      companyId: company?.id,
-      actionType: selectedNode?.data?.config?.actionType,
-      hasSelectedNode: !!selectedNode,
-      hasCompany: !!company?.id,
-      selectedNodeData: selectedNode?.data
-    })
-    
-    const actionType = selectedNode?.data?.config?.actionType
+    const actionType = config.actionType || selectedNode?.data?.config?.actionType
     
     if (selectedNode?.type === 'action' && company?.id && 
         (actionType === 'add_tag' || actionType === 'remove_tag')) {
-      console.log('✅ [useEffect loadTags] Condições atendidas, chamando loadTags()')
       loadTags()
-    } else {
-      console.log('❌ [useEffect loadTags] Condições NÃO atendidas:', {
-        isAction: selectedNode?.type === 'action',
-        hasCompanyId: !!company?.id,
-        isAddOrRemoveTag: actionType === 'add_tag' || actionType === 'remove_tag',
-        actionType
-      })
     }
-  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
 
   useEffect(() => {
-    const actionType = selectedNode?.data?.config?.actionType
+    const actionType = config.actionType || selectedNode?.data?.config?.actionType
     
     if (selectedNode?.type === 'action' && company?.id && actionType === 'assign_owner') {
       loadUsers()
     }
-  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
 
   useEffect(() => {
-    const actionType = selectedNode?.data?.config?.actionType
+    const actionType = config.actionType || selectedNode?.data?.config?.actionType
     
     if (selectedNode?.type === 'action' && company?.id && actionType === 'move_opportunity') {
       loadFunnels()
     }
-  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, company?.id])
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
 
   useEffect(() => {
     if (config.funnelId) {
@@ -86,8 +69,6 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }, [config.funnelId])
 
   const loadTags = async () => {
-    console.log('🏷️ [loadTags] Iniciando carregamento de tags...')
-    console.log('🏷️ [loadTags] Company ID:', company?.id)
     setLoadingTags(true)
     try {
       const { data, error } = await supabase
@@ -96,16 +77,13 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
         .eq('company_id', company?.id)
         .order('name')
       
-      console.log('🏷️ [loadTags] Resposta Supabase:', { data, error, count: data?.length })
-      
       if (error) {
-        console.error('❌ [loadTags] Erro do Supabase:', error)
+        console.error('Erro ao carregar tags:', error)
       }
       
       setTags(data || [])
-      console.log('🏷️ [loadTags] Tags setadas no estado:', data?.length || 0)
     } catch (error) {
-      console.error('❌ [loadTags] Erro ao carregar tags:', error)
+      console.error('Erro ao carregar tags:', error)
     } finally {
       setLoadingTags(false)
     }
