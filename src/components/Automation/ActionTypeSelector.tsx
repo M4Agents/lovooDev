@@ -11,15 +11,15 @@ import {
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification'
   label: string
   icon: React.ReactNode
   description?: string
-  category: 'lead' | 'opportunity' | 'integration' | 'activity'
+  category: 'lead' | 'opportunity' | 'integration' | 'activity' | 'system'
 }
 
 export interface ActionCategory {
-  id: 'lead' | 'opportunity' | 'integration' | 'activity'
+  id: 'lead' | 'opportunity' | 'integration' | 'activity' | 'system'
   label: string
   icon: React.ReactNode
 }
@@ -44,6 +44,11 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
     id: 'activity',
     label: 'Atividades',
     icon: <Calendar className="w-4 h-4" />
+  },
+  {
+    id: 'system',
+    label: 'Sistema',
+    icon: <Settings className="w-4 h-4" />
   }
 ]
 
@@ -152,6 +157,13 @@ export const ACTION_TYPES: ActionType[] = [
     icon: <CalendarClock className="w-4 h-4" />,
     description: 'Reagende atividades para nova data',
     category: 'activity'
+  },
+  {
+    id: 'send_notification',
+    label: 'Enviar Notificação',
+    icon: <Bell className="w-4 h-4" />,
+    description: 'Notifique usuários sobre eventos',
+    category: 'system'
   }
 ]
 
