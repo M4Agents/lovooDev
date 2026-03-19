@@ -69,16 +69,26 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   }, [config.funnelId])
 
   const loadTags = async () => {
+    console.log('🏷️ [loadTags] Iniciando carregamento de tags...')
+    console.log('🏷️ [loadTags] Company ID:', company?.id)
     setLoadingTags(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('tags')
         .select('id, name, color')
         .eq('company_id', company?.id)
         .order('name')
+      
+      console.log('🏷️ [loadTags] Resposta Supabase:', { data, error, count: data?.length })
+      
+      if (error) {
+        console.error('❌ [loadTags] Erro do Supabase:', error)
+      }
+      
       setTags(data || [])
+      console.log('🏷️ [loadTags] Tags setadas no estado:', data?.length || 0)
     } catch (error) {
-      console.error('Erro ao carregar tags:', error)
+      console.error('❌ [loadTags] Erro ao carregar tags:', error)
     } finally {
       setLoadingTags(false)
     }
