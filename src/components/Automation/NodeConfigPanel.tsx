@@ -31,6 +31,8 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [loadingStages, setLoadingStages] = useState(false)
+  const [customFields, setCustomFields] = useState<any[]>([])
+  const [loadingCustomFields, setLoadingCustomFields] = useState(false)
 
   useEffect(() => {
     if (selectedNode) {
@@ -68,6 +70,14 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
       loadStages(config.funnelId)
     }
   }, [config.funnelId])
+
+  useEffect(() => {
+    const actionType = config.actionType || selectedNode?.data?.config?.actionType
+    
+    if (selectedNode?.type === 'action' && company?.id && actionType === 'set_custom_field') {
+      loadCustomFields()
+    }
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
 
   const loadTags = async () => {
     setLoadingTags(true)
@@ -137,6 +147,22 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
       console.error('Erro ao carregar etapas:', error)
     } finally {
       setLoadingStages(false)
+    }
+  }
+
+  const loadCustomFields = async () => {
+    setLoadingCustomFields(true)
+    try {
+      const { data } = await supabase
+        .from('lead_custom_fields')
+        .select('id, field_name, field_label, field_type, options, is_required')
+        .eq('company_id', company?.id)
+        .order('field_label')
+      setCustomFields(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar campos personalizados:', error)
+    } finally {
+      setLoadingCustomFields(false)
     }
   }
 
@@ -602,8 +628,103 @@ export default function NodeConfigPanel({ selectedNode, onClose, onSave }: NodeC
                   </>
                 )}
 
+                {/* DEFINIR CAMPO PERSONALIZADO */}
+                {config.actionType === 'set_custom_field' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Campo Personalizado *
+                      </label>
+                      {loadingCustomFields ? (
+                        <div className="text-sm text-gray-500">Carregando campos...</div>
+                      ) : (
+                        <select
+                          value={config.customFieldId || ''}
+                          onChange={(e) => {
+                            const field = customFields.find(f => f.id === e.target.value)
+                            setConfig({ 
+                              ...config, 
+                              customFieldId: e.target.value,
+                              customFieldType: field?.field_type,
+                              customFieldOptions: field?.options,
+                              customFieldValue: ''
+                            })
+                          }}
+                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        >
+                          <option value="">-- Selecione um campo --</option>
+                          {customFields.map(field => (
+                            <option key={field.id} value={field.id}>
+                              {field.field_label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {config.customFieldId && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Valor *
+                        </label>
+                        {config.customFieldType === 'text' && (
+                          <input
+                            type="text"
+                            value={config.customFieldValue || ''}
+                            onChange={(e) => setConfig({ ...config, customFieldValue: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="Digite o valor..."
+                          />
+                        )}
+                        {config.customFieldType === 'number' && (
+                          <input
+                            type="number"
+                            value={config.customFieldValue || ''}
+                            onChange={(e) => setConfig({ ...config, customFieldValue: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="Digite o número..."
+                          />
+                        )}
+                        {config.customFieldType === 'date' && (
+                          <input
+                            type="date"
+                            value={config.customFieldValue || ''}
+                            onChange={(e) => setConfig({ ...config, customFieldValue: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        )}
+                        {config.customFieldType === 'boolean' && (
+                          <select
+                            value={config.customFieldValue || ''}
+                            onChange={(e) => setConfig({ ...config, customFieldValue: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">-- Selecione --</option>
+                            <option value="true">Sim</option>
+                            <option value="false">Não</option>
+                          </select>
+                        )}
+                        {config.customFieldType === 'select' && (
+                          <select
+                            value={config.customFieldValue || ''}
+                            onChange={(e) => setConfig({ ...config, customFieldValue: e.target.value })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">-- Selecione uma opção --</option>
+                            {config.customFieldOptions?.map((opt: string, idx: number) => (
+                              <option key={idx} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

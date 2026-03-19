@@ -6,11 +6,11 @@
 
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
-  ArrowRight, Trophy, XCircle, User, Briefcase 
+  ArrowRight, Trophy, XCircle, User, Briefcase, Settings 
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field'
   label: string
   icon: React.ReactNode
   description?: string
@@ -63,6 +63,13 @@ export const ACTION_TYPES: ActionType[] = [
     label: 'Atualizar Lead',
     icon: <Edit className="w-4 h-4" />,
     description: 'Atualize dados do lead',
+    category: 'lead'
+  },
+  {
+    id: 'set_custom_field',
+    label: 'Definir Campo Personalizado',
+    icon: <Settings className="w-4 h-4" />,
+    description: 'Defina um campo personalizado do lead',
     category: 'lead'
   },
   {

@@ -595,6 +595,34 @@ export class AutomationEngine {
             opportunityId: context.opportunityId
           }
 
+        case 'set_custom_field':
+          // Definir campo personalizado
+          const fieldId = node.data.config?.customFieldId
+          const fieldValue = node.data.config?.customFieldValue
+
+          if (!fieldId) {
+            throw new Error('Campo personalizado não especificado')
+          }
+
+          if (fieldValue === undefined || fieldValue === '') {
+            throw new Error('Valor do campo personalizado não especificado')
+          }
+
+          const customFieldResult = await crmService.setCustomField({
+            leadId: context.leadId,
+            companyId: context.companyId,
+            fieldId,
+            value: String(fieldValue)
+          })
+
+          return {
+            executed: true,
+            action: 'set_custom_field',
+            fieldId,
+            value: fieldValue,
+            actionType: customFieldResult.action
+          }
+
         default:
           console.warn('⚠️ Tipo de ação desconhecido:', actionType)
           return {

@@ -35,6 +35,13 @@ interface AssignOwnerParams {
   ownerId: string
 }
 
+interface SetCustomFieldParams {
+  leadId: number
+  companyId: string
+  fieldId: string
+  value: string
+}
+
 export class CRMService {
   /**
    * Cria uma oportunidade no funil de vendas
@@ -436,6 +443,73 @@ export class CRMService {
       }
     } catch (error: any) {
       console.error('❌ Erro ao marcar oportunidade como perdida:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Define valor de campo personalizado do lead
+   */
+  async setCustomField(params: SetCustomFieldParams): Promise<any> {
+    try {
+      console.log('🔧 CRMService: Definindo campo personalizado', {
+        leadId: params.leadId,
+        fieldId: params.fieldId
+      })
+
+      // Verificar se já existe valor para este campo
+      const { data: existing } = await supabase
+        .from('lead_custom_values')
+        .select('id')
+        .eq('lead_id', params.leadId)
+        .eq('field_id', params.fieldId)
+        .maybeSingle()
+
+      if (existing) {
+        // Atualizar valor existente
+        const { data, error } = await supabase
+          .from('lead_custom_values')
+          .update({ 
+            value: params.value,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+          .select()
+          .single()
+
+        if (error) throw error
+
+        console.log('✅ Campo personalizado atualizado')
+
+        return {
+          success: true,
+          action: 'updated',
+          customValue: data
+        }
+      } else {
+        // Inserir novo valor
+        const { data, error } = await supabase
+          .from('lead_custom_values')
+          .insert({
+            lead_id: params.leadId,
+            field_id: params.fieldId,
+            value: params.value
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        console.log('✅ Campo personalizado criado')
+
+        return {
+          success: true,
+          action: 'created',
+          customValue: data
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao definir campo personalizado:', error)
       throw error
     }
   }
