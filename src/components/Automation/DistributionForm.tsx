@@ -38,6 +38,7 @@ const DISTRIBUTION_METHODS = [
 export function DistributionForm({ config, setConfig }: DistributionFormProps) {
   const { company } = useAuth()
   const [users, setUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState<string[]>(config.users || [])
   const [method, setMethod] = useState(config.method || 'round_robin')
   const [skipUnavailable, setSkipUnavailable] = useState(config.skip_unavailable ?? true)
@@ -65,15 +66,19 @@ export function DistributionForm({ config, setConfig }: DistributionFormProps) {
   }, [config])
 
   const loadUsers = async () => {
+    setLoadingUsers(true)
     try {
       const { data } = await supabase
-        .from('company_users')
-        .select('user_id, users(id, name, email)')
+        .from('users')
+        .select('id, name, email')
         .eq('company_id', company?.id)
+        .order('name')
       
-      setUsers(data?.map((cu: any) => cu.users) || [])
+      setUsers(data || [])
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
+    } finally {
+      setLoadingUsers(false)
     }
   }
 
@@ -160,7 +165,11 @@ export function DistributionForm({ config, setConfig }: DistributionFormProps) {
           Usuários para Distribuição
         </label>
         <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-300 rounded-md p-2">
-          {users.length === 0 ? (
+          {loadingUsers ? (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Carregando usuários...
+            </p>
+          ) : users.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-4">
               Nenhum usuário encontrado
             </p>

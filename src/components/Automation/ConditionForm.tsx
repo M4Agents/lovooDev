@@ -198,10 +198,11 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
   const loadUsers = async () => {
     try {
       const { data } = await supabase
-        .from('company_users')
-        .select('user_id, users(id, name, email)')
+        .from('users')
+        .select('id, name, email')
         .eq('company_id', company?.id)
-      setUsers(data?.map((cu: any) => cu.users) || [])
+        .order('name')
+      setUsers(data || [])
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
     }
