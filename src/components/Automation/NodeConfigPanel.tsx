@@ -5,6 +5,7 @@
 // =====================================================
 import { TriggerAutomationForm } from './TriggerAutomationForm'
 import { NotificationForm } from './NotificationForm'
+import { ConditionForm } from './ConditionForm'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
 import { Node } from 'reactflow'
@@ -923,51 +924,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, onClose, onSave 
         )
 
       case 'condition':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Campo a Verificar
-              </label>
-              <input
-                type="text"
-                value={config.field || ''}
-                onChange={(e) => setConfig({ ...config, field: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Ex: nome, email, telefone"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Operador
-              </label>
-              <select
-                value={config.operator || 'equals'}
-                onChange={(e) => setConfig({ ...config, operator: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="equals">Igual a</option>
-                <option value="not_equals">Diferente de</option>
-                <option value="contains">Contém</option>
-                <option value="not_contains">Não contém</option>
-                <option value="is_empty">Está vazio</option>
-                <option value="is_not_empty">Não está vazio</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Valor
-              </label>
-              <input
-                type="text"
-                value={config.value || ''}
-                onChange={(e) => setConfig({ ...config, value: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Valor para comparação"
-              />
-            </div>
-          </div>
-        )
+        return <ConditionForm config={config} setConfig={setConfig} />
 
       case 'delay':
         return (

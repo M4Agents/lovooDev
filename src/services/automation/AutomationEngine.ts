@@ -743,103 +743,540 @@ export class AutomationEngine {
   }
 
   /**
-   * FASE 5.4: Avalia condição REAL
+   * FASE 5.4: Avalia condição REAL (refatorado para suportar múltiplos tipos)
    */
   private async evaluateCondition(node: Node, context: ExecutionContext): Promise<any> {
     try {
-      console.log('❓ Avaliando condição...')
+      console.log('❓ Avaliando condição...', node.data.config)
 
-      const field = node.data.config?.field
-      const operator = node.data.config?.operator || 'equals'
-      const value = node.data.config?.value
+      const config = node.data.config
+      const conditionType = config?.type
 
-      if (!field) {
-        throw new Error('Campo não especificado na condição')
+      if (!conditionType) {
+        // Fallback para condições antigas (compatibilidade)
+        return await this.evaluateLegacyCondition(node, context)
       }
 
-      // Buscar valor do campo no lead
-      let fieldValue: any = null
-
-      if (context.leadId) {
-        const { data: lead } = await supabase
-          .from('leads')
-          .select('*')
-          .eq('id', Number(context.leadId))
-          .single()
-
-        if (lead) {
-          // Suportar campos aninhados (ex: "company.name")
-          fieldValue = this.getNestedValue(lead, field)
-        }
-      }
-
-      // Avaliar condição baseado no operador
+      // Avaliar baseado no tipo de condição
       let result = false
 
-      switch (operator) {
-        case 'equals':
-          result = fieldValue == value
+      switch (conditionType) {
+        case 'lead_field':
+          result = await this.evaluateLeadField(config, context)
           break
 
-        case 'not_equals':
-          result = fieldValue != value
+        case 'lead_tags':
+          result = await this.evaluateLeadTags(config, context)
           break
 
-        case 'contains':
-          result = String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+        case 'lead_source':
+          result = await this.evaluateLeadSource(config, context)
           break
 
-        case 'not_contains':
-          result = !String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+        case 'lead_created_date':
+          result = await this.evaluateLeadCreatedDate(config, context)
           break
 
-        case 'is_empty':
-          result = !fieldValue || fieldValue === '' || fieldValue === null
+        case 'last_interaction':
+          result = await this.evaluateLastInteraction(config, context)
           break
 
-        case 'is_not_empty':
-          result = !!fieldValue && fieldValue !== ''
+        case 'lead_score':
+          result = await this.evaluateLeadScore(config, context)
           break
 
-        case 'greater_than':
-          result = Number(fieldValue) > Number(value)
+        case 'opportunity_stage':
+          result = await this.evaluateOpportunityStage(config, context)
           break
 
-        case 'less_than':
-          result = Number(fieldValue) < Number(value)
+        case 'opportunity_value':
+          result = await this.evaluateOpportunityValue(config, context)
           break
 
-        case 'greater_or_equal':
-          result = Number(fieldValue) >= Number(value)
+        case 'opportunity_owner':
+          result = await this.evaluateOpportunityOwner(config, context)
           break
 
-        case 'less_or_equal':
-          result = Number(fieldValue) <= Number(value)
+        case 'opportunity_stage_duration':
+          result = await this.evaluateOpportunityStageDuration(config, context)
+          break
+
+        case 'day_of_week':
+          result = await this.evaluateDayOfWeek(config, context)
+          break
+
+        case 'time_of_day':
+          result = await this.evaluateTimeOfDay(config, context)
+          break
+
+        case 'day_of_month':
+          result = await this.evaluateDayOfMonth(config, context)
           break
 
         default:
-          console.warn('⚠️ Operador desconhecido:', operator)
+          console.warn('⚠️ Tipo de condição não implementado:', conditionType)
           result = false
       }
 
       console.log('✅ Condição avaliada:', {
-        field,
-        operator,
-        value,
-        fieldValue,
+        type: conditionType,
+        operator: config.operator,
         result
       })
 
       return {
         result,
-        field,
-        operator,
-        expectedValue: value,
-        actualValue: fieldValue
+        type: conditionType,
+        operator: config.operator,
+        value: config.value
       }
     } catch (error: any) {
       console.error('❌ Erro ao avaliar condição:', error)
       throw error
+    }
+  }
+
+  /**
+   * Avalia condição legada (compatibilidade com sistema antigo)
+   */
+  private async evaluateLegacyCondition(node: Node, context: ExecutionContext): Promise<any> {
+    const field = node.data.config?.field
+    const operator = node.data.config?.operator || 'equals'
+    const value = node.data.config?.value
+
+    if (!field) {
+      throw new Error('Campo não especificado na condição')
+    }
+
+    let fieldValue: any = null
+
+    if (context.leadId) {
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', Number(context.leadId))
+        .single()
+
+      if (lead) {
+        fieldValue = this.getNestedValue(lead, field)
+      }
+    }
+
+    let result = false
+
+    switch (operator) {
+      case 'equals':
+        result = fieldValue == value
+        break
+      case 'not_equals':
+        result = fieldValue != value
+        break
+      case 'contains':
+        result = String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+        break
+      case 'not_contains':
+        result = !String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+        break
+      case 'is_empty':
+        result = !fieldValue || fieldValue === '' || fieldValue === null
+        break
+      case 'is_not_empty':
+        result = !!fieldValue && fieldValue !== ''
+        break
+      case 'greater_than':
+        result = Number(fieldValue) > Number(value)
+        break
+      case 'less_than':
+        result = Number(fieldValue) < Number(value)
+        break
+      default:
+        result = false
+    }
+
+    return { result, field, operator, expectedValue: value, actualValue: fieldValue }
+  }
+
+  /**
+   * AVALIADORES ESPECÍFICOS POR TIPO DE CONDIÇÃO
+   */
+
+  private async evaluateLeadField(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', Number(context.leadId))
+      .single()
+
+    if (!lead) return false
+
+    const fieldValue = this.getNestedValue(lead, config.field)
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'equals':
+        return fieldValue == value
+      case 'not_equals':
+        return fieldValue != value
+      case 'contains':
+        return String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+      case 'not_contains':
+        return !String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase())
+      case 'is_empty':
+        return !fieldValue || fieldValue === '' || fieldValue === null
+      case 'is_not_empty':
+        return !!fieldValue && fieldValue !== ''
+      default:
+        return false
+    }
+  }
+
+  private async evaluateLeadTags(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: leadTags } = await supabase
+      .from('lead_tag_assignments')
+      .select('tag_id')
+      .eq('lead_id', Number(context.leadId))
+
+    const leadTagIds = leadTags?.map(lt => lt.tag_id) || []
+    const { operator, tags } = config
+
+    switch (operator) {
+      case 'has_tag':
+        return tags.some((tagId: string) => leadTagIds.includes(tagId))
+      case 'not_has_tag':
+        return !tags.some((tagId: string) => leadTagIds.includes(tagId))
+      case 'has_any_tag':
+        return tags.some((tagId: string) => leadTagIds.includes(tagId))
+      case 'has_all_tags':
+        return tags.every((tagId: string) => leadTagIds.includes(tagId))
+      default:
+        return false
+    }
+  }
+
+  private async evaluateLeadSource(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('source')
+      .eq('id', Number(context.leadId))
+      .single()
+
+    if (!lead) return false
+
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'equals':
+        return lead.source === value
+      case 'not_equals':
+        return lead.source !== value
+      case 'contains':
+        return String(lead.source || '').toLowerCase().includes(String(value || '').toLowerCase())
+      default:
+        return false
+    }
+  }
+
+  private async evaluateLeadCreatedDate(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('created_at')
+      .eq('id', Number(context.leadId))
+      .single()
+
+    if (!lead) return false
+
+    const createdAt = new Date(lead.created_at)
+    const now = new Date()
+    const { operator, value, unit } = config
+
+    const diffMs = now.getTime() - createdAt.getTime()
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+
+    switch (operator) {
+      case 'is_today':
+        return createdAt.toDateString() === now.toDateString()
+      case 'is_yesterday':
+        const yesterday = new Date(now)
+        yesterday.setDate(yesterday.getDate() - 1)
+        return createdAt.toDateString() === yesterday.toDateString()
+      case 'is_this_week':
+        return diffDays <= 7
+      case 'is_this_month':
+        return createdAt.getMonth() === now.getMonth() && createdAt.getFullYear() === now.getFullYear()
+      case 'is_older_than':
+        const unitMultiplier = unit === 'weeks' ? 7 : unit === 'months' ? 30 : 1
+        return diffDays > (value * unitMultiplier)
+      case 'is_newer_than':
+        const unitMult = unit === 'weeks' ? 7 : unit === 'months' ? 30 : 1
+        return diffDays < (value * unitMult)
+      default:
+        return false
+    }
+  }
+
+  private async evaluateLastInteraction(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: messages } = await supabase
+      .from('chat_messages')
+      .select('created_at')
+      .eq('lead_id', Number(context.leadId))
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (!messages || messages.length === 0) {
+      return config.operator === 'never_interacted'
+    }
+
+    const lastInteraction = new Date(messages[0].created_at)
+    const now = new Date()
+    const diffMs = now.getTime() - lastInteraction.getTime()
+    
+    const { operator, value, unit } = config
+    let diffInUnit = 0
+
+    switch (unit) {
+      case 'hours':
+        diffInUnit = diffMs / (1000 * 60 * 60)
+        break
+      case 'days':
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24)
+        break
+      case 'weeks':
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24 * 7)
+        break
+      default:
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24)
+    }
+
+    switch (operator) {
+      case 'is_older_than':
+        return diffInUnit > value
+      case 'is_newer_than':
+        return diffInUnit < value
+      case 'never_interacted':
+        return false
+      default:
+        return false
+    }
+  }
+
+  private async evaluateLeadScore(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.leadId) return false
+
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('score')
+      .eq('id', Number(context.leadId))
+      .single()
+
+    if (!lead) return false
+
+    const score = lead.score || 0
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'equals':
+        return score === value
+      case 'greater_than':
+        return score > value
+      case 'less_than':
+        return score < value
+      case 'between':
+        return score >= value.min && score <= value.max
+      default:
+        return false
+    }
+  }
+
+  private async evaluateOpportunityStage(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.opportunityId) return false
+
+    const { data: opportunity } = await supabase
+      .from('opportunities')
+      .select('stage_id')
+      .eq('id', context.opportunityId)
+      .single()
+
+    if (!opportunity) return false
+
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'is':
+        return opportunity.stage_id === value
+      case 'is_not':
+        return opportunity.stage_id !== value
+      case 'is_in':
+        return Array.isArray(value) && value.includes(opportunity.stage_id)
+      default:
+        return false
+    }
+  }
+
+  private async evaluateOpportunityValue(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.opportunityId) return false
+
+    const { data: opportunity } = await supabase
+      .from('opportunities')
+      .select('value')
+      .eq('id', context.opportunityId)
+      .single()
+
+    if (!opportunity) return false
+
+    const oppValue = opportunity.value || 0
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'equals':
+        return oppValue === value
+      case 'greater_than':
+        return oppValue > value
+      case 'less_than':
+        return oppValue < value
+      case 'between':
+        return oppValue >= value.min && oppValue <= value.max
+      default:
+        return false
+    }
+  }
+
+  private async evaluateOpportunityOwner(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.opportunityId) return false
+
+    const { data: opportunity } = await supabase
+      .from('opportunities')
+      .select('owner_id')
+      .eq('id', context.opportunityId)
+      .single()
+
+    if (!opportunity) return false
+
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'is':
+        return opportunity.owner_id === value
+      case 'is_not':
+        return opportunity.owner_id !== value
+      case 'has_no_owner':
+        return !opportunity.owner_id
+      default:
+        return false
+    }
+  }
+
+  private async evaluateOpportunityStageDuration(config: any, context: ExecutionContext): Promise<boolean> {
+    if (!context.opportunityId) return false
+
+    const { data: opportunity } = await supabase
+      .from('opportunities')
+      .select('stage_changed_at')
+      .eq('id', context.opportunityId)
+      .single()
+
+    if (!opportunity || !opportunity.stage_changed_at) return false
+
+    const stageChangedAt = new Date(opportunity.stage_changed_at)
+    const now = new Date()
+    const diffMs = now.getTime() - stageChangedAt.getTime()
+    
+    const { operator, value, unit } = config
+    let diffInUnit = 0
+
+    switch (unit) {
+      case 'hours':
+        diffInUnit = diffMs / (1000 * 60 * 60)
+        break
+      case 'days':
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24)
+        break
+      case 'weeks':
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24 * 7)
+        break
+      default:
+        diffInUnit = diffMs / (1000 * 60 * 60 * 24)
+    }
+
+    switch (operator) {
+      case 'is_longer_than':
+        return diffInUnit > value
+      case 'is_shorter_than':
+        return diffInUnit < value
+      default:
+        return false
+    }
+  }
+
+  private async evaluateDayOfWeek(config: any, context: ExecutionContext): Promise<boolean> {
+    const now = new Date()
+    const currentDay = now.getDay()
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'is':
+        return currentDay === value
+      case 'is_not':
+        return currentDay !== value
+      case 'is_in':
+        return Array.isArray(value) && value.includes(currentDay)
+      default:
+        return false
+    }
+  }
+
+  private async evaluateTimeOfDay(config: any, context: ExecutionContext): Promise<boolean> {
+    const now = new Date()
+    const currentTime = now.getHours() * 60 + now.getMinutes()
+    const { operator, value } = config
+
+    const parseTime = (timeStr: string) => {
+      const [hours, minutes] = timeStr.split(':').map(Number)
+      return hours * 60 + minutes
+    }
+
+    switch (operator) {
+      case 'is_between':
+        const start = parseTime(value.start)
+        const end = parseTime(value.end)
+        return currentTime >= start && currentTime <= end
+      case 'is_before':
+        const before = parseTime(value)
+        return currentTime < before
+      case 'is_after':
+        const after = parseTime(value)
+        return currentTime > after
+      default:
+        return false
+    }
+  }
+
+  private async evaluateDayOfMonth(config: any, context: ExecutionContext): Promise<boolean> {
+    const now = new Date()
+    const currentDay = now.getDate()
+    const { operator, value } = config
+
+    switch (operator) {
+      case 'is':
+        return currentDay === value
+      case 'is_between':
+        return currentDay >= value.start && currentDay <= value.end
+      case 'is_first_day':
+        return currentDay === 1
+      case 'is_last_day':
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+        return currentDay === lastDay
+      default:
+        return false
     }
   }
 

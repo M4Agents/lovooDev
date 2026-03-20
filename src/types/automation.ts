@@ -417,24 +417,6 @@ export type TriggerConfigUnion =
   | TagTriggerConfig
   | ScheduleTriggerConfig
 
-export interface TriggerConfig {
-  type: 'lead.created' | 'message.received' | 'opportunity.created' | 'opportunity.stage_changed' | 'tag.added' | 'schedule.time'
-  filters?: {
-    source?: string[]
-    tags?: string[]
-    funnel_id?: string
-    stage_id?: string
-    from_stage_id?: string
-    to_stage_id?: string
-    min_value?: number
-    max_value?: number
-    contains_keyword?: string[]
-    business_hours_only?: boolean
-    time?: string
-    days_of_week?: number[]
-  }
-}
-
 export interface MessageConfig {
   message: string
   media_type?: 'image' | 'video' | 'audio' | 'document'
@@ -455,13 +437,49 @@ export interface ActionConfig {
   params: Record<string, any>
 }
 
+export type ConditionType =
+  | 'lead_field' | 'lead_tags' | 'lead_source' | 'lead_created_date'
+  | 'last_interaction' | 'custom_field' | 'lead_count' | 'lead_score'
+  | 'opportunity_stage' | 'opportunity_value' | 'opportunity_stage_duration'
+  | 'opportunity_owner' | 'opportunity_close_date' | 'opportunity_probability'
+  | 'pending_activities' | 'last_activity' | 'next_activity' | 'activity_completion_rate'
+  | 'day_of_week' | 'time_of_day' | 'day_of_month' | 'period_of_year' | 'special_date'
+  | 'message_engagement' | 'purchase_history' | 'website_behavior' | 'contact_attempts'
+  | 'composite' | 'group' | 'not'
+
+export interface SingleCondition {
+  id: string
+  type: ConditionType
+  operator: string
+  value?: any
+  field?: string
+  field_id?: string
+  unit?: 'hours' | 'days' | 'weeks' | 'months'
+  filters?: Record<string, any>
+  tags?: string[]
+  channel?: string
+  activity_type?: string
+  entity?: string
+}
+
+export interface ConditionGroup {
+  operator: 'AND' | 'OR'
+  conditions: SingleCondition[]
+}
+
 export interface ConditionConfig {
-  conditions: Array<{
-    field: string
-    operator: 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'greater_than' | 'less_than' | 'is_empty' | 'is_not_empty'
-    value: any
-    logic?: 'AND' | 'OR'
-  }>
+  id?: string
+  type?: ConditionType
+  operator?: string
+  value?: any
+  field?: string
+  field_id?: string
+  unit?: 'hours' | 'days' | 'weeks' | 'months'
+  filters?: Record<string, any>
+  logic?: 'AND' | 'OR'
+  conditions?: SingleCondition[]
+  groups?: ConditionGroup[]
+  condition?: ConditionConfig
 }
 
 export interface DelayConfig {
