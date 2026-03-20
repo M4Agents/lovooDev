@@ -1,8 +1,42 @@
 import React from 'react'
-import { Handle, Position, NodeProps } from 'reactflow'
-import { Shuffle, Trash2, Copy, Settings } from 'lucide-react'
+import { Handle, Position, NodeProps, useReactFlow } from 'reactflow'
+import { Shuffle, Settings, CheckCircle, AlertTriangle } from 'lucide-react'
+import NodeToolbar from './NodeToolbar'
 
-export default function DistributionNode({ data, selected }: NodeProps) {
+export default function DistributionNode({ data, selected, id }: NodeProps) {
+  const { setNodes, setEdges } = useReactFlow()
+  const config = data.config || {}
+
+  const handleDelete = () => {
+    setNodes((nodes) => nodes.filter((node) => node.id !== id))
+    setEdges((edges) => edges.filter((edge) => edge.source !== id && edge.target !== id))
+  }
+
+  const handleDuplicate = () => {
+    setNodes((nodes) => {
+      const nodeToDuplicate = nodes.find((node) => node.id === id)
+      if (!nodeToDuplicate) return nodes
+
+      const newNode = {
+        ...nodeToDuplicate,
+        id: `${nodeToDuplicate.type}-${Date.now()}`,
+        position: {
+          x: nodeToDuplicate.position.x + 50,
+          y: nodeToDuplicate.position.y + 50
+        },
+        selected: false
+      }
+
+      return [...nodes, newNode]
+    })
+  }
+
+  const handleOpen = () => {
+    if (data.onSelect) {
+      data.onSelect()
+    }
+  }
+
   const getMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       round_robin: 'Rodízio',
@@ -33,86 +67,55 @@ export default function DistributionNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`
-        bg-white rounded-lg shadow-md border-2 transition-all
-        ${selected ? 'border-cyan-500 shadow-lg' : 'border-cyan-300'}
-        hover:shadow-lg
-        min-w-[280px]
+        bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative
+        ${selected ? 'border-cyan-500 ring-2 ring-cyan-300' : 'border-gray-200 hover:border-cyan-400'}
       `}
     >
+      {/* Toolbar - aparece apenas quando selecionado */}
+      {selected && (
+        <NodeToolbar
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          onOpen={handleOpen}
+        />
+      )}
+
       <Handle
         type="target"
-        position={Position.Top}
-        className="w-3 h-3 !bg-cyan-500"
+        position={Position.Left}
+        className="absolute -left-1 w-2 h-2 rounded-full !bg-cyan-500 !border-2 !border-white"
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
       />
 
-      <div className="p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-cyan-500 flex items-center justify-center flex-shrink-0">
-            <Shuffle className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-cyan-600 uppercase tracking-wide">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-cyan-500 to-cyan-600 px-2 py-1 rounded-t relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <Shuffle className="w-2.5 h-2.5 text-white" />
+            <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
               Distribuição
-            </div>
-            <div className="text-sm font-semibold text-gray-900 truncate">
-              {data.label || 'Distribuir Lead'}
-            </div>
+            </span>
           </div>
+          {config?.method ? (
+            <CheckCircle className="w-2.5 h-2.5 text-green-300" />
+          ) : (
+            <AlertTriangle className="w-2.5 h-2.5 text-yellow-300" />
+          )}
         </div>
-
-        <div className="bg-cyan-50 rounded-md p-3 mb-3">
-          <div className="text-xs text-cyan-900 font-medium">
-            {getPreview()}
-          </div>
-        </div>
-
-        {data.stats && (
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-200">
-            <span>✓ {data.stats.executions || 0} execuções</span>
-            <span>⚡ {data.stats.success_rate || 0}% sucesso</span>
-          </div>
-        )}
       </div>
 
-      <div className="border-t border-gray-200 px-4 py-2 bg-gray-50 rounded-b-lg flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              data.onDelete?.(data.id)
-            }}
-            className="p-1.5 hover:bg-red-100 rounded text-red-600 transition-colors"
-            title="Deletar"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              data.onDuplicate?.(data.id)
-            }}
-            className="p-1.5 hover:bg-gray-200 rounded text-gray-600 transition-colors"
-            title="Duplicar"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
+      {/* Content Preview */}
+      <div className="px-2 py-1.5 bg-gray-50">
+        <div className="text-[8px] text-gray-700 leading-tight">
+          {getPreview()}
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            data.onOpen?.(data.id)
-          }}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-600 hover:bg-cyan-100 rounded transition-colors"
-        >
-          <Settings className="w-3 h-3" />
-          Configurar
-        </button>
       </div>
 
       <Handle
         type="source"
-        position={Position.Bottom}
-        className="w-3 h-3 !bg-cyan-500"
+        position={Position.Right}
+        className="absolute -right-1 w-2 h-2 rounded-full !bg-cyan-500 !border-2 !border-white"
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
       />
     </div>
   )
