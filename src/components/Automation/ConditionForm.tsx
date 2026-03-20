@@ -151,6 +151,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
   const [users, setUsers] = useState<any[]>([])
   const [funnels, setFunnels] = useState<any[]>([])
   const [stages, setStages] = useState<any[]>([])
+  const [sources, setSources] = useState<string[]>([])
   const [selectedFunnel, setSelectedFunnel] = useState<string>('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
@@ -170,6 +171,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
       loadTags()
       loadUsers()
       loadFunnels()
+      loadSources()
     }
   }, [company?.id])
 
@@ -215,6 +217,23 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
       setFunnels(data || [])
     } catch (error) {
       console.error('Erro ao carregar funis:', error)
+    }
+  }
+
+  const loadSources = async () => {
+    try {
+      const { data } = await supabase
+        .from('leads')
+        .select('source')
+        .eq('company_id', company?.id)
+        .not('source', 'is', null)
+      
+      if (data) {
+        const uniqueSources = [...new Set(data.map((l: any) => l.source).filter(Boolean))]
+        setSources(uniqueSources.sort())
+      }
+    } catch (error) {
+      console.error('Erro ao carregar origens:', error)
     }
   }
 
@@ -283,7 +302,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
   const renderValueInput = () => {
     if (!selectedType || !operator) return null
 
-    if (['is_empty', 'is_not_empty', 'never_interacted', 'has_no_owner', 'is_first_day', 'is_last_day'].includes(operator)) {
+    if (['is_empty', 'is_not_empty', 'never_interacted', 'has_no_owner', 'is_first_day', 'is_last_day', 'is_today', 'is_yesterday', 'is_this_week', 'is_this_month'].includes(operator)) {
       return null
     }
 
@@ -344,6 +363,29 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
               </label>
             ))}
           </div>
+        </div>
+      )
+    }
+
+    if (selectedType === 'lead_source') {
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Origem</label>
+          <select
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">Selecione a origem...</option>
+            {sources.map(source => (
+              <option key={source} value={source}>{source}</option>
+            ))}
+          </select>
+          {sources.length === 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              Nenhuma origem encontrada. Leads precisam ter origem cadastrada.
+            </p>
+          )}
         </div>
       )
     }
