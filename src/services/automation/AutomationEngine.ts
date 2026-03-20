@@ -260,6 +260,10 @@ export class AutomationEngine {
         // Implementar delay REAL com agendamento
         return await this.scheduleDelay(node, context)
 
+      case 'distribution':
+        // Executar distribuição de leads
+        return await this.executeDistribution(node, context)
+
       case 'end':
         // Fim do fluxo
         console.log('🏁 Fim do fluxo')
@@ -1510,6 +1514,221 @@ export class AutomationEngine {
     } catch (error: any) {
       console.error('❌ Erro ao enviar mensagem WhatsApp:', error)
       throw error
+    }
+  }
+
+  /**
+   * Executa distribuição de leads entre usuários
+   */
+  private async executeDistribution(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      console.log('🔄 Executando distribuição de lead...', node.data.config)
+
+      const config = node.data.config
+      const { method, users } = config
+
+      if (!users || users.length === 0) {
+        throw new Error('Nenhum usuário configurado para distribuição')
+      }
+
+      if (!context.leadId) {
+        throw new Error('Lead ID não encontrado no contexto')
+      }
+
+      let selectedUserId: string | null = null
+
+      switch (method) {
+        case 'round_robin':
+          selectedUserId = await this.distributeRoundRobin(users, context.companyId)
+          break
+        case 'availability':
+          selectedUserId = await this.distributeByAvailability(users, config)
+          break
+        case 'workload':
+          selectedUserId = await this.distributeByWorkload(users, config, context.companyId)
+          break
+        case 'region':
+          selectedUserId = await this.distributeByRegion(config, context.leadId)
+          break
+        default:
+          throw new Error(`Método de distribuição desconhecido: ${method}`)
+      }
+
+      if (!selectedUserId) {
+        console.warn('⚠️ Nenhum usuário disponível para distribuição')
+        return { distributed: false, reason: 'no_user_available' }
+      }
+
+      // Atribuir lead ao usuário selecionado
+      const { error } = await supabase
+        .from('leads')
+        .update({ owner_id: selectedUserId })
+        .eq('id', context.leadId)
+
+      if (error) {
+        throw new Error(`Erro ao atribuir lead: ${error.message}`)
+      }
+
+      console.log('✅ Lead distribuído com sucesso para usuário:', selectedUserId)
+
+      return {
+        distributed: true,
+        user_id: selectedUserId,
+        method,
+        lead_id: context.leadId
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao executar distribuição:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Distribuição Round Robin (Rodízio)
+   */
+  private async distributeRoundRobin(users: string[], companyId: string): Promise<string | null> {
+    try {
+      // Buscar último índice usado
+      const { data: state } = await supabase
+        .from('distribution_state')
+        .select('last_user_index')
+        .eq('company_id', companyId)
+        .single()
+
+      const lastIndex = state?.last_user_index ?? -1
+      const nextIndex = (lastIndex + 1) % users.length
+      const selectedUserId = users[nextIndex]
+
+      // Salvar novo índice
+      await supabase
+        .from('distribution_state')
+        .upsert({
+          company_id: companyId,
+          last_user_index: nextIndex,
+          updated_at: new Date().toISOString()
+        })
+
+      console.log('🔄 Round Robin:', { lastIndex, nextIndex, selectedUserId })
+      return selectedUserId
+    } catch (error) {
+      console.error('Erro no Round Robin:', error)
+      return users[0] // Fallback para primeiro usuário
+    }
+  }
+
+  /**
+   * Distribuição por Disponibilidade
+   */
+  private async distributeByAvailability(users: string[], config: any): Promise<string | null> {
+    try {
+      if (!config.check_online_status) {
+        // Se não verificar status, retorna primeiro usuário
+        return users[0]
+      }
+
+      // Buscar usuários online (implementação futura com presença real-time)
+      // Por enquanto, retorna primeiro usuário disponível
+      const availableUsers = users.filter(userId => userId) // Placeholder
+
+      if (availableUsers.length === 0) {
+        if (config.skip_unavailable) {
+          return null
+        }
+        return users[0] // Fallback
+      }
+
+      // Distribuir aleatoriamente entre disponíveis
+      const randomIndex = Math.floor(Math.random() * availableUsers.length)
+      return availableUsers[randomIndex]
+    } catch (error) {
+      console.error('Erro na distribuição por disponibilidade:', error)
+      return users[0]
+    }
+  }
+
+  /**
+   * Distribuição por Carga de Trabalho
+   */
+  private async distributeByWorkload(users: string[], config: any, companyId: string): Promise<string | null> {
+    try {
+      // Contar leads ativos por usuário
+      const userLeadCounts = await Promise.all(
+        users.map(async (userId) => {
+          const { count } = await supabase
+            .from('leads')
+            .select('*', { count: 'exact', head: true })
+            .eq('owner_id', userId)
+            .eq('company_id', companyId)
+            .is('archived_at', null)
+
+          return { userId, count: count || 0 }
+        })
+      )
+
+      // Filtrar usuários que não atingiram o limite
+      let availableUsers = userLeadCounts
+      if (config.max_leads_per_user) {
+        availableUsers = userLeadCounts.filter(u => u.count < config.max_leads_per_user)
+      }
+
+      if (availableUsers.length === 0) {
+        if (config.skip_unavailable) {
+          return null
+        }
+        availableUsers = userLeadCounts // Usar todos se nenhum disponível
+      }
+
+      // Selecionar usuário com menos leads
+      const userWithLeastLeads = availableUsers.reduce((min, current) =>
+        current.count < min.count ? current : min
+      )
+
+      console.log('📊 Workload:', { userLeadCounts, selected: userWithLeastLeads })
+      return userWithLeastLeads.userId
+    } catch (error) {
+      console.error('Erro na distribuição por workload:', error)
+      return users[0]
+    }
+  }
+
+  /**
+   * Distribuição por Região
+   */
+  private async distributeByRegion(config: any, leadId: number): Promise<string | null> {
+    try {
+      // Buscar lead para obter região
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('city, state')
+        .eq('id', leadId)
+        .single()
+
+      if (!lead) {
+        return config.default_user_id || null
+      }
+
+      // Tentar mapear por cidade ou estado
+      const region = lead.city || lead.state
+      if (!region) {
+        return config.default_user_id || null
+      }
+
+      // Buscar mapeamento
+      const mapping = config.region_mappings?.find((m: any) =>
+        region.toLowerCase().includes(m.region.toLowerCase()) ||
+        m.region.toLowerCase().includes(region.toLowerCase())
+      )
+
+      if (mapping && mapping.user_id) {
+        console.log('🗺️ Região mapeada:', { region, userId: mapping.user_id })
+        return mapping.user_id
+      }
+
+      // Fallback para usuário padrão
+      return config.default_user_id || null
+    } catch (error) {
+      console.error('Erro na distribuição por região:', error)
+      return config.default_user_id || null
     }
   }
 }

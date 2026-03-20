@@ -7,11 +7,11 @@
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
   ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
-  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation'
   label: string
   icon: React.ReactNode
   description?: string
@@ -72,6 +72,13 @@ export const ACTION_TYPES: ActionType[] = [
     label: 'Atribuir Responsável',
     icon: <UserPlus className="w-4 h-4" />,
     description: 'Atribua um responsável ao lead',
+    category: 'lead'
+  },
+  {
+    id: 'distribute_lead',
+    label: 'Distribuir Lead',
+    icon: <Shuffle className="w-4 h-4" />,
+    description: 'Distribua leads entre usuários automaticamente',
     category: 'lead'
   },
   {

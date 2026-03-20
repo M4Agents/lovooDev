@@ -32,6 +32,7 @@ import ConditionNode from './nodes/ConditionNode'
 import MessageNode from './nodes/MessageNode'
 import DelayNode from './nodes/DelayNode'
 import EndNode from './nodes/EndNode'
+import DistributionNode from './nodes/DistributionNode'
 
 // Custom Edge Component
 import CustomEdge from './edges/CustomEdge'
@@ -73,7 +74,8 @@ const nodeTypes: NodeTypes = {
   condition: ConditionNode,
   message: MessageNode,
   delay: DelayNode,
-  end: EndNode
+  end: EndNode,
+  distribution: DistributionNode
 }
 
 const edgeTypes: EdgeTypes = {

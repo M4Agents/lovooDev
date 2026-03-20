@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState } from 'react'
-import { Zap, Target, GitBranch, MessageSquare, Clock, Flag, ChevronDown, ChevronRight, MessageCircle, UserPlus, Tag, TrendingUp, UserCheck, UserMinus, RotateCcw } from 'lucide-react'
+import { Zap, Target, GitBranch, MessageSquare, Clock, Flag, ChevronDown, ChevronRight, MessageCircle, UserPlus, Tag, TrendingUp, UserCheck, UserMinus, RotateCcw, Shuffle } from 'lucide-react'
 
 interface Block {
   type: string
@@ -130,6 +130,13 @@ const BLOCK_CATEGORIES = {
         icon: <Target className="w-5 h-5" />,
         color: 'bg-blue-500',
         description: 'Adiciona uma tag ao lead'
+      },
+      {
+        type: 'distribution',
+        label: 'Distribuir Lead',
+        icon: <Shuffle className="w-5 h-5" />,
+        color: 'bg-cyan-500',
+        description: 'Distribui leads entre usuários automaticamente'
       }
     ]
   },

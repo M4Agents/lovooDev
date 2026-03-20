@@ -6,6 +6,7 @@
 import { TriggerAutomationForm } from './TriggerAutomationForm'
 import { NotificationForm } from './NotificationForm'
 import { ConditionForm } from './ConditionForm'
+import { DistributionForm } from './DistributionForm'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
 import { Node } from 'reactflow'
@@ -362,6 +363,11 @@ export default function NodeConfigPanel({ selectedNode, flowId, onClose, onSave 
                   </select>
                 )}
               </div>
+            )}
+
+            {/* DISTRIBUIR LEAD */}
+            {config.actionType === 'distribute_lead' && (
+              <DistributionForm config={config} setConfig={setConfig} />
             )}
 
             {/* MOVER OPORTUNIDADE */}
@@ -968,6 +974,9 @@ export default function NodeConfigPanel({ selectedNode, flowId, onClose, onSave 
             </div>
           </div>
         )
+
+      case 'distribution':
+        return <DistributionForm config={config} setConfig={setConfig} />
 
       default:
         return (
