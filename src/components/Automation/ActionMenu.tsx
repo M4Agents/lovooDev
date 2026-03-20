@@ -41,10 +41,10 @@ const ACTIONS = [
     description: 'Aguardar tempo específico'
   },
   {
-    type: 'randomizer',
-    label: 'Randomizador',
+    type: 'distribution',
+    label: 'Distribuir Lead',
     icon: Shuffle,
-    description: 'Escolha aleatória de caminho'
+    description: 'Distribui leads entre usuários automaticamente'
   },
   {
     type: 'api',
