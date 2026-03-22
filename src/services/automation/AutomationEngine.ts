@@ -1429,8 +1429,12 @@ export class AutomationEngine {
         ...leadVariables
       }
 
-      // Obter mensagem/caption configurada
-      let message = node.data.config?.message || node.data.config?.caption || ''
+      // Obter mensagem/caption/question configurada
+      // Para nós user_input, a mensagem está no campo 'question'
+      let message = node.data.config?.message || 
+                    node.data.config?.caption || 
+                    node.data.config?.question || 
+                    ''
 
       // Substituir variáveis SEMPRE (não depende de flag)
       message = whatsAppService.replaceVariables(message, allVariables)
