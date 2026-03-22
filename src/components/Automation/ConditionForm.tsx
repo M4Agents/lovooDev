@@ -198,25 +198,17 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
   const loadUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('company_users')
-        .select(`
-          user_id,
-          users:user_id (
-            id,
-            email,
-            raw_user_meta_data
-          )
-        `)
-        .eq('company_id', company?.id)
-        .eq('is_active', true)
+        .rpc('get_company_users_with_details', {
+          p_company_id: company?.id
+        })
       
       if (error) throw error
       
       // Transformar dados para formato esperado
-      const formattedUsers = data?.map((cu: any) => ({
-        id: cu.users.id,
-        name: cu.users.raw_user_meta_data?.name || cu.users.email,
-        email: cu.users.email
+      const formattedUsers = data?.map((user: any) => ({
+        id: user.id,
+        name: user.display_name || user.email,
+        email: user.email
       })) || []
       
       setUsers(formattedUsers)
