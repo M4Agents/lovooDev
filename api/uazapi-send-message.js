@@ -135,8 +135,18 @@ export default async function handler(req, res) {
  * Não bloqueia a resposta HTTP ao cliente
  */
 async function sendToUazapiAsync(messageData) {
+  const startTime = Date.now();
+  
   try {
     console.log('📤 Iniciando envio assíncrono para Uazapi...');
+    console.log('🔍 DEBUG - messageData recebido:', {
+      message_id: messageData.message_id,
+      message_type: messageData.message_type,
+      phone: messageData.phone,
+      has_content: !!messageData.content,
+      has_token: !!messageData.provider_token,
+      content_length: messageData.content?.length || 0
+    });
     
     const { 
       message_id, 
@@ -146,6 +156,17 @@ async function sendToUazapiAsync(messageData) {
       phone, 
       provider_token 
     } = messageData;
+
+    // Validações críticas
+    if (!provider_token) {
+      throw new Error('Token do Uazapi não encontrado');
+    }
+    if (!phone) {
+      throw new Error('Telefone não encontrado');
+    }
+    if (!content && !media_url) {
+      throw new Error('Conteúdo ou mídia não encontrado');
+    }
 
     // Determinar endpoint e payload
     let endpoint, payload;
@@ -177,10 +198,12 @@ async function sendToUazapiAsync(messageData) {
     console.log('🌐 Fazendo requisição HTTP para Uazapi:', {
       endpoint,
       phone,
-      type: message_type
+      type: message_type,
+      payload_size: JSON.stringify(payload).length
     });
 
-    // Fazer requisição HTTP para Uazapi
+    // Fazer requisição HTTP para Uazapi com timeout
+    console.log('⏱️ Iniciando fetch com timeout de 30s...');
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -191,7 +214,12 @@ async function sendToUazapiAsync(messageData) {
       signal: AbortSignal.timeout(UAZAPI_CONFIG.TIMEOUT)
     });
 
+    const elapsed = Date.now() - startTime;
+    console.log(`⏱️ Fetch concluído em ${elapsed}ms - Status: ${response.status}`);
+
+    console.log('📥 Parseando resposta JSON...');
     const responseData = await response.json();
+    console.log('📥 Resposta parseada:', responseData);
 
     if (response.ok) {
       console.log('✅ Uazapi respondeu com sucesso:', responseData);
@@ -199,17 +227,28 @@ async function sendToUazapiAsync(messageData) {
       // Atualizar status para 'sent'
       const uazapiMessageId = responseData.messageid || responseData.messageId;
       
-      await supabase.rpc('update_message_status', {
+      console.log('💾 Atualizando status para SENT no banco...');
+      const { data: updateResult, error: updateError } = await supabase.rpc('update_message_status', {
         p_message_id: message_id,
         p_status: 'sent',
         p_uazapi_message_id: uazapiMessageId
       });
 
-      console.log('✅ Status atualizado para SENT:', message_id);
+      if (updateError) {
+        console.error('❌ Erro ao atualizar status:', updateError);
+        throw updateError;
+      }
+
+      console.log('✅ Status atualizado para SENT:', message_id, updateResult);
     } else {
-      console.error('❌ Uazapi retornou erro:', response.status, responseData);
+      console.error('❌ Uazapi retornou erro:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: responseData
+      });
       
       // Atualizar status para 'failed'
+      console.log('💾 Atualizando status para FAILED no banco...');
       await supabase.rpc('update_message_status', {
         p_message_id: message_id,
         p_status: 'failed',
@@ -220,18 +259,34 @@ async function sendToUazapiAsync(messageData) {
     }
 
   } catch (error) {
-    console.error('💥 Erro no envio assíncrono:', error);
+    const elapsed = Date.now() - startTime;
+    console.error('💥 Erro no envio assíncrono:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      elapsed_ms: elapsed,
+      message_id: messageData.message_id
+    });
     
     // Atualizar status para 'failed'
     try {
-      await supabase.rpc('update_message_status', {
+      console.log('💾 Tentando atualizar status para FAILED após exceção...');
+      const { error: updateError } = await supabase.rpc('update_message_status', {
         p_message_id: messageData.message_id,
         p_status: 'failed',
-        p_error_message: error.message
+        p_error_message: `${error.name}: ${error.message}`
       });
-      console.log('❌ Status atualizado para FAILED após exceção:', messageData.message_id);
+      
+      if (updateError) {
+        console.error('❌ Erro ao atualizar status:', updateError);
+      } else {
+        console.log('✅ Status atualizado para FAILED após exceção:', messageData.message_id);
+      }
     } catch (updateError) {
-      console.error('💥 Erro ao atualizar status após falha:', updateError);
+      console.error('💥 Erro ao atualizar status após falha:', {
+        message: updateError.message,
+        stack: updateError.stack
+      });
     }
   }
 }
