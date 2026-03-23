@@ -1729,8 +1729,50 @@ export class AutomationEngine {
 
       // 1. Enviar a pergunta ao usuário
       const result = await this.sendWhatsAppMessage(node, context)
+      const messageId = result.messageId
 
-      // 2. Pausar a execução
+      // 2. AGUARDAR confirmação de envio antes de pausar
+      if (messageId) {
+        console.log('⏳ Aguardando confirmação de envio da pergunta...')
+        
+        let attempts = 0
+        let messageSent = false
+        const maxAttempts = 30 // 30 segundos máximo
+
+        while (attempts < maxAttempts && !messageSent) {
+          // Buscar status da mensagem
+          const { data: message } = await supabase
+            .from('chat_messages')
+            .select('status')
+            .eq('id', messageId)
+            .single()
+          
+          if (message?.status === 'sent') {
+            messageSent = true
+            console.log('✅ Pergunta enviada com sucesso! Agora pausando fluxo...')
+            break
+          }
+          
+          if (message?.status === 'failed') {
+            console.error('❌ Falha no envio da pergunta - Abortando pausa')
+            throw new Error('Falha ao enviar pergunta ao usuário')
+          }
+          
+          // Aguardar 1 segundo antes de tentar novamente
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          attempts++
+          
+          if (attempts % 5 === 0) {
+            console.log(`⏳ Ainda aguardando envio... (${attempts}s/${maxAttempts}s)`)
+          }
+        }
+
+        if (!messageSent) {
+          console.warn('⚠️ Timeout aguardando envio, mas continuando com pausa...')
+        }
+      }
+
+      // 3. Pausar a execução
       console.log('⏸️ PAUSANDO fluxo - Aguardando resposta do usuário')
       
       const variableName = node.data.config?.variable || 'user_response'
@@ -1754,7 +1796,7 @@ export class AutomationEngine {
 
       console.log(`✅ Fluxo pausado - Aguardando resposta na variável: ${variableName}`)
 
-      // 3. Retornar indicador de pausa (não continuar processamento)
+      // 4. Retornar indicador de pausa (não continuar processamento)
       return {
         paused: true,
         awaiting_input: true,
