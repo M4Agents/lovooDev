@@ -180,6 +180,18 @@ export class AutomationEngine {
       // Processar a partir do trigger
       await this.processNode(triggerNode as Node, flow.nodes as Node[], flow.edges as Edge[], context)
 
+      // Verificar se execução foi pausada (não marcar como completed)
+      const { data: currentExecution } = await supabase
+        .from('automation_executions')
+        .select('status')
+        .eq('id', execution.id)
+        .single()
+
+      if (currentExecution?.status === 'paused') {
+        console.log('⏸️ Fluxo pausado - Aguardando resposta do usuário')
+        return
+      }
+
       // Marcar como completo
       await this.completeExecution(execution.id, 'completed')
       console.log('✅ Fluxo processado com sucesso:', flow.id)
@@ -206,6 +218,14 @@ export class AutomationEngine {
     try {
       // Executar ação do nó
       const result = await this.executeNodeAction(node, context)
+
+      // Verificar se o fluxo foi pausado (user_input)
+      if (result?.paused === true) {
+        console.log('⏸️ Fluxo pausado - Não processando próximos nós')
+        await this.createLog(context, node, 'paused', result)
+        await this.updateExecutedNodes(context.executionId, node.id, 'paused', result)
+        return // INTERROMPER processamento
+      }
 
       // Criar log de sucesso
       await this.createLog(context, node, 'success', result)
@@ -248,6 +268,10 @@ export class AutomationEngine {
         // Verificar se é delay ou mensagem real
         if (node.data.config?.messageType === 'delay') {
           return await this.executeDelay(node, context)
+        }
+        // Verificar se é user_input (aguarda resposta do usuário)
+        if (node.data.config?.messageType === 'user_input') {
+          return await this.handleUserInput(node, context)
         }
         // Enviar mensagem WhatsApp REAL
         return await this.sendWhatsAppMessage(node, context)
@@ -1692,6 +1716,159 @@ export class AutomationEngine {
     } catch (error) {
       console.error('Erro na distribuição por workload:', error)
       return users[0]
+    }
+  }
+
+  /**
+   * FASE 5.2: Trata entrada de usuário (user_input)
+   * Envia a pergunta e PAUSA o fluxo aguardando resposta
+   */
+  private async handleUserInput(node: Node, context: ExecutionContext): Promise<any> {
+    try {
+      console.log('❓ Processando entrada de usuário (user_input)...')
+
+      // 1. Enviar a pergunta ao usuário
+      const result = await this.sendWhatsAppMessage(node, context)
+
+      // 2. Pausar a execução
+      console.log('⏸️ PAUSANDO fluxo - Aguardando resposta do usuário')
+      
+      const variableName = node.data.config?.variable || 'user_response'
+      
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'paused',
+          current_node_id: node.id,
+          paused_at: new Date().toISOString(),
+          variables: {
+            ...context.variables,
+            _awaiting_input: {
+              node_id: node.id,
+              variable_name: variableName,
+              question: node.data.config?.question
+            }
+          }
+        })
+        .eq('id', context.executionId)
+
+      console.log(`✅ Fluxo pausado - Aguardando resposta na variável: ${variableName}`)
+
+      // 3. Retornar indicador de pausa (não continuar processamento)
+      return {
+        paused: true,
+        awaiting_input: true,
+        variable: variableName,
+        message_sent: result.sent
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao processar entrada de usuário:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Retoma execução pausada após receber resposta do usuário
+   */
+  async resumeExecution(executionId: string, userResponse: string): Promise<void> {
+    try {
+      console.log('▶️ Retomando execução pausada:', executionId)
+
+      // 1. Buscar execução pausada
+      const { data: execution, error } = await supabase
+        .from('automation_executions')
+        .select('*')
+        .eq('id', executionId)
+        .eq('status', 'paused')
+        .single()
+
+      if (error || !execution) {
+        throw new Error('Execução pausada não encontrada')
+      }
+
+      // 2. Extrair informações da pausa
+      const awaitingInput = execution.variables?._awaiting_input
+      if (!awaitingInput) {
+        throw new Error('Informações de pausa não encontradas')
+      }
+
+      // 3. Salvar resposta do usuário na variável
+      const updatedVariables = {
+        ...execution.variables,
+        [awaitingInput.variable_name]: userResponse
+      }
+      delete updatedVariables._awaiting_input
+
+      // 4. Atualizar execução para running
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'running',
+          variables: updatedVariables,
+          paused_at: null
+        })
+        .eq('id', executionId)
+
+      console.log(`✅ Resposta salva na variável: ${awaitingInput.variable_name} = "${userResponse}"`)
+
+      // 5. Buscar fluxo
+      const { data: flow } = await supabase
+        .from('automation_flows')
+        .select('*')
+        .eq('id', execution.flow_id)
+        .single()
+
+      if (!flow) {
+        throw new Error('Fluxo não encontrado')
+      }
+
+      // 6. Reconstruir contexto
+      const context: ExecutionContext = {
+        executionId: execution.id,
+        flowId: execution.flow_id,
+        companyId: execution.company_id,
+        triggerData: execution.trigger_data,
+        variables: updatedVariables,
+        leadId: execution.lead_id || undefined,
+        opportunityId: execution.opportunity_id || undefined
+      }
+
+      // 7. Encontrar próximo nó após o nó pausado
+      const currentNode = flow.nodes.find((n: Node) => n.id === awaitingInput.node_id)
+      if (!currentNode) {
+        throw new Error('Nó atual não encontrado')
+      }
+
+      const nextNodes = this.getNextNodes(currentNode, flow.edges)
+      
+      // 8. Continuar processamento a partir do próximo nó
+      console.log('🔄 Continuando execução a partir do próximo nó...')
+      
+      for (const nextNode of nextNodes) {
+        await this.processNode(nextNode, context, flow.nodes, flow.edges)
+      }
+
+      // 9. Marcar execução como concluída
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', executionId)
+
+      console.log('✅ Execução retomada e concluída com sucesso')
+    } catch (error: any) {
+      console.error('❌ Erro ao retomar execução:', error)
+      
+      // Marcar execução como failed
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'failed',
+          error_message: error.message
+        })
+        .eq('id', executionId)
     }
   }
 
