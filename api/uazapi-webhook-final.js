@@ -675,7 +675,45 @@ async function processMessage(payload) {
       console.log('ℹ️ Mensagem outbound - não cria lead automaticamente');
     }
 
-    // 💬 SINCRONIZAR COM BIBLIOTECA DE MÍDIAS - CORREÇÃO CRÍTICA
+    // � SINCRONIZAÇÃO DE FOTO DE PERFIL (THROTTLE 24H)
+    // Atualiza foto do contato em cada interação, respeitando throttle de 24h
+    // URLs expiradas do WhatsApp são sempre atualizadas
+    try {
+      console.log('📸 Iniciando sincronização de foto de perfil...');
+      
+      // Buscar dados do contato incluindo photo_updated_at
+      const { data: contactData, error: contactError } = await supabase
+        .from('chat_contacts')
+        .select('id, phone_number, profile_picture_url, photo_updated_at, company_id')
+        .eq('id', contactId)
+        .single();
+      
+      if (contactError || !contactData) {
+        console.log('📸 Contato não encontrado, pulando sincronização de foto');
+      } else {
+        // Importar funções de sincronização
+        const { syncContactPhoto } = require('../lib/photoSync.cjs');
+        
+        // Executar sincronização de forma assíncrona (não bloqueia webhook)
+        syncContactPhoto(supabase, contactData, instance, company)
+          .then(result => {
+            if (result.updated) {
+              console.log(`📸 ✅ Foto sincronizada com sucesso: ${contactData.phone_number}`);
+            } else {
+              console.log(`📸 ℹ️ Foto não atualizada: ${result.reason}`);
+            }
+          })
+          .catch(error => {
+            console.error(`📸 ❌ Erro na sincronização de foto: ${error.message}`);
+            // Não falhar o webhook por causa disso
+          });
+      }
+    } catch (photoSyncError) {
+      console.error('📸 ❌ EXCEPTION na sincronização de foto:', photoSyncError);
+      // Não falhar o webhook por causa disso - apenas log
+    }
+
+    // �💬 SINCRONIZAR COM BIBLIOTECA DE MÍDIAS - CORREÇÃO CRÍTICA
     if (finalMediaUrl && finalMediaUrl.includes('aws-lovoocrm-media.s3')) {
       try {
         console.error('💬 BIBLIOTECA: Iniciando sincronização da mídia processada...');
