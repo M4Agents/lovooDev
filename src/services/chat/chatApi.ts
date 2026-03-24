@@ -386,28 +386,10 @@ export class ChatApi {
         throw new Error(result.error || 'Falha no envio')
       }
 
-      // Mensagem enviada com sucesso
-      
-      // 🔧 CORREÇÃO: Atualizar status no banco para 'sent'
-      try {
-        // Atualizando status para enviado...
-        const { error: updateError } = await supabase
-          .from('chat_messages')
-          .update({ 
-            status: 'sent',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', messageId)
-          .eq('company_id', companyId)
-        
-        if (updateError) {
-          console.error('Erro ao atualizar status')
-        } else {
-          // Status atualizado para enviado
-        }
-      } catch (updateError) {
-        console.error('Erro ao atualizar status')
-      }
+      // ✅ API retornou sucesso - mensagem está sendo processada
+      // ⚠️ NÃO atualizar status aqui! 
+      // O status será atualizado para 'sent' pelo sendToUazapiAsync após confirmação real do Uazapi
+      console.log('✅ API aceitou a mensagem - processamento assíncrono iniciado')
       
     } catch (error) {
       console.error('Erro no envio via WhatsApp')

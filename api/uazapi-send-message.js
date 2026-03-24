@@ -203,19 +203,40 @@ async function sendToUazapiAsync(messageData) {
     });
 
     // Fazer requisição HTTP para Uazapi com timeout
-    console.log('⏱️ Iniciando fetch com timeout de 30s...');
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': provider_token
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(UAZAPI_CONFIG.TIMEOUT)
-    });
+    // ⚠️ IMPORTANTE: Vercel tem limite de 10s para funções serverless
+    // Reduzindo timeout para 8s para garantir que temos tempo de atualizar status
+    const SAFE_TIMEOUT = 8000; // 8 segundos
+    console.log(`⏱️ Iniciando fetch com timeout de ${SAFE_TIMEOUT}ms...`);
+    
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': provider_token
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(SAFE_TIMEOUT)
+      });
 
-    const elapsed = Date.now() - startTime;
-    console.log(`⏱️ Fetch concluído em ${elapsed}ms - Status: ${response.status}`);
+      const elapsed = Date.now() - startTime;
+      console.log(`⏱️ Fetch concluído em ${elapsed}ms - Status: ${response.status}`);
+    } catch (fetchError) {
+      const elapsed = Date.now() - startTime;
+      
+      if (fetchError.name === 'TimeoutError' || fetchError.name === 'AbortError') {
+        console.error(`⏱️ TIMEOUT após ${elapsed}ms - Uazapi não respondeu a tempo!`);
+        throw new Error(`Timeout: Uazapi não respondeu em ${SAFE_TIMEOUT}ms`);
+      }
+      
+      console.error('💥 Erro no fetch:', {
+        name: fetchError.name,
+        message: fetchError.message,
+        elapsed_ms: elapsed
+      });
+      throw fetchError;
+    }
 
     console.log('📥 Parseando resposta JSON...');
     const responseData = await response.json();
