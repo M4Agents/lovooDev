@@ -12,8 +12,8 @@
  * Pode ser agendado via cron job para rodar diariamente às 3h da manhã
  */
 
-import { createClient } from '@supabase/supabase-js';
-import fetch from 'node-fetch';
+const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch');
 
 // Configuração Supabase
 const SUPABASE_URL = 'https://etzdsywunlpbgxkphuil.supabase.co';
