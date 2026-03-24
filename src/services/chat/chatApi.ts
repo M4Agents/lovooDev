@@ -609,10 +609,57 @@ export class ChatApi {
 
       if (error) throw error
 
+      // Sincronizar status em background (não bloqueia)
+      this.syncInstancesStatusBackground(companyId)
+
       return data || []
     } catch (error) {
       console.error('Error fetching company instances:', error)
       throw error
+    }
+  }
+
+  // =====================================================
+  // SINCRONIZAÇÃO DE STATUS EM BACKGROUND
+  // =====================================================
+  // Data: 24/03/2026
+  // Objetivo: Verificar status real das instâncias na uazapi
+  // e atualizar banco se houver divergência
+  
+  private static async syncInstancesStatusBackground(companyId: string): Promise<void> {
+    try {
+      // Chamar função SQL de sincronização
+      const { data, error } = await supabase.rpc('sync_all_instances_status', {
+        p_company_id: companyId
+      })
+      
+      if (error) {
+        console.warn('[chatApi] Background sync error:', error)
+        return
+      }
+
+      if (data?.synced_count > 0) {
+        console.log(`✅ [chatApi] ${data.synced_count} instâncias sincronizadas com uazapi`)
+        console.log('[chatApi] Instâncias atualizadas:', data.updated_instances)
+        
+        // Notificar usuário sobre instâncias desconectadas
+        data.updated_instances?.forEach((instance: any) => {
+          if (instance.new_status === 'disconnected') {
+            // Emitir evento customizado para notificação
+            const event = new CustomEvent('whatsapp-instance-disconnected', {
+              detail: {
+                instanceName: instance.instance_name,
+                oldStatus: instance.old_status,
+                newStatus: instance.new_status
+              }
+            })
+            window.dispatchEvent(event)
+          }
+        })
+      }
+    } catch (error) {
+      // Não bloqueia a aplicação se sync falhar
+      console.warn('[chatApi] Background sync failed:', error)
     }
   }
 

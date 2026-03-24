@@ -7,6 +7,7 @@
 import React from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { AdaptiveChatLayout } from '../components/WhatsAppChat/ChatLayout'
+import { InstanceDisconnectedNotification } from '../components/WhatsAppChat/InstanceDisconnectedNotification'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -51,6 +52,7 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="h-[calc(100vh-80px)] bg-gray-50">
+      <InstanceDisconnectedNotification />
       <AdaptiveChatLayout 
         companyId={company.id}
         userId={user.id}
