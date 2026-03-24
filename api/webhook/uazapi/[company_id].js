@@ -377,10 +377,33 @@ async function processMessage(payload) {
     // =====================================================
     // Verificar se precisa sincronizar foto (otimização de performance)
     try {
+      console.error('🔍 DEBUG SYNC - Iniciando verificação de sincronização de foto');
+      console.error('🔍 DEBUG SYNC - Parâmetros recebidos:', {
+        hasBaseUrl: !!payload.BaseUrl,
+        baseUrl: payload.BaseUrl?.substring(0, 50) + '...',
+        hasToken: !!payload.token,
+        tokenLength: payload.token?.length,
+        instanceName,
+        phoneNumber,
+        companyId: company.id,
+        hasImagePreview: !!payload.chat?.imagePreview,
+        imagePreviewUrl: payload.chat?.imagePreview?.substring(0, 80) + '...',
+        isNewContact: isNewContact || 'undefined'
+      });
+      
       const needsSync = await shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact);
+      console.error('🔍 DEBUG SYNC - Resultado shouldSyncPhoto:', needsSync);
       
       if (needsSync) {
-        console.log('📸 Sincronizando foto do contato:', phoneNumber);
+        console.error('📸 SYNC INICIADO - Sincronizando foto do contato:', phoneNumber);
+        console.error('📸 SYNC PARAMS:', {
+          baseUrl: payload.BaseUrl,
+          hasToken: !!payload.token,
+          instanceName,
+          companyId: company.id,
+          phoneNumber
+        });
+        
         // Sincronizar foto de perfil do contato via Uazapi em background
         syncContactProfilePictureFromUazapi({
           supabase,
@@ -390,13 +413,25 @@ async function processMessage(payload) {
           companyId: company.id,
           phoneNumber,
         }).catch((syncError) => {
-          console.error('⚠️ Erro ao sincronizar foto do contato (async):', syncError);
+          console.error('❌ ERRO COMPLETO NA SINCRONIZAÇÃO DE FOTO:', {
+            error: syncError.message,
+            stack: syncError.stack,
+            phoneNumber,
+            instanceName,
+            hasBaseUrl: !!payload.BaseUrl,
+            hasToken: !!payload.token
+          });
         });
       } else {
-        console.log('⏭️ Pulando sincronização de foto (não necessária):', phoneNumber);
+        console.error('⏭️ SYNC PULADO - Sincronização não necessária:', phoneNumber);
       }
     } catch (syncInitError) {
-      console.error('⚠️ Erro ao verificar/iniciar sync de foto do contato:', syncInitError);
+      console.error('❌ ERRO AO VERIFICAR/INICIAR SYNC:', {
+        error: syncInitError.message,
+        stack: syncInitError.stack,
+        phoneNumber,
+        companyId: company.id
+      });
       // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
     }
     
@@ -728,7 +763,13 @@ async function downloadAndStoreContactAvatar({
     return publicUrl;
 
   } catch (error) {
-    console.error('[downloadAndStoreContactAvatar] EXCEPTION:', error);
+    console.error('❌ [downloadAndStoreContactAvatar] EXCEPTION COMPLETA:', {
+      message: error.message,
+      stack: error.stack,
+      profileUrl: profileUrl?.substring(0, 80) + '...',
+      companyId,
+      phoneNumber
+    });
     return null;
   }
 }
@@ -743,17 +784,35 @@ async function syncContactProfilePictureFromUazapi({
   phoneNumber,
 }) {
   try {
+    console.error('🔍 [syncContactProfilePictureFromUazapi] INICIANDO SINCRONIZAÇÃO');
+    console.error('🔍 [syncContactProfilePictureFromUazapi] Parâmetros recebidos:', {
+      hasSupabase: !!supabase,
+      baseUrl,
+      hasToken: !!token,
+      tokenLength: token?.length,
+      instanceName,
+      companyId,
+      phoneNumber
+    });
+    
     if (!token || !instanceName || !companyId || !phoneNumber) {
-      console.log('[syncContactProfilePictureFromUazapi] Dados insuficientes para sincronizar foto, abortando.');
+      console.error('❌ [syncContactProfilePictureFromUazapi] DADOS INSUFICIENTES:', {
+        hasToken: !!token,
+        hasInstanceName: !!instanceName,
+        hasCompanyId: !!companyId,
+        hasPhoneNumber: !!phoneNumber
+      });
       return;
     }
 
     // Usar endpoint oficial da Uazapi para buscar nome e imagem do contato
     const url = `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceName}`;
 
-    console.log('[syncContactProfilePictureFromUazapi] Chamando Uazapi para foto do contato...', {
+    console.error('📡 [syncContactProfilePictureFromUazapi] Chamando API Uazapi:', {
       url,
       phoneNumber,
+      method: 'POST',
+      hasApiKey: !!token
     });
 
     const response = await fetch(url, {
@@ -766,22 +825,47 @@ async function syncContactProfilePictureFromUazapi({
       body: JSON.stringify({ phone: phoneNumber }),
     });
 
+    console.error('📡 [syncContactProfilePictureFromUazapi] Resposta HTTP:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
     if (!response.ok) {
-      console.error('[syncContactProfilePictureFromUazapi] Falha HTTP ao buscar foto do contato:', response.status, response.statusText);
+      const errorText = await response.text();
+      console.error('❌ [syncContactProfilePictureFromUazapi] FALHA HTTP:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText
+      });
       return;
     }
 
     const data = await response.json();
+    console.error('📦 [syncContactProfilePictureFromUazapi] Dados recebidos da API:', {
+      success: data?.success,
+      hasData: !!data?.data,
+      hasProfilePictureUrl: !!data?.data?.profilePictureUrl,
+      profilePictureUrl: data?.data?.profilePictureUrl?.substring(0, 100) + '...',
+      fullResponse: JSON.stringify(data)
+    });
+    
     const profileUrl = data?.data?.profilePictureUrl;
 
     if (!data?.success || !profileUrl) {
-      console.log('[syncContactProfilePictureFromUazapi] Resposta sem profilePictureUrl util:', data);
+      console.error('⚠️ [syncContactProfilePictureFromUazapi] Resposta sem profilePictureUrl:', {
+        success: data?.success,
+        hasProfileUrl: !!profileUrl,
+        dataKeys: Object.keys(data || {}),
+        fullData: JSON.stringify(data)
+      });
       return;
     }
 
-    console.log('[syncContactProfilePictureFromUazapi] URL de foto obtida da Uazapi:', profileUrl.substring(0, 80) + '...');
+    console.error('✅ [syncContactProfilePictureFromUazapi] URL de foto obtida da Uazapi:', profileUrl.substring(0, 80) + '...');
 
     // Baixar avatar da Uazapi e armazenar em Storage proprio para obter URL estavel
+    console.error('📥 [syncContactProfilePictureFromUazapi] Iniciando download e armazenamento no Storage...');
     const stableAvatarUrl = await downloadAndStoreContactAvatar({
       supabase,
       profileUrl,
@@ -789,7 +873,21 @@ async function syncContactProfilePictureFromUazapi({
       phoneNumber,
     });
 
+    console.error('📥 [syncContactProfilePictureFromUazapi] Resultado do download/upload:', {
+      hasStableUrl: !!stableAvatarUrl,
+      stableUrl: stableAvatarUrl?.substring(0, 100) + '...',
+      willUseFallback: !stableAvatarUrl
+    });
+
     const finalUrl = stableAvatarUrl || profileUrl;
+
+    console.error('💾 [syncContactProfilePictureFromUazapi] Atualizando banco de dados:', {
+      finalUrl: finalUrl.substring(0, 100) + '...',
+      isStorageUrl: finalUrl.includes('supabase.co/storage'),
+      isWhatsAppUrl: finalUrl.includes('pps.whatsapp.net'),
+      companyId,
+      phoneNumber
+    });
 
     const { error: updateError } = await supabase
       .from('chat_contacts')
@@ -798,13 +896,27 @@ async function syncContactProfilePictureFromUazapi({
       .eq('phone_number', phoneNumber);
 
     if (updateError) {
-      console.error('[syncContactProfilePictureFromUazapi] Erro ao atualizar profile_picture_url em chat_contacts:', updateError);
+      console.error('❌ [syncContactProfilePictureFromUazapi] ERRO ao atualizar chat_contacts:', {
+        error: updateError.message,
+        code: updateError.code,
+        details: updateError.details,
+        hint: updateError.hint
+      });
       return;
     }
 
-    console.log('[syncContactProfilePictureFromUazapi] profile_picture_url sincronizada com sucesso para', phoneNumber);
+    console.error('🎉 [syncContactProfilePictureFromUazapi] SUCESSO - Foto sincronizada:', {
+      phoneNumber,
+      finalUrl: finalUrl.substring(0, 100) + '...',
+      isStorageUrl: finalUrl.includes('supabase.co/storage')
+    });
   } catch (error) {
-    console.error('[syncContactProfilePictureFromUazapi] EXCEPTION:', error);
+    console.error('❌ [syncContactProfilePictureFromUazapi] EXCEPTION COMPLETA:', {
+      message: error.message,
+      stack: error.stack,
+      phoneNumber,
+      companyId
+    });
   }
 }
 
