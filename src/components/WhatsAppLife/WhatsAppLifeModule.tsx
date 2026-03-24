@@ -127,6 +127,27 @@ export const WhatsAppLifeModule: React.FC = () => {
     }
   }, [generateQRCode]);
 
+  // Handler para reconectar instância desconectada
+  const handleReconnectInstance = useCallback(async (instance: any) => {
+    console.log('[WhatsAppLifeModule] Reconectando instância:', instance.instance_name);
+    
+    // Abrir modal de QR Code para reconectar
+    setCurrentInstanceId(instance.id);
+    setCurrentInstanceName(instance.instance_name);
+    setShowQRModal(true);
+    
+    // Gerar novo QR Code para mesma instância
+    const result = await generateQRCode(instance.instance_name);
+    if (result.success && result.data) {
+      setQrCodeData(result.data);
+      console.log('[WhatsAppLifeModule] QR Code gerado para reconexão');
+    } else {
+      console.error('[WhatsAppLifeModule] Erro ao gerar QR Code para reconexão:', result.error);
+      alert(`Erro ao gerar QR Code: ${result.error}`);
+      setShowQRModal(false);
+    }
+  }, [generateQRCode]);
+
   // Handlers para editar e excluir instâncias
   const handleEditInstance = useCallback(async (instance: any) => {
     const newName = prompt(`Alterar nome da instância "${instance.instance_name}":`, instance.instance_name);
@@ -582,6 +603,16 @@ export const WhatsAppLifeModule: React.FC = () => {
                       
                       {/* Botões de Ação */}
                       <div className="flex gap-1 ml-2">
+                        {/* Botão Reconectar - apenas para instâncias desconectadas */}
+                        {instance.status === 'disconnected' && (
+                          <button
+                            onClick={() => handleReconnectInstance(instance)}
+                            className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
+                            title="Reconectar instância"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleSyncProfile(instance)}
                           className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"
