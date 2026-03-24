@@ -34,6 +34,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     error: instancesError,
     generateQRCode,
     getTempInstanceStatus,
+    getInstanceStatus,
     getQRCode,
     syncWithUazapi,
     deleteInstance,
@@ -106,7 +107,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         
         // Iniciar polling para detectar conexão
         if (result.data.temp_instance_id) {
-          startTempInstancePolling(result.data.temp_instance_id);
+          startTempInstancePolling(result.data.temp_instance_id, false); // false = criação nova
         }
       } else {
         // Atualizar com erro
@@ -145,7 +146,7 @@ export const WhatsAppLifeModule: React.FC = () => {
       
       // Iniciar polling para detectar conexão automaticamente
       if (result.data.temp_instance_id) {
-        startTempInstancePolling(result.data.temp_instance_id);
+        startTempInstancePolling(result.data.temp_instance_id, true); // true = reconexão
       }
     } else {
       console.error('[WhatsAppLifeModule] Erro ao gerar QR Code para reconexão:', result.error);
@@ -254,8 +255,8 @@ export const WhatsAppLifeModule: React.FC = () => {
   }, [instances, syncProfileData]);
 
   // Função para iniciar polling de instância temporária
-  const startTempInstancePolling = useCallback((tempInstanceId: string) => {
-    console.log('[WhatsAppLifeModule] Iniciando polling para:', tempInstanceId);
+  const startTempInstancePolling = useCallback((tempInstanceId: string, isReconnect: boolean = false) => {
+    console.log('[WhatsAppLifeModule] Iniciando polling:', { tempInstanceId, isReconnect });
     
     // Limpar polling anterior se existir
     if (pollingInterval) {
@@ -270,10 +271,16 @@ export const WhatsAppLifeModule: React.FC = () => {
       console.log(`[WhatsAppLifeModule] Polling attempt ${attempts}/${maxAttempts} (15s interval)`);
       
       try {
-        const status = await getTempInstanceStatus(tempInstanceId);
+        // Polling híbrido: usar função correta baseado no tipo
+        const status = isReconnect 
+          ? await getInstanceStatus(tempInstanceId)
+          : await getTempInstanceStatus(tempInstanceId);
         console.log('[WhatsAppLifeModule] Status response:', status);
         
-        if (status.success && status.data) {
+        // Para reconexão, dados vêm direto em status; para criação, vêm em status.data
+        const statusData = isReconnect ? status : status.data;
+        
+        if (status.success && statusData) {
           const { 
             qrcode, 
             status: instanceStatus, 
@@ -283,7 +290,7 @@ export const WhatsAppLifeModule: React.FC = () => {
             profile_name,
             phone_number,
             message
-          } = status.data;
+          } = statusData;
           
           // Atualizar dados do QR Code
           setQrCodeData((prev: any) => ({
@@ -296,7 +303,7 @@ export const WhatsAppLifeModule: React.FC = () => {
             profile_name,
             phone_number,
             message,
-            updated_at: status.data?.updated_at
+            updated_at: statusData?.updated_at
           }));
           
           // DETECTAR CONEXÃO AUTOMÁTICA
@@ -412,7 +419,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     }, 15000); // A cada 15 segundos (otimizado)
     
     setPollingInterval(interval);
-  }, [getTempInstanceStatus, pollingInterval]);
+  }, [getTempInstanceStatus, getInstanceStatus, pollingInterval]);
 
   // Limpar polling quando componente for desmontado
   useEffect(() => {

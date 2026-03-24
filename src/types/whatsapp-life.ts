@@ -217,6 +217,18 @@ export interface UseInstancesReturn {
     };
     error?: string;
   }>;
+  getInstanceStatus: (instanceId: string) => Promise<{
+    success: boolean;
+    temp_instance_id?: string;
+    instance_name?: string;
+    status?: string;
+    connected?: boolean;
+    logged_in?: boolean;
+    profile_name?: string;
+    phone_number?: string;
+    provider_instance_id?: string;
+    error?: string;
+  }>;
   getQRCode: (instanceId: string) => Promise<{
     success: boolean;
     data?: { qrcode: string; expires_at?: string; status?: string };

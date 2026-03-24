@@ -158,6 +158,36 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   }, []);
 
   // =====================================================
+  // VERIFICAR STATUS DE INSTÂNCIA EXISTENTE (RECONEXÃO)
+  // =====================================================
+  const getInstanceStatus = useCallback(async (instanceId: string) => {
+    console.log('[useWhatsAppInstancesWebhook100] Getting instance status:', instanceId);
+    
+    try {
+      const { data, error } = await supabase.rpc('get_instance_status_by_id', {
+        p_instance_id: instanceId,
+      });
+
+      console.log('[useWhatsAppInstancesWebhook100] Instance status response:', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstancesWebhook100] Erro ao verificar status:', error);
+        return {
+          success: false,
+          error: `Erro ao verificar status: ${error.message}`,
+        };
+      }
+
+      return data || { success: false, error: 'Sem dados retornados' };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao verificar status da instância',
+      };
+    }
+  }, []);
+
+  // =====================================================
   // FUNÇÕES COMPATIBILIDADE (STUBS)
   // =====================================================
   const confirmConnection = useCallback(async (
@@ -415,6 +445,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     confirmConnection,
     checkConnectionStatus,
     getTempInstanceStatus,
+    getInstanceStatus,
     getQRCode,
     deleteInstance,
     updateInstance,
