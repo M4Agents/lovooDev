@@ -16,6 +16,7 @@ import { triggerManager } from '../../../services/automation/TriggerManager'
 import toast from 'react-hot-toast'
 
 interface OpportunitiesSectionProps {
+  leadId?: number | null  // ✅ NOVO: lead_id da conversa (à prova de migração WhatsApp username)
   phoneNumber: string
   leadName: string
   companyId: string
@@ -23,15 +24,16 @@ interface OpportunitiesSectionProps {
 }
 
 export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
+  leadId: propLeadId,  // ✅ NOVO: receber lead_id diretamente
   phoneNumber,
   leadName,
   companyId,
   conversationId
 }) => {
-  console.log('💼 OpportunitiesSection - Rendered with phone:', phoneNumber)
+  console.log('💼 OpportunitiesSection - Rendered with:', { propLeadId, phoneNumber })
   
-  const [leadId, setLeadId] = useState<number | null>(null)
-  const [loadingLeadId, setLoadingLeadId] = useState(true)
+  const [leadId, setLeadId] = useState<number | null>(propLeadId || null)
+  const [loadingLeadId, setLoadingLeadId] = useState(!propLeadId)
   
   // Estados para funis e etapas
   const [funnels, setFunnels] = useState<SalesFunnel[]>([])
@@ -42,11 +44,23 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [deletingOpportunity, setDeletingOpportunity] = useState<string | null>(null)
   
   // Buscar lead_id a partir do telefone (ou criar se não existir)
+  // ✅ NOVO: Se lead_id foi passado como prop, usar diretamente (à prova de migração WhatsApp)
   useEffect(() => {
+    // Se lead_id foi passado como prop, usar diretamente
+    if (propLeadId) {
+      console.log('✅ OpportunitiesSection - lead_id recebido via prop (conversation.lead_id):', propLeadId)
+      console.log('🎯 Sistema preparado para migração WhatsApp username - não depende de telefone')
+      setLeadId(propLeadId)
+      setLoadingLeadId(false)
+      return
+    }
+    
+    // Fallback: buscar por telefone (será removido após migração WhatsApp para username)
     const fetchOrCreateLead = async () => {
       try {
         setLoadingLeadId(true)
-        console.log('🔍 OpportunitiesSection - Buscando lead_id para telefone:', phoneNumber)
+        console.log('⚠️ OpportunitiesSection - FALLBACK: Buscando lead_id por telefone:', phoneNumber)
+        console.log('⚠️ Este método será descontinuado após migração WhatsApp para username')
         
         // Tentar buscar lead existente
         const { data: existingLead, error: searchError } = await supabase
@@ -94,7 +108,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     if (phoneNumber && companyId) {
       fetchOrCreateLead()
     }
-  }, [phoneNumber, companyId, leadName])
+  }, [propLeadId, phoneNumber, companyId, leadName])
   
   const { opportunities, loading, refreshOpportunities } = useOpportunities(leadId || 0)
   const [showCreateModal, setShowCreateModal] = useState(false)

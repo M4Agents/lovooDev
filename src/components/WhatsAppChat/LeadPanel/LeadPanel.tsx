@@ -774,6 +774,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       {conversation?.contact_phone && (
         <div className="flex-shrink-0 overflow-y-auto max-h-[40vh] px-4 pt-4">
           <OpportunitiesSection
+            leadId={conversation.lead_id}
             phoneNumber={conversation.contact_phone}
             leadName={contact?.name || conversation?.contact_name || 'Lead'}
             companyId={companyId}
