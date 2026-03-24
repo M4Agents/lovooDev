@@ -245,6 +245,7 @@ export class ChatApi {
     userId: string,
     waitForSend: boolean = false  // AUTOMAÇÃO: aguardar envio completo para garantir ordem
   ): Promise<string> {
+    const isAutomation = waitForSend;
     try {
       console.log('💾 chatApi.sendMessage recebeu:', {
         conversationId,
@@ -330,15 +331,19 @@ export class ChatApi {
 
       // PASSO 2: Enviar via Uazapi
       if (waitForSend) {
-        // AUTOMAÇÃO: Aguardar envio completo para garantir ordem sequencial
-        console.log('⏳ Aguardando envio via WhatsApp (automação)...')
-        await this.sendViaUazapiAsync(messageId, companyId)
+        // AUTOMAÇÃO: Aguardar envio completo via ENDPOINT (ordem sequencial)
+        console.log('⏳ Aguardando envio via WhatsApp (automação - via endpoint)...')
+        await this.sendViaUazapiAsync(messageId, companyId, false) // false = usar endpoint
         console.log('✅ Envio via WhatsApp concluído (automação)')
       } else {
-        // UI MANUAL: Envio assíncrono (não bloqueia interface)
-        this.sendViaUazapiAsync(messageId, companyId).catch(error => {
-          console.error('Erro no envio via WhatsApp')
-          // Erro será tratado pela função SQL que atualiza status para 'failed'
+        // CHAT MANUAL: Envio DIRETO assíncrono (não bloqueia interface)
+        console.log('🚀 Iniciando envio DIRETO para Uazapi (chat manual)...')
+        this.sendViaUazapiAsync(messageId, companyId, true).catch(error => { // true = envio direto
+          console.error('❌ Erro no envio DIRETO via WhatsApp:', {
+            message: error.message,
+            stack: error.stack,
+            messageId
+          })
         })
       }
 
@@ -355,19 +360,145 @@ export class ChatApi {
 
   /**
    * FUNÇÃO ISOLADA: Envio via Uazapi de forma assíncrona
-   * Não afeta o fluxo principal do sistema
+   * HÍBRIDO: Suporta envio DIRETO (chat manual) e via ENDPOINT (automação)
+   * @param messageId - ID da mensagem
+   * @param companyId - ID da empresa
+   * @param useDirectSend - true = envio direto (chat manual), false = via endpoint (automação)
    */
-  private static async sendViaUazapiAsync(messageId: string, companyId: string): Promise<void> {
+  private static async sendViaUazapiAsync(
+    messageId: string, 
+    companyId: string,
+    useDirectSend: boolean = true
+  ): Promise<void> {
     try {
-      // Enviando via WhatsApp...
+      console.log('🚀 [sendViaUazapiAsync] Iniciando...', { 
+        messageId, 
+        companyId,
+        mode: useDirectSend ? 'DIRETO' : 'ENDPOINT'
+      });
 
+      // =====================================================
+      // OPÇÃO 1: ENVIO DIRETO (CHAT MANUAL)
+      // =====================================================
+      if (useDirectSend) {
+        console.log('📤 Modo DIRETO: Enviando diretamente para Uazapi (sem endpoint intermediário)');
+        
+        // 1. Buscar dados da mensagem e instância
+        console.log('🔍 Buscando dados da mensagem...');
+        const { data: messageData, error: fetchError } = await supabase
+          .from('chat_messages')
+          .select(`
+            id,
+            content,
+            message_type,
+            media_url,
+            conversation_id,
+            chat_conversations!inner(
+              contact_phone,
+              instance_id,
+              whatsapp_life_instances!inner(
+                provider_token
+              )
+            )
+          `)
+          .eq('id', messageId)
+          .eq('company_id', companyId)
+          .single();
+
+        if (fetchError || !messageData) {
+          console.error('❌ Mensagem não encontrada:', fetchError);
+          throw new Error('Mensagem não encontrada');
+        }
+
+        console.log('✅ Dados da mensagem obtidos:', {
+          message_type: messageData.message_type,
+          has_content: !!messageData.content,
+          has_media: !!messageData.media_url
+        });
+
+        const phone = messageData.chat_conversations.contact_phone;
+        const token = messageData.chat_conversations.whatsapp_life_instances.provider_token;
+
+        if (!token) {
+          throw new Error('Token da instância não encontrado');
+        }
+
+        // 2. Preparar payload para Uazapi
+        const endpoint = messageData.message_type === 'text'
+          ? 'https://lovoo.uazapi.com/send/text'
+          : 'https://lovoo.uazapi.com/send/media';
+
+        const payload = messageData.message_type === 'text'
+          ? {
+              number: phone,
+              text: messageData.content,
+              delay: 1000,
+              linkPreview: true
+            }
+          : {
+              number: phone,
+              type: messageData.message_type,
+              file: messageData.media_url,
+              text: messageData.content || '',
+              delay: 1000
+            };
+
+        // 3. Enviar para Uazapi DIRETAMENTE
+        console.log('📤 Enviando para Uazapi:', { endpoint, phone: phone.substring(0, 8) + '***' });
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'token': token
+          },
+          body: JSON.stringify(payload)
+        });
+
+        console.log('📥 Resposta recebida:', { status: response.status, ok: response.ok });
+        const result = await response.json();
+        console.log('📊 Resultado parseado:', result);
+
+        // 4. Atualizar status no banco
+        if (response.ok) {
+          console.log('✅ Uazapi aceitou - atualizando status para SENT...');
+          await supabase
+            .from('chat_messages')
+            .update({ 
+              status: 'sent',
+              uazapi_message_id: result.messageid || result.messageId,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', messageId);
+          
+          console.log('✅ Mensagem enviada com sucesso via ENVIO DIRETO');
+        } else {
+          console.error('❌ Uazapi rejeitou mensagem:', result);
+          await supabase
+            .from('chat_messages')
+            .update({ 
+              status: 'failed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', messageId);
+          
+          throw new Error(result.error || 'Falha no envio');
+        }
+        
+        return;
+      }
+
+      // =====================================================
+      // OPÇÃO 2: VIA ENDPOINT (AUTOMAÇÃO)
+      // =====================================================
+      console.log('📤 Modo ENDPOINT: Usando /api/uazapi-send-message (automação)');
+      
       const payload = {
         message_id: messageId,
         company_id: companyId
       }
-      // Preparando envio...
 
-      // Conectando com API...
+      console.log('🌐 Fazendo fetch para endpoint...');
       const response = await fetch('/api/uazapi-send-message', {
         method: 'POST',
         headers: {
@@ -376,27 +507,30 @@ export class ChatApi {
         body: JSON.stringify(payload)
       })
 
-      // Processando resposta...
-
+      console.log('📥 Response do endpoint:', { status: response.status, ok: response.ok });
       const result = await response.json()
-      // Analisando resultado...
+      console.log('📊 Result do endpoint:', result);
 
       if (!response.ok || !result.success) {
-        console.error('Falha no envio via WhatsApp')
-        throw new Error(result.error || 'Falha no envio')
+        console.error('❌ Endpoint falhou:', result);
+        throw new Error(result.error || 'Falha no envio via endpoint')
       }
 
-      // ✅ API retornou sucesso - mensagem está sendo processada
-      // ⚠️ NÃO atualizar status aqui! 
-      // O status será atualizado para 'sent' pelo sendToUazapiAsync após confirmação real do Uazapi
-      console.log('✅ API aceitou a mensagem - processamento assíncrono iniciado')
+      console.log('✅ Endpoint aceitou a mensagem - processamento assíncrono iniciado')
       
     } catch (error) {
-      console.error('Erro no envio via WhatsApp')
+      console.error('💥 [sendViaUazapiAsync] ERRO CAPTURADO:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        messageId,
+        companyId,
+        mode: useDirectSend ? 'DIRETO' : 'ENDPOINT'
+      });
       
-      // 🔧 CORREÇÃO: Atualizar status no banco para 'failed' em caso de erro
+      // Atualizar status para failed
       try {
-        // Atualizando status para falha...
+        console.log('💾 Atualizando status para FAILED...');
         await supabase
           .from('chat_messages')
           .update({ 
@@ -406,12 +540,12 @@ export class ChatApi {
           .eq('id', messageId)
           .eq('company_id', companyId)
         
-        // Status atualizado para falha
+        console.log('✅ Status atualizado para FAILED');
       } catch (updateError) {
-        console.error('Erro ao atualizar status de falha')
+        console.error('❌ Erro ao atualizar status:', updateError);
       }
       
-      throw error
+      throw error;
     }
   }
 
