@@ -142,6 +142,11 @@ export const WhatsAppLifeModule: React.FC = () => {
     if (result.success && result.data) {
       setQrCodeData(result.data);
       console.log('[WhatsAppLifeModule] QR Code gerado para reconexão');
+      
+      // Iniciar polling para detectar conexão automaticamente
+      if (result.data.temp_instance_id) {
+        startTempInstancePolling(result.data.temp_instance_id);
+      }
     } else {
       console.error('[WhatsAppLifeModule] Erro ao gerar QR Code para reconexão:', result.error);
       alert(`Erro ao gerar QR Code: ${result.error}`);
