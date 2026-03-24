@@ -39,7 +39,8 @@ export const WhatsAppLifeModule: React.FC = () => {
     deleteInstance,
     updateInstanceName,
     fetchInstances,
-    syncProfileData
+    syncProfileData,
+    reconnectInstance
   } = useWhatsAppInstancesWebhook100(company?.id);
   
   const { 
@@ -136,8 +137,8 @@ export const WhatsAppLifeModule: React.FC = () => {
     setCurrentInstanceName(instance.instance_name);
     setShowQRModal(true);
     
-    // Gerar novo QR Code para mesma instância
-    const result = await generateQRCode(instance.instance_name);
+    // Usar função específica de reconexão (não generateQRCode)
+    const result = await reconnectInstance(instance.id);
     if (result.success && result.data) {
       setQrCodeData(result.data);
       console.log('[WhatsAppLifeModule] QR Code gerado para reconexão');
@@ -146,7 +147,7 @@ export const WhatsAppLifeModule: React.FC = () => {
       alert(`Erro ao gerar QR Code: ${result.error}`);
       setShowQRModal(false);
     }
-  }, [generateQRCode]);
+  }, [reconnectInstance]);
 
   // Handlers para editar e excluir instâncias
   const handleEditInstance = useCallback(async (instance: any) => {

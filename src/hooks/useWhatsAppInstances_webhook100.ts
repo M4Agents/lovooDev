@@ -360,6 +360,51 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     }
   }, [companyId, supabase, fetchInstances]);
 
+  // =====================================================
+  // RECONECTAR INSTÂNCIA DESCONECTADA
+  // =====================================================
+  const reconnectInstance = useCallback(async (instanceId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    try {
+      console.log('[useWhatsAppInstancesWebhook100] Reconectando instância:', instanceId);
+      
+      const { data, error } = await supabase.rpc('reconnect_whatsapp_instance', {
+        p_instance_id: instanceId,
+      });
+
+      console.log('[useWhatsAppInstancesWebhook100] Reconnect response:', { data, error });
+
+      if (error) {
+        console.error('[useWhatsAppInstancesWebhook100] Erro RPC:', error);
+        return {
+          success: false,
+          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
+        };
+      }
+
+      if (data && data.success) {
+        return {
+          success: true,
+          data: data.data,
+        };
+      } else {
+        return {
+          success: false,
+          error: data?.error || 'Erro desconhecido ao reconectar',
+        };
+      }
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro ao reconectar instância:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao reconectar instância',
+      };
+    }
+  }, [supabase]);
+
   return {
     instances,
     loading,
@@ -376,6 +421,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     syncWithUazapi,
     updateInstanceName,
     fetchInstances,
-    syncProfileData
+    syncProfileData,
+    reconnectInstance
   };
 };
