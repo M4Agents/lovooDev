@@ -17,9 +17,10 @@ const fetch = require('node-fetch');
 
 // Configuração Supabase
 const SUPABASE_URL = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+// Usar SERVICE_ROLE_KEY para bypass do RLS e acesso completo aos dados
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE5MjMwMywiZXhwIjoyMDYzNzY4MzAzfQ.tT3zHJXOb_2lhAnii_wKQKdBvOlPbxYJQPWKGUQEKPo';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // Estatísticas
 const stats = {
@@ -202,22 +203,31 @@ async function main() {
   console.log('');
 
   try {
-    // 1. Buscar todos os contatos com fotos expiradas (WhatsApp URLs)
-    console.log('🔍 Buscando contatos com fotos expiradas...');
+    // 1. Buscar todos os contatos com fotos
+    console.log('🔍 Buscando contatos com fotos...');
 
-    const { data: contacts, error: contactsError } = await supabase
+    const { data: allContacts, error: contactsError } = await supabase
       .from('chat_contacts')
       .select('id, phone_number, profile_picture_url, company_id')
-      .or('profile_picture_url.like.%pps.whatsapp.net%,profile_picture_url.like.%mmg.whatsapp.net%')
-      .limit(100); // Processar 100 por vez para não sobrecarregar
+      .not('profile_picture_url', 'is', null)
+      .limit(200); // Processar 200 por vez
 
     if (contactsError) {
       throw new Error(`Erro ao buscar contatos: ${contactsError.message}`);
     }
 
-    stats.total = contacts?.length || 0;
+    console.log(`📊 Total de contatos com foto: ${allContacts?.length || 0}`);
 
-    console.log(`✅ Encontrados ${stats.total} contatos com fotos expiradas`);
+    // Filtrar apenas URLs do WhatsApp (expiradas)
+    const contacts = (allContacts || []).filter(contact => 
+      contact.profile_picture_url && 
+      (contact.profile_picture_url.includes('pps.whatsapp.net') || 
+       contact.profile_picture_url.includes('mmg.whatsapp.net'))
+    );
+
+    stats.total = contacts.length;
+
+    console.log(`✅ Encontrados ${stats.total} contatos com fotos expiradas (WhatsApp CDN)`);
     console.log('');
 
     if (stats.total === 0) {
