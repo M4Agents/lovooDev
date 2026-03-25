@@ -767,6 +767,60 @@ async function processMessage(payload) {
 
     console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
     
+    // 🤖 VERIFICAR E RETOMAR AUTOMAÇÕES PAUSADAS
+    // Quando lead responde, verificar se há automação aguardando resposta
+    if (direction === 'inbound' && webhookResult.lead_id) {
+      try {
+        console.log('🤖 Verificando automações pausadas para lead:', webhookResult.lead_id);
+        
+        // Buscar execuções pausadas aguardando input
+        const { data: pausedExecutions, error: pausedError } = await supabase
+          .from('automation_executions')
+          .select('*')
+          .eq('company_id', company.id)
+          .eq('lead_id', webhookResult.lead_id)
+          .eq('status', 'paused')
+          .order('paused_at', { ascending: false })
+          .limit(1);
+        
+        if (pausedError) {
+          console.error('❌ Erro ao buscar execuções pausadas:', pausedError);
+        } else if (pausedExecutions && pausedExecutions.length > 0) {
+          const execution = pausedExecutions[0];
+          const awaitingInput = execution.variables?._awaiting_input;
+          
+          if (awaitingInput) {
+            console.log('✅ Execução pausada encontrada:', execution.id);
+            console.log('📝 Retomando com resposta:', messageText);
+            
+            // Retomar execução via RPC
+            const { data: resumeResult, error: resumeError } = await supabase
+              .rpc('resume_automation_execution', {
+                p_execution_id: execution.id,
+                p_user_response: messageText,
+                p_variable_name: awaitingInput.variable_name
+              });
+            
+            if (resumeError) {
+              console.error('❌ Erro ao retomar execução:', resumeError);
+            } else if (resumeResult && resumeResult.success) {
+              console.log('✅ Automação retomada com sucesso!');
+              console.log('📊 Variável atualizada:', awaitingInput.variable_name, '=', messageText);
+            } else {
+              console.error('❌ Falha ao retomar automação:', resumeResult);
+            }
+          } else {
+            console.log('ℹ️ Execução pausada mas não aguardando input');
+          }
+        } else {
+          console.log('ℹ️ Nenhuma automação pausada encontrada');
+        }
+      } catch (resumeError) {
+        console.error('❌ EXCEPTION ao retomar automação:', resumeError);
+        // Não falhar o webhook por causa disso - apenas log
+      }
+    }
+    
     return { 
       success: true, 
       message_id: savedMessageId,
