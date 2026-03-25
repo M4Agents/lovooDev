@@ -56,7 +56,6 @@ export default async function handler(req, res) {
 
     const { message_id, company_id } = req.body;
 
-    // Validar parâmetros obrigatórios
     if (!message_id || !company_id) {
       console.error('❌ Parâmetros obrigatórios ausentes');
       res.status(400).json({
@@ -66,35 +65,130 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Processar envio via função SQL isolada
-    console.log('🔄 Chamando função SQL para envio...');
-    const { data: result, error: sqlError } = await supabase.rpc('send_message_via_uazapi', {
+    // ETAPA 1: Preparar mensagem (SQL rápido, sem HTTP)
+    console.log('🔄 Preparando mensagem para envio...');
+    const { data: prepareResult, error: prepareError } = await supabase.rpc('prepare_message_for_sending', {
       p_message_id: message_id,
       p_company_id: company_id
     });
 
-    if (sqlError) {
-      console.error('❌ Erro na função SQL:', sqlError);
+    if (prepareError || !prepareResult?.success) {
+      console.error('❌ Erro ao preparar mensagem:', prepareError || prepareResult);
       res.status(500).json({
         success: false,
-        error: 'Erro interno ao processar envio',
-        details: sqlError.message
+        error: 'Erro ao preparar mensagem',
+        details: prepareError?.message || prepareResult?.error
       });
       return;
     }
 
-    console.log('✅ Resultado do envio:', result);
+    console.log('✅ Mensagem preparada:', prepareResult);
 
-    // Resposta de sucesso
-    res.status(200).json({
-      success: true,
-      message: 'Processamento de envio concluído',
-      data: result,
-      timestamp: new Date().toISOString()
+    // ETAPA 2: Enviar via HTTP no Node.js (não no SQL)
+    const messageData = prepareResult;
+    const endpoint = messageData.message_type === 'text' 
+      ? `${UAZAPI_CONFIG.BASE_URL}${UAZAPI_CONFIG.ENDPOINTS.SEND_TEXT}`
+      : `${UAZAPI_CONFIG.BASE_URL}${UAZAPI_CONFIG.ENDPOINTS.SEND_MEDIA}`;
+
+    let payload;
+    if (messageData.message_type === 'text') {
+      payload = {
+        number: messageData.phone,
+        text: messageData.content,
+        delay: 1000,
+        linkPreview: true
+      };
+    } else {
+      payload = {
+        number: messageData.phone,
+        type: messageData.message_type,
+        file: messageData.media_url,
+        text: messageData.content || '',
+        delay: 1000
+      };
+      
+      if (messageData.message_type === 'document' && messageData.media_url) {
+        payload.docName = extractFileName(messageData.media_url);
+      }
+    }
+
+    console.log('📤 Enviando para Uazapi:', { endpoint, payload });
+
+    const uazapiResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'token': messageData.provider_token
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(UAZAPI_CONFIG.TIMEOUT)
     });
+
+    const uazapiData = await uazapiResponse.json();
+    console.log('📥 Resposta Uazapi:', { status: uazapiResponse.status, data: uazapiData });
+
+    // ETAPA 3: Atualizar status da mensagem
+    if (uazapiResponse.ok) {
+      const { error: updateError } = await supabase.rpc('update_message_status', {
+        p_message_id: message_id,
+        p_status: 'sent',
+        p_uazapi_message_id: uazapiData.messageid || null,
+        p_error_message: null
+      });
+
+      if (updateError) {
+        console.error('⚠️ Erro ao atualizar status (mensagem enviada):', updateError);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Mensagem enviada com sucesso',
+        data: {
+          message_id,
+          uazapi_message_id: uazapiData.messageid,
+          phone: messageData.phone,
+          instance_name: messageData.instance_name
+        },
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      const { error: updateError } = await supabase.rpc('update_message_status', {
+        p_message_id: message_id,
+        p_status: 'failed',
+        p_uazapi_message_id: null,
+        p_error_message: `HTTP ${uazapiResponse.status}: ${JSON.stringify(uazapiData)}`
+      });
+
+      if (updateError) {
+        console.error('⚠️ Erro ao atualizar status (falha):', updateError);
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Falha no envio via Uazapi',
+        details: {
+          http_status: uazapiResponse.status,
+          response: uazapiData
+        }
+      });
+    }
 
   } catch (error) {
     console.error('💥 Erro inesperado no endpoint:', error);
+    
+    const { message_id } = req.body;
+    if (message_id) {
+      try {
+        await supabase.rpc('update_message_status', {
+          p_message_id: message_id,
+          p_status: 'failed',
+          p_uazapi_message_id: null,
+          p_error_message: error.message
+        });
+      } catch (updateErr) {
+        console.error('⚠️ Erro ao atualizar status (exception):', updateErr);
+      }
+    }
     
     res.status(500).json({
       success: false,

@@ -771,62 +771,65 @@ async function processMessage(payload) {
     // Quando lead responde, verificar se há automação aguardando resposta
     if (direction === 'inbound' && conversationId) {
       try {
-        // Buscar lead_id da conversa
-        const { data: conversationData, error: convError } = await supabase
-          .from('chat_conversations')
-          .select('lead_id')
-          .eq('id', conversationId)
-          .single();
+        // Buscar lead_id da conversa via RPC SECURITY DEFINER (bypass RLS)
+        const { data: leadResult, error: leadError } = await supabase
+          .rpc('get_conversation_lead_id', {
+            p_conversation_id: conversationId
+          });
         
-        if (convError) {
-          console.error('❌ Erro ao buscar lead_id da conversa:', convError);
-        } else if (conversationData && conversationData.lead_id) {
-          console.log('🤖 Verificando automações pausadas para lead:', conversationData.lead_id);
+        if (leadError) {
+          console.error('❌ Erro ao buscar lead_id da conversa:', leadError);
+        } else if (!leadResult?.success) {
+          console.error('❌ Falha ao buscar lead_id:', leadResult?.error);
+        } else {
+          const leadId = leadResult.lead_id;
+          console.log('🤖 Verificando automações pausadas para lead:', leadId);
           
-          // Buscar execuções pausadas aguardando input
-          const { data: pausedExecutions, error: pausedError } = await supabase
-            .from('automation_executions')
-            .select('*')
-            .eq('company_id', company.id)
-            .eq('lead_id', conversationData.lead_id)
-            .eq('status', 'paused')
-            .order('paused_at', { ascending: false })
-            .limit(1);
+          // Buscar e retomar automação pausada via RPC unificada (bypass RLS)
+          const { data: resumeResult, error: resumeError } = await supabase
+            .rpc('find_and_resume_paused_automation', {
+              p_company_id: company.id,
+              p_lead_id: leadId,
+              p_user_response: messageText
+            });
           
-          if (pausedError) {
-            console.error('❌ Erro ao buscar execuções pausadas:', pausedError);
-          } else if (pausedExecutions && pausedExecutions.length > 0) {
-            const execution = pausedExecutions[0];
-            const awaitingInput = execution.variables?._awaiting_input;
+          if (resumeError) {
+            console.error('❌ Erro ao buscar/retomar automação:', resumeError);
+          } else if (!resumeResult?.found) {
+            console.log('ℹ️ Nenhuma automação pausada encontrada');
+          } else if (!resumeResult?.awaiting_input) {
+            console.log('ℹ️ Execução pausada mas não aguardando input');
+          } else if (resumeResult?.success) {
+            console.log('✅ Execução pausada encontrada:', resumeResult.execution_id);
+            console.log('📝 Retomando com resposta:', messageText);
+            console.log('✅ Automação retomada com sucesso!');
+            console.log('📊 Variável atualizada:', resumeResult.variable_name, '=', messageText);
             
-            if (awaitingInput) {
-              console.log('✅ Execução pausada encontrada:', execution.id);
-              console.log('📝 Retomando com resposta:', messageText);
+            // Chamar endpoint para continuar execução do fluxo
+            try {
+              console.log('🚀 Chamando endpoint para continuar fluxo...');
+              const resumeEndpoint = 'https://loovocrm.vercel.app/api/automation/resume-execution';
               
-              // Retomar execução via RPC
-              const { data: resumeResult, error: resumeError } = await supabase
-                .rpc('resume_automation_execution', {
-                  p_execution_id: execution.id,
-                  p_user_response: messageText,
-                  p_variable_name: awaitingInput.variable_name
-                });
+              const resumeResponse = await fetch(resumeEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  execution_id: resumeResult.execution_id,
+                  user_response: messageText
+                })
+              });
               
-              if (resumeError) {
-                console.error('❌ Erro ao retomar execução:', resumeError);
-              } else if (resumeResult && resumeResult.success) {
-                console.log('✅ Automação retomada com sucesso!');
-                console.log('📊 Variável atualizada:', awaitingInput.variable_name, '=', messageText);
+              if (resumeResponse.ok) {
+                console.log('✅ Endpoint chamado com sucesso - Fluxo continuando');
               } else {
-                console.error('❌ Falha ao retomar automação:', resumeResult);
+                console.error('❌ Erro ao chamar endpoint:', resumeResponse.status, resumeResponse.statusText);
               }
-            } else {
-              console.log('ℹ️ Execução pausada mas não aguardando input');
+            } catch (endpointError) {
+              console.error('❌ EXCEPTION ao chamar endpoint:', endpointError);
             }
           } else {
-            console.log('ℹ️ Nenhuma automação pausada encontrada');
+            console.error('❌ Falha ao retomar automação:', resumeResult?.message || resumeResult);
           }
-        } else {
-          console.log('ℹ️ Conversa sem lead_id vinculado');
         }
       } catch (resumeError) {
         console.error('❌ EXCEPTION ao retomar automação:', resumeError);

@@ -188,8 +188,11 @@ export class TriggerManager {
         case 'tag.removed':
           return this.matchesTag(trigger, event.data)
         
+        case 'message.received':
+          return this.matchesMessageReceived(trigger, event.data)
+        
         default:
-          // Triggers sem validação específica (lead.created, message.received, etc)
+          // Triggers sem validação específica (lead.created, etc)
           return true
       }
     })
@@ -284,6 +287,29 @@ export class TriggerManager {
       return false
     }
     
+    return true
+  }
+
+  /**
+   * Valida condições para message.received
+   */
+  private matchesMessageReceived(trigger: any, eventData: any): boolean {
+    const config = trigger.config || {}
+    
+    // Validar instância WhatsApp (se especificada)
+    if (config.instanceId && config.instanceId !== eventData.instance_id) {
+      console.log('❌ Instância não corresponde:', {
+        configured: config.instanceId,
+        received: eventData.instance_id,
+        configuredName: config.instanceName
+      })
+      return false
+    }
+    
+    console.log('✅ Trigger message.received corresponde', {
+      instanceId: eventData.instance_id,
+      hasFilter: !!config.instanceId
+    })
     return true
   }
 

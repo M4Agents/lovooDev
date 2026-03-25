@@ -60,6 +60,31 @@ export const WhatsAppLifeModule: React.FC = () => {
 
   const loading = instancesLoading || planLoading;
 
+  // =====================================================
+  // SINCRONIZAÇÃO AUTOMÁTICA DE STATUS AO ABRIR PÁGINA
+  // =====================================================
+  useEffect(() => {
+    if (!company?.id) return;
+    
+    console.log('[WhatsAppLifeModule] 🔄 Sincronizando status das instâncias com Uazapi...');
+    
+    // Chamar endpoint de sincronização
+    fetch(`/api/sync-whatsapp-status?company_id=${company.id}`)
+      .then(response => response.json())
+      .then(data => {
+        console.log('[WhatsAppLifeModule] ✅ Sincronização concluída:', data);
+        
+        // Se houve atualizações, recarregar instâncias
+        if (data.success && data.updated_count > 0) {
+          console.log(`[WhatsAppLifeModule] 📊 ${data.updated_count} instâncias atualizadas - Recarregando...`);
+          fetchInstances();
+        }
+      })
+      .catch(error => {
+        console.error('[WhatsAppLifeModule] ❌ Erro na sincronização:', error);
+      });
+  }, [company?.id, fetchInstances]);
+
   // Handler para abrir modal de criação
   const handleOpenAddModal = () => {
     if (!company?.id) {
@@ -317,64 +342,108 @@ export const WhatsAppLifeModule: React.FC = () => {
             clearInterval(interval);
             setPollingInterval(null);
             
-            // MOSTRAR MENSAGEM DE SUCESSO NO MODAL (NÃO FECHAR AINDA)
-            setQrCodeData((prev: any) => ({
-              ...prev,
-              status: 'success',
-              message: `WhatsApp conectado com sucesso! Perfil: ${profile_name || 'Conectado'}`,
-              connected: true,
-              logged_in: true,
-              profile_name,
-              phone_number
-            }));
-            
-            // Fechar modal e recarregar após 3 segundos para usuário ver sucesso
-            setTimeout(async () => {
-              setShowQRModal(false);
+            // 🎯 CONFIRMAR CONEXÃO E MOVER DE TEMP → PERMANENTE
+            try {
+              console.log('[WhatsAppLifeModule] 📞 Confirmando conexão e configurando webhook...');
               
-              // 🎯 SINCRONIZAÇÃO AUTOMÁTICA DO PERFIL APÓS CONEXÃO
-              try {
-                console.log('[WhatsAppLifeModule] 🔄 Sincronizando perfil automaticamente...');
+              const confirmResult = await confirmConnection(
+                tempInstanceId,
+                company.id,
+                qrCodeData?.instance_name || currentInstanceName,
+                phone_number,
+                profile_name
+              );
+              
+              if (confirmResult.success) {
+                console.log('[WhatsAppLifeModule] ✅ Conexão confirmada!');
+                console.log('[WhatsAppLifeModule] 🎯 Trigger configurará webhook automaticamente');
                 
-                // Buscar a instância recém-conectada
-                const tempInstanceId = qrCodeData?.temp_instance_id;
-                if (tempInstanceId) {
-                  // Aguardar um pouco para garantir que a instância foi salva
-                  setTimeout(async () => {
-                    try {
-                      // Buscar instâncias para encontrar a ID real
-                      await fetchInstances();
+                // MOSTRAR MENSAGEM DE SUCESSO NO MODAL
+                setQrCodeData((prev: any) => ({
+                  ...prev,
+                  status: 'success',
+                  message: `WhatsApp conectado! Configurando webhook...`,
+                  connected: true,
+                  logged_in: true,
+                  profile_name,
+                  phone_number
+                }));
+                
+                // Fechar modal e recarregar após 3 segundos
+                setTimeout(async () => {
+                  setShowQRModal(false);
+                  
+                  // Recarregar lista de instâncias
+                  await fetchInstances();
+                  
+                  // 🎯 SINCRONIZAÇÃO AUTOMÁTICA DO PERFIL APÓS CONEXÃO
+                  try {
+                    console.log('[WhatsAppLifeModule] 🔄 Sincronizando perfil automaticamente...');
+                    
+                    // Buscar a instância pelo nome para sincronizar perfil
+                    const instanceName = qrCodeData?.instance_name || currentInstanceName;
+                    if (instanceName && instances.length > 0) {
+                      const connectedInstance = instances.find(inst => 
+                        inst.instance_name === instanceName && 
+                        inst.status === 'connected'
+                      );
                       
-                      // Buscar a instância pelo nome para sincronizar perfil
-                      const instanceName = qrCodeData?.instance_name;
-                      if (instanceName && instances.length > 0) {
-                        const connectedInstance = instances.find(inst => 
-                          inst.instance_name === instanceName && 
-                          inst.status === 'connected'
-                        );
+                      if (connectedInstance) {
+                        console.log('[WhatsAppLifeModule] 📸 Sincronizando foto do perfil...');
+                        const syncResult = await syncProfileData(connectedInstance.id);
                         
-                        if (connectedInstance) {
-                          console.log('[WhatsAppLifeModule] 📸 Sincronizando foto do perfil...');
-                          const syncResult = await syncProfileData(connectedInstance.id);
-                          
-                          if (syncResult.success) {
-                            console.log('[WhatsAppLifeModule] ✅ Foto sincronizada automaticamente!');
-                          } else {
-                            console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', syncResult.error);
-                          }
+                        if (syncResult.success) {
+                          console.log('[WhatsAppLifeModule] ✅ Foto sincronizada automaticamente!');
+                        } else {
+                          console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', syncResult.error);
                         }
                       }
-                    } catch (error) {
-                      console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', error);
                     }
-                  }, 2000); // Aguardar 2s para instância ser salva
-                }
-              } catch (error) {
-                console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', error);
+                  } catch (error) {
+                    console.log('[WhatsAppLifeModule] ⚠️ Erro na sincronização automática:', error);
+                  }
+                }, 3000);
+                
+              } else {
+                console.error('[WhatsAppLifeModule] ❌ Erro ao confirmar conexão:', confirmResult.error);
+                
+                // Mostrar erro mas não bloquear
+                setQrCodeData((prev: any) => ({
+                  ...prev,
+                  status: 'success',
+                  message: `WhatsApp conectado! (Aviso: ${confirmResult.error})`,
+                  connected: true,
+                  logged_in: true,
+                  profile_name,
+                  phone_number
+                }));
+                
+                // Fechar modal mesmo com erro na confirmação
+                setTimeout(() => {
+                  setShowQRModal(false);
+                  fetchInstances();
+                }, 3000);
               }
+            } catch (error) {
+              console.error('[WhatsAppLifeModule] ❌ Erro ao confirmar conexão:', error);
               
-              window.location.reload(); // Recarregar para mostrar nova instância
-            }, 3000);
+              // Mostrar erro mas não bloquear
+              setQrCodeData((prev: any) => ({
+                ...prev,
+                status: 'success',
+                message: `WhatsApp conectado! (Aviso: erro na confirmação)`,
+                connected: true,
+                logged_in: true,
+                profile_name,
+                phone_number
+              }));
+              
+              // Fechar modal mesmo com erro
+              setTimeout(() => {
+                setShowQRModal(false);
+                fetchInstances();
+              }, 3000);
+            }
             
             return;
           }

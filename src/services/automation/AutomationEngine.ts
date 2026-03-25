@@ -6,13 +6,13 @@
 // =====================================================
 import { notificationService } from './NotificationService'
 import { supabase } from '../../lib/supabase'
-import type { AutomationFlow, AutomationExecution, AutomationLog } from '../../types/automation'
-import { Node, Edge } from 'reactflow'
+import type { AutomationFlow, AutomationExecution, AutomationLog, Node, Edge } from '../../types/automation'
 import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
 import { scheduleService } from './ScheduleService'
 import { webhookService } from './WebhookService'
 import { activityService } from './ActivityService'
+import { ChatApi } from '../chat/chatApi'
 
 interface ExecutionContext {
   executionId: string
@@ -22,6 +22,7 @@ interface ExecutionContext {
   variables: Record<string, any>
   leadId?: number
   opportunityId?: string
+  instanceId?: string  // Instância WhatsApp definida no trigger
 }
 
 export class AutomationEngine {
@@ -161,6 +162,24 @@ export class AutomationEngine {
     try {
       console.log('🔄 Processando fluxo:', flow.id)
 
+      // Encontrar o nó trigger/start (ponto de partida)
+      const triggerNode = flow.nodes.find((node: any) => node.type === 'trigger' || node.type === 'start')
+      if (!triggerNode) {
+        throw new Error('Nó trigger/start não encontrado')
+      }
+
+      // Extrair instanceId do trigger (se configurado)
+      // StartNode armazena triggers em data.triggers (array)
+      const triggers = triggerNode?.data?.triggers || []
+      const firstTrigger = triggers.find((t: any) => t.enabled)
+      const instanceId = firstTrigger?.config?.instanceId
+      if (instanceId) {
+        console.log('📱 Instância WhatsApp definida no gatilho:', {
+          instanceId,
+          instanceName: firstTrigger?.config?.instanceName
+        })
+      }
+
       const context: ExecutionContext = {
         executionId: execution.id,
         flowId: flow.id,
@@ -168,13 +187,8 @@ export class AutomationEngine {
         triggerData: execution.trigger_data,
         variables: execution.variables || {},
         leadId: execution.lead_id,
-        opportunityId: execution.opportunity_id
-      }
-
-      // Encontrar o nó trigger/start (ponto de partida)
-      const triggerNode = flow.nodes.find((node: any) => node.type === 'trigger' || node.type === 'start')
-      if (!triggerNode) {
-        throw new Error('Nó trigger/start não encontrado')
+        opportunityId: execution.opportunity_id,
+        instanceId: instanceId  // Passa instância do trigger para todos os cards
       }
 
       // Processar a partir do trigger
@@ -1511,9 +1525,91 @@ export class AutomationEngine {
         throw new Error('Mensagem vazia')
       }
 
-      // Buscar conversationId do triggerData (mais eficiente)
-      const conversationId = context.triggerData?.conversation_id || 
-                            context.triggerData?.opportunity?.conversation_id
+      // ✅ PRIORIZAR instanceId sobre conversationId
+      // Priorizar instanceId do trigger (context), fallback para instanceId do card
+      const instanceId = context.instanceId || node.data.config?.instanceId
+      let conversationId: string | undefined
+
+      if (instanceId) {
+        // ✅ TEM instanceId configurado: SEMPRE criar/buscar conversa com essa instância
+        // ✅ IGNORA conversationId do triggerData para garantir instância correta
+        
+        console.log('📱 Instância configurada detectada:', {
+          source: context.instanceId ? 'trigger' : 'card',
+          instanceId
+        })
+
+        // ✅ Validar status da instância ANTES de criar conversa
+        const { data: instance, error: instanceError } = await supabase
+          .from('whatsapp_life_instances')
+          .select('id, instance_name, status, phone_number')
+          .eq('id', instanceId)
+          .eq('company_id', context.companyId)
+          .single()
+
+        if (instanceError || !instance) {
+          throw new Error(`Instância WhatsApp não encontrada (ID: ${instanceId})`)
+        }
+
+        if (instance.status !== 'connected') {
+          // ✅ Notificar admins/owners sobre instância desconectada
+          await this.notifyInstanceDisconnected(
+            context,
+            instance,
+            node.data.label || 'Enviar Mensagem WhatsApp'
+          )
+          
+          // ✅ Falhar com erro claro
+          throw new Error(
+            `Instância "${instance.instance_name}" está ${instance.status}. ` +
+            `Conecte a instância antes de enviar mensagens.`
+          )
+        }
+
+        console.log('✅ Instância validada:', {
+          instanceName: instance.instance_name,
+          status: instance.status,
+          phone: instance.phone_number
+        })
+
+        console.log('📱 Criando/buscando conversa com instância:', {
+          source: context.instanceId ? 'trigger' : 'card',
+          instanceId,
+          instanceName: instance.instance_name,
+          phone: lead.phone
+        })
+
+        // Criar ou buscar conversa com instância específica
+        const conversation = await ChatApi.createOrGetConversation(
+          context.companyId,
+          instanceId,
+          lead.phone,
+          lead.name
+        )
+
+        conversationId = conversation.id
+        console.log('✅ Conversa criada/encontrada com instância configurada:', conversationId)
+
+        // ✅ PROPAGAR instanceId para próximos nós (se não veio do trigger)
+        if (!context.instanceId && instanceId) {
+          context.instanceId = instanceId
+          console.log('✅ instanceId propagado para próximos nós:', {
+            instanceId,
+            instanceName: instance.instance_name,
+            source: 'primeiro card'
+          })
+        }
+      } else {
+        // ✅ NÃO tem instanceId: usar conversationId do triggerData (fallback)
+        conversationId = context.triggerData?.conversation_id || 
+                         context.triggerData?.opportunity?.conversation_id
+        
+        if (!conversationId) {
+          throw new Error('Instância WhatsApp não configurada. Configure no gatilho ou no card de mensagem.')
+        }
+
+        console.log('✅ Usando conversationId do triggerData (sem instanceId configurado):', conversationId)
+      }
 
       // Enviar mensagem
       const result = await whatsAppService.sendMessage({
@@ -1542,6 +1638,76 @@ export class AutomationEngine {
     } catch (error: any) {
       console.error('❌ Erro ao enviar mensagem WhatsApp:', error)
       throw error
+    }
+  }
+
+  /**
+   * Notifica admins/owners quando automação falha por instância desconectada
+   */
+  private async notifyInstanceDisconnected(
+    context: ExecutionContext,
+    instance: any,
+    actionName: string
+  ): Promise<void> {
+    try {
+      // Buscar admin/owner da empresa para notificar
+      const { data: companyUsers } = await supabase
+        .from('company_users')
+        .select('user_id, role')
+        .eq('company_id', context.companyId)
+        .eq('is_active', true)
+        .in('role', ['owner', 'admin'])
+        .limit(5)
+
+      if (!companyUsers || companyUsers.length === 0) {
+        console.warn('⚠️ Nenhum admin/owner encontrado para notificar')
+        return
+      }
+
+      // Buscar nome do fluxo
+      const { data: flow } = await supabase
+        .from('automation_flows')
+        .select('name')
+        .eq('id', context.flowId)
+        .single()
+
+      const flowName = flow?.name || 'Automação'
+
+      // Enviar notificação para cada admin/owner
+      for (const user of companyUsers) {
+        await notificationService.sendNotification({
+          companyId: context.companyId,
+          userId: user.user_id,
+          title: '⚠️ Automação Falhou - Instância Desconectada',
+          message: 
+            `A automação "${flowName}" falhou ao executar "${actionName}" ` +
+            `porque a instância WhatsApp "${instance.instance_name}" está desconectada. ` +
+            `Conecte a instância para que as automações funcionem corretamente.`,
+          notificationType: 'error',
+          priority: 'high',
+          actionType: 'reconnect_whatsapp_instance',
+          actionData: {
+            instanceId: instance.id,
+            instanceName: instance.instance_name,
+            instanceStatus: instance.status,
+            flowId: context.flowId,
+            flowName: flowName,
+            executionId: context.executionId
+          },
+          source: 'automation',
+          sourceFlowId: context.flowId,
+          leadId: context.leadId,
+          opportunityId: context.opportunityId
+        })
+      }
+
+      console.log('✅ Notificações enviadas para admins/owners:', {
+        instanceName: instance.instance_name,
+        recipients: companyUsers.length
+      })
+    } catch (error) {
+      console.error('❌ Erro ao enviar notificação:', error)
+      // Não propagar erro - notificação é secundária
     }
   }
 
@@ -1740,7 +1906,32 @@ export class AutomationEngine {
         console.log('🚀 Mensagem será enviada ao WhatsApp em background')
       }
 
-      // 3. Pausar a execução IMEDIATAMENTE
+      // 3. Calcular timeout
+      const timeoutValue = node.data.config?.timeoutValue || 24
+      const timeoutUnit = node.data.config?.timeoutUnit || 'hours'
+      
+      let timeoutMinutes = 0
+      switch (timeoutUnit) {
+        case 'minutes':
+          timeoutMinutes = timeoutValue
+          break
+        case 'hours':
+          timeoutMinutes = timeoutValue * 60
+          break
+        case 'days':
+          timeoutMinutes = timeoutValue * 60 * 24
+          break
+      }
+      
+      const timeoutAt = new Date(Date.now() + timeoutMinutes * 60 * 1000)
+      
+      console.log('⏰ Timeout configurado:', {
+        value: timeoutValue,
+        unit: timeoutUnit,
+        expiresAt: timeoutAt.toISOString()
+      })
+
+      // 4. Pausar a execução IMEDIATAMENTE
       console.log('⏸️ PAUSANDO fluxo - Aguardando resposta do usuário')
       
       const variableName = node.data.config?.variable || 'user_response'
@@ -1751,26 +1942,30 @@ export class AutomationEngine {
           status: 'paused',
           current_node_id: node.id,
           paused_at: new Date().toISOString(),
+          timeout_at: timeoutAt.toISOString(),
           variables: {
             ...context.variables,
             _awaiting_input: {
               node_id: node.id,
               variable_name: variableName,
               question: node.data.config?.question,
-              message_id: messageId
+              message_id: messageId,
+              timeout_value: timeoutValue,
+              timeout_unit: timeoutUnit
             }
           }
         })
         .eq('id', context.executionId)
 
-      console.log(`✅ Fluxo pausado - Aguardando resposta na variável: ${variableName}`)
+      console.log(`✅ Fluxo pausado - Aguardando resposta (timeout: ${timeoutValue} ${timeoutUnit})`)
 
-      // 4. Retornar indicador de pausa (não continuar processamento)
+      // 5. Retornar indicador de pausa (não continuar processamento)
       return {
         paused: true,
         awaiting_input: true,
         variable: variableName,
-        message_id: messageId
+        message_id: messageId,
+        timeout_at: timeoutAt.toISOString()
       }
     } catch (error: any) {
       console.error('❌ Erro ao processar entrada de usuário:', error)

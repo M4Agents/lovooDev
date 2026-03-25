@@ -401,39 +401,55 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     try {
       console.log('[useWhatsAppInstancesWebhook100] Reconectando instância:', instanceId);
       
-      const { data, error } = await supabase.rpc('reconnect_whatsapp_instance', {
-        p_instance_id: instanceId,
-      });
-
-      console.log('[useWhatsAppInstancesWebhook100] Reconnect response:', { data, error });
-
-      if (error) {
-        console.error('[useWhatsAppInstancesWebhook100] Erro RPC:', error);
+      // Buscar nome da instância
+      const instance = instances.find(i => i.id === instanceId);
+      if (!instance) {
         return {
           success: false,
-          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
+          error: 'Instância não encontrada'
         };
       }
 
-      if (data && data.success) {
+      const instanceName = instance.instance_name;
+      console.log('[useWhatsAppInstancesWebhook100] Deletando instância antiga:', instanceName);
+
+      // PASSO 1: Deletar instância antiga do banco
+      const deleteResult = await deleteInstance(instanceId);
+      
+      if (!deleteResult.success) {
+        console.error('[useWhatsAppInstancesWebhook100] Erro ao deletar instância:', deleteResult.error);
+        return {
+          success: false,
+          error: `Erro ao deletar instância antiga: ${deleteResult.error}`
+        };
+      }
+
+      console.log('[useWhatsAppInstancesWebhook100] Instância deletada, gerando novo QR Code:', instanceName);
+
+      // PASSO 2: Gerar novo QR Code (cria nova instância com mesmo nome)
+      const result = await generateQRCode(instanceName);
+      
+      console.log('[useWhatsAppInstancesWebhook100] Resultado generateQRCode:', result);
+
+      if (result.success && result.data) {
         return {
           success: true,
-          data: data.data,
+          data: result.data
         };
       } else {
         return {
           success: false,
-          error: data?.error || 'Erro desconhecido ao reconectar',
+          error: result.error || 'Erro ao gerar QR Code para reconexão'
         };
       }
     } catch (err) {
       console.error('[useWhatsAppInstancesWebhook100] Erro ao reconectar instância:', err);
       return {
         success: false,
-        error: err instanceof Error ? err.message : 'Erro ao reconectar instância',
+        error: err instanceof Error ? err.message : 'Erro ao reconectar instância'
       };
     }
-  }, [supabase]);
+  }, [instances, generateQRCode, deleteInstance]);
 
   return {
     instances,

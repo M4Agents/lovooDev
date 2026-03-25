@@ -28,7 +28,7 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   const [selectedType, setSelectedType] = useState<MessageType['id'] | null>(config.messageType || null)
   const [currentConfig, setCurrentConfig] = useState(config)
-  const [selectedInstance, setSelectedInstance] = useState(config.instance || '')
+  const [selectedInstance, setSelectedInstance] = useState(config.instanceId || '')
 
   // Resetar estado quando modal abrir ou config mudar
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
       console.log('🔄 MessageConfigModal RESETANDO:', config)
       setCurrentConfig(config)
       setSelectedType(config.messageType || null)
-      setSelectedInstance(config.instance || '')
+      setSelectedInstance(config.instanceId || '')
     }
   }, [isOpen, config])
 
@@ -56,11 +56,20 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
   }
 
   const handleSave = () => {
-    const configToSave = { ...currentConfig, instance: selectedInstance }
+    // Buscar nome da instância selecionada
+    const selectedInstanceData = instances.find(inst => inst.id === selectedInstance)
+    
+    const configToSave = { 
+      ...currentConfig, 
+      instanceId: selectedInstance,
+      instanceName: selectedInstanceData?.instance_name || ''
+    }
     console.log('💾 MessageConfigModal SALVANDO:', {
       messageType: configToSave.messageType,
       duration: configToSave.duration,
       unit: configToSave.unit,
+      instanceId: configToSave.instanceId,
+      instanceName: configToSave.instanceName,
       fullConfig: configToSave
     })
     onSave(configToSave)

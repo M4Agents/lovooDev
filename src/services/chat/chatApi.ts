@@ -987,28 +987,6 @@ export class ChatApi {
   }
 
   // =====================================================
-  // INSTÂNCIAS WHATSAPP
-  // =====================================================
-
-  static async getCompanyInstances(companyId: string): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from('whatsapp_life_instances')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('status', 'connected')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      return data || []
-    } catch (error) {
-      console.error('Error fetching company instances:', error)
-      throw error
-    }
-  }
-
-  // =====================================================
   // UTILITÁRIOS PARA NOTIFICAÇÕES EM TEMPO REAL
   // =====================================================
 

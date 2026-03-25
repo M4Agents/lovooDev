@@ -467,6 +467,7 @@ export default function FlowEditor() {
           <NodeConfigPanel
             selectedNode={selectedNode}
             flowId={id}
+            nodes={flow.nodes as Node[]}
             onClose={() => setSelectedNode(null)}
             onSave={handleNodeConfigSave}
           />
