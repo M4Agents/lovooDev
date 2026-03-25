@@ -1731,48 +1731,16 @@ export class AutomationEngine {
       const result = await this.sendWhatsAppMessage(node, context)
       const messageId = result.messageId
 
-      // 2. AGUARDAR confirmação de envio antes de pausar
+      // 2. Mensagem enviada para processamento assíncrono
+      // O endpoint /api/uazapi-send-message processa em background
+      // Não precisamos aguardar status 'sent' antes de pausar
       if (messageId) {
-        console.log('⏳ Aguardando confirmação de envio da pergunta...')
-        
-        let attempts = 0
-        let messageSent = false
-        const maxAttempts = 30 // 30 segundos máximo
-
-        while (attempts < maxAttempts && !messageSent) {
-          // Buscar status da mensagem
-          const { data: message } = await supabase
-            .from('chat_messages')
-            .select('status')
-            .eq('id', messageId)
-            .single()
-          
-          if (message?.status === 'sent') {
-            messageSent = true
-            console.log('✅ Pergunta enviada com sucesso! Agora pausando fluxo...')
-            break
-          }
-          
-          if (message?.status === 'failed') {
-            console.error('❌ Falha no envio da pergunta - Abortando pausa')
-            throw new Error('Falha ao enviar pergunta ao usuário')
-          }
-          
-          // Aguardar 1 segundo antes de tentar novamente
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          attempts++
-          
-          if (attempts % 5 === 0) {
-            console.log(`⏳ Ainda aguardando envio... (${attempts}s/${maxAttempts}s)`)
-          }
-        }
-
-        if (!messageSent) {
-          console.warn('⚠️ Timeout aguardando envio, mas continuando com pausa...')
-        }
+        console.log('✅ Pergunta enviada para processamento assíncrono')
+        console.log('📤 Message ID:', messageId)
+        console.log('🚀 Mensagem será enviada ao WhatsApp em background')
       }
 
-      // 3. Pausar a execução
+      // 3. Pausar a execução IMEDIATAMENTE
       console.log('⏸️ PAUSANDO fluxo - Aguardando resposta do usuário')
       
       const variableName = node.data.config?.variable || 'user_response'
@@ -1788,7 +1756,8 @@ export class AutomationEngine {
             _awaiting_input: {
               node_id: node.id,
               variable_name: variableName,
-              question: node.data.config?.question
+              question: node.data.config?.question,
+              message_id: messageId
             }
           }
         })
@@ -1801,7 +1770,7 @@ export class AutomationEngine {
         paused: true,
         awaiting_input: true,
         variable: variableName,
-        message_sent: result.sent
+        message_id: messageId
       }
     } catch (error: any) {
       console.error('❌ Erro ao processar entrada de usuário:', error)
