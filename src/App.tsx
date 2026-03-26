@@ -21,6 +21,7 @@ import { AcceptInvite } from './pages/AcceptInvite';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { ChangePasswordRequired } from './pages/ChangePasswordRequired';
+import { DeletedInstances } from './pages/DeletedInstances';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -211,6 +212,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/deleted-instances"
+        element={
+          <ProtectedRoute>
+            <DeletedInstances />
           </ProtectedRoute>
         }
       />

@@ -16,6 +16,7 @@ import Picker from '@emoji-mart/react'
 import { ActivityBadge } from './ActivityBadge'
 import { ActivityBanner } from './ActivityBanner'
 import { ActivityModal } from '../../Calendar/ActivityModal'
+import { InstanceAlert } from '../InstanceAlert/InstanceAlert'
 import { supabase } from '../../../lib/supabase'
 
 // =====================================================
@@ -1031,6 +1032,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           companyId={companyId}
           onViewDetails={handleOpenActivity}
         />
+      )}
+
+      {/* Alerta de Instância Desconectada/Deletada */}
+      {conversation && (
+        <div className="px-6 pt-4">
+          <InstanceAlert
+            conversationId={conversationId}
+            instanceId={(conversation as any).instance_id}
+            instanceName={(conversation as any).instance_name}
+            instanceStatus={(conversation as any).instance_status}
+            instanceDeleted={(conversation as any).instance_deleted}
+            companyId={companyId}
+            userId={userId}
+            onMigrationComplete={fetchConversation}
+          />
+        </div>
       )}
 
       {/* Overlay de Drag & Drop - Cobertura total como WhatsApp Web */}
