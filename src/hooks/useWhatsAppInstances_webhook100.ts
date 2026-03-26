@@ -401,7 +401,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     try {
       console.log('[useWhatsAppInstancesWebhook100] Reconectando instância:', instanceId);
       
-      // Buscar nome da instância
+      // Buscar instância existente
       const instance = instances.find(i => i.id === instanceId);
       if (!instance) {
         return {
@@ -410,36 +410,46 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         };
       }
 
-      const instanceName = instance.instance_name;
-      console.log('[useWhatsAppInstancesWebhook100] Deletando instância antiga:', instanceName);
+      console.log('[useWhatsAppInstancesWebhook100] Gerando QR Code de reconexão para:', instance.instance_name);
 
-      // PASSO 1: Deletar instância antiga do banco
-      const deleteResult = await deleteInstance(instanceId);
-      
-      if (!deleteResult.success) {
-        console.error('[useWhatsAppInstancesWebhook100] Erro ao deletar instância:', deleteResult.error);
+      // ✅ CORREÇÃO: Não deletar instância, apenas gerar novo QR Code
+      // Chamar API de conexão que gera QR Code para instância existente
+      const response = await fetch('/api/uazapi/connect-instance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uazapiInstanceId: instance.uazapi_instance_id,
+          instanceId: instance.id
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[useWhatsAppInstancesWebhook100] Erro na API:', errorData);
         return {
           success: false,
-          error: `Erro ao deletar instância antiga: ${deleteResult.error}`
+          error: errorData.error || 'Erro ao gerar QR Code de reconexão'
         };
       }
 
-      console.log('[useWhatsAppInstancesWebhook100] Instância deletada, gerando novo QR Code:', instanceName);
+      const data = await response.json();
+      console.log('[useWhatsAppInstancesWebhook100] Resultado API:', data);
 
-      // PASSO 2: Gerar novo QR Code (cria nova instância com mesmo nome)
-      const result = await generateQRCode(instanceName);
-      
-      console.log('[useWhatsAppInstancesWebhook100] Resultado generateQRCode:', result);
-
-      if (result.success && result.data) {
+      if (data.success && data.qrcode) {
         return {
           success: true,
-          data: result.data
+          data: {
+            qrcode: data.qrcode,
+            instance_name: instance.instance_name,
+            status: 'connecting'
+          }
         };
       } else {
         return {
           success: false,
-          error: result.error || 'Erro ao gerar QR Code para reconexão'
+          error: data.error || 'Erro ao gerar QR Code para reconexão'
         };
       }
     } catch (err) {
@@ -449,7 +459,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         error: err instanceof Error ? err.message : 'Erro ao reconectar instância'
       };
     }
-  }, [instances, generateQRCode, deleteInstance]);
+  }, [instances]);
 
   return {
     instances,
