@@ -150,15 +150,13 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
               )}
             </p>
             <div className="flex flex-wrap gap-2">
-              {!instanceDeleted && (
-                <button
-                  onClick={handleReconnect}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Reconectar Instância
-                </button>
-              )}
+              <button
+                onClick={handleReconnect}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Reconectar Instância
+              </button>
               <button
                 onClick={handleOpenMigration}
                 disabled={loading}
