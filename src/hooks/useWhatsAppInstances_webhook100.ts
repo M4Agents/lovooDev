@@ -410,55 +410,17 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         };
       }
 
-      if (!instance.provider_token) {
-        return {
-          success: false,
-          error: 'Token da instância não encontrado'
-        };
-      }
-
       console.log('[useWhatsAppInstancesWebhook100] Gerando QR Code de reconexão para:', instance.instance_name);
 
-      // ✅ CORREÇÃO: Chamar Uazapi DIRETAMENTE com token da instância
-      // Não usar API intermediária que espera temp_instance
-      const response = await fetch('https://lovoo.uazapi.com/instance/connect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'token': instance.provider_token  // Token da instância permanente
-        },
-        body: JSON.stringify({})  // Body vazio conforme especificação Uazapi
-      });
-
-      if (!response.ok) {
-        console.error('[useWhatsAppInstancesWebhook100] Erro Uazapi:', response.status);
-        return {
-          success: false,
-          error: `Erro ao conectar com Uazapi: ${response.status}`
-        };
-      }
-
-      const data = await response.json();
-      console.log('[useWhatsAppInstancesWebhook100] Resultado Uazapi:', data);
-
-      // Extrair QR Code de múltiplos campos possíveis
-      const qrcode = data.qrcode || data.instance?.qrcode || data.data?.qrcode || data.data?.base64 || data.base64;
-
-      if (qrcode && qrcode.length > 0) {
-        return {
-          success: true,
-          data: {
-            qrcode,
-            instance_name: instance.instance_name,
-            status: 'connecting'
-          }
-        };
-      } else {
-        return {
-          success: false,
-          error: 'QR Code não foi gerado pela Uazapi'
-        };
-      }
+      // ✅ SOLUÇÃO DEFINITIVA: Usar MESMO fluxo de nova instância
+      // generateQRCode cria temp_instance com token NOVO via API admin
+      // Isso resolve o problema de token inválido/expirado (401)
+      // Após conexão, webhook atualiza instância permanente automaticamente
+      const result = await generateQRCode(instance.instance_name);
+      
+      console.log('[useWhatsAppInstancesWebhook100] Resultado generateQRCode:', result);
+      
+      return result;
     } catch (err) {
       console.error('[useWhatsAppInstancesWebhook100] Erro ao reconectar instância:', err);
       return {
@@ -466,7 +428,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         error: err instanceof Error ? err.message : 'Erro ao reconectar instância'
       };
     }
-  }, [instances]);
+  }, [instances, generateQRCode]);
 
   return {
     instances,
