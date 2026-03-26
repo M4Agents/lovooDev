@@ -2,7 +2,7 @@
 // SERVIÇO DE ADMINISTRAÇÃO DE USUÁRIOS - SUPABASE AUTH
 // =====================================================
 
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { CreateUserRequest } from '../types/user';
 
 // =====================================================
@@ -47,9 +47,9 @@ export const createAuthUser = async (request: CreateAuthUserRequest): Promise<Au
   try {
     console.log('AuthAdmin: Creating real user:', request.email);
 
-    // TENTATIVA 1: Usar Admin API (se disponível)
+    // TENTATIVA 1: Usar Admin API com Service Role Key
     try {
-      const { data, error } = await supabase.auth.admin.createUser({
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email: request.email,
         password: request.password || generateTemporaryPassword(),
         email_confirm: request.emailConfirm || false,
@@ -101,7 +101,7 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
   try {
     console.log('AuthAdmin: Inviting user:', request.email);
 
-    const { data, error } = await supabase.auth.admin.inviteUserByEmail(
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       request.email,
       {
         redirectTo: request.redirectTo || `https://app.lovoocrm.com/accept-invite`,
