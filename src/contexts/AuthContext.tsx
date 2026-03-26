@@ -216,6 +216,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: new Date().toISOString()
       });
       
+      // ✅ NOVO: Verificar se há company_id do convite (primeira vez após ativação)
+      const invitedCompanyId = localStorage.getItem('invited_company_id');
+      if (invitedCompanyId && !company) {
+        console.log('🎯 AuthContext: Loading invited company:', invitedCompanyId);
+        
+        const { data: invitedCompany, error: invitedError } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', invitedCompanyId)
+          .single();
+          
+        if (!invitedError && invitedCompany) {
+          console.log('✅ AuthContext: Loaded invited company:', invitedCompany.name);
+          setCompany(invitedCompany);
+          setCompanyTimezone(invitedCompany.timezone || 'America/Sao_Paulo');
+          localStorage.setItem('currentCompanyId', invitedCompany.id);
+          localStorage.removeItem('invited_company_id'); // Limpar após usar
+          return;
+        } else {
+          console.warn('⚠️ AuthContext: Invited company not found, continuing with normal flow');
+          localStorage.removeItem('invited_company_id');
+        }
+      }
+      
       // Verificar localStorage primeiro para impersonation
       const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
       const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');

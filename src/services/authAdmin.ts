@@ -91,27 +91,12 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     const result = await response.json();
 
     if (!response.ok || result.error) {
-      console.warn('AuthAdmin: API route failed:', result.error);
-      
-      // FALLBACK INTELIGENTE: Criar convite simulado
-      if (result.fallback || result.error?.includes('403') || result.error?.includes('Unauthorized')) {
-        
-        console.log('AuthAdmin: Creating simulated invite - Admin API not configured');
-        
-        // Gerar dados de convite simulado
-        const simulatedInvite = await createSimulatedInvite(request);
-        
-        return {
-          user: simulatedInvite.user,
-          success: true
-          // Não incluir 'error' quando é sucesso simulado
-        };
-      }
+      console.error('AuthAdmin: API route failed:', result.error);
       
       return {
         user: null,
         success: false,
-        error: result.error || 'Erro ao convidar usuário'
+        error: result.error || 'Erro ao enviar convite. Verifique se Service Role Key está configurada no Vercel.'
       };
     }
 
@@ -123,46 +108,68 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
   } catch (error) {
     console.error('AuthAdmin: Error in inviteUser:', error);
     
-    // FALLBACK FINAL: Criar convite simulado
-    const simulatedInvite = await createSimulatedInvite(request);
-    
     return {
-      user: simulatedInvite.user,
-      success: true
-      // Não incluir 'error' quando é sucesso simulado
+      user: null,
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao enviar convite'
     };
   }
 };
 
 /**
- * Cria convite simulado quando Admin API não está disponível
+ * Gera magic link manual para quando email não chegar
  */
-const createSimulatedInvite = async (request: InviteUserRequest) => {
-  const inviteId = `invite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const inviteToken = btoa(`${request.email}:${inviteId}:${Date.now()}`);
-  
-  // Gerar URL de convite para debug
-  const inviteUrl = `${request.redirectTo}?token=${inviteToken}&type=invite&email=${encodeURIComponent(request.email)}`;
-  
-  // Log detalhado para debug
-  console.log('AuthAdmin: Simulated invite created:', {
-    email: request.email,
-    inviteId,
-    inviteUrl
-  });
-  
-  return {
-    user: {
-      id: inviteId,
-      email: request.email,
-      user_metadata: request.data,
-      app_metadata: {
-        invite_token: inviteToken,
-        invite_url: inviteUrl
-      }
-    },
-    message: 'Convite simulado criado - Configure Admin API para envio real de emails'
-  };
+export const generateMagicLink = async (email: string) => {
+  try {
+    const response = await fetch('/api/auth/generate-magic-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      return {
+        success: true,
+        magicLink: result.magicLink,
+        expiresIn: '1 hora'
+      };
+    }
+    
+    return { success: false, error: result.error };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Erro ao gerar link'
+    };
+  }
+};
+
+/**
+ * Confirma usuário manualmente (fallback quando email não chega)
+ */
+export const confirmUserManually = async (email: string) => {
+  try {
+    const response = await fetch('/api/auth/confirm-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      return { success: true };
+    }
+    
+    return { success: false, error: result.error };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Erro ao confirmar usuário'
+    };
+  }
 };
 
 /**

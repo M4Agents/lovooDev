@@ -130,13 +130,14 @@ export const AcceptInvite: React.FC = () => {
   };
 
   // Aceitar convite
-  const handleAcceptInvite = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const handleAcceptInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-      // Validações
-      if (!formData.password.trim()) {
+    try {
+      // Validação básica
+      if (!formData.password) {
         setError('Senha é obrigatória');
         return;
       }
@@ -152,181 +153,72 @@ export const AcceptInvite: React.FC = () => {
         return;
       }
 
-      const token = searchParams.get('token') || '';
-      const email = searchParams.get('email') || '';
+      const email = searchParams.get('email') || inviteInfo.email || '';
       
-      console.log('AcceptInvite: Processing invite with token:', token.substring(0, 20) + '...');
-
-      // SOLUÇÃO DIRETA: Múltiplas estratégias de ativação
-      console.log('AcceptInvite: Attempting invite activation for email:', email);
+      console.log('AcceptInvite: Processing invite for email:', email);
 
       if (!email) {
-        setError('Email não encontrado no convite. Verifique se o link está correto.');
+        setError('Email não encontrado. Verifique se o link está correto.');
         return;
       }
 
-      // ESTRATÉGIA 1: Tentar login direto (caso usuário já tenha senha)
-      console.log('AcceptInvite: Strategy 1 - Attempting direct login');
-      try {
-        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-          email: email,
+      // FLUXO SIMPLIFICADO: Verificar se usuário já está autenticado (veio do link do email)
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        console.log('AcceptInvite: User already authenticated via email link');
+        
+        // Usuário já autenticado - apenas atualizar senha se fornecida
+        const { error: updateError } = await supabase.auth.updateUser({
           password: formData.password
         });
-
-        if (!loginError && loginData.user) {
-          console.log('AcceptInvite: Direct login successful - user already activated');
+        
+        if (!updateError) {
+          console.log('AcceptInvite: Password updated successfully');
+          
+          // Salvar company_id do convite para AuthContext usar
+          if (session.user.user_metadata?.company_id) {
+            localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
+            console.log('AcceptInvite: Saved invited company_id:', session.user.user_metadata.company_id);
+          }
+          
           setSuccess(true);
           setTimeout(() => navigate('/dashboard'), 2000);
           return;
         }
-      } catch (e) {
-        console.log('AcceptInvite: Direct login failed, trying other strategies');
       }
-
-      // ESTRATÉGIA 2: Criar usuário COM email personalizado via SMTP configurado
-      console.log('AcceptInvite: Strategy 2 - Creating user with custom SMTP email');
-      try {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: email,
-          password: formData.password,
-          options: {
-            emailRedirectTo: `https://app.lovoocrm.com/accept-invite?confirmed=true&token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
-          }
-        });
-
-        if (!signUpError && signUpData.user) {
-          console.log('AcceptInvite: User created via valid invite - applying auto-confirmation logic');
-          
-          // LÓGICA DE NEGÓCIO: Convite = Confirmação Automática
-          // Usuário veio via link de convite válido, não precisa confirmar email
-          let confirmationSuccess = false;
-          
-          try {
-            const { error: confirmError } = await supabase.auth.admin.updateUserById(
-              signUpData.user.id,
-              { 
-                email_confirm: true
-              }
-            );
-            
-            confirmationSuccess = !confirmError;
-            
-            if (confirmationSuccess) {
-              console.log('AcceptInvite: User auto-confirmed via Admin API (invite-based)');
-            } else {
-              console.warn('AcceptInvite: Admin API confirmation failed:', confirmError?.message);
-            }
-          } catch (confirmErr) {
-            console.warn('AcceptInvite: Admin API not available, using invite-based confirmation logic');
-          }
-          
-          // TENTATIVA DE LOGIN IMEDIATO (usuário confirmado por convite)
-          try {
-            const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-              email: email,
-              password: formData.password
-            });
-            
-            if (!loginError && loginData.user) {
-              console.log('AcceptInvite: Login successful - user confirmed via invite');
-              setSuccess(true);
-              setTimeout(() => navigate('/dashboard'), 2000);
-              return;
-            } else {
-              console.log('AcceptInvite: Login failed after confirmation, continuing with fallbacks');
-            }
-          } catch (loginErr) {
-            console.log('AcceptInvite: Login attempt failed, continuing with fallbacks');
-          }
-          
-          // FALLBACK SEGURO: Mostrar que email foi enviado via SMTP personalizado
-          console.log('AcceptInvite: User created, confirmation email sent via custom SMTP');
-          
-          // Verificar se usuário veio de confirmação via email
-          const confirmed = searchParams.get('confirmed');
-          if (confirmed === 'true') {
-            setError(`✅ Conta ativada com sucesso!
-            
-🎉 Sua conta foi confirmada via email e está pronta para uso.
-
-🔗 Faça login em: ${window.location.origin}/login
-
-📧 Use o email: ${email}
-🔑 Use a senha que você acabou de definir.`);
-          } else {
-            setError(`✅ Conta criada com sucesso!
-            
-📧 Um email de confirmação foi enviado para: ${email}
-
-📬 Verifique sua caixa de entrada (e pasta de spam) e clique no link para ativar sua conta.
-
-✉️ Email enviado de: noreply@lovoocrm.com
-
-🔗 Após confirmar pelo email, você será redirecionado automaticamente.
-
-⏱️ O link de confirmação é válido por 24 horas.`);
-          }
-          return;
-        }
-      } catch (e) {
-        console.log('AcceptInvite: User creation failed, trying Supabase invite verification');
-      }
-
-      // ESTRATÉGIA 3: Tentar como convite real do Supabase (fallback)
-      console.log('AcceptInvite: Strategy 3 - Attempting Supabase invite verification');
-      try {
-        const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: 'invite'
-        });
-
-        if (!verifyError && verifyData.user) {
-          console.log('AcceptInvite: Supabase invite verification successful');
-          
-          // Definir senha
-          const { error: updateError } = await supabase.auth.updateUser({
-            password: formData.password
-          });
-
-          if (!updateError) {
-            console.log('AcceptInvite: Password set successfully via Supabase invite');
-            setSuccess(true);
-            setTimeout(() => navigate('/dashboard'), 2000);
-            return;
-          }
-        }
-      } catch (e) {
-        console.log('AcceptInvite: Supabase invite verification failed, trying reset as last resort');
-      }
-
-      // ESTRATÉGIA 4: Reset de senha (ÚLTIMO RECURSO - ainda pode enviar email)
-      console.log('AcceptInvite: Strategy 4 - Using password reset as last resort');
-      try {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `https://app.lovoocrm.com/reset-password?from=invite&email=${encodeURIComponent(email)}`
-        });
-
-        if (!resetError) {
-          console.log('AcceptInvite: Password reset email sent as fallback');
-          setError('✅ Um email foi enviado para ativar sua conta! Verifique sua caixa de entrada e clique no link para definir sua senha.');
-          return;
-        }
-      } catch (e) {
-        console.log('AcceptInvite: Password reset failed');
-      }
-
-      // ESTRATÉGIA 5: Fallback final - orientação específica
-      console.log('AcceptInvite: All strategies failed, providing specific guidance');
-      setError(`❌ Não foi possível ativar automaticamente. 
       
-📧 Email: ${email}
+      // Se não autenticado, tentar login com senha fornecida
+      console.log('AcceptInvite: Attempting login with provided password');
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: formData.password
+      });
       
-✅ Opções disponíveis:
-1. Tente fazer login diretamente se já tem senha
+      if (!loginError && loginData.user) {
+        console.log('AcceptInvite: Login successful');
+        
+        // Salvar company_id do convite
+        if (loginData.user.user_metadata?.company_id) {
+          localStorage.setItem('invited_company_id', loginData.user.user_metadata.company_id);
+          console.log('AcceptInvite: Saved invited company_id:', loginData.user.user_metadata.company_id);
+        }
+        
+        setSuccess(true);
+        setTimeout(() => navigate('/dashboard'), 2000);
+        return;
+      }
+      
+      // Fallback: Orientar usuário
+      console.log('AcceptInvite: Login failed, showing guidance');
+      setError(`Não foi possível fazer login. 
+
+Possíveis soluções:
+1. Use o link enviado por email para ativar sua conta
 2. Solicite um novo convite ao administrador
 3. Use "Esqueci minha senha" na tela de login
 
-🔗 Fazer login: ${window.location.origin}/login`);
+Email: ${email}`);
 
     } catch (err) {
       console.error('AcceptInvite: Error in handleAcceptInvite:', err);

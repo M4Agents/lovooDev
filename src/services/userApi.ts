@@ -405,15 +405,8 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           throw new Error(inviteResult.error || 'Falha ao enviar convite');
         }
       } catch (authError) {
-        console.warn('UserAPI: Real user creation failed, using current user fallback:', authError);
-        // FALLBACK SEGURO: Usar user_id atual (como empresas fazem)
-        finalUserId = currentUser.id;
-        isRealUser = false;
-        
-        // Gerar dados de convite simulado para mostrar no modal
-        inviteData = {
-          invite_url: `https://app.lovoocrm.com/accept-invite?token=${btoa(request.email)}&type=invite&email=${encodeURIComponent(request.email)}`
-        };
+        console.error('UserAPI: Failed to create user:', authError);
+        throw new Error('Não foi possível criar usuário. Verifique se Service Role Key está configurada no Vercel.');
       }
     } else {
       // Não solicitou convite - usar user_id atual (como empresas)
