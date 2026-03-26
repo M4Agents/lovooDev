@@ -437,7 +437,7 @@ export class ChatApi {
           .select(`
             contact_phone,
             instance_id,
-            whatsapp_life_instances!inner(
+            whatsapp_life_instances(
               provider_token,
               status,
               deleted_at
@@ -448,34 +448,67 @@ export class ChatApi {
           .single();
         
         if (convError || !conversationData) {
-          console.error('❌ Conversa não encontrada:', convError);
+          console.error('❌ Conversa não encontrada:', {
+            error: convError,
+            conversationId: messageData.conversation_id,
+            companyId: companyId
+          });
           throw new Error('Conversa não encontrada');
         }
         
-        // Type assertion para whatsapp_life_instances (retorna objeto único devido ao !inner)
-        const instanceData = (conversationData as any).whatsapp_life_instances as any;
+        console.log('✅ Conversa encontrada:', {
+          contact_phone: (conversationData as any).contact_phone?.substring(0, 8) + '***',
+          instance_id: (conversationData as any).instance_id,
+          has_instance_data: !!(conversationData as any).whatsapp_life_instances
+        });
+        
+        // Verificar se instância foi retornada (LEFT JOIN pode retornar null)
+        const instanceData = (conversationData as any).whatsapp_life_instances;
+        
+        if (!instanceData) {
+          console.error('❌ Instância não encontrada para esta conversa:', {
+            conversationId: messageData.conversation_id,
+            instanceId: (conversationData as any).instance_id
+          });
+          throw new Error('Instância não encontrada - pode ter sido deletada ou sem permissão de acesso');
+        }
+        
+        // Pegar primeiro item se for array, ou objeto único
+        const instance = Array.isArray(instanceData) ? instanceData[0] : instanceData;
+        
+        if (!instance) {
+          console.error('❌ Dados da instância vazios');
+          throw new Error('Dados da instância não disponíveis');
+        }
+        
+        console.log('✅ Instância encontrada:', {
+          status: instance.status,
+          deleted: instance.deleted_at !== null,
+          has_token: !!instance.provider_token
+        });
         
         // Verificar se instância está ativa
-        if (instanceData?.deleted_at !== null) {
-          console.error('❌ Instância foi deletada (soft delete)');
+        if (instance.deleted_at !== null) {
+          console.error('❌ Instância foi deletada (soft delete):', instance.deleted_at);
           throw new Error('Instância não está mais ativa');
         }
         
-        if (instanceData?.status !== 'connected') {
-          console.error('❌ Instância não está conectada:', instanceData?.status);
-          throw new Error('Instância não está conectada');
+        if (instance.status !== 'connected') {
+          console.error('❌ Instância não está conectada:', instance.status);
+          throw new Error(`Instância não está conectada (status: ${instance.status})`);
         }
         
         const phone = (conversationData as any).contact_phone;
-        const token = instanceData?.provider_token;
+        const token = instance.provider_token;
         
         if (!token) {
+          console.error('❌ Token não encontrado na instância');
           throw new Error('Token da instância não encontrado');
         }
         
         console.log('✅ Dados obtidos com sucesso:', {
           phone: phone.substring(0, 8) + '***',
-          instance_status: instanceData.status,
+          instance_status: instance.status,
           has_token: !!token
         });
 
