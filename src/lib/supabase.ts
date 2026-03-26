@@ -5,10 +5,9 @@ const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
 
 // ✅ Service Role Key para operações administrativas
-// IMPORTANTE: Adicione sua Service Role Key aqui
-// Obtenha em: Supabase Dashboard → Settings → API → service_role key
-// Em produção (Vercel), esta será substituída pela variável de ambiente SUPABASE_SERVICE_ROLE_KEY
-const supabaseServiceRoleKey = 'ADICIONE_SUA_SERVICE_ROLE_KEY_AQUI';
+// Usa variável VITE_SUPABASE_SERVICE_ROLE_KEY do Vercel
+// Fallback vazio para desenvolvimento local
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Debug: Log configurações - FORÇADO PARA M4_DIGITAL
 console.log('🔧 [Supabase] FORCED M4_Digital URL:', supabaseUrl);
