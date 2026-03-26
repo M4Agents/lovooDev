@@ -428,21 +428,13 @@ export class ChatApi {
         }
         
         // =====================================================
-        // ETAPA 2: Buscar dados da conversa e instância
+        // ETAPA 2: Buscar dados da conversa (SEM JOIN)
         // =====================================================
-        console.log('🔍 Buscando dados da conversa e instância...');
+        console.log('🔍 Buscando dados da conversa...');
         
         const { data: conversationData, error: convError } = await supabase
           .from('chat_conversations')
-          .select(`
-            contact_phone,
-            instance_id,
-            whatsapp_life_instances(
-              provider_token,
-              status,
-              deleted_at
-            )
-          `)
+          .select('contact_phone, instance_id')
           .eq('id', messageData.conversation_id)
           .eq('company_id', companyId)
           .single();
@@ -450,35 +442,46 @@ export class ChatApi {
         if (convError || !conversationData) {
           console.error('❌ Conversa não encontrada:', {
             error: convError,
+            errorMessage: convError?.message,
+            errorCode: convError?.code,
             conversationId: messageData.conversation_id,
             companyId: companyId
           });
           throw new Error('Conversa não encontrada');
         }
         
+        const phone = (conversationData as any).contact_phone;
+        const instanceId = (conversationData as any).instance_id;
+        
         console.log('✅ Conversa encontrada:', {
-          contact_phone: (conversationData as any).contact_phone?.substring(0, 8) + '***',
-          instance_id: (conversationData as any).instance_id,
-          has_instance_data: !!(conversationData as any).whatsapp_life_instances
+          contact_phone: phone?.substring(0, 8) + '***',
+          instance_id: instanceId
         });
         
-        // Verificar se instância foi retornada (LEFT JOIN pode retornar null)
-        const instanceData = (conversationData as any).whatsapp_life_instances;
-        
-        if (!instanceData) {
-          console.error('❌ Instância não encontrada para esta conversa:', {
-            conversationId: messageData.conversation_id,
-            instanceId: (conversationData as any).instance_id
-          });
-          throw new Error('Instância não encontrada - pode ter sido deletada ou sem permissão de acesso');
+        if (!instanceId) {
+          console.error('❌ Conversa sem instância associada');
+          throw new Error('Conversa não tem instância associada');
         }
         
-        // Pegar primeiro item se for array, ou objeto único
-        const instance = Array.isArray(instanceData) ? instanceData[0] : instanceData;
+        // =====================================================
+        // ETAPA 3: Buscar instância DIRETAMENTE por ID
+        // =====================================================
+        console.log('🔍 Buscando instância por ID:', instanceId);
         
-        if (!instance) {
-          console.error('❌ Dados da instância vazios');
-          throw new Error('Dados da instância não disponíveis');
+        const { data: instance, error: instanceError } = await supabase
+          .from('whatsapp_life_instances')
+          .select('provider_token, status, deleted_at')
+          .eq('id', instanceId)
+          .single();
+        
+        if (instanceError || !instance) {
+          console.error('❌ Instância não encontrada:', {
+            error: instanceError,
+            errorMessage: instanceError?.message,
+            errorCode: instanceError?.code,
+            instanceId: instanceId
+          });
+          throw new Error('Instância não encontrada');
         }
         
         console.log('✅ Instância encontrada:', {
@@ -498,7 +501,6 @@ export class ChatApi {
           throw new Error(`Instância não está conectada (status: ${instance.status})`);
         }
         
-        const phone = (conversationData as any).contact_phone;
         const token = instance.provider_token;
         
         if (!token) {
@@ -506,7 +508,7 @@ export class ChatApi {
           throw new Error('Token da instância não encontrado');
         }
         
-        console.log('✅ Dados obtidos com sucesso:', {
+        console.log('✅ Todos os dados obtidos com sucesso:', {
           phone: phone.substring(0, 8) + '***',
           instance_status: instance.status,
           has_token: !!token
