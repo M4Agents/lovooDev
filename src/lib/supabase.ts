@@ -4,11 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
 
-// ✅ Service Role Key para operações administrativas
-// Usa variável VITE_SUPABASE_SERVICE_ROLE_KEY do Vercel
-// Fallback vazio para desenvolvimento local
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
-
 // Debug: Log configurações - FORÇADO PARA M4_DIGITAL
 console.log('🔧 [Supabase] FORCED M4_Digital URL:', supabaseUrl);
 console.log('🔧 [Supabase] FORCED M4_Digital Key (first 20 chars):', supabaseAnonKey.substring(0, 20) + '...');
@@ -17,23 +12,6 @@ console.log('🔧 [Supabase] Environment KEY override ignored:', import.meta.env
 
 // Criar cliente com valores padrão se as variáveis não estiverem configuradas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// ✅ Cliente Admin com Service Role Key para operações administrativas
-// Usa variável SUPABASE_SERVICE_ROLE_KEY do Vercel (process.env)
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
-
-// Log de configuração do Admin
-console.log('🔧 [Supabase Admin] Service Role configured:', supabaseServiceRoleKey ? 'Yes' : 'No');
-console.log('🔧 [Supabase Admin] Service Role Key (first 20 chars):', supabaseServiceRoleKey ? supabaseServiceRoleKey.substring(0, 20) + '...' : 'Not configured');
 
 // 🔧 FUNÇÃO ATUALIZADA: Supabase sempre configurado para M4_Digital
 export const isSupabaseConfigured = () => {

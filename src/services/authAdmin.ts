@@ -2,7 +2,7 @@
 // SERVIÇO DE ADMINISTRAÇÃO DE USUÁRIOS - SUPABASE AUTH
 // =====================================================
 
-import { supabase, supabaseAdmin } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { CreateUserRequest } from '../types/user';
 
 // =====================================================
@@ -47,42 +47,16 @@ export const createAuthUser = async (request: CreateAuthUserRequest): Promise<Au
   try {
     console.log('AuthAdmin: Creating real user:', request.email);
 
-    // TENTATIVA 1: Usar Admin API com Service Role Key
-    try {
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
-        email: request.email,
-        password: request.password || generateTemporaryPassword(),
-        email_confirm: request.emailConfirm || false,
-        user_metadata: {
-          role: request.userData?.role || 'seller',
-          company_id: request.userData?.company_id || ''
-        }
-      });
-
-      if (error) {
-        console.warn('AuthAdmin: Admin API failed, trying invite method:', error.message);
-        throw error;
+    // Usar sistema de convites via API route server-side
+    return await inviteUser({
+      email: request.email,
+      redirectTo: `https://app.lovoocrm.com/accept-invite`,
+      data: {
+        role: request.userData?.role || 'seller',
+        company_id: request.userData?.company_id || '',
+        company_name: 'Sistema'
       }
-
-      console.log('AuthAdmin: User created successfully via Admin API');
-      return {
-        user: data.user,
-        success: true
-      };
-    } catch (adminError) {
-      console.warn('AuthAdmin: Admin API not available, falling back to invite');
-      
-      // FALLBACK: Usar sistema de convites
-      return await inviteUser({
-        email: request.email,
-        redirectTo: `https://app.lovoocrm.com/accept-invite`,
-        data: {
-          role: request.userData?.role || 'seller',
-          company_id: request.userData?.company_id || '',
-          company_name: 'Sistema'
-        }
-      });
-    }
+    });
   } catch (error) {
     console.error('AuthAdmin: Error creating user:', error);
     return {
@@ -101,20 +75,26 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
   try {
     console.log('AuthAdmin: Inviting user:', request.email);
 
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      request.email,
-      {
+    // Chamar API route server-side (Service Role Key segura)
+    const response = await fetch('/api/auth/invite-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: request.email,
         redirectTo: request.redirectTo || `https://app.lovoocrm.com/accept-invite`,
         data: request.data || {}
-      }
-    );
+      })
+    });
 
-    if (error) {
-      console.warn('AuthAdmin: Admin API not available:', error.message);
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      console.warn('AuthAdmin: API route failed:', result.error);
       
       // FALLBACK INTELIGENTE: Criar convite simulado
-      if (error.message.includes('401') || error.message.includes('Unauthorized') || 
-          error.message.includes('Invalid API key') || error.message.includes('service_role')) {
+      if (result.fallback || result.error?.includes('403') || result.error?.includes('Unauthorized')) {
         
         console.log('AuthAdmin: Creating simulated invite - Admin API not configured');
         
@@ -131,13 +111,13 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
       return {
         user: null,
         success: false,
-        error: error.message
+        error: result.error || 'Erro ao convidar usuário'
       };
     }
 
-    console.log('AuthAdmin: Invite sent successfully via Supabase');
+    console.log('AuthAdmin: User invited successfully via API route');
     return {
-      user: data.user,
+      user: result.user,
       success: true
     };
   } catch (error) {
