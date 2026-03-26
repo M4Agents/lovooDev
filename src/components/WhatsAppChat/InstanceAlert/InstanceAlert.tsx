@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { AlertCircle, RefreshCw, ArrowRight } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { QRCodeModal } from '../../WhatsAppLife/QRCodeModal'
+import { useWhatsAppInstancesWebhook100 } from '../../../hooks/useWhatsAppInstances_webhook100'
 
 interface InstanceAlertProps {
   conversationId: string
@@ -28,15 +30,43 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
   const [selectedInstance, setSelectedInstance] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
+  
+  // Estados para QR Code Modal
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQrCodeData] = useState<any>(null)
+  
+  // Hook para reconexão de instância
+  const { reconnectInstance, getQRCode } = useWhatsAppInstancesWebhook100(companyId)
 
   // Não mostrar alerta se instância está conectada
   if (instanceStatus === 'connected' && !instanceDeleted) {
     return null
   }
 
-  const handleReconnect = () => {
-    // TODO: Implementar lógica de reconexão
-    alert('Funcionalidade de reconexão será implementada em breve')
+  const handleReconnect = async () => {
+    if (!instanceId) {
+      setError('ID da instância não encontrado')
+      return
+    }
+    
+    setShowQRModal(true)
+    setQrCodeData({ status: 'loading' })
+    
+    try {
+      const result = await reconnectInstance(instanceId)
+      
+      if (result.success && result.data) {
+        setQrCodeData(result.data)
+      } else {
+        setQrCodeData({ 
+          error_message: result.error || 'Erro ao gerar QR Code para reconexão' 
+        })
+      }
+    } catch (err: any) {
+      setQrCodeData({ 
+        error_message: err.message || 'Erro ao reconectar instância' 
+      })
+    }
   }
 
   const handleOpenMigration = async () => {
@@ -141,6 +171,23 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal de QR Code para Reconexão */}
+      {showQRModal && (
+        <QRCodeModal
+          isOpen={showQRModal}
+          onClose={() => {
+            setShowQRModal(false)
+            setQrCodeData(null)
+            // Atualizar conversa após reconexão bem-sucedida
+            onMigrationComplete?.()
+          }}
+          instanceId={instanceId || ''}
+          instanceName={instanceName || 'Instância'}
+          onGetQRCode={getQRCode}
+          qrCodeData={qrCodeData}
+        />
+      )}
 
       {/* Modal de Migração */}
       {showMigrationModal && (
