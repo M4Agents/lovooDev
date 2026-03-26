@@ -410,38 +410,45 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         };
       }
 
+      if (!instance.provider_token) {
+        return {
+          success: false,
+          error: 'Token da instância não encontrado'
+        };
+      }
+
       console.log('[useWhatsAppInstancesWebhook100] Gerando QR Code de reconexão para:', instance.instance_name);
 
-      // ✅ CORREÇÃO: Não deletar instância, apenas gerar novo QR Code
-      // Chamar API de conexão que gera QR Code para instância existente
-      const response = await fetch('/api/uazapi/connect-instance', {
+      // ✅ CORREÇÃO: Chamar Uazapi DIRETAMENTE com token da instância
+      // Não usar API intermediária que espera temp_instance
+      const response = await fetch('https://lovoo.uazapi.com/instance/connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'token': instance.provider_token  // Token da instância permanente
         },
-        body: JSON.stringify({
-          uazapiInstanceId: instance.uazapi_instance_id,
-          instanceId: instance.id
-        }),
+        body: JSON.stringify({})  // Body vazio conforme especificação Uazapi
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[useWhatsAppInstancesWebhook100] Erro na API:', errorData);
+        console.error('[useWhatsAppInstancesWebhook100] Erro Uazapi:', response.status);
         return {
           success: false,
-          error: errorData.error || 'Erro ao gerar QR Code de reconexão'
+          error: `Erro ao conectar com Uazapi: ${response.status}`
         };
       }
 
       const data = await response.json();
-      console.log('[useWhatsAppInstancesWebhook100] Resultado API:', data);
+      console.log('[useWhatsAppInstancesWebhook100] Resultado Uazapi:', data);
 
-      if (data.success && data.qrcode) {
+      // Extrair QR Code de múltiplos campos possíveis
+      const qrcode = data.qrcode || data.instance?.qrcode || data.data?.qrcode || data.data?.base64 || data.base64;
+
+      if (qrcode && qrcode.length > 0) {
         return {
           success: true,
           data: {
-            qrcode: data.qrcode,
+            qrcode,
             instance_name: instance.instance_name,
             status: 'connecting'
           }
@@ -449,7 +456,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
       } else {
         return {
           success: false,
-          error: data.error || 'Erro ao gerar QR Code para reconexão'
+          error: 'QR Code não foi gerado pela Uazapi'
         };
       }
     } catch (err) {
