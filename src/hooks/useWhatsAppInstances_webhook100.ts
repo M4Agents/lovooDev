@@ -390,88 +390,6 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     }
   }, [companyId, supabase, fetchInstances]);
 
-  // =====================================================
-  // RECONECTAR INSTÂNCIA DESCONECTADA
-  // =====================================================
-  const reconnectInstance = useCallback(async (instanceId: string): Promise<{
-    success: boolean;
-    data?: any;
-    error?: string;
-  }> => {
-    try {
-      console.log('[useWhatsAppInstancesWebhook100] Reconectando instância:', instanceId);
-      
-      // Buscar instância existente
-      const instance = instances.find(i => i.id === instanceId);
-      if (!instance) {
-        return {
-          success: false,
-          error: 'Instância não encontrada'
-        };
-      }
-
-      console.log('[useWhatsAppInstancesWebhook100] Preparando reconexão para:', instance.instance_name);
-
-      // ✅ PASSO 1: Deletar instância antiga da Uazapi (evita instâncias sem uso)
-      if (instance.provider_instance_id) {
-        try {
-          console.log('[useWhatsAppInstancesWebhook100] Deletando instância antiga da Uazapi:', instance.provider_instance_id);
-          
-          const deleteResponse = await fetch('https://lovoo.uazapi.com/instance/delete', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'admintoken': 'Qz8m6fc3Gcfc0jKAdZbCPaHRYa2nCGpOapTNJT5J4C2km6GdQB'
-            },
-            body: JSON.stringify({
-              id: instance.provider_instance_id
-            })
-          });
-
-          if (deleteResponse.ok) {
-            console.log('[useWhatsAppInstancesWebhook100] Instância deletada da Uazapi com sucesso');
-          } else {
-            console.warn('[useWhatsAppInstancesWebhook100] Aviso: Não foi possível deletar instância da Uazapi:', deleteResponse.status);
-          }
-        } catch (deleteError) {
-          console.warn('[useWhatsAppInstancesWebhook100] Aviso: Erro ao deletar da Uazapi:', deleteError);
-          // Continua mesmo se falhar - não é crítico
-        }
-      }
-
-      // ✅ PASSO 2: Soft delete no nosso banco (libera nome para nova instância)
-      const { error: softDeleteError } = await supabase
-        .from('whatsapp_life_instances')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', instanceId);
-
-      if (softDeleteError) {
-        console.error('[useWhatsAppInstancesWebhook100] Erro ao fazer soft delete:', softDeleteError);
-        return {
-          success: false,
-          error: 'Erro ao preparar reconexão'
-        };
-      }
-
-      console.log('[useWhatsAppInstancesWebhook100] Soft delete realizado, gerando QR Code para nova instância');
-
-      // ✅ PASSO 3: Criar nova instância com mesmo nome
-      // generateQRCode cria temp_instance com token NOVO via API admin
-      // Após conexão, webhook cria nova instância permanente
-      const result = await generateQRCode(instance.instance_name);
-      
-      console.log('[useWhatsAppInstancesWebhook100] Resultado generateQRCode:', result);
-      
-      return result;
-    } catch (err) {
-      console.error('[useWhatsAppInstancesWebhook100] Erro ao reconectar instância:', err);
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Erro ao reconectar instância'
-      };
-    }
-  }, [instances, generateQRCode]);
-
   return {
     instances,
     loading,
@@ -489,7 +407,6 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     syncWithUazapi,
     updateInstanceName,
     fetchInstances,
-    syncProfileData,
-    reconnectInstance
+    syncProfileData
   };
 };

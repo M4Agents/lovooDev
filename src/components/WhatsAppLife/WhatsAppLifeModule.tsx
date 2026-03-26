@@ -4,7 +4,7 @@
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Smartphone, Plus, Crown, CheckCircle, RefreshCw, Edit2, Trash2, User } from 'lucide-react';
+import { Smartphone, Plus, Crown, CheckCircle, Edit2, Trash2, User, AlertCircle } from 'lucide-react';
 import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
@@ -40,8 +40,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     deleteInstance,
     updateInstanceName,
     fetchInstances,
-    syncProfileData,
-    reconnectInstance
+    syncProfileData
   } = useWhatsAppInstancesWebhook100(company?.id);
   
   const { 
@@ -153,32 +152,6 @@ export const WhatsAppLifeModule: React.FC = () => {
       }));
     }
   }, [generateQRCode]);
-
-  // Handler para reconectar instância desconectada
-  const handleReconnectInstance = useCallback(async (instance: any) => {
-    console.log('[WhatsAppLifeModule] Reconectando instância:', instance.instance_name);
-    
-    // Abrir modal de QR Code para reconectar
-    setCurrentInstanceId(instance.id);
-    setCurrentInstanceName(instance.instance_name);
-    setShowQRModal(true);
-    
-    // Usar função específica de reconexão (não generateQRCode)
-    const result = await reconnectInstance(instance.id);
-    if (result.success && result.data) {
-      setQrCodeData(result.data);
-      console.log('[WhatsAppLifeModule] QR Code gerado para reconexão');
-      
-      // Iniciar polling para detectar conexão automaticamente
-      if (result.data.temp_instance_id) {
-        startTempInstancePolling(result.data.temp_instance_id, true); // true = reconexão
-      }
-    } else {
-      console.error('[WhatsAppLifeModule] Erro ao gerar QR Code para reconexão:', result.error);
-      alert(`Erro ao gerar QR Code: ${result.error}`);
-      setShowQRModal(false);
-    }
-  }, [reconnectInstance]);
 
   // Handlers para editar e excluir instâncias
   const handleEditInstance = useCallback(async (instance: any) => {
@@ -685,16 +658,6 @@ export const WhatsAppLifeModule: React.FC = () => {
                       
                       {/* Botões de Ação */}
                       <div className="flex gap-1 ml-2">
-                        {/* Botão Reconectar - apenas para instâncias desconectadas */}
-                        {instance.status === 'disconnected' && (
-                          <button
-                            onClick={() => handleReconnectInstance(instance)}
-                            className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
-                            title="Reconectar instância"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </button>
-                        )}
                         <button
                           onClick={() => handleSyncProfile(instance)}
                           className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"

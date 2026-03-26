@@ -256,11 +256,6 @@ export interface UseInstancesReturn {
     data?: any;
     error?: string;
   }>;
-  reconnectInstance: (instanceId: string) => Promise<{
-    success: boolean;
-    data?: any;
-    error?: string;
-  }>;
 }
 
 export interface UseQRCodeReturn {

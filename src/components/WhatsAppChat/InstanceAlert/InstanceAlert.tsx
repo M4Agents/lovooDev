@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
-import { AlertCircle, RefreshCw, ArrowRight } from 'lucide-react'
+import { AlertCircle, Settings, ArrowRight } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { QRCodeModal } from '../../WhatsAppLife/QRCodeModal'
-import { useWhatsAppInstancesWebhook100 } from '../../../hooks/useWhatsAppInstances_webhook100'
 
 interface InstanceAlertProps {
   conversationId: string
@@ -30,43 +28,10 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
   const [selectedInstance, setSelectedInstance] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
-  
-  // Estados para QR Code Modal
-  const [showQRModal, setShowQRModal] = useState(false)
-  const [qrCodeData, setQrCodeData] = useState<any>(null)
-  
-  // Hook para reconexão de instância
-  const { reconnectInstance, getQRCode } = useWhatsAppInstancesWebhook100(companyId)
 
   // Não mostrar alerta se instância está conectada
   if (instanceStatus === 'connected' && !instanceDeleted) {
     return null
-  }
-
-  const handleReconnect = async () => {
-    if (!instanceId) {
-      setError('ID da instância não encontrado')
-      return
-    }
-    
-    setShowQRModal(true)
-    setQrCodeData({ status: 'loading' })
-    
-    try {
-      const result = await reconnectInstance(instanceId)
-      
-      if (result.success && result.data) {
-        setQrCodeData(result.data)
-      } else {
-        setQrCodeData({ 
-          error_message: result.error || 'Erro ao gerar QR Code para reconexão' 
-        })
-      }
-    } catch (err: any) {
-      setQrCodeData({ 
-        error_message: err.message || 'Erro ao reconectar instância' 
-      })
-    }
   }
 
   const handleOpenMigration = async () => {
@@ -137,25 +102,30 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
               {instanceDeleted ? 'Instância Deletada' : 'Instância Desconectada'}
             </h3>
             <p className="text-sm text-yellow-700 mb-3">
-              {instanceDeleted ? (
-                <>
-                  Esta conversa foi iniciada pela instância <strong>"{instanceName}"</strong> que foi deletada.
-                  Você pode migrar esta conversa para outra instância ativa para continuar o atendimento.
-                </>
-              ) : (
-                <>
-                  Esta conversa foi iniciada pela instância <strong>"{instanceName}"</strong> que está desconectada.
-                  Reconecte a instância ou migre esta conversa para outra instância ativa.
-                </>
-              )}
+              Esta conversa foi iniciada pela instância <strong>"{instanceName}"</strong> que está {instanceDeleted ? 'deletada' : 'desconectada'}.
             </p>
+            
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                📋 Como Resolver:
+              </h4>
+              <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
+                <li>Vá em <strong>Configurações → Integrações</strong></li>
+                <li>Clique em <strong>"Nova Instância"</strong></li>
+                <li>Use o <strong>mesmo número</strong> de WhatsApp</li>
+                <li>Escaneie o QR Code</li>
+                <li>Suas conversas serão <strong>migradas automaticamente</strong> ✅</li>
+                <li>Depois, exclua a instância antiga em Configurações</li>
+              </ol>
+            </div>
+            
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleReconnect}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors"
+                onClick={() => window.location.href = '/settings/integrations'}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <RefreshCw className="w-4 h-4" />
-                Reconectar Instância
+                <Settings className="w-4 h-4" />
+                Ir para Configurações
               </button>
               <button
                 onClick={handleOpenMigration}
@@ -169,23 +139,6 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Modal de QR Code para Reconexão */}
-      {showQRModal && (
-        <QRCodeModal
-          isOpen={showQRModal}
-          onClose={() => {
-            setShowQRModal(false)
-            setQrCodeData(null)
-            // Atualizar conversa após reconexão bem-sucedida
-            onMigrationComplete?.()
-          }}
-          instanceId={instanceId || ''}
-          instanceName={instanceName || 'Instância'}
-          onGetQRCode={getQRCode}
-          qrCodeData={qrCodeData}
-        />
-      )}
 
       {/* Modal de Migração */}
       {showMigrationModal && (
