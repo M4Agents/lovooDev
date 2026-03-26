@@ -838,6 +838,8 @@ export class ChatApi {
       unread_count: raw.unread_count || 0,
       status: raw.status,
       instance_name: raw.instance_name,
+      instance_status: raw.instance_status,
+      instance_deleted: raw.instance_deleted,
       created_at: new Date(raw.created_at),
       updated_at: new Date(raw.updated_at)
     }
