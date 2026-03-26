@@ -435,6 +435,14 @@ export const useChatData = (
             console.log('📞 Telefone:', newMessage.from_phone || 'N/A')
             console.log('⬅️ Direção:', newMessage.direction)
             
+            // ✅ CORREÇÃO: Ignorar mensagens outbound próprias (já estão no estado local do ChatArea)
+            // Isso evita duplicação: mensagem local + mensagem do Realtime
+            if (newMessage.direction === 'outbound' && newMessage.sent_by === userId) {
+              console.log('⏭️ Mensagem outbound própria ignorada (já no estado local do ChatArea)')
+              console.log('💡 Evitando duplicação de mensagem')
+              return
+            }
+            
             // 1. Primeiro: Atualização local otimista (instantânea)
             setConversations(prev => {
               const existingIndex = prev.findIndex(conv => conv.id === newMessage.conversation_id)
