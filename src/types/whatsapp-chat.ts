@@ -27,6 +27,8 @@ export interface ChatConversation {
   unread_count: number
   status: 'active' | 'archived'
   instance_name?: string
+  instance_status?: string
+  instance_deleted?: boolean
   created_at: Date
   updated_at: Date
 }
