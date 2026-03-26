@@ -383,45 +383,101 @@ export class ChatApi {
       if (useDirectSend) {
         console.log('📤 Modo DIRETO: Enviando diretamente para Uazapi (sem endpoint intermediário)');
         
-        // 1. Buscar dados da mensagem e instância
-        console.log('🔍 Buscando dados da mensagem...');
-        const { data: messageData, error: fetchError } = await supabase
-          .from('chat_messages')
+        // =====================================================
+        // ETAPA 1: Buscar mensagem com RETRY (resolve replication lag)
+        // =====================================================
+        let messageData = null;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (!messageData && attempts < maxAttempts) {
+          attempts++;
+          console.log(`🔍 Tentativa ${attempts}/${maxAttempts} - Buscando mensagem...`);
+          
+          const { data, error } = await supabase
+            .from('chat_messages')
+            .select(`
+              id,
+              content,
+              message_type,
+              media_url,
+              conversation_id,
+              instance_id
+            `)
+            .eq('id', messageId)
+            .eq('company_id', companyId)
+            .single();
+          
+          if (!error && data) {
+            messageData = data;
+            console.log('✅ Mensagem encontrada!');
+            break;
+          }
+          
+          // Aguardar antes de tentar novamente (exponential backoff)
+          if (attempts < maxAttempts) {
+            const delay = 50 * attempts; // 50ms, 100ms, 150ms
+            console.log(`⏳ Aguardando ${delay}ms antes de tentar novamente...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+        
+        if (!messageData) {
+          console.error('❌ Mensagem não encontrada após 3 tentativas');
+          throw new Error('Mensagem não encontrada após múltiplas tentativas');
+        }
+        
+        // =====================================================
+        // ETAPA 2: Buscar dados da conversa e instância
+        // =====================================================
+        console.log('🔍 Buscando dados da conversa e instância...');
+        
+        const { data: conversationData, error: convError } = await supabase
+          .from('chat_conversations')
           .select(`
-            id,
-            content,
-            message_type,
-            media_url,
-            conversation_id,
-            chat_conversations!inner(
-              contact_phone,
-              instance_id,
-              whatsapp_life_instances!inner(
-                provider_token
-              )
+            contact_phone,
+            instance_id,
+            whatsapp_life_instances!inner(
+              provider_token,
+              status,
+              deleted_at
             )
           `)
-          .eq('id', messageId)
+          .eq('id', messageData.conversation_id)
           .eq('company_id', companyId)
           .single();
-
-        if (fetchError || !messageData) {
-          console.error('❌ Mensagem não encontrada:', fetchError);
-          throw new Error('Mensagem não encontrada');
+        
+        if (convError || !conversationData) {
+          console.error('❌ Conversa não encontrada:', convError);
+          throw new Error('Conversa não encontrada');
         }
-
-        console.log('✅ Dados da mensagem obtidos:', {
-          message_type: messageData.message_type,
-          has_content: !!messageData.content,
-          has_media: !!messageData.media_url
-        });
-
-        const phone = messageData.chat_conversations.contact_phone;
-        const token = messageData.chat_conversations.whatsapp_life_instances.provider_token;
-
+        
+        // Type assertion para whatsapp_life_instances (retorna objeto único devido ao !inner)
+        const instanceData = (conversationData as any).whatsapp_life_instances as any;
+        
+        // Verificar se instância está ativa
+        if (instanceData?.deleted_at !== null) {
+          console.error('❌ Instância foi deletada (soft delete)');
+          throw new Error('Instância não está mais ativa');
+        }
+        
+        if (instanceData?.status !== 'connected') {
+          console.error('❌ Instância não está conectada:', instanceData?.status);
+          throw new Error('Instância não está conectada');
+        }
+        
+        const phone = (conversationData as any).contact_phone;
+        const token = instanceData?.provider_token;
+        
         if (!token) {
           throw new Error('Token da instância não encontrado');
         }
+        
+        console.log('✅ Dados obtidos com sucesso:', {
+          phone: phone.substring(0, 8) + '***',
+          instance_status: instanceData.status,
+          has_token: !!token
+        });
 
         // 2. Preparar payload para Uazapi
         const endpoint = messageData.message_type === 'text'
