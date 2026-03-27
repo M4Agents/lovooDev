@@ -252,27 +252,32 @@ export default function FlowEditor() {
     navigate('/automations')
   }
 
-  const handleNodeConfigSave = async (nodeId: string, config: any) => {
+  const handleNodeConfigSave = async (nodeId: string, config: any, currentNodes?: Node[]) => {
     if (!flow || !id) return
+
+    // ✅ FIX: Usar currentNodes do FlowCanvas ao invés de flow.nodes (que pode estar vazio)
+    const nodesToUpdate = (currentNodes || flow.nodes) as Node[]
 
     console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
       nodeId,
       configRecebido: config,
       selectedNodeId: selectedNode?.id,
       selectedNodeConfig: selectedNode?.data?.config,
-      isSelectedNode: selectedNode?.id === nodeId
+      isSelectedNode: selectedNode?.id === nodeId,
+      usingCurrentNodes: !!currentNodes
     })
 
     let updatedSelectedNode: Node | null = null
 
-    console.log('🔍 [handleNodeConfigSave] flow.nodes:', {
-      totalNodes: flow.nodes.length,
-      nodeIds: flow.nodes.map((n: any) => n.id),
+    console.log('🔍 [handleNodeConfigSave] nodes:', {
+      totalNodes: nodesToUpdate.length,
+      nodeIds: nodesToUpdate.map((n: any) => n.id),
       buscandoNodeId: nodeId,
-      nodeExiste: flow.nodes.some((n: any) => n.id === nodeId)
+      nodeExiste: nodesToUpdate.some((n: any) => n.id === nodeId),
+      source: currentNodes ? 'FlowCanvas (currentNodes)' : 'flow.nodes'
     })
 
-    const updatedNodes = flow.nodes.map((node: any) => {
+    const updatedNodes = nodesToUpdate.map((node: any) => {
       console.log('🔍 [map] Verificando node:', {
         nodeId: node.id,
         buscando: nodeId,
@@ -530,7 +535,7 @@ export default function FlowEditor() {
             onDelete={handleDelete}
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
-            onNodeConfigSave={handleNodeConfigSave}
+            onNodeConfigSave={handleNodeConfigSave as any}
           />
         </div>
         {selectedNode && showTriggerConfig ? (
@@ -541,7 +546,9 @@ export default function FlowEditor() {
               setSelectedNode(null)
               setShowTriggerConfig(false)
             }}
-            onSave={handleNodeConfigSave}
+            onSave={(nodeId, config) => {
+              handleNodeConfigSave(nodeId, config, flow.nodes as Node[])
+            }}
           />
         ) : selectedNode && !showTriggerConfig ? (
           <NodeConfigPanel
@@ -549,7 +556,10 @@ export default function FlowEditor() {
             flowId={id}
             nodes={flow.nodes as Node[]}
             onClose={() => setSelectedNode(null)}
-            onSave={handleNodeConfigSave}
+            onSave={(nodeId, config) => {
+              // ✅ FIX: Passar nodes atuais (flow.nodes pode estar vazio, mas NodeConfigPanel tem nodes via props)
+              handleNodeConfigSave(nodeId, config, flow.nodes as Node[])
+            }}
           />
         ) : null}
       </div>

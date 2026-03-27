@@ -64,7 +64,7 @@ interface FlowCanvasProps {
   onDelete: () => Promise<void>
   selectedNode: Node | null
   onNodeSelect: (node: Node | null) => void
-  onNodeConfigSave: (nodeId: string, config: any) => void
+  onNodeConfigSave: (nodeId: string, config: any, currentNodes?: Node[]) => void
 }
 
 const nodeTypes: NodeTypes = {
