@@ -201,6 +201,18 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   if (!selectedNode) return null
 
   const handleSave = () => {
+    // ✅ Validação: Bloco de ação DEVE ter actionType
+    if (selectedNode.type === 'action' && !config.actionType) {
+      alert('⚠️ Por favor, selecione um tipo de ação antes de salvar.')
+      return
+    }
+    
+    console.log('💾 NodeConfigPanel salvando:', {
+      nodeId: selectedNode.id,
+      nodeType: selectedNode.type,
+      config: config
+    })
+    
     onSave(selectedNode.id, config)
     onClose()
   }

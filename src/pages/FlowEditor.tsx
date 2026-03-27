@@ -255,9 +255,32 @@ export default function FlowEditor() {
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
 
-    const updatedNodes = flow.nodes.map((node: any) =>
-      node.id === nodeId ? { ...node, data: { ...node.data, config } } : node
-    )
+    const updatedNodes = flow.nodes.map((node: any) => {
+      if (node.id === nodeId) {
+        // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
+        const mergedConfig = {
+          ...node.data.config,  // Config anterior
+          ...config              // Novo config (sobrescreve apenas campos enviados)
+        }
+        
+        console.log('💾 Salvando config do node:', {
+          nodeId,
+          nodeType: node.type,
+          configAnterior: node.data.config,
+          configNovo: config,
+          configFinal: mergedConfig
+        })
+        
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            config: mergedConfig
+          }
+        }
+      }
+      return node
+    })
 
     // Salvar direto sem validação (apenas configuração de nó)
     await automationApi.saveFlowCanvas(id, {
