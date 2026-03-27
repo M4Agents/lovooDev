@@ -83,7 +83,7 @@ export const Login: React.FC = () => {
           <div className="text-center pt-8 pb-6 px-8">
             <div className="mx-auto mb-1 flex items-center justify-center" style={{ width: '226px', height: '96px' }}>
               <img 
-                src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-logo-colorido-para-fundo-branco-scaled.png" 
+                src="https://app.lovoocrm.com/images/emails/logo_fundo_branco-300x128.png" 
                 alt="Lovoo CRM Logo" 
                 className="w-full h-full object-contain"
               />
