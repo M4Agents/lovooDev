@@ -143,7 +143,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
             <div className="flex flex-col items-center justify-center w-full">
               <div className="flex items-center justify-center mb-1" style={{ width: '94px', height: '40px' }}>
                 <img 
-                  src="https://imagens.lovoocrm.com/wp-content/uploads/2025/12/LOVOO-PNG-para-fundo-preto-scaled.png" 
+                  src="https://app.lovoocrm.com/images/emails/LOVOO-PNG-para-fundo-preto-scaled.png" 
                   alt="Lovoo CRM Logo" 
                   className="w-full h-full object-contain"
                 />
