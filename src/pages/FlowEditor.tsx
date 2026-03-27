@@ -31,7 +31,6 @@ export default function FlowEditor() {
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [tempName, setTempName] = useState('')
-  const [canvasNodes, setCanvasNodes] = useState<Node[]>([])
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
@@ -227,11 +226,6 @@ export default function FlowEditor() {
   const handleSave = async (nodes: Node[], edges: Edge[]) => {
     if (!id) return
 
-    console.log('🔍 [handleSave] Salvando canvas:', {
-      totalNodes: nodes.length,
-      nodeIds: nodes.map(n => n.id)
-    })
-
     // FASE 6.3: Validar antes de salvar
     const canSave = await validateAndSave(nodes, edges)
     if (!canSave) return
@@ -241,9 +235,7 @@ export default function FlowEditor() {
       edges: edges as any
     })
 
-    // ✅ FIX: Atualizar flow.nodes para sincronizar com FlowCanvas
-    setFlow(prev => prev ? { ...prev, nodes, edges } : null)
-    console.log('✅ [handleSave] flow.nodes atualizado com', nodes.length, 'nodes')
+    await loadFlow()
   }
 
   const handleToggleActive = async (isActive: boolean) => {
@@ -255,6 +247,18 @@ export default function FlowEditor() {
 
   const handleDelete = async () => {
     if (!id) return
+
+    await automationApi.deleteFlow(id)
+    navigate('/automations')
+  }
+
+  const handleNodeConfigSave = async (nodeId: string, config: any, currentNodes?: Node[]) => {
+    if (!flow || !id) return
+
+    // ✅ FIX: Usar currentNodes do FlowCanvas ao invés de flow.nodes (que pode estar vazio)
+    const nodesToUpdate = (currentNodes || flow.nodes) as Node[]
+
+    console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
       nodeId,
       configRecebido: config,
       selectedNodeId: selectedNode?.id,
@@ -532,11 +536,6 @@ export default function FlowEditor() {
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
             onNodeConfigSave={handleNodeConfigSave as any}
-            onNodesUpdate={(updatedNodes: Node[]) => {
-              // ✅ FIX: Sincronizar flow.nodes com FlowCanvas.nodes em tempo real
-              console.log('🔄 [onNodesUpdate] Sincronizando flow.nodes:', updatedNodes.length, 'nodes')
-              setFlow(prev => ({ ...prev!, nodes: updatedNodes }))
-            }}
           />
         </div>
         {selectedNode && showTriggerConfig ? (
