@@ -255,6 +255,8 @@ export default function FlowEditor() {
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
 
+    let updatedSelectedNode: Node | null = null
+
     const updatedNodes = flow.nodes.map((node: any) => {
       if (node.id === nodeId) {
         // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
@@ -271,13 +273,20 @@ export default function FlowEditor() {
           configFinal: mergedConfig
         })
         
-        return {
+        const updatedNode = {
           ...node,
           data: {
             ...node.data,
             config: mergedConfig
           }
         }
+        
+        // ✅ FIX: Se for o node selecionado, guardar referência para atualizar selectedNode
+        if (selectedNode?.id === nodeId) {
+          updatedSelectedNode = updatedNode
+        }
+        
+        return updatedNode
       }
       return node
     })
@@ -289,6 +298,12 @@ export default function FlowEditor() {
     })
 
     setFlow({ ...flow, nodes: updatedNodes })
+    
+    // ✅ FIX: Atualizar selectedNode para manter sincronização
+    if (updatedSelectedNode) {
+      console.log('🔄 Atualizando selectedNode com config salvo')
+      setSelectedNode(updatedSelectedNode)
+    }
   }
 
   const handleNodeSelect = (node: Node | null) => {
