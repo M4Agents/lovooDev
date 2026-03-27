@@ -89,10 +89,19 @@ function FlowCanvasInner({
   onSave,
   onToggleActive,
   onDelete,
-  onNodeSelect
+  onNodeSelect,
+  onNodesUpdate
 }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  
+  // ✅ FIX: Sincronizar nodes com FlowEditor em tempo real
+  useEffect(() => {
+    if (onNodesUpdate) {
+      console.log('🔄 [FlowCanvas] Nodes mudaram, notificando FlowEditor:', nodes.length)
+      onNodesUpdate(nodes)
+    }
+  }, [nodes, onNodesUpdate])
   const [isSaving, setIsSaving] = useState(false)
   const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
   const [isTriggerSelectorOpen, setIsTriggerSelectorOpen] = useState(false)

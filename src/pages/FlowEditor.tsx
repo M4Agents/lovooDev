@@ -31,6 +31,7 @@ export default function FlowEditor() {
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [tempName, setTempName] = useState('')
+  const [canvasNodes, setCanvasNodes] = useState<Node[]>([])
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
