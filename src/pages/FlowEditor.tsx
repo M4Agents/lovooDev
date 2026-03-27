@@ -25,8 +25,8 @@ export default function FlowEditor() {
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [clipboard, setClipboard] = useState<Node | null>(null)
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
-  const [showValidation, setShowValidation] = useState(false)
+  const [, setValidationResult] = useState<ValidationResult | null>(null)
+  const [, setShowValidation] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -252,102 +252,49 @@ export default function FlowEditor() {
     navigate('/automations')
   }
 
-  const handleNodeConfigSave = async (nodeId: string, config: any, currentNodes?: Node[]) => {
+  const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
-
-    // ✅ FIX: Usar currentNodes do FlowCanvas ao invés de flow.nodes (que pode estar vazio)
-    const nodesToUpdate = (currentNodes || flow.nodes) as Node[]
 
     console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
       nodeId,
       configRecebido: config,
       selectedNodeId: selectedNode?.id,
-      selectedNodeConfig: selectedNode?.data?.config,
-      isSelectedNode: selectedNode?.id === nodeId,
-      usingCurrentNodes: !!currentNodes
+      flowNodesCount: flow.nodes.length
     })
 
-    let updatedSelectedNode: Node | null = null
-
-    console.log('🔍 [handleNodeConfigSave] nodes:', {
-      totalNodes: nodesToUpdate.length,
-      nodeIds: nodesToUpdate.map((n: any) => n.id),
-      buscandoNodeId: nodeId,
-      nodeExiste: nodesToUpdate.some((n: any) => n.id === nodeId),
-      source: currentNodes ? 'FlowCanvas (currentNodes)' : 'flow.nodes'
-    })
-
-    const updatedNodes = nodesToUpdate.map((node: any) => {
-      console.log('🔍 [map] Verificando node:', {
-        nodeId: node.id,
-        buscando: nodeId,
-        match: node.id === nodeId
-      })
-      
+    const updatedNodes = (flow.nodes as Node[]).map((node: any) => {
       if (node.id === nodeId) {
-        // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
         const mergedConfig = {
-          ...node.data.config,  // Config anterior
-          ...config              // Novo config (sobrescreve apenas campos enviados)
+          ...node.data.config,
+          ...config
         }
         
-        console.log('💾 [handleNodeConfigSave] Salvando config do node:', {
+        console.log('💾 [handleNodeConfigSave] Atualizando config:', {
           nodeId,
-          nodeType: node.type,
-          configAnterior: node.data.config,
-          configNovo: config,
           configFinal: mergedConfig,
           hasActionType: !!mergedConfig.actionType
         })
         
-        const updatedNode = {
+        return {
           ...node,
           data: {
             ...node.data,
             config: mergedConfig
           }
         }
-        
-        // ✅ FIX: Se for o node selecionado, guardar referência para atualizar selectedNode
-        if (selectedNode?.id === nodeId) {
-          updatedSelectedNode = updatedNode
-          console.log('✅ [handleNodeConfigSave] Node é o selecionado, será atualizado:', {
-            updatedNodeId: updatedNode.id,
-            updatedNodeConfig: updatedNode.data.config
-          })
-        } else {
-          console.log('⚠️ [handleNodeConfigSave] Node NÃO é o selecionado:', {
-            nodeId,
-            selectedNodeId: selectedNode?.id
-          })
-        }
-        
-        return updatedNode
       }
       return node
     })
 
-    // Salvar direto sem validação (apenas configuração de nó)
-    await automationApi.saveFlowCanvas(id, {
-      nodes: updatedNodes as any,
-      edges: flow.edges as any
-    })
-
-    console.log('💿 [handleNodeConfigSave] Salvou no banco')
-
-    setFlow({ ...flow, nodes: updatedNodes })
-    console.log('📊 [handleNodeConfigSave] Atualizou flow.nodes')
+    await handleSave(updatedNodes, flow.edges as Edge[])
     
-    // ✅ FIX: Atualizar selectedNode para manter sincronização
-    if (updatedSelectedNode) {
+    const updatedSelectedNode = updatedNodes.find(n => n.id === nodeId)
+    if (updatedSelectedNode && selectedNode?.id === nodeId) {
       console.log('🔄 [handleNodeConfigSave] Atualizando selectedNode:', {
         nodeId: updatedSelectedNode.id,
-        config: updatedSelectedNode.data.config,
         hasActionType: !!updatedSelectedNode.data.config.actionType
       })
       setSelectedNode(updatedSelectedNode)
-    } else {
-      console.log('❌ [handleNodeConfigSave] updatedSelectedNode é NULL - selectedNode NÃO será atualizado!')
     }
     
     console.log('✅ [handleNodeConfigSave] FIM')
@@ -546,9 +493,7 @@ export default function FlowEditor() {
               setSelectedNode(null)
               setShowTriggerConfig(false)
             }}
-            onSave={(nodeId, config) => {
-              handleNodeConfigSave(nodeId, config, flow.nodes as Node[])
-            }}
+            onSave={(nodeId, config) => handleNodeConfigSave(nodeId, config)}
           />
         ) : selectedNode && !showTriggerConfig ? (
           <NodeConfigPanel
@@ -556,10 +501,7 @@ export default function FlowEditor() {
             flowId={id}
             nodes={flow.nodes as Node[]}
             onClose={() => setSelectedNode(null)}
-            onSave={(nodeId, config) => {
-              // ✅ FIX: Passar nodes atuais (flow.nodes pode estar vazio, mas NodeConfigPanel tem nodes via props)
-              handleNodeConfigSave(nodeId, config, flow.nodes as Node[])
-            }}
+            onSave={(nodeId, config) => handleNodeConfigSave(nodeId, config)}
           />
         ) : null}
       </div>
