@@ -265,7 +265,20 @@ export default function FlowEditor() {
 
     let updatedSelectedNode: Node | null = null
 
+    console.log('🔍 [handleNodeConfigSave] flow.nodes:', {
+      totalNodes: flow.nodes.length,
+      nodeIds: flow.nodes.map((n: any) => n.id),
+      buscandoNodeId: nodeId,
+      nodeExiste: flow.nodes.some((n: any) => n.id === nodeId)
+    })
+
     const updatedNodes = flow.nodes.map((node: any) => {
+      console.log('🔍 [map] Verificando node:', {
+        nodeId: node.id,
+        buscando: nodeId,
+        match: node.id === nodeId
+      })
+      
       if (node.id === nodeId) {
         // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
         const mergedConfig = {
