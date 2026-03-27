@@ -65,6 +65,7 @@ interface FlowCanvasProps {
   selectedNode: Node | null
   onNodeSelect: (node: Node | null) => void
   onNodeConfigSave: (nodeId: string, config: any, currentNodes?: Node[]) => void
+  onNodesUpdate?: (nodes: Node[]) => void
 }
 
 const nodeTypes: NodeTypes = {
