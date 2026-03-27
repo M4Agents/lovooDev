@@ -255,6 +255,14 @@ export default function FlowEditor() {
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
 
+    console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
+      nodeId,
+      configRecebido: config,
+      selectedNodeId: selectedNode?.id,
+      selectedNodeConfig: selectedNode?.data?.config,
+      isSelectedNode: selectedNode?.id === nodeId
+    })
+
     let updatedSelectedNode: Node | null = null
 
     const updatedNodes = flow.nodes.map((node: any) => {
@@ -265,12 +273,13 @@ export default function FlowEditor() {
           ...config              // Novo config (sobrescreve apenas campos enviados)
         }
         
-        console.log('💾 Salvando config do node:', {
+        console.log('💾 [handleNodeConfigSave] Salvando config do node:', {
           nodeId,
           nodeType: node.type,
           configAnterior: node.data.config,
           configNovo: config,
-          configFinal: mergedConfig
+          configFinal: mergedConfig,
+          hasActionType: !!mergedConfig.actionType
         })
         
         const updatedNode = {
@@ -284,6 +293,15 @@ export default function FlowEditor() {
         // ✅ FIX: Se for o node selecionado, guardar referência para atualizar selectedNode
         if (selectedNode?.id === nodeId) {
           updatedSelectedNode = updatedNode
+          console.log('✅ [handleNodeConfigSave] Node é o selecionado, será atualizado:', {
+            updatedNodeId: updatedNode.id,
+            updatedNodeConfig: updatedNode.data.config
+          })
+        } else {
+          console.log('⚠️ [handleNodeConfigSave] Node NÃO é o selecionado:', {
+            nodeId,
+            selectedNodeId: selectedNode?.id
+          })
         }
         
         return updatedNode
@@ -297,13 +315,24 @@ export default function FlowEditor() {
       edges: flow.edges as any
     })
 
+    console.log('💿 [handleNodeConfigSave] Salvou no banco')
+
     setFlow({ ...flow, nodes: updatedNodes })
+    console.log('📊 [handleNodeConfigSave] Atualizou flow.nodes')
     
     // ✅ FIX: Atualizar selectedNode para manter sincronização
     if (updatedSelectedNode) {
-      console.log('🔄 Atualizando selectedNode com config salvo')
+      console.log('🔄 [handleNodeConfigSave] Atualizando selectedNode:', {
+        nodeId: updatedSelectedNode.id,
+        config: updatedSelectedNode.data.config,
+        hasActionType: !!updatedSelectedNode.data.config.actionType
+      })
       setSelectedNode(updatedSelectedNode)
+    } else {
+      console.log('❌ [handleNodeConfigSave] updatedSelectedNode é NULL - selectedNode NÃO será atualizado!')
     }
+    
+    console.log('✅ [handleNodeConfigSave] FIM')
   }
 
   const handleNodeSelect = (node: Node | null) => {
