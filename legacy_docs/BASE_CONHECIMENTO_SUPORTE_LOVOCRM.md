@@ -257,7 +257,8 @@ Maria Santos,maria@email.com,5521988888888,"VIP,Quente,Prioridade"
 **⚠️ IMPORTANTE:** Use **aspas duplas** `"` quando houver múltiplas tags separadas por vírgula.
 
 ##### Funcionalidades das Tags
-- ✅ **Reconhecimento Automático**: Coluna "tags" ou "etiquetas" é detectada
+- ✅ **Reconhecimento Automático**: Aceita "tag", "tags", "etiqueta" ou "etiquetas"
+- ✅ **Singular ou Plural**: Tanto "tag" quanto "tags" funcionam
 - ✅ **Case-Insensitive**: VIP = vip = Vip (sistema reconhece qualquer formatação)
 - ✅ **Criação Automática**: Tags novas são criadas automaticamente com cor padrão azul
 - ✅ **Reutilização**: Tags existentes são reutilizadas automaticamente
@@ -271,6 +272,13 @@ João Silva,joao@email.com,5511999999999,VIP
 Maria Santos,maria@email.com,5521988888888,"VIP,Quente"
 Pedro Costa,pedro@email.com,5511987654321,"Prioridade,Ativo,Cliente"
 Ana Oliveira,ana@email.com,5521987654321,
+```
+
+**Também funciona com "tag" (singular):**
+```csv
+Nome,Email,Telefone,tag
+João Silva,joao@email.com,5511999999999,VIP
+Maria Santos,maria@email.com,5521988888888,"VIP,Quente"
 ```
 
 #### 🏢 CAMPOS DE EMPRESA (NOVO V2.2!)
@@ -314,6 +322,36 @@ Pedro Costa,pedro@email.com,5511987654321,Inovação LTDA,11223344000155,São Pa
 - **Emails**: Devem estar no formato correto (nome@dominio.com)
 - **Tags múltiplas**: Use aspas duplas e separe por vírgula
 - **Campos vazios**: Deixe em branco se não tiver o dado
+- **Separador CSV**: Sistema detecta automaticamente vírgula (`,`) ou ponto e vírgula (`;`)
+
+#### 🎯 SEPARADOR CSV - DETECÇÃO AUTOMÁTICA (NOVO V2.2!)
+
+**O sistema detecta automaticamente o separador do seu arquivo CSV!**
+
+##### Formatos Aceitos:
+- ✅ **Vírgula (`,`)**: Padrão internacional
+- ✅ **Ponto e vírgula (`;`)**: Padrão do Excel brasileiro
+
+##### Como Funciona:
+- **Automático**: Sistema analisa a primeira linha e detecta o separador
+- **Zero Configuração**: Você não precisa fazer nada
+- **Excel Brasileiro**: Funciona direto com CSV exportado do Excel
+- **Google Sheets**: Funciona com qualquer formato
+
+##### Exemplos:
+**CSV com vírgula (padrão internacional):**
+```csv
+Nome,Email,Telefone,tags
+João Silva,joao@email.com,5511999999999,VIP
+```
+
+**CSV com ponto e vírgula (Excel brasileiro):**
+```csv
+Nome;Email;Telefone;tags
+João Silva;joao@email.com;5511999999999;VIP
+```
+
+**Ambos funcionam perfeitamente!** 🎉
 
 ### 📤 EXPORTAÇÃO DE LEADS V2.0 ✨ NOVO!
 
@@ -932,7 +970,10 @@ R: O sistema detecta e oferece opções de mesclagem automática.
 #### Sobre Tags na Importação (NOVO V2.2!)
 
 **P: Como adiciono tags na importação?**
-R: Adicione uma coluna "tags" no seu arquivo. Para uma tag use: `VIP`. Para múltiplas use aspas duplas: `"VIP,Quente,Cliente"`.
+R: Adicione uma coluna "tags" ou "tag" no seu arquivo. Para uma tag use: `VIP`. Para múltiplas use aspas duplas: `"VIP,Quente,Cliente"`.
+
+**P: Posso usar "tag" (singular) ou precisa ser "tags" (plural)?**
+R: Ambos funcionam! O sistema aceita "tag", "tags", "etiqueta" ou "etiquetas".
 
 **P: As tags precisam existir antes da importação?**
 R: Não! O sistema cria automaticamente tags novas com cor padrão azul. Se a tag já existir, ela será reutilizada.

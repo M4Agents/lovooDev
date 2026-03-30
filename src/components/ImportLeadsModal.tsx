@@ -107,6 +107,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     }
   };
 
+  // Detectar separador automaticamente (vírgula ou ponto e vírgula)
+  const detectSeparator = (line: string): string => {
+    const commaCount = (line.match(/,/g) || []).length;
+    const semicolonCount = (line.match(/;/g) || []).length;
+    return semicolonCount > commaCount ? ';' : ',';
+  };
+
   const parseFile = async (file: File) => {
     setLoading(true);
     try {
@@ -118,12 +125,16 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
         return;
       }
 
+      // Detectar separador automaticamente
+      const separator = detectSeparator(lines[0]);
+      console.log('📊 Separador detectado:', separator === ',' ? 'vírgula (,)' : 'ponto e vírgula (;)');
+
       // Parse CSV
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const headers = lines[0].split(separator).map(h => h.trim().replace(/"/g, ''));
       const data: ParsedLead[] = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const values = lines[i].split(separator).map(v => v.trim().replace(/"/g, ''));
         const lead: ParsedLead = { name: '' };
 
         headers.forEach((header, index) => {
@@ -226,8 +237,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
       return;
     }
 
+    // Detectar separador automaticamente
+    const separator = detectSeparator(lines[0]);
+    console.log('📊 Separador detectado:', separator === ',' ? 'vírgula (,)' : 'ponto e vírgula (;)');
+
     // Parse CSV (mesma lógica da função parseFile)
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const headers = lines[0].split(separator).map(h => h.trim().replace(/"/g, ''));
     setRawHeaders(headers);
     
     // Detectar colunas não mapeadas
@@ -271,7 +286,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
     const data: ParsedLead[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const values = lines[i].split(separator).map(v => v.trim().replace(/"/g, ''));
       const lead: ParsedLead = { name: '' };
 
       headers.forEach((header, index) => {
@@ -279,7 +294,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
         
         // Mapear colunas comuns (mesma lógica existente)
         const lowerHeader = header.toLowerCase();
-        if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
+        if (lowerHeader === 'nome' || lowerHeader === 'name') {
           lead.name = value;
         } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
           lead.email = value;
@@ -291,8 +306,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.status = value;
         } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
           lead.interest = value;
-        } else if (lowerHeader.includes('tags') || lowerHeader.includes('etiquetas')) {
+        } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
           lead.tags = value;
+        } else if (lowerHeader === 'company_name' || lowerHeader.includes('empresa')) {
+          lead.company_name = value;
         } else {
           lead[header] = value;
         }
@@ -383,6 +400,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   };
 
   const downloadTemplate = () => {
+    // Template usa vírgula (,) mas sistema aceita ponto e vírgula (;) automaticamente
     const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,1,2,3\n' +
                       'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
                       'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
