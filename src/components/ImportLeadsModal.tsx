@@ -1,6 +1,7 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { funnelApi } from '../services/funnelApi';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import {
@@ -175,6 +176,38 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const [customFields, setCustomFields] = useState<any[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+
+  // Estados para seleção de funil/etapa
+  const [selectedFunnelId, setSelectedFunnelId] = useState<string>('');
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+  const [availableFunnels, setAvailableFunnels] = useState<any[]>([]);
+  const [availableStages, setAvailableStages] = useState<any[]>([]);
+  const [loadingFunnels, setLoadingFunnels] = useState(false);
+
+  // Carregar funis ao entrar na prévia
+  useEffect(() => {
+    if (step === 'preview' && company?.id && availableFunnels.length === 0) {
+      setLoadingFunnels(true);
+      funnelApi.getFunnels(company.id)
+        .then(funnels => setAvailableFunnels(funnels.filter((f: any) => f.is_active)))
+        .catch(err => console.error('Error loading funnels for import:', err))
+        .finally(() => setLoadingFunnels(false));
+    }
+  }, [step, company?.id]);
+
+  const handleFunnelChange = async (funnelId: string) => {
+    setSelectedFunnelId(funnelId);
+    setSelectedStageId('');
+    setAvailableStages([]);
+    if (funnelId) {
+      try {
+        const stages = await funnelApi.getStages(funnelId);
+        setAvailableStages(stages.filter((s: any) => s.stage_type === 'active'));
+      } catch (err) {
+        console.error('Error loading stages:', err);
+      }
+    }
+  };
 
   // Calcular campos personalizados mapeados para o preview
   const mappedCustomFields = useMemo(() => {
@@ -496,7 +529,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
       for (let i = 0; i < leadsToImport.length; i += batchSize) {
         const batch = leadsToImport.slice(i, i + batchSize);
         try {
-          await api.importLeads(company.id, batch);
+          await api.importLeads(company.id, batch, selectedFunnelId || undefined, selectedStageId || undefined);
           successCount += batch.length;
         } catch (error) {
           console.error('Error importing batch:', error);
@@ -828,6 +861,47 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                   </p>
                 </div>
               )}
+
+              {/* Destino no Funil (Opcional) */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Destino no Funil de Vendas (Opcional)
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Se não selecionar, os leads serão adicionados ao funil e etapa padrão automaticamente.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Funil de Vendas</label>
+                    <select
+                      value={selectedFunnelId}
+                      onChange={(e) => handleFunnelChange(e.target.value)}
+                      disabled={loadingFunnels}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      <option value="">Padrão (automático)</option>
+                      {availableFunnels.map((f: any) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Etapa Inicial</label>
+                    <select
+                      value={selectedStageId}
+                      onChange={(e) => setSelectedStageId(e.target.value)}
+                      disabled={!selectedFunnelId || availableStages.length === 0}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      <option value="">Padrão (primeira etapa)</option>
+                      {availableStages.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               {/* Botões de ação */}
               <div className="flex justify-between pt-4 border-t">

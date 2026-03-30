@@ -1317,7 +1317,7 @@ export const api = {
     company_email?: string;
     company_site?: string;
     [key: string]: any;
-  }>) {
+  }>, funnelId?: string, stageId?: string) {
     console.log('API: importLeads called with:', { companyId, count: leads.length });
     
     try {
@@ -1480,6 +1480,33 @@ export const api = {
             } catch (tagError) {
               console.error('Error processing tags:', tagError);
               // Continuar mesmo se houver erro nas tags
+            }
+          }
+
+          // Se funil específico foi selecionado, mover lead para o funil/etapa desejado
+          if (funnelId && lead?.id) {
+            let targetStageId = stageId;
+            if (!targetStageId) {
+              const { data: firstStage } = await supabase
+                .from('funnel_stages')
+                .select('id')
+                .eq('funnel_id', funnelId)
+                .eq('stage_type', 'active')
+                .order('position', { ascending: true })
+                .limit(1)
+                .single();
+              if (firstStage) targetStageId = firstStage.id;
+            }
+            if (targetStageId) {
+              await supabase
+                .from('lead_funnel_positions')
+                .upsert({
+                  lead_id: lead.id,
+                  funnel_id: funnelId,
+                  stage_id: targetStageId,
+                  position_in_stage: 0,
+                  entered_stage_at: new Date().toISOString()
+                }, { onConflict: 'lead_id,funnel_id' });
             }
           }
 
