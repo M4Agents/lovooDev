@@ -383,9 +383,11 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   };
 
   const downloadTemplate = () => {
-    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,tags,1,2,3\n' +
-                      'João Silva,joao@email.com,5511999999999,landing_page,novo,Desenvolvimento de site,Empresa ABC,"VIP,Quente",Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
-                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,Cliente,Outro Valor 1,Outro Valor 2,Outro Valor 3';
+    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,1,2,3\n' +
+                      'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
+                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
+                      'Pedro Costa,pedro@email.com,5511987654321,indicacao,novo,Consultoria,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo",,,';
+
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
