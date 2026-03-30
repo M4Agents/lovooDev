@@ -1498,15 +1498,27 @@ export const api = {
               if (firstStage) targetStageId = firstStage.id;
             }
             if (targetStageId) {
-              await supabase
-                .from('lead_funnel_positions')
-                .upsert({
-                  lead_id: lead.id,
-                  funnel_id: funnelId,
-                  stage_id: targetStageId,
-                  position_in_stage: 0,
-                  entered_stage_at: new Date().toISOString()
-                }, { onConflict: 'lead_id,funnel_id' });
+              // Buscar opportunity criada pelo trigger para este lead
+              const { data: opportunity } = await supabase
+                .from('opportunities')
+                .select('id')
+                .eq('lead_id', lead.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (opportunity) {
+                // Atualizar opportunity_funnel_positions com funil/etapa selecionados
+                await supabase
+                  .from('opportunity_funnel_positions')
+                  .update({
+                    funnel_id: funnelId,
+                    stage_id: targetStageId,
+                    entered_stage_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('opportunity_id', opportunity.id);
+              }
             }
           }
 
