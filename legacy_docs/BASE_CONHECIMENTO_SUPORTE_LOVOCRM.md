@@ -1,9 +1,9 @@
 # BASE DE CONHECIMENTO - SUPORTE LOVOCRM
 ## Guia Completo para Suporte ao Usuário
 
-**Versão:** 2.1.0 - Sistema Completo com WhatsApp Integration V2.1.0  
+**Versão:** 2.2.0 - Sistema Completo com Importação de Tags e Campos de Empresa  
 **Data:** Março 2026  
-**Última Atualização:** 03/03/2026 - 12:05 - WHATSAPP INTEGRATION V2.1.0 IMPLEMENTADO  
+**Última Atualização:** 30/03/2026 - 11:16 - IMPORTAÇÃO DE TAGS E CAMPOS DE EMPRESA IMPLEMENTADOS  
 
 ---
 
@@ -215,11 +215,12 @@ Clique em qualquer lead para ver:
 - **Adicionar observações**: Notas internas
 - **Exportar dados**: Para outros sistemas
 
-### 📥 IMPORTAÇÃO DE LEADS V2.0 ✨ NOVO!
+### 📥 IMPORTAÇÃO DE LEADS V2.2 ✨ ATUALIZADO!
 
 #### Formatos Suportados
 - **CSV**: Arquivos de texto (.csv)
 - **Excel**: Planilhas (.xlsx e .xls)
+- **TXT**: Arquivos de texto simples
 - **Google Sheets**: Via link compartilhado público
 
 #### Como Importar
@@ -233,15 +234,86 @@ Clique em qualquer lead para ver:
 
 #### Mapeamento Inteligente
 - **Campos padrão**: Nome, email, telefone são reconhecidos automaticamente
-- **Campos da empresa**: CNPJ, razão social, endereço também
+- **Campos da empresa**: company_name, company_cnpj, company_cidade, company_estado, etc.
+- **Tags**: Coluna "tags" para categorizar leads automaticamente
 - **Campos personalizados**: Sistema pergunta como mapear campos novos
 - **Flexibilidade total**: Qualquer planilha funciona!
+
+#### 🏷️ IMPORTAÇÃO DE TAGS (NOVO V2.2!)
+
+##### Como Usar Tags na Importação
+**Uma Tag:**
+```csv
+Nome,Email,Telefone,tags
+João Silva,joao@email.com,5511999999999,VIP
+```
+
+**Múltiplas Tags:**
+```csv
+Nome,Email,Telefone,tags
+Maria Santos,maria@email.com,5521988888888,"VIP,Quente,Prioridade"
+```
+
+**⚠️ IMPORTANTE:** Use **aspas duplas** `"` quando houver múltiplas tags separadas por vírgula.
+
+##### Funcionalidades das Tags
+- ✅ **Reconhecimento Automático**: Coluna "tags" ou "etiquetas" é detectada
+- ✅ **Case-Insensitive**: VIP = vip = Vip (sistema reconhece qualquer formatação)
+- ✅ **Criação Automática**: Tags novas são criadas automaticamente com cor padrão azul
+- ✅ **Reutilização**: Tags existentes são reutilizadas automaticamente
+- ✅ **Múltiplas Tags**: Separe por vírgula: "VIP,Quente,Cliente"
+- ✅ **Sem Tags**: Deixe campo vazio se não quiser tags
+
+##### Exemplos de Uso de Tags
+```csv
+Nome,Email,Telefone,tags
+João Silva,joao@email.com,5511999999999,VIP
+Maria Santos,maria@email.com,5521988888888,"VIP,Quente"
+Pedro Costa,pedro@email.com,5511987654321,"Prioridade,Ativo,Cliente"
+Ana Oliveira,ana@email.com,5521987654321,
+```
+
+#### 🏢 CAMPOS DE EMPRESA (NOVO V2.2!)
+
+##### Campos Disponíveis
+- **company_name**: Nome da empresa
+- **company_cnpj**: CNPJ da empresa
+- **company_razao_social**: Razão social
+- **company_nome_fantasia**: Nome fantasia
+- **company_cep**: CEP
+- **company_cidade**: Cidade
+- **company_estado**: Estado (UF)
+- **company_endereco**: Endereço completo
+- **company_telefone**: Telefone da empresa
+- **company_email**: Email corporativo
+- **company_site**: Website da empresa
+
+##### Exemplo Completo com Empresa e Tags
+```csv
+Nome,Email,Telefone,company_name,company_cnpj,company_cidade,company_estado,tags
+João Silva,joao@email.com,5511999999999,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente"
+Maria Santos,maria@email.com,5521988888888,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente
+Pedro Costa,pedro@email.com,5511987654321,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo"
+```
+
+#### 📋 TEMPLATE CSV ATUALIZADO
+
+**Baixe o Template:**
+1. Clique em "Importar Leads"
+2. Clique em "Baixar Template CSV"
+3. Arquivo inclui exemplos de:
+   - Campos padrão (nome, email, telefone)
+   - Campos de empresa (company_name, company_cnpj, etc.)
+   - Tags (uma e múltiplas)
+   - Campos personalizados (1, 2, 3)
 
 #### Dicas para Importação
 - **Primeira linha**: Use como cabeçalho com nomes dos campos
 - **Dados limpos**: Remova linhas vazias
-- **Formatos**: Telefones podem ter qualquer formato
+- **Telefones**: Use formato 55XXXXXXXXXXX (com código do país 55)
 - **Emails**: Devem estar no formato correto (nome@dominio.com)
+- **Tags múltiplas**: Use aspas duplas e separe por vírgula
+- **Campos vazios**: Deixe em branco se não tiver o dado
 
 ### 📤 EXPORTAÇÃO DE LEADS V2.0 ✨ NOVO!
 
@@ -841,12 +913,12 @@ O Sistema de Duplicatas é uma funcionalidade automática que identifica leads d
 #### "Posso ignorar uma duplicata?"
 **Sim!** Se você determinar que não são realmente duplicatas, pode clicar em "Ignorar" e elas não aparecerão mais na lista.
 
-### 🆕 PERGUNTAS FREQUENTES - SISTEMA V2.0
+### 🆕 PERGUNTAS FREQUENTES - SISTEMA V2.2
 
 #### Sobre Importação de Leads
 
 **P: Que formatos posso importar?**
-R: CSV, Excel (.xlsx e .xls) e Google Sheets via link compartilhado público.
+R: CSV, Excel (.xlsx e .xls), TXT e Google Sheets via link compartilhado público.
 
 **P: E se minha planilha tiver campos diferentes?**
 R: Perfeito! O sistema detecta campos novos e permite mapear para campos personalizados.
@@ -856,6 +928,51 @@ R: Até 1.000 leads por importação para garantir boa performance.
 
 **P: O que acontece se houver dados duplicados na importação?**
 R: O sistema detecta e oferece opções de mesclagem automática.
+
+#### Sobre Tags na Importação (NOVO V2.2!)
+
+**P: Como adiciono tags na importação?**
+R: Adicione uma coluna "tags" no seu arquivo. Para uma tag use: `VIP`. Para múltiplas use aspas duplas: `"VIP,Quente,Cliente"`.
+
+**P: As tags precisam existir antes da importação?**
+R: Não! O sistema cria automaticamente tags novas com cor padrão azul. Se a tag já existir, ela será reutilizada.
+
+**P: O sistema diferencia maiúsculas e minúsculas nas tags?**
+R: Não! O sistema reconhece "VIP", "vip", "Vip" como a mesma tag. Se a tag já existir, mantém a formatação original.
+
+**P: Posso importar leads sem tags?**
+R: Sim! Deixe a coluna "tags" vazia ou não inclua a coluna. O lead será importado normalmente.
+
+**P: Quantas tags posso adicionar por lead?**
+R: Não há limite! Separe por vírgula: `"Tag1,Tag2,Tag3,Tag4"`.
+
+**P: E se eu esquecer as aspas duplas nas múltiplas tags?**
+R: O sistema pode interpretar incorretamente. Sempre use aspas duplas quando houver vírgulas: `"VIP,Quente"`.
+
+#### Sobre Campos de Empresa (NOVO V2.2!)
+
+**P: Quais campos de empresa posso importar?**
+R: company_name, company_cnpj, company_razao_social, company_nome_fantasia, company_cep, company_cidade, company_estado, company_endereco, company_telefone, company_email, company_site.
+
+**P: Preciso preencher todos os campos de empresa?**
+R: Não! Preencha apenas os que você tiver. Campos vazios são aceitos normalmente.
+
+**P: O formato do CNPJ importa?**
+R: Não! Pode ser com ou sem pontuação: `12.345.678/0001-90` ou `12345678000190`.
+
+**P: Como sei quais campos usar?**
+R: Baixe o template CSV no modal de importação. Ele tem exemplos de todos os campos disponíveis.
+
+#### Sobre Telefones na Importação
+
+**P: Qual o formato correto de telefone?**
+R: Use o formato internacional brasileiro: `55XXXXXXXXXXX` (55 + DDD + número). Exemplo: `5511999999999`.
+
+**P: Posso usar telefone com formatação?**
+R: Sim, mas recomendamos o formato limpo. O sistema aceita `(11) 99999-9999` mas o ideal é `5511999999999`.
+
+**P: Preciso do código do país (+55)?**
+R: Use apenas `55` sem o `+`. Exemplo: `5511999999999` (não `+5511999999999`).
 
 #### Sobre Exportação de Leads
 
