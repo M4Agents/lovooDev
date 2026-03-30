@@ -176,7 +176,7 @@ export const flowTemplates: FlowTemplate[] = [
           label: 'Criar Oportunidade',
           config: {
             actionType: 'create_opportunity',
-            title: 'Nova Oportunidade - {nome}'
+            title: '{nome}'
           }
         }
       },

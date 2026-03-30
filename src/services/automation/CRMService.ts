@@ -108,7 +108,7 @@ export class CRMService {
         lead_id: params.leadId,
         funnel_id: funnelId,
         stage_id: stageId,
-        title: params.title || `Oportunidade - ${lead.name}`,
+        title: params.title || lead.name,
         value: params.value || 0,
         probability: params.probability || 50,
         status: 'open',
