@@ -271,6 +271,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.status = value;
           } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
             lead.interest = value;
+          } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
+            lead.tags = value;
+          } else if (lowerHeader === 'company_name' || lowerHeader.includes('empresa')) {
+            lead.company_name = value;
           } else {
             lead[header] = value;
           }
