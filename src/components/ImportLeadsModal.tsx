@@ -782,128 +782,64 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           {/* Step Preview */}
           {step === 'preview' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Prévia da Importação
-                  </h3>
-                  <p className="text-gray-500">
-                    {parsedData.length} leads encontrados no arquivo "{file?.name}"
-                  </p>
-                </div>
-                <button
-                  onClick={() => setStep('upload')}
-                  className="text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  Alterar arquivo
-                </button>
-              </div>
-
-              {/* Preview Table */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto max-h-96">
-                  <table className="w-full min-w-max">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          <User className="w-4 h-4 inline mr-1" />
-                          Nome
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          <Mail className="w-4 h-4 inline mr-1" />
-                          Email
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          <Phone className="w-4 h-4 inline mr-1" />
-                          Telefone
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          <Building className="w-4 h-4 inline mr-1" />
-                          Origem
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          <Tag className="w-4 h-4 inline mr-1" />
-                          Status
-                        </th>
-                        {/* Campos personalizados mapeados */}
-                        {mappedCustomFields.map(field => (
-                          <th key={field.id} className="px-4 py-3 text-left text-xs font-medium text-purple-600 uppercase min-w-[150px]">
-                            <Settings className="w-4 h-4 inline mr-1" />
-                            {field.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {parsedData.slice(0, 10).map((lead, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {lead.name}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {lead.email || '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {lead.phone || '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {lead.origin || 'import'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {lead.status || 'novo'}
-                          </td>
-                          {/* Valores dos campos personalizados mapeados */}
-                          {mappedCustomFields.map(field => (
-                            <td key={field.id} className="px-4 py-3 text-sm font-medium text-purple-700">
-                              {lead[field.column] || '-'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {parsedData.length > 10 && (
-                  <div className="bg-gray-50 px-4 py-3 text-sm text-gray-500 text-center">
-                    Mostrando 10 de {parsedData.length} leads. Todos serão importados.
-                  </div>
-                )}
-              </div>
-
-              {/* Dica para scroll horizontal se há muitos campos */}
-              {mappedCustomFields.length > 0 && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <div className="flex items-start gap-3">
-                    <Settings className="w-5 h-5 text-purple-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-purple-900 mb-1">
-                        Campos Personalizados Mapeados
-                      </h4>
-                      <p className="text-sm text-purple-700">
-                        {mappedCustomFields.length} campo(s) personalizado(s) detectado(s) e mapeado(s). 
-                        {mappedCustomFields.length > 2 && ' Use scroll horizontal para ver todos os campos.'}
-                      </p>
+              {/* Header com estatísticas */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-blue-900 font-semibold mb-1">
+                      <CheckCircle className="w-5 h-5" />
+                      {parsedData.length} leads encontrados no arquivo "{file?.name}"
                     </div>
+                    <p className="text-sm text-blue-700">
+                      👁️ Exibindo os primeiros {Math.min(3, parsedData.length)} leads para validação
+                    </p>
                   </div>
+                  <button
+                    onClick={() => setStep('upload')}
+                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm font-medium"
+                  >
+                    Alterar arquivo
+                  </button>
+                </div>
+              </div>
+
+              {/* Cards de Preview */}
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                {parsedData.slice(0, 3).map((lead, index) => (
+                  <LeadPreviewCard
+                    key={index}
+                    lead={lead}
+                    index={index}
+                    total={parsedData.length}
+                    mappedCustomFields={mappedCustomFields}
+                  />
+                ))}
+              </div>
+
+              {/* Informação sobre leads restantes */}
+              {parsedData.length > 3 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-gray-600">
+                    ℹ️ Os demais <strong>{parsedData.length - 3} leads</strong> seguem o mesmo formato e serão importados
+                  </p>
                 </div>
               )}
 
-              {/* Import Button */}
-              <div className="flex items-center justify-end space-x-3">
+              {/* Botões de ação */}
+              <div className="flex justify-between pt-4 border-t">
                 <button
-                  onClick={() => setStep('upload')}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  onClick={() => setStep(unmappedColumns.length > 0 ? 'mapping' : 'upload')}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Voltar
                 </button>
                 <button
                   onClick={handleImport}
-                  disabled={loading || parsedData.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   <Upload className="w-4 h-4" />
-                  Importar {parsedData.length} Leads
+                  {loading ? 'Importando...' : `Importar ${parsedData.length} Leads`}
                 </button>
               </div>
             </div>
