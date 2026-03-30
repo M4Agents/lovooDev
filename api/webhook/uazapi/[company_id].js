@@ -454,12 +454,18 @@ async function processMessage(payload) {
       }
     }
     
-    // 🎯 CRIAR LEAD + OPORTUNIDADE AUTOMATICAMENTE APENAS PARA MENSAGENS INBOUND
+    // 🎯 CRIAR LEAD + OPORTUNIDADE AUTOMATICAMENTE (INBOUND + OUTBOUND DEVICE)
     let leadId = null;
-    if (direction === 'inbound') {
+    if (direction === 'inbound' || source === 'device') {
       try {
         console.log('🔍 CRIANDO/VERIFICANDO LEAD VIA create_lead_from_whatsapp_safe...');
-        console.log('📍 Empresa:', company.id, '-', company.name);
+        console.log('📍 Empresa:', company.id, '-', company.name, '| Direção:', direction, '| Source:', source);
+
+        // Para outbound device: usar payload.chat?.name (nome do contato na agenda)
+        // Para inbound: usar senderName (pushName do WhatsApp)
+        const contactName = source === 'device' && direction === 'outbound'
+          ? (payload.chat?.name || `Contato ${phoneNumber}`)
+          : (senderName || 'Lead WhatsApp');
 
         // create_lead_from_whatsapp_safe: cria lead + oportunidade + posição no funil padrão
         // Se lead já existe, retorna o existente sem duplicar
@@ -467,7 +473,7 @@ async function processMessage(payload) {
           .rpc('create_lead_from_whatsapp_safe', {
             p_company_id: company.id,
             p_phone: phoneNumber,
-            p_name: senderName || 'Lead WhatsApp'
+            p_name: contactName
           });
 
         if (leadError) {
