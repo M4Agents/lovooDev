@@ -34,6 +34,7 @@ import {
   Tag
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
+import { Avatar } from '../components/Avatar';
 
 interface Lead {
   id: number;
@@ -806,24 +807,11 @@ export const Leads: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
-                        {(() => {
-                          const phoneKey = lead.phone ? lead.phone.replace(/\D/g, '') : '';
-                          const photoUrl = phoneKey ? leadPhotos[phoneKey] : undefined;
-                          if (photoUrl) {
-                            return (
-                              <img
-                                src={photoUrl}
-                                alt={lead.name}
-                                className="h-10 w-10 rounded-full object-cover"
-                              />
-                            );
-                          }
-                          return (
-                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                              <User className="w-5 h-5 text-blue-600" />
-                            </div>
-                          );
-                        })()}
+                        <Avatar
+                          src={lead.phone ? leadPhotos[lead.phone.replace(/\D/g, '')] : undefined}
+                          alt={lead.name}
+                          size="md"
+                        />
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{lead.name}</div>
