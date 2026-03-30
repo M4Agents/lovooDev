@@ -1379,6 +1379,14 @@ export const api = {
             company_id: companyId
           };
 
+          // DIAGNÓSTICO TEMPORÁRIO
+          console.log('🔍 [importLeads] leadData recebido:', {
+            company_name: leadData?.company_name,
+            tags: leadData?.tags,
+            name: leadData?.name
+          });
+          console.log('🔍 [importLeads] standardFields.company_name:', standardFields.company_name);
+
           // Criar lead com campos padrão
           const { data: lead, error: leadError } = await supabase
             .from('leads')
