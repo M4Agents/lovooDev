@@ -16,7 +16,8 @@ import {
   Tag,
   Settings,
   Link,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 
 interface ImportLeadsModalProps {
@@ -500,7 +501,19 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           phone: lead.phone || undefined,
           origin: lead.origin || 'import',
           status: lead.status || 'novo',
-          interest: lead.interest || undefined
+          interest: lead.interest || undefined,
+          tags: lead.tags || undefined,
+          company_name: lead.company_name || undefined,
+          company_cnpj: lead.company_cnpj || undefined,
+          company_razao_social: lead.company_razao_social || undefined,
+          company_nome_fantasia: lead.company_nome_fantasia || undefined,
+          company_cep: lead.company_cep || undefined,
+          company_cidade: lead.company_cidade || undefined,
+          company_estado: lead.company_estado || undefined,
+          company_endereco: lead.company_endereco || undefined,
+          company_telefone: lead.company_telefone || undefined,
+          company_email: lead.company_email || undefined,
+          company_site: lead.company_site || undefined,
         };
 
         // Adicionar campos personalizados mapeados
