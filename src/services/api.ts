@@ -1157,6 +1157,7 @@ export const api = {
     
     try {
       if (softDelete) {
+        // 1. Soft delete no lead
         const { data, error } = await supabase
           .from('leads')
           .update({ deleted_at: new Date().toISOString() })
@@ -1165,6 +1166,20 @@ export const api = {
           .single();
 
         if (error) throw error;
+
+        // 2. Remover do funil (evita oportunidades órfãs no kanban)
+        await supabase
+          .from('opportunity_funnel_positions')
+          .delete()
+          .eq('lead_id', leadId);
+
+        // 3. Marcar oportunidades como perdidas (preserva histórico)
+        await supabase
+          .from('opportunities')
+          .update({ status: 'lost' })
+          .eq('lead_id', leadId)
+          .eq('status', 'open');
+
         return data;
       } else {
         const { error } = await supabase
