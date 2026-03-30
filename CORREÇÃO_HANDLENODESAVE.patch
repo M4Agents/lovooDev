@@ -1,0 +1,67 @@
+--- INSTRUÇÕES PARA APLICAR CORREÇÃO ---
+
+O arquivo FlowEditor.tsx precisa ser editado MANUALMENTE no VS Code.
+
+LOCALIZAÇÃO: src/pages/FlowEditor.tsx
+FUNÇÃO: handleNodeConfigSave (linha 255)
+
+SUBSTITUIR TODO O CONTEÚDO DA FUNÇÃO (linhas 255-354) POR:
+
+```typescript
+  const handleNodeConfigSave = async (nodeId: string, config: any, currentNodes?: Node[]) => {
+    if (!flow || !id) return
+
+    console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
+      nodeId,
+      configRecebido: config,
+      selectedNodeId: selectedNode?.id,
+      flowNodesCount: flow.nodes.length
+    })
+
+    // ✅ FIX: Atualizar nodes via handleSave para disparar loadFlow
+    const updatedNodes = (flow.nodes as Node[]).map((node: any) => {
+      if (node.id === nodeId) {
+        const mergedConfig = {
+          ...node.data.config,
+          ...config
+        }
+        
+        console.log('💾 [handleNodeConfigSave] Atualizando config:', {
+          nodeId,
+          configFinal: mergedConfig,
+          hasActionType: !!mergedConfig.actionType
+        })
+        
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            config: mergedConfig
+          }
+        }
+      }
+      return node
+    })
+
+    // ✅ Chamar handleSave que valida, salva e recarrega via loadFlow
+    await handleSave(updatedNodes, flow.edges as Edge[])
+    
+    // ✅ Atualizar selectedNode com config atualizado
+    const updatedSelectedNode = updatedNodes.find(n => n.id === nodeId)
+    if (updatedSelectedNode && selectedNode?.id === nodeId) {
+      console.log('🔄 [handleNodeConfigSave] Atualizando selectedNode:', {
+        nodeId: updatedSelectedNode.id,
+        hasActionType: !!updatedSelectedNode.data.config.actionType
+      })
+      setSelectedNode(updatedSelectedNode)
+    }
+    
+    console.log('✅ [handleNodeConfigSave] FIM')
+  }
+```
+
+DEPOIS DE EDITAR:
+1. Salve o arquivo (Cmd+S)
+2. Execute: git add src/pages/FlowEditor.tsx
+3. Execute: git commit -m "fix: Correção handleNodeConfigSave"
+4. Execute: git push origin main
