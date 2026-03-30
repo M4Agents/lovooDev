@@ -6,17 +6,15 @@ import * as XLSX from 'xlsx';
 import {
   X,
   Upload,
-  Download,
-  CheckCircle,
-  AlertCircle,
+  FileUp,
   User,
   Mail,
   Phone,
   Building,
   Tag,
-  FileUp,
+  Settings,
   Link,
-  Settings
+  CheckCircle
 } from 'lucide-react';
 
 interface ImportLeadsModalProps {
@@ -32,8 +30,126 @@ interface ParsedLead {
   origin?: string;
   status?: string;
   interest?: string;
+  company_name?: string;
+  company_cnpj?: string;
+  company_razao_social?: string;
+  company_nome_fantasia?: string;
+  company_cep?: string;
+  company_cidade?: string;
+  company_estado?: string;
+  company_endereco?: string;
+  company_telefone?: string;
+  company_email?: string;
+  company_site?: string;
+  tags?: string;
   [key: string]: any;
 }
+
+interface LeadPreviewCardProps {
+  lead: ParsedLead;
+  index: number;
+  total: number;
+  mappedCustomFields: Array<{id: string, label: string, column: string}>;
+}
+
+const LeadPreviewCard = ({ lead, index, total, mappedCustomFields }: LeadPreviewCardProps) => {
+  const companyFields = {
+    name: lead.company_name,
+    cnpj: lead.company_cnpj,
+    razao_social: lead.company_razao_social,
+    nome_fantasia: lead.company_nome_fantasia,
+    cep: lead.company_cep,
+    cidade: lead.company_cidade,
+    estado: lead.company_estado,
+    endereco: lead.company_endereco,
+    telefone: lead.company_telefone,
+    email: lead.company_email,
+    site: lead.company_site
+  };
+
+  const hasCompanyData = Object.values(companyFields).some(v => v);
+  const tags = lead.tags ? lead.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm">
+      <div className="flex items-center justify-between border-b pb-3">
+        <h4 className="text-lg font-semibold text-gray-900">
+          📋 Lead {index + 1} de {total}
+        </h4>
+      </div>
+
+      <div>
+        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <User className="w-4 h-4" />
+          DADOS BÁSICOS
+        </h5>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><span className="text-gray-500">Nome:</span> <span className="font-medium text-gray-900">{lead.name}</span></div>
+          <div><span className="text-gray-500">Email:</span> <span className="font-medium text-gray-900">{lead.email || '-'}</span></div>
+          <div><span className="text-gray-500">Telefone:</span> <span className="font-medium text-gray-900">{lead.phone || '-'}</span></div>
+          <div><span className="text-gray-500">Origem:</span> <span className="font-medium text-gray-900">{lead.origin || 'import'}</span></div>
+          <div><span className="text-gray-500">Status:</span> <span className="font-medium text-gray-900">{lead.status || 'novo'}</span></div>
+          <div><span className="text-gray-500">Interesse:</span> <span className="font-medium text-gray-900">{lead.interest || '-'}</span></div>
+        </div>
+      </div>
+
+      {hasCompanyData && (
+        <div>
+          <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Building className="w-4 h-4" />
+            DADOS DA EMPRESA
+          </h5>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {companyFields.name && <div><span className="text-gray-500">Nome:</span> <span className="font-medium text-gray-900">{companyFields.name}</span></div>}
+            {companyFields.cnpj && <div><span className="text-gray-500">CNPJ:</span> <span className="font-medium text-gray-900">{companyFields.cnpj}</span></div>}
+            {companyFields.razao_social && <div><span className="text-gray-500">Razão Social:</span> <span className="font-medium text-gray-900">{companyFields.razao_social}</span></div>}
+            {companyFields.nome_fantasia && <div><span className="text-gray-500">Nome Fantasia:</span> <span className="font-medium text-gray-900">{companyFields.nome_fantasia}</span></div>}
+            {companyFields.cidade && <div><span className="text-gray-500">Cidade:</span> <span className="font-medium text-gray-900">{companyFields.cidade}</span></div>}
+            {companyFields.estado && <div><span className="text-gray-500">Estado:</span> <span className="font-medium text-gray-900">{companyFields.estado}</span></div>}
+            {companyFields.cep && <div><span className="text-gray-500">CEP:</span> <span className="font-medium text-gray-900">{companyFields.cep}</span></div>}
+            {companyFields.endereco && <div><span className="text-gray-500">Endereço:</span> <span className="font-medium text-gray-900">{companyFields.endereco}</span></div>}
+            {companyFields.telefone && <div><span className="text-gray-500">Telefone:</span> <span className="font-medium text-gray-900">{companyFields.telefone}</span></div>}
+            {companyFields.email && <div><span className="text-gray-500">Email:</span> <span className="font-medium text-gray-900">{companyFields.email}</span></div>}
+            {companyFields.site && <div><span className="text-gray-500">Site:</span> <span className="font-medium text-gray-900">{companyFields.site}</span></div>}
+          </div>
+        </div>
+      )}
+
+      {tags.length > 0 && (
+        <div>
+          <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Tag className="w-4 h-4" />
+            TAGS ({tags.length})
+          </h5>
+          <div className="flex flex-wrap gap-2">
+            {tags.map((tag, i) => (
+              <span key={i} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mappedCustomFields.length > 0 && (
+        <div>
+          <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            CAMPOS PERSONALIZADOS
+          </h5>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {mappedCustomFields.map(field => (
+              <div key={field.id}>
+                <span className="text-gray-500">{field.label}:</span>{' '}
+                <span className="font-medium text-purple-700">{lead[field.column] || '-'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   isOpen,
