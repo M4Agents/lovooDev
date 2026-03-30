@@ -35,6 +35,11 @@ export const Avatar: React.FC<AvatarProps> = ({
   const [imageError, setImageError] = React.useState(false);
   const [imageLoading, setImageLoading] = React.useState(true);
 
+  React.useEffect(() => {
+    setImageError(false);
+    setImageLoading(!!src);
+  }, [src]);
+
   const handleImageLoad = () => {
     setImageLoading(false);
     setImageError(false);
@@ -48,12 +53,15 @@ export const Avatar: React.FC<AvatarProps> = ({
   const showFallback = !src || imageError;
 
   return (
-    <div className={`
-      relative rounded-full overflow-hidden flex items-center justify-center
-      ${sizeClasses[size]}
-      ${showFallback ? 'bg-blue-100' : 'bg-gray-200'}
-      ${className}
-    `}>
+    <div
+      aria-label={alt}
+      className={`
+        relative rounded-full overflow-hidden flex items-center justify-center
+        ${sizeClasses[size]}
+        ${showFallback ? 'bg-blue-100' : 'bg-gray-200'}
+        ${className}
+      `}
+    >
       {!showFallback && (
         <>
           {imageLoading && (
@@ -61,7 +69,7 @@ export const Avatar: React.FC<AvatarProps> = ({
           )}
           <img
             src={src}
-            alt={alt}
+            alt=""
             className="w-full h-full object-cover"
             onLoad={handleImageLoad}
             onError={handleImageError}
