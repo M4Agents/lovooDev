@@ -4,6 +4,8 @@ import ChatArea from '../WhatsAppChat/ChatArea/ChatArea'
 import LeadPanel from '../WhatsAppChat/LeadPanel/LeadPanel'
 import { chatApi } from '../../services/chat/chatApi'
 import { supabase } from '../../lib/supabase'
+import { api } from '../../services/api'
+import { crmService } from '../../services/automation/CRMService'
 
 interface ConnectedInstance {
   id: string
@@ -103,6 +105,55 @@ export default function ChatModalSimple({
     }
   }
 
+  const ensureLeadAndOpportunity = async (conversationId: string) => {
+    try {
+      // 1. Verificar se já existe lead com este telefone na empresa
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('phone', leadPhone)
+        .limit(1)
+        .maybeSingle()
+
+      let leadId: number
+
+      if (existingLead) {
+        leadId = existingLead.id
+      } else {
+        // 2. Criar lead automaticamente
+        const newLead = await api.createLead({
+          company_id: companyId,
+          name: leadName || leadPhone,
+          phone: leadPhone,
+          origin: 'whatsapp',
+        })
+        leadId = newLead.id
+      }
+
+      // 3. Vincular lead_id à conversa
+      await supabase
+        .from('chat_conversations')
+        .update({ lead_id: leadId })
+        .eq('id', conversationId)
+
+      // 4. Criar oportunidade no funil padrão (apenas se não existir)
+      const { data: existingOpp } = await supabase
+        .from('opportunities')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('lead_id', leadId)
+        .limit(1)
+        .maybeSingle()
+
+      if (!existingOpp) {
+        await crmService.createOpportunity({ leadId, companyId })
+      }
+    } catch (err) {
+      console.error('Erro ao criar lead/oportunidade automaticamente:', err)
+    }
+  }
+
   const handleStartConversation = async () => {
     if (!selectedInstanceId || !leadPhone) return
 
@@ -114,6 +165,12 @@ export default function ChatModalSimple({
         leadPhone,
         leadName || undefined
       )
+
+      // Criar lead + oportunidade automaticamente se contato for novo
+      if (!conversation.lead_id) {
+        await ensureLeadAndOpportunity(conversation.id)
+      }
+
       setConversationId(conversation.id)
       setNoConversation(false)
     } catch (err) {

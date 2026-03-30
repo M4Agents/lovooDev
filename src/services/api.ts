@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { triggerManager } from './automation/TriggerManager';
 
 // Process tracking queue
 export const processTrackingQueue = async () => {
@@ -922,6 +923,12 @@ export const api = {
       }
 
       console.log('API: Lead created successfully:', lead);
+
+      // Disparar trigger lead.created de forma não-bloqueante
+      triggerManager.onLeadCreated(lead.company_id, lead.id, lead).catch(err => {
+        console.error('Error firing lead.created trigger:', err);
+      });
+
       return lead;
     } catch (error) {
       console.error('Error in createLead:', error);
