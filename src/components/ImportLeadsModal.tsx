@@ -293,7 +293,29 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           
           // Mapear colunas comuns
           const lowerHeader = header.toLowerCase();
-          if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
+          if (lowerHeader === 'company_name' || (lowerHeader.includes('empresa') && !lowerHeader.includes('email'))) {
+            lead.company_name = value;
+          } else if (lowerHeader === 'company_cnpj' || lowerHeader.includes('cnpj')) {
+            lead.company_cnpj = value;
+          } else if (lowerHeader === 'company_razao_social') {
+            lead.company_razao_social = value;
+          } else if (lowerHeader === 'company_nome_fantasia') {
+            lead.company_nome_fantasia = value;
+          } else if (lowerHeader === 'company_cep') {
+            lead.company_cep = value;
+          } else if (lowerHeader === 'company_cidade') {
+            lead.company_cidade = value;
+          } else if (lowerHeader === 'company_estado') {
+            lead.company_estado = value;
+          } else if (lowerHeader === 'company_endereco') {
+            lead.company_endereco = value;
+          } else if (lowerHeader === 'company_telefone') {
+            lead.company_telefone = value;
+          } else if (lowerHeader === 'company_email') {
+            lead.company_email = value;
+          } else if (lowerHeader === 'company_site') {
+            lead.company_site = value;
+          } else if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
             lead.name = value;
           } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
             lead.email = value;
@@ -307,8 +329,6 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.interest = value;
           } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
             lead.tags = value;
-          } else if (lowerHeader === 'company_name' || lowerHeader.includes('empresa')) {
-            lead.company_name = value;
           } else {
             lead[header] = value;
           }
@@ -449,7 +469,29 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
         
         // Mapear colunas comuns (mesma lógica existente)
         const lowerHeader = header.toLowerCase();
-        if (lowerHeader === 'nome' || lowerHeader === 'name') {
+        if (lowerHeader === 'company_name' || (lowerHeader.includes('empresa') && !lowerHeader.includes('email'))) {
+          lead.company_name = value;
+        } else if (lowerHeader === 'company_cnpj' || lowerHeader.includes('cnpj')) {
+          lead.company_cnpj = value;
+        } else if (lowerHeader === 'company_razao_social') {
+          lead.company_razao_social = value;
+        } else if (lowerHeader === 'company_nome_fantasia') {
+          lead.company_nome_fantasia = value;
+        } else if (lowerHeader === 'company_cep') {
+          lead.company_cep = value;
+        } else if (lowerHeader === 'company_cidade') {
+          lead.company_cidade = value;
+        } else if (lowerHeader === 'company_estado') {
+          lead.company_estado = value;
+        } else if (lowerHeader === 'company_endereco') {
+          lead.company_endereco = value;
+        } else if (lowerHeader === 'company_telefone') {
+          lead.company_telefone = value;
+        } else if (lowerHeader === 'company_email') {
+          lead.company_email = value;
+        } else if (lowerHeader === 'company_site') {
+          lead.company_site = value;
+        } else if (lowerHeader === 'nome' || lowerHeader === 'name') {
           lead.name = value;
         } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
           lead.email = value;
@@ -463,8 +505,6 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.interest = value;
         } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
           lead.tags = value;
-        } else if (lowerHeader === 'company_name' || lowerHeader.includes('empresa')) {
-          lead.company_name = value;
         } else {
           lead[header] = value;
         }
