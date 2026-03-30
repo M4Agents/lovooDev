@@ -291,6 +291,8 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.status = value;
         } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
           lead.interest = value;
+        } else if (lowerHeader.includes('tags') || lowerHeader.includes('etiquetas')) {
+          lead.tags = value;
         } else {
           lead[header] = value;
         }
@@ -381,9 +383,9 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   };
 
   const downloadTemplate = () => {
-    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,1,2,3\n' +
-                      'João Silva,joao@email.com,(11) 99999-9999,landing_page,novo,Desenvolvimento de site,Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
-                      'Maria Santos,maria@email.com,(11) 88888-8888,whatsapp,em_qualificacao,Marketing digital,Outro Valor 1,Outro Valor 2,Outro Valor 3';
+    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,tags,1,2,3\n' +
+                      'João Silva,joao@email.com,5511999999999,landing_page,novo,Desenvolvimento de site,Empresa ABC,"VIP,Quente",Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
+                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,Cliente,Outro Valor 1,Outro Valor 2,Outro Valor 3';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

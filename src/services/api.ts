@@ -1351,6 +1351,7 @@ export const api = {
             company_name, company_cnpj, company_razao_social, company_nome_fantasia,
             company_cep, company_cidade, company_estado, company_endereco,
             company_telefone, company_email, company_site,
+            tags,
             ...otherFields 
           } = leadData;
 
@@ -1411,6 +1412,74 @@ export const api = {
               console.error('Error inserting custom field values:', customError);
             } else {
               console.log(`Inserted ${customValues.length} custom field values for lead ${lead.id}`);
+            }
+          }
+
+          // Processar tags se fornecidas
+          if (tags && typeof tags === 'string' && tags.trim() !== '') {
+            try {
+              const tagNames = tags.split(',').map(t => t.trim()).filter(Boolean);
+              console.log(`Processing ${tagNames.length} tags for lead ${lead.id}:`, tagNames);
+
+              for (const tagName of tagNames) {
+                // Buscar tag existente (case-insensitive)
+                const { data: existingTag } = await supabase
+                  .from('lead_tags')
+                  .select('id')
+                  .eq('company_id', companyId)
+                  .ilike('name', tagName)
+                  .eq('is_active', true)
+                  .maybeSingle();
+
+                let tagId: string;
+
+                if (existingTag) {
+                  // Tag já existe, usar ID existente
+                  tagId = existingTag.id;
+                  console.log(`Tag "${tagName}" já existe, usando ID: ${tagId}`);
+                } else {
+                  // Criar nova tag
+                  const { data: newTag, error: tagError } = await supabase
+                    .from('lead_tags')
+                    .insert({
+                      company_id: companyId,
+                      name: tagName,
+                      color: '#3B82F6', // Cor padrão azul
+                      is_active: true
+                    })
+                    .select('id')
+                    .single();
+
+                  if (tagError) {
+                    console.error(`Error creating tag "${tagName}":`, tagError);
+                    continue;
+                  }
+
+                  tagId = newTag.id;
+                  console.log(`Tag "${tagName}" criada com ID: ${tagId}`);
+                }
+
+                // Associar tag ao lead (ignorar se já existe)
+                const { error: assignError } = await supabase
+                  .from('lead_tag_assignments')
+                  .insert({
+                    lead_id: lead.id,
+                    tag_id: tagId
+                  })
+                  .select();
+
+                if (assignError) {
+                  // Ignorar erro de duplicata (constraint violation)
+                  if (assignError.code !== '23505') {
+                    console.error(`Error assigning tag "${tagName}" to lead:`, assignError);
+                  }
+                } else {
+                  console.log(`Tag "${tagName}" associada ao lead ${lead.id}`);
+                }
+              }
+            } catch (tagError) {
+              console.error('Error processing tags:', tagError);
+              // Continuar mesmo se houver erro nas tags
             }
           }
 
