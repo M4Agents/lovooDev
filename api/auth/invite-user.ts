@@ -1,8 +1,9 @@
 // =====================================================
-// API ROUTE SERVER-SIDE - CONVIDAR USUÁRIO
+// API ROUTE SERVER-SIDE - CRIAR USUÁRIO E GERAR LINK
 // =====================================================
-// Esta API route usa Service Role Key de forma SEGURA (server-side only)
-// Não expõe a key ao navegador
+// Fluxo interno do CRM: cria conta + gera link de acesso
+// 100% independente de SMTP — sem envio de email
+// Admin recebe o link para compartilhar manualmente (WhatsApp, etc.)
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -19,7 +20,6 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 });
 
 export default async function handler(req: any, res: any) {
-  // Apenas POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -27,59 +27,68 @@ export default async function handler(req: any, res: any) {
   try {
     const { email, redirectTo, data } = req.body;
 
-    console.log('[DEBUG invite-user] body recebido:', {
-      email,
-      hasRedirectTo: !!redirectTo,
-      hasData: !!data,
-      dataKeys: data ? Object.keys(data) : []
-    });
-
     if (!email) {
       return res.status(400).json({ error: 'Email é obrigatório' });
     }
 
-    // Verificar se Service Role Key está configurada
     if (!serviceRoleKey) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Service Role Key não configurada no servidor',
-        fallback: true 
+        fallback: true
       });
     }
 
-    // Convidar usuário via Admin API
-    const { data: userData, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    // PASSO 1: Criar conta do usuário (sem envio de email)
+    const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      {
-        redirectTo: redirectTo || 'https://app.lovoocrm.com/accept-invite',
-        data: data || {}
-      }
-    );
+      email_confirm: false,
+      user_metadata: data || {}
+    });
 
-    if (error) {
-      console.error('[DEBUG invite-user] Supabase error bruto:', {
-        message: error.message,
-        status: error.status,
-        name: error.name,
-        code: (error as any).code,
-        details: (error as any).__isAuthError ? 'AuthApiError' : typeof error
-      });
-      const errorMessage = error.message || `${error.name} (status: ${error.status})` || 'Erro desconhecido ao convidar usuário';
-      return res.status(400).json({ 
-        error: errorMessage,
-        fallback: errorMessage.includes('403') || errorMessage.includes('Unauthorized')
+    if (createError) {
+      console.error('invite-user: createUser error:', createError.message);
+      return res.status(400).json({
+        error: createError.message,
+        fallback: false
       });
     }
 
-    return res.status(200).json({ 
-      success: true, 
-      user: userData.user 
+    // PASSO 2: Gerar link de acesso (sem enviar email)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        redirectTo: redirectTo || 'https://app.lovoocrm.com/accept-invite'
+      }
+    });
+
+    // TODO [FASE FUTURA]: envio de email opcional
+    // Se SMTP estiver configurado, enviar email com o inviteLink aqui.
+    // O fluxo principal NÃO deve depender deste passo.
+    // Implementar apenas após estabilizar o fluxo atual e configurar provedor (ex: Resend).
+
+    if (linkError) {
+      // Usuário criado com sucesso, mas geração do link falhou.
+      // Admin pode usar /api/auth/generate-magic-link como fallback manual.
+      console.warn('invite-user: generateLink failed after createUser:', linkError.message);
+      return res.status(200).json({
+        success: true,
+        user: userData.user,
+        inviteLink: null
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user: userData.user,
+      inviteLink: linkData.properties.action_link
     });
 
   } catch (error: any) {
-    console.error('API Route: Unexpected error:', error);
-    return res.status(500).json({ 
+    console.error('invite-user: Unexpected error:', error);
+    return res.status(500).json({
       error: error.message || 'Erro desconhecido',
-      fallback: true 
+      fallback: true
     });
   }
 }

@@ -388,11 +388,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           }
         });
 
-        console.log('[DEBUG userApi] inviteResult:', {
-          success: inviteResult.success,
-          error: inviteResult.error,
-          hasUser: !!inviteResult.user
-        });
+        const inviteLink = inviteResult.inviteLink ?? null;
 
         if (inviteResult.success && inviteResult.user) {
           // Se conseguiu criar usuário real, usar o ID real
@@ -401,12 +397,14 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
             isRealUser = true;
             inviteData = inviteResult.user.app_metadata;
           } else {
-            // Convite simulado - usar user_id atual temporariamente (como empresas)
             finalUserId = currentUser.id;
             isRealUser = false;
             inviteData = inviteResult.user.app_metadata;
           }
-          
+
+          // Armazenar link para retornar ao frontend
+          (request as any)._inviteLinkGenerated = inviteLink;
+
         } else {
           throw new Error(inviteResult.error || 'Falha ao enviar convite');
         }
@@ -511,6 +509,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       },
       _isRealUser: isRealUser,
       _email: request.email,
+      _inviteLink: (request as any)._inviteLinkGenerated ?? null,
       // Incluir dados do convite se disponível
       ...(request.sendInvite && inviteData && {
         app_metadata: inviteData

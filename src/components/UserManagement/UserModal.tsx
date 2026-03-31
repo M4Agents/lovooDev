@@ -417,33 +417,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // SEMPRE mostrar modal de sucesso quando usuário é criado com convite
         if (formData.sendInvite) {
           const mode = result._isRealUser ? 'real' : 'simulated';
-          let inviteUrl = (result as any).app_metadata?.invite_url;
-          
-          // Se não tem URL do convite, gerar uma para teste
+
+          // Priorizar link real gerado pelo backend (createUser + generateLink)
+          let inviteUrl = (result as any)._inviteLink || (result as any).app_metadata?.invite_url;
+
+          // Fallback: gerar link manual se o backend não retornou link
           if (!inviteUrl) {
-            // Buscar email real do usuário criado/reativado
-            let emailForLink = formData.email;
-            if (result && (result as any).user_id) {
-              try {
-                const { data: emailResult, error } = await supabase.rpc('get_user_email_safe', {
-                  p_user_id: (result as any).user_id
-                });
-                
-                if (!error && emailResult) {
-                  emailForLink = emailResult;
-                }
-              } catch (e) {
-              }
-            }
-            
-            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(emailForLink)}&type=invite&email=${encodeURIComponent(emailForLink)}`;
+            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
           }
-          
+
           setInviteData({
             email: formData.email,
             inviteUrl: inviteUrl,
             mode: mode === 'real' ? 'real' : 'simulated',
-            message: mode === 'real' ? 'Convite enviado por email via Supabase Auth' : 'Configure Admin API para envio real de emails'
+            message: mode === 'real' ? 'Link de acesso gerado — compartilhe com o usuário' : 'Configure Admin API para criação real de usuários'
           });
           
           setShowInviteSuccess(true);

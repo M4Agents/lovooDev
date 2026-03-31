@@ -33,6 +33,7 @@ export interface AuthUserResponse {
   user: any;
   success: boolean;
   error?: string;
+  inviteLink?: string | null;
 }
 
 // =====================================================
@@ -68,14 +69,14 @@ export const createAuthUser = async (request: CreateAuthUserRequest): Promise<Au
 };
 
 /**
- * Convida usuário por email (MÉTODO PRINCIPAL)
- * COM FALLBACK SEGURO E SIMULAÇÃO DE CONVITE
+ * Cria usuário no CRM via API route server-side (MÉTODO PRINCIPAL)
+ * Fluxo: createUser + generateLink — sem envio de email, sem SMTP
+ * Retorna inviteLink para o admin compartilhar manualmente
  */
 export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserResponse> => {
   try {
-    console.log('AuthAdmin: Inviting user:', request.email);
+    console.log('AuthAdmin: Creating user:', request.email);
 
-    // Chamar API route server-side (Service Role Key segura)
     const response = await fetch('/api/auth/invite-user', {
       method: 'POST',
       headers: {
@@ -90,34 +91,29 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
 
     const result = await response.json();
 
-    console.log('[DEBUG authAdmin] resposta da API:', {
-      status: response.status,
-      ok: response.ok,
-      body: JSON.stringify(result)
-    });
-
     if (!response.ok || result.error) {
       console.error('AuthAdmin: API route failed:', result.error);
-      
+
       return {
         user: null,
         success: false,
-        error: result.error || 'Erro ao enviar convite. Verifique se Service Role Key está configurada no Vercel.'
+        error: result.error || 'Erro ao criar usuário. Verifique se Service Role Key está configurada no Vercel.'
       };
     }
 
-    console.log('AuthAdmin: User invited successfully via API route');
+    console.log('AuthAdmin: User created successfully via API route');
     return {
       user: result.user,
-      success: true
+      success: true,
+      inviteLink: result.inviteLink ?? null
     };
   } catch (error) {
     console.error('AuthAdmin: Error in inviteUser:', error);
-    
+
     return {
       user: null,
       success: false,
-      error: error instanceof Error ? error.message : 'Erro ao enviar convite'
+      error: error instanceof Error ? error.message : 'Erro ao criar usuário'
     };
   }
 };
