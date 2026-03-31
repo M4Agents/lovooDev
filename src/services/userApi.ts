@@ -388,6 +388,12 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           }
         });
 
+        console.log('[DEBUG userApi] inviteResult:', {
+          success: inviteResult.success,
+          error: inviteResult.error,
+          hasUser: !!inviteResult.user
+        });
+
         if (inviteResult.success && inviteResult.user) {
           // Se conseguiu criar usuário real, usar o ID real
           if (inviteResult.user.id && !inviteResult.user.id.startsWith('invite_') && !inviteResult.user.id.startsWith('fallback_')) {

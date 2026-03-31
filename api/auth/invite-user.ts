@@ -27,6 +27,13 @@ export default async function handler(req: any, res: any) {
   try {
     const { email, redirectTo, data } = req.body;
 
+    console.log('[DEBUG invite-user] body recebido:', {
+      email,
+      hasRedirectTo: !!redirectTo,
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : []
+    });
+
     if (!email) {
       return res.status(400).json({ error: 'Email é obrigatório' });
     }
@@ -49,7 +56,13 @@ export default async function handler(req: any, res: any) {
     );
 
     if (error) {
-      console.error('API Route: Error inviting user:', error);
+      console.error('[DEBUG invite-user] Supabase error bruto:', {
+        message: error.message,
+        status: error.status,
+        name: error.name,
+        code: (error as any).code,
+        details: (error as any).__isAuthError ? 'AuthApiError' : typeof error
+      });
       const errorMessage = error.message || `${error.name} (status: ${error.status})` || 'Erro desconhecido ao convidar usuário';
       return res.status(400).json({ 
         error: errorMessage,

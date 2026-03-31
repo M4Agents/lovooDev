@@ -90,6 +90,12 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
 
     const result = await response.json();
 
+    console.log('[DEBUG authAdmin] resposta da API:', {
+      status: response.status,
+      ok: response.ok,
+      body: JSON.stringify(result)
+    });
+
     if (!response.ok || result.error) {
       console.error('AuthAdmin: API route failed:', result.error);
       
