@@ -135,9 +135,16 @@ export const AcceptInvite: React.FC = () => {
         company_name: searchParams.get('company') || ''
       });
     } else {
-      // Sem hash do Supabase nem token válido — redirecionar para login
-      console.log('AcceptInvite: No valid token, redirecting to login');
-      navigate('/login');
+      // Sem hash nem token — verificar se há sessão ativa antes de redirecionar
+      // (o SDK pode ter limpado o hash mas a sessão já está estabelecida)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+          console.log('AcceptInvite: No valid token or session, redirecting to login');
+          navigate('/');
+        } else {
+          console.log('AcceptInvite: Session active (magic link processed), staying on page');
+        }
+      });
     }
   }, [searchParams, navigate]);
 
