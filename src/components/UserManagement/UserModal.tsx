@@ -416,7 +416,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // SEMPRE mostrar modal de sucesso quando usuário é criado com convite
         if (formData.sendInvite) {
-          const mode = result._isRealUser ? 'real' : 'simulated';
+          const mode = (result as any)._inviteLink ? 'real' : 'simulated';
 
           // Priorizar link real gerado pelo backend (createUser + generateLink)
           let inviteUrl = (result as any)._inviteLink || (result as any).app_metadata?.invite_url;

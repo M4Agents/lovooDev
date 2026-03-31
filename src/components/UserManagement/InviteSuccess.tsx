@@ -50,10 +50,10 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {inviteData.mode === 'real' ? 'Convite Enviado!' : 'Convite Criado!'}
+                {inviteData.mode === 'real' ? 'Usuário Criado!' : 'Convite Criado!'}
               </h2>
               <p className="text-sm text-slate-600">
-                {inviteData.mode === 'real' ? 'Email enviado com sucesso' : 'Link de convite gerado'}
+                {inviteData.mode === 'real' ? 'Link de acesso gerado' : 'Link de convite gerado'}
               </p>
             </div>
           </div>
@@ -83,11 +83,43 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-medium text-green-900 mb-1">Convite Real Enviado</h4>
-                  <p className="text-sm text-green-700">
-                    O usuário receberá um email com instruções para ativar a conta.
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-green-900 mb-1">Link de Acesso Gerado</h4>
+                  <p className="text-sm text-green-700 mb-3">
+                    Compartilhe este link com o usuário para que ele ative a conta.
                   </p>
+
+                  {inviteData.inviteUrl && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-green-900">Link de acesso:</p>
+                      <div className="bg-white border border-green-200 rounded p-2">
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs text-green-800 flex-1 break-all">
+                            {inviteData.inviteUrl}
+                          </code>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={handleCopyLink}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Copiar link"
+                            >
+                              <Copy className="w-4 h-4 text-green-600" />
+                            </button>
+                            <button
+                              onClick={handleOpenLink}
+                              className="p-1 hover:bg-green-100 rounded transition-colors"
+                              title="Abrir link"
+                            >
+                              <ExternalLink className="w-4 h-4 text-green-600" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {copied && (
+                        <p className="text-xs text-green-600">Link copiado!</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -144,8 +176,8 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             <ul className="text-sm text-slate-600 space-y-1">
               {inviteData.mode === 'real' ? (
                 <>
-                  <li>• O usuário receberá o email de convite</li>
-                  <li>• Ele deve clicar no link para ativar a conta</li>
+                  <li>• Copie o link acima e envie para o usuário (WhatsApp, email, etc.)</li>
+                  <li>• O usuário deve clicar no link para ativar a conta</li>
                   <li>• Após ativar, poderá fazer login normalmente</li>
                 </>
               ) : (
