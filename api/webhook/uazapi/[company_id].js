@@ -374,66 +374,50 @@ async function processMessage(payload) {
     const isNewContact = webhookResult?.lead_created || false;
 
     // =====================================================
-    // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
+    // SINCRONIZAÇÃO DE FOTO VIA imagePreview DO PAYLOAD
     // =====================================================
-    // Verificar se precisa sincronizar foto (otimização de performance)
+    // Usa a foto que já vem direto no webhook (sem chamada extra à API Uazapi)
     try {
-      console.error('🔍 DEBUG SYNC - Iniciando verificação de sincronização de foto');
-      console.error('🔍 DEBUG SYNC - Parâmetros recebidos:', {
-        hasBaseUrl: !!payload.BaseUrl,
-        baseUrl: payload.BaseUrl?.substring(0, 50) + '...',
-        hasToken: !!payload.token,
-        tokenLength: payload.token?.length,
-        instanceName,
-        phoneNumber,
-        companyId: company.id,
-        hasImagePreview: !!payload.chat?.imagePreview,
-        imagePreviewUrl: payload.chat?.imagePreview?.substring(0, 80) + '...',
-        isNewContact: isNewContact || 'undefined'
-      });
-      
-      const needsSync = await shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact);
-      console.error('🔍 DEBUG SYNC - Resultado shouldSyncPhoto:', needsSync);
-      
-      if (needsSync) {
-        console.error('📸 SYNC INICIADO - Sincronizando foto do contato:', phoneNumber);
-        console.error('📸 SYNC PARAMS:', {
-          baseUrl: payload.BaseUrl,
-          hasToken: !!payload.token,
-          instanceName,
-          companyId: company.id,
-          phoneNumber
-        });
-        
-        // Sincronizar foto de perfil do contato via Uazapi em background
-        syncContactProfilePictureFromUazapi({
+      const imagePreview = payload.chat?.imagePreview;
+      const isWhatsAppCdnUrl = imagePreview && (
+        imagePreview.includes('pps.whatsapp.net') ||
+        imagePreview.includes('mmg.whatsapp.net')
+      );
+
+      if (isWhatsAppCdnUrl) {
+        console.log('📸 imagePreview detectado — baixando para Storage:', phoneNumber);
+        // Não bloqueia — executa em background
+        downloadAndStoreContactAvatar({
           supabase,
-          baseUrl: payload.BaseUrl,
-          token: instance.provider_token || payload.token,
-          instanceName,
+          profileUrl: imagePreview,
           companyId: company.id,
           phoneNumber,
+        }).then(async (stableUrl) => {
+          const finalUrl = stableUrl || imagePreview;
+          const { error: photoUpdateError } = await supabase
+            .from('chat_contacts')
+            .update({
+              profile_picture_url: finalUrl,
+              photo_updated_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('company_id', company.id)
+            .eq('phone_number', phoneNumber);
+          if (photoUpdateError) {
+            console.error('❌ Erro ao atualizar foto do contato:', photoUpdateError.message);
+          } else {
+            const type = stableUrl ? 'Storage permanente' : 'URL fresca WhatsApp';
+            console.log(`📸 ✅ Foto salva (${type}):`, phoneNumber);
+          }
         }).catch((syncError) => {
-          console.error('❌ ERRO COMPLETO NA SINCRONIZAÇÃO DE FOTO:', {
-            error: syncError.message,
-            stack: syncError.stack,
-            phoneNumber,
-            instanceName,
-            hasBaseUrl: !!payload.BaseUrl,
-            hasToken: !!payload.token
-          });
+          console.error('❌ Erro no download/upload de foto:', syncError.message);
         });
       } else {
-        console.error('⏭️ SYNC PULADO - Sincronização não necessária:', phoneNumber);
+        console.log('📸 Sem imagePreview no payload — foto não atualizada:', phoneNumber);
       }
     } catch (syncInitError) {
-      console.error('❌ ERRO AO VERIFICAR/INICIAR SYNC:', {
-        error: syncInitError.message,
-        stack: syncInitError.stack,
-        phoneNumber,
-        companyId: company.id
-      });
-      // Em caso de erro na verificação, não sincronizar (sistema continua funcionando)
+      console.error('❌ ERRO AO SINCRONIZAR FOTO:', syncInitError.message);
+      // Não interrompe o fluxo principal
     }
     
     console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
