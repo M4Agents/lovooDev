@@ -406,7 +406,8 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
         }
       } catch (authError) {
         console.error('UserAPI: Failed to create user:', authError);
-        throw new Error('Não foi possível criar usuário. Verifique se Service Role Key está configurada no Vercel.');
+        const originalMessage = authError instanceof Error ? authError.message : String(authError);
+        throw new Error(originalMessage || 'Não foi possível criar usuário. Verifique os logs do servidor.');
       }
     } else {
       // Não solicitou convite - usar user_id atual (como empresas)
