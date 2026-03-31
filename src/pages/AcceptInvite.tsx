@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, CheckCircle, AlertCircle, Mail, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, AlertCircle, Lock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const AcceptInvite: React.FC = () => {
@@ -263,15 +263,17 @@ export const AcceptInvite: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-lg max-w-md w-full overflow-hidden">
         {/* Header */}
-        <div className="bg-blue-600 text-white p-6 text-center">
-          <div className="p-3 bg-blue-500 rounded-full w-16 h-16 mx-auto mb-4">
-            <Mail className="w-10 h-10 mx-auto mt-1" />
-          </div>
-          <h1 className="text-2xl font-bold mb-2">Ativar Conta</h1>
-          <p className="text-blue-100">
+        <div className="bg-white px-8 pt-8 pb-4 text-center border-b border-slate-100">
+          <img
+            src="/images/emails/logo_fundo_branco-300x128.png"
+            alt="Lovoo CRM"
+            className="h-14 mx-auto mb-4 object-contain"
+          />
+          <h1 className="text-xl font-semibold text-slate-800 mb-1">Ativar Conta</h1>
+          <p className="text-sm text-slate-500">
             Complete o cadastro para acessar o sistema
           </p>
         </div>
