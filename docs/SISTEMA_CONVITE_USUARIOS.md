@@ -1,7 +1,7 @@
 # Sistema de Convite de Usuários - Documentação Técnica
 
-**Data:** 26/03/2026  
-**Versão:** 2.0  
+**Data:** 31/03/2026  
+**Versão:** 3.0  
 **Status:** ✅ Implementado e Funcional
 
 ---
@@ -11,28 +11,43 @@
 1. [Visão Geral](#visão-geral)
 2. [Arquitetura](#arquitetura)
 3. [Fluxo Principal](#fluxo-principal)
-4. [Fluxos de Fallback](#fluxos-de-fallback)
-5. [Hierarquia de Empresas](#hierarquia-de-empresas)
-6. [API Routes](#api-routes)
-7. [Frontend](#frontend)
-8. [Templates de Email](#templates-de-email)
-9. [Segurança](#segurança)
-10. [Troubleshooting](#troubleshooting)
+4. [Fluxo de Ativação de Conta](#fluxo-de-ativação-de-conta)
+5. [Reenvio de Convite](#reenvio-de-convite)
+6. [Hierarquia de Empresas](#hierarquia-de-empresas)
+7. [API Routes](#api-routes)
+8. [Frontend](#frontend)
+9. [Segurança e RLS](#segurança-e-rls)
+10. [RPC Chat](#rpc-chat)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## 🎯 Visão Geral
 
 ### Objetivo
-Sistema completo de convite e ativação de usuários usando **tokens oficiais do Supabase**, com suporte a **hierarquia de empresas** (parent/client) e **fallbacks seguros** quando email não chega.
+Sistema completo de convite e ativação de usuários usando **magic links oficiais do Supabase**, totalmente **independente de SMTP**, com suporte a **hierarquia de empresas** (parent/client) e **isolamento multi-tenant via RLS**.
 
-### Principais Mudanças (v2.0)
-- ❌ **Removido:** Tokens customizados (base64)
-- ❌ **Removido:** Convites simulados
-- ✅ **Adicionado:** Tokens oficiais Supabase
-- ✅ **Adicionado:** API routes server-side
-- ✅ **Adicionado:** Fallbacks seguros (magic link, confirmação manual)
-- ✅ **Adicionado:** Suporte a hierarquia de empresas
+### Mudanças por Versão
+
+#### v3.0 (31/03/2026)
+- ❌ **Removido:** Dependência de SMTP para criação de usuários
+- ❌ **Removido:** Redirecionamento para dashboard após ativação
+- ❌ **Removido:** Tokens fake no reenvio de convite (`btoa`)
+- ❌ **Removido:** `localStorage.invited_company_id` (desnecessário)
+- ❌ **Removido:** `/accept-invite` dentro de `PublicRoute`
+- ✅ **Adicionado:** `createUser` + `generateLink(magiclink)` — sem SMTP
+- ✅ **Adicionado:** Magic link retornado ao frontend para envio manual
+- ✅ **Adicionado:** Rota `/accept-invite` aberta (sem guard de autenticação)
+- ✅ **Adicionado:** `onAuthStateChange` para capturar sessão do magic link
+- ✅ **Adicionado:** `signOut()` após ativação → redireciona para login
+- ✅ **Adicionado:** `InviteLink.tsx` chama API real para gerar magic link
+- ✅ **Adicionado:** Policies RLS com funções `SECURITY DEFINER` para membros
+- ✅ **Adicionado:** Acesso de membros a funil, chat, instâncias WhatsApp
+
+#### v2.0 (26/03/2026)
+- Tokens oficiais Supabase substituindo tokens customizados (base64)
+- API routes server-side para criação de usuários
+- Suporte a hierarquia de empresas (parent/client)
 
 ---
 
@@ -42,28 +57,28 @@ Sistema completo de convite e ativação de usuários usando **tokens oficiais d
 
 ```
 Frontend (React)
-├── UserModal.tsx              # Criação de usuários
-├── AcceptInvite.tsx           # Ativação de conta (simplificado)
-└── AuthContext.tsx            # Carrega empresa do convite
+├── UserModal.tsx              # Criação de usuários + exibe magic link
+├── InviteLink.tsx             # Reenvio de convite (chama API real)
+├── AcceptInvite.tsx           # Ativação de conta (rota aberta)
+└── App.tsx                    # Roteamento (/accept-invite sem PublicRoute)
 
 Backend (API Routes - Vercel)
-├── /api/auth/invite-user.ts           # Convite oficial
-├── /api/auth/generate-magic-link.ts   # Fallback 1
-└── /api/auth/confirm-user.ts          # Fallback 2
+├── /api/auth/invite-user.ts           # Cria usuário + gera magic link
+├── /api/auth/generate-magic-link.ts   # Gera magic link para usuário existente
+└── /api/auth/confirm-user.ts          # Confirmação manual (fallback)
 
 Services
-├── authAdmin.ts               # Lógica de convite
+├── authAdmin.ts               # Chamadas à API de convite
 └── userApi.ts                 # Criação de company_user
 
 Database (Supabase)
 ├── auth.users                 # Usuários Supabase
-├── company_users              # Vínculo empresa-usuário
-└── companies                  # Empresas (parent/client)
-
-Email (Supabase SMTP)
-├── Invite user template       # Email de convite
-├── Reset password template    # Email de reset
-└── Magic link template        # Email de magic link
+├── company_users              # Vínculo empresa-usuário (com RLS para membros)
+├── companies                  # Empresas (com RLS para membros)
+├── sales_funnels              # Funis (com RLS para membros)
+├── funnel_stages              # Etapas (com RLS para membros)
+├── whatsapp_life_instances    # Instâncias WhatsApp (com RLS para membros)
+└── opportunity_funnel_positions # Posições no funil (com RLS para membros)
 ```
 
 ---
@@ -74,182 +89,188 @@ Email (Supabase SMTP)
 
 **Arquivo:** `src/components/UserManagement/UserModal.tsx`
 
-```typescript
-// Admin preenche formulário
-const formData = {
-  email: 'usuario@exemplo.com',
-  role: 'admin',
-  company_id: 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413'
-};
+Admin preenche o formulário (email, role, empresa) e confirma.
 
-// Chama API
-await createCompanyUser(formData);
-```
+---
 
-### 2. Sistema Cria Usuário e Envia Convite
-
-**Arquivo:** `src/services/userApi.ts`
-
-```typescript
-// Cria vínculo em company_users
-const { data: companyUser } = await supabase.rpc('create_company_user_safe', {
-  p_company_id: company_id,
-  p_user_id: userId,
-  p_role: role,
-  p_permissions: permissions,
-  p_created_by: currentUser.id
-});
-
-// Envia convite via authAdmin
-const inviteResult = await inviteUser({
-  email: email,
-  redirectTo: 'https://app.lovoocrm.com/accept-invite',
-  data: {
-    role: role,
-    company_id: company_id,
-    company_name: company.name
-  }
-});
-```
-
-### 3. API Route Envia Email
+### 2. Backend Cria Usuário e Gera Magic Link
 
 **Arquivo:** `api/auth/invite-user.ts`
 
 ```typescript
-// Usa Service Role Key (segura, server-side)
+// Usa Service Role Key — nunca exposta ao frontend
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-// Convida usuário via Admin API
-const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+// Passo 1: Criar usuário (email já confirmado, independente de SMTP)
+const { data: { user }, error } = await supabaseAdmin.auth.admin.createUser({
   email,
-  {
-    redirectTo: 'https://app.lovoocrm.com/accept-invite',
-    data: {
-      role: role,
-      company_id: company_id,
-      company_name: company_name
-    }
+  email_confirm: true,  // ← confirma sem precisar de email
+  user_metadata: {
+    role,
+    company_id,
+    company_name,
+    email_verified: true
   }
-);
-```
+});
 
-### 4. Supabase Envia Email
-
-**Template:** Authentication → Email Templates → Invite user
-
-```html
-<a href="{{ .ConfirmationURL }}">Ativar minha conta</a>
-```
-
-**URL gerada:**
-```
-https://app.lovoocrm.com/accept-invite#access_token=eyJhbGc...&type=invite
-```
-
-### 5. Usuário Clica no Link
-
-**Supabase autentica automaticamente e redireciona para `/accept-invite`**
-
-### 6. AcceptInvite Processa
-
-**Arquivo:** `src/pages/AcceptInvite.tsx`
-
-```typescript
-// Verifica se usuário já está autenticado (veio do link do email)
-const { data: { session } } = await supabase.auth.getSession();
-
-if (session?.user) {
-  // Usuário autenticado - atualizar senha
-  await supabase.auth.updateUser({ password: formData.password });
-  
-  // Salvar company_id do convite
-  if (session.user.user_metadata?.company_id) {
-    localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
-  }
-  
-  // Redirecionar para dashboard
-  navigate('/dashboard');
-}
-```
-
-### 7. AuthContext Carrega Empresa Correta
-
-**Arquivo:** `src/contexts/AuthContext.tsx`
-
-```typescript
-// Verificar se há company_id do convite (primeira vez)
-const invitedCompanyId = localStorage.getItem('invited_company_id');
-
-if (invitedCompanyId && !company) {
-  const { data: invitedCompany } = await supabase
-    .from('companies')
-    .select('*')
-    .eq('id', invitedCompanyId)
-    .single();
-    
-  if (invitedCompany) {
-    setCompany(invitedCompany);
-    localStorage.removeItem('invited_company_id'); // Limpar após usar
-  }
-}
-```
-
----
-
-## 🔀 Fluxos de Fallback
-
-### Fallback 1: Magic Link Manual
-
-**Quando usar:** Email de convite não chegou
-
-**Arquivo:** `api/auth/generate-magic-link.ts`
-
-```typescript
-// Admin clica "Gerar Link Manual"
-const { data } = await supabaseAdmin.auth.admin.generateLink({
+// Passo 2: Gerar magic link para ativação
+const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
   type: 'magiclink',
-  email: email,
+  email,
   options: {
     redirectTo: 'https://app.lovoocrm.com/accept-invite'
   }
 });
 
-// Retorna link oficial do Supabase
-return { magicLink: data.properties.action_link };
+// Retorna o link para o frontend exibir ao admin
+return res.status(200).json({
+  success: true,
+  user: resolvedUser,
+  inviteLink: linkData.properties.action_link,
+  isExistingUser: userAlreadyExists
+});
 ```
 
-**Fluxo:**
-1. Admin gera link manual
-2. Copia link gerado
-3. Envia para usuário via WhatsApp/Telegram
-4. Usuário clica e ativa conta
-
-**Validade:** 1 hora
+> **Usuário já existe:** Se o email já está cadastrado, o sistema confirma o email (`updateUserById`) e gera um novo magic link para o usuário existente, sem criar duplicata.
 
 ---
 
-### Fallback 2: Confirmação Manual
+### 3. Admin Recebe e Compartilha o Link
 
-**Quando usar:** Email não chega e não é possível enviar link manual
+O frontend exibe o magic link gerado. O admin **copia e envia manualmente** para o usuário (WhatsApp, Telegram, email, etc.).
 
-**Arquivo:** `api/auth/confirm-user.ts`
+**Validade do link:** 1 hora.
 
-```typescript
-// Admin clica "Confirmar Manualmente"
-const { error } = await supabaseAdmin.auth.admin.updateUserById(
-  user.id,
-  { email_confirm: true }
-);
+---
 
-// Usuário confirmado - pode usar "Esqueci minha senha"
+### 4. Usuário Clica no Link
+
+URL gerada pelo Supabase:
+```
+https://etzdsywunlpbgxkphuil.supabase.co/auth/v1/verify?token=...&type=magiclink&redirect_to=https://app.lovoocrm.com/accept-invite
 ```
 
-**Fluxo:**
-1. Admin confirma usuário manualmente
-2. Usuário acessa tela de login
-3. Clica em "Esqueci minha senha"
-4. Define senha e faz login
+O Supabase autentica o usuário e redireciona para `/accept-invite#access_token=...`.
+
+---
+
+## 🔐 Fluxo de Ativação de Conta
+
+**Arquivo:** `src/pages/AcceptInvite.tsx`  
+**Rota:** `/accept-invite` — **aberta, sem guard de autenticação**
+
+### Por que a rota é aberta?
+
+O magic link autentica o usuário **antes** do React renderizar a rota. Se `/accept-invite` estivesse dentro de `PublicRoute`, o guard detectaria o usuário autenticado e redirecionaria para `/dashboard` — sem nunca mostrar a página de ativação.
+
+**Configuração em `App.tsx`:**
+```tsx
+// ✅ Correto — rota aberta (sem PublicRoute)
+<Route path="/accept-invite" element={<AcceptInvite />} />
+
+// ❌ Errado — redirecionaria para /dashboard antes de ativar
+<Route path="/accept-invite" element={<PublicRoute><AcceptInvite /></PublicRoute>} />
+```
+
+---
+
+### Processamento do Magic Link
+
+```typescript
+// 1. Listener detecta SIGNED_IN gerado pelo SDK ao processar o hash da URL
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session?.user) {
+    // Preenche email, role e empresa no formulário
+    setInviteInfo({
+      email: user.email,
+      role: user.user_metadata?.role,
+      company_name: user.user_metadata?.company_name
+    });
+  }
+});
+
+// 2. Detecta hash do Supabase para não redirecionar prematuramente
+const hasSupabaseHash = window.location.hash.includes('access_token=');
+if (hasSupabaseHash) {
+  // Aguarda onAuthStateChange — não redireciona para login
+  return;
+}
+
+// 3. Se não há hash nem token: verifica se há sessão ativa antes de redirecionar
+supabase.auth.getSession().then(({ data: { session } }) => {
+  if (!session) {
+    navigate('/'); // Sem sessão → tela de login
+  }
+  // Com sessão (magic link já processado) → permanece na página
+});
+```
+
+---
+
+### Definição de Senha e Ativação
+
+```typescript
+const handleAcceptInvite = async () => {
+  // Obtém sessão ativa (criada pelo magic link)
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    // Define a senha do usuário
+    await supabase.auth.updateUser({ password: formData.password });
+
+    // Encerra a sessão do magic link (temporária)
+    await supabase.auth.signOut();
+
+    // Redireciona para login — usuário faz login com email + senha
+    setSuccess(true);
+    setTimeout(() => navigate('/'), 2000);
+  }
+};
+```
+
+### Fluxo completo de ativação
+
+```
+1. Admin gera magic link → copia e envia para o usuário
+2. Usuário clica no link → Supabase autentica
+3. Página AcceptInvite renderiza → formulário de senha aparece
+4. Usuário define senha → updateUser({ password })
+5. signOut() → encerra sessão do magic link
+6. Redireciona para tela de login (/)'
+7. Usuário faz login com email + senha cadastrada
+8. Acessa o sistema normalmente
+```
+
+---
+
+## 🔁 Reenvio de Convite
+
+**Arquivo:** `src/components/UserManagement/InviteLink.tsx`
+
+Quando o admin precisa reenviar o link para um usuário que ainda não ativou a conta, o componente chama a API para gerar um **novo magic link real** (não mais um token fake).
+
+```typescript
+const generateMagicLink = async (email: string) => {
+  setLoadingLink(true);
+
+  const response = await fetch('/api/auth/generate-magic-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+
+  const result = await response.json();
+
+  if (!response.ok || result.error) {
+    setLinkError('Não foi possível gerar o link. Tente novamente.');
+    return;
+  }
+
+  setMagicLink(result.magicLink); // Link real do Supabase
+};
+```
+
+O modal exibe o link gerado e um botão **"Gerar novo"** para renovar quando o link expirar (1 hora).
 
 ---
 
@@ -266,34 +287,11 @@ const { error } = await supabaseAdmin.auth.admin.updateUserById(
 
 ```sql
 CONSTRAINT valid_role_for_company_type CHECK (
-  (role IN ('super_admin', 'admin', 'partner') AND 
+  (role IN ('super_admin', 'admin', 'partner') AND
    company_id IN (SELECT id FROM companies WHERE company_type = 'parent')) OR
-  (role IN ('admin', 'manager', 'seller') AND 
+  (role IN ('admin', 'manager', 'seller') AND
    company_id IN (SELECT id FROM companies WHERE company_type = 'client'))
 )
-```
-
-### Fluxo com Hierarquia
-
-```typescript
-// 1. Convite inclui company_id
-data: {
-  role: 'admin',
-  company_id: 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413', // M4 Digital
-  company_name: 'M4 Digital'
-}
-
-// 2. AcceptInvite salva company_id
-localStorage.setItem('invited_company_id', company_id);
-
-// 3. AuthContext carrega empresa específica
-const invitedCompany = await supabase
-  .from('companies')
-  .select('*')
-  .eq('id', invitedCompanyId)
-  .single();
-
-// 4. Usuário vê dashboard da empresa correta
 ```
 
 ### Parceiros
@@ -307,19 +305,13 @@ CREATE TABLE partner_company_links (
 );
 ```
 
-**Fluxo:**
-1. Parceiro criado na M4 Digital (parent) com role 'partner'
-2. Vinculado a empresas clientes via `partner_company_links`
-3. Pode acessar múltiplas empresas clientes
-
 ---
 
 ## 🔌 API Routes
 
 ### 1. Invite User
 
-**Arquivo:** `api/auth/invite-user.ts`
-
+**Arquivo:** `api/auth/invite-user.ts`  
 **Método:** POST
 
 **Body:**
@@ -339,61 +331,47 @@ CREATE TABLE partner_company_links (
 ```json
 {
   "success": true,
-  "user": {
-    "id": "uuid",
-    "email": "usuario@exemplo.com"
-  }
+  "user": { "id": "uuid", "email": "usuario@exemplo.com" },
+  "inviteLink": "https://etzdsywunlpbgxkphuil.supabase.co/auth/v1/verify?token=...",
+  "isExistingUser": false
 }
 ```
 
-**Segurança:**
-- Usa `SUPABASE_SERVICE_ROLE_KEY` (server-side)
-- Nunca exposta ao frontend
-- Configurada no Vercel
+> O `inviteLink` é exibido no frontend para o admin copiar e enviar ao usuário.
 
 ---
 
 ### 2. Generate Magic Link
 
-**Arquivo:** `api/auth/generate-magic-link.ts`
-
+**Arquivo:** `api/auth/generate-magic-link.ts`  
 **Método:** POST
 
 **Body:**
 ```json
-{
-  "email": "usuario@exemplo.com"
-}
+{ "email": "usuario@exemplo.com" }
 ```
 
 **Response:**
 ```json
 {
   "success": true,
-  "magicLink": "https://app.lovoocrm.com/accept-invite#access_token=...",
+  "magicLink": "https://etzdsywunlpbgxkphuil.supabase.co/auth/v1/verify?token=...",
   "expiresIn": 3600
 }
 ```
 
-**Uso:**
-```typescript
-const result = await generateMagicLink('usuario@exemplo.com');
-// Admin copia result.magicLink e envia via WhatsApp
-```
+**Uso:** Reenvio de convite (componente `InviteLink.tsx`).
 
 ---
 
 ### 3. Confirm User
 
-**Arquivo:** `api/auth/confirm-user.ts`
-
+**Arquivo:** `api/auth/confirm-user.ts`  
 **Método:** POST
 
 **Body:**
 ```json
-{
-  "email": "usuario@exemplo.com"
-}
+{ "email": "usuario@exemplo.com" }
 ```
 
 **Response:**
@@ -404,223 +382,309 @@ const result = await generateMagicLink('usuario@exemplo.com');
 }
 ```
 
+**Uso:** Fallback quando não é possível gerar magic link.
+
 ---
 
 ## 💻 Frontend
 
-### AcceptInvite (Simplificado)
+### AcceptInvite
 
-**Antes (v1.0):** 4 estratégias complexas  
-**Depois (v2.0):** 1 fluxo simples
+**Arquivo:** `src/pages/AcceptInvite.tsx`
 
-```typescript
-// FLUXO ÚNICO
-const handleAcceptInvite = async () => {
-  // 1. Verificar se já está autenticado
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (session?.user) {
-    // Autenticado - atualizar senha
-    await supabase.auth.updateUser({ password: formData.password });
-    
-    // Salvar company_id
-    if (session.user.user_metadata?.company_id) {
-      localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
-    }
-    
-    navigate('/dashboard');
-    return;
-  }
-  
-  // 2. Tentar login com senha
-  const { data } = await supabase.auth.signInWithPassword({
-    email: email,
-    password: formData.password
-  });
-  
-  if (data.user) {
-    // Salvar company_id
-    if (data.user.user_metadata?.company_id) {
-      localStorage.setItem('invited_company_id', data.user.user_metadata.company_id);
-    }
-    
-    navigate('/dashboard');
-  }
-};
-```
+- Header: fundo branco com logo oficial (`/images/emails/logo_fundo_branco-300x128.png`)
+- Formulário: nova senha + confirmação (mínimo 8 caracteres, maiúscula, minúscula, número)
+- Exibe email, role e empresa do convite (via `user_metadata`)
+- Tela de sucesso: _"Sua senha foi definida. Você será redirecionado para a tela de login."_
 
-### AuthContext
+### UserModal
 
-**Prioridade de carregamento:**
+**Arquivo:** `src/components/UserManagement/UserModal.tsx`
 
-1. ✅ `invited_company_id` (primeira vez após convite)
-2. ✅ `impersonated_company_id` (impersonação)
-3. ✅ `company_users` (empresas do usuário)
-4. ✅ `companies.user_id` (sistema legado)
+Após criação bem-sucedida, exibe o magic link gerado no modal `InviteSuccess`:
+- Se `_inviteLink` presente: exibe o link para cópia manual
+- Se `_inviteLink` ausente: exibe mensagem de erro
+
+### InviteLink
+
+**Arquivo:** `src/components/UserManagement/InviteLink.tsx`
+
+- Gera magic link real via API ao abrir o modal
+- Exibe link para cópia
+- Botão "Gerar novo" para renovar link expirado
+- Estados: loading, erro, link disponível
 
 ---
 
-## 📧 Templates de Email
-
-### Localização
-
-**Supabase Dashboard:**
-```
-Authentication → Email Templates
-```
-
-### 1. Invite User
-
-**Quando:** Usuário convidado via `inviteUserByEmail()`
-
-**Variável:** `{{ .ConfirmationURL }}`
-
-**Template:**
-```html
-<a href="{{ .ConfirmationURL }}">Ativar minha conta</a>
-```
-
-**Imagem:**
-```html
-<img src="https://app.lovoocrm.com/images/emails/logo_fundo_branco-300x128.png" />
-```
-
----
-
-### 2. Reset Password
-
-**Quando:** Usuário usa "Esqueci minha senha"
-
-**Variável:** `{{ .ConfirmationURL }}`
-
-**Template:**
-```html
-<a href="{{ .ConfirmationURL }}">Redefinir minha senha</a>
-```
-
----
-
-### 3. Magic Link
-
-**Quando:** Admin gera magic link manual
-
-**Variável:** `{{ .ConfirmationURL }}`
-
-**Template:**
-```html
-<a href="{{ .ConfirmationURL }}">Acessar minha conta</a>
-```
-
----
-
-## 🔒 Segurança
+## 🔒 Segurança e RLS
 
 ### Service Role Key
 
-**Configuração:**
 - Variável: `SUPABASE_SERVICE_ROLE_KEY`
 - Onde: Vercel Environment Variables
-- Uso: Apenas server-side (API routes)
+- Uso: apenas server-side (API routes)
 - **NUNCA** exposta ao frontend
 
-**Validação:**
-```typescript
-if (!serviceRoleKey) {
-  return res.status(500).json({ 
-    error: 'Service Role Key não configurada'
-  });
-}
-```
+---
 
-### Tokens
+### Funções SECURITY DEFINER
 
-**Antes (v1.0):**
-```typescript
-// ❌ Token customizado (inseguro)
-const token = btoa(`${email}:${inviteId}:${Date.now()}`);
-```
+Funções auxiliares que rodam como superuser do banco, **ignorando RLS**.  
+Usadas dentro de policies para evitar **recursão infinita** (policy consultando a própria tabela que está protegendo).
 
-**Depois (v2.0):**
-```typescript
-// ✅ Token oficial Supabase (seguro)
-// Gerado automaticamente pelo Supabase
-// Hash único, criptografado, com expiração
-```
-
-### RLS Policies
-
-**company_users:**
 ```sql
--- Usuário só vê próprios dados
-CREATE POLICY "Users can view own data"
-  ON company_users FOR SELECT
-  USING (user_id = auth.uid());
-
--- Admin vê usuários da empresa
-CREATE POLICY "Admin can view company users"
-  ON company_users FOR SELECT
-  USING (
-    company_id IN (
-      SELECT company_id FROM company_users 
-      WHERE user_id = auth.uid() 
-      AND role IN ('admin', 'super_admin')
-    )
+-- Verifica se auth.uid() é admin ou super_admin ativo na empresa
+CREATE OR REPLACE FUNCTION auth_user_is_company_admin(p_company_id uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM company_users
+    WHERE user_id = auth.uid()
+    AND company_id = p_company_id
+    AND role IN ('admin', 'super_admin')
+    AND is_active = true
   );
+$$;
+
+-- Verifica se auth.uid() é qualquer membro ativo da empresa
+CREATE OR REPLACE FUNCTION auth_user_is_company_member(p_company_id uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM company_users
+    WHERE user_id = auth.uid()
+    AND company_id = p_company_id
+    AND is_active = true
+  );
+$$;
 ```
+
+> **Por que SECURITY DEFINER?** Policies com subquery na mesma tabela causam loop infinito no RLS do PostgreSQL. A função roda como postgres (superuser) e não aciona policies ao consultar `company_users`.
+
+---
+
+### Políticas RLS — `companies`
+
+| Policy | Operação | Quem acessa |
+|---|---|---|
+| `companies_super_admin_full_access` | ALL | Dono da empresa (`user_id = auth.uid()`) |
+| `companies_support_access` | ALL | Roles super_admin e support |
+| `companies_partner_linked_access` | ALL | Parceiros vinculados |
+| `companies_member_select_access` | SELECT | **Membros ativos via `company_users`** ✅ |
+
+```sql
+CREATE POLICY "companies_member_select_access"
+ON companies FOR SELECT
+USING (
+  current_setting('role') = 'service_role'
+  OR id IN (
+    SELECT company_id FROM company_users
+    WHERE user_id = auth.uid() AND is_active = true
+  )
+);
+```
+
+---
+
+### Políticas RLS — `company_users`
+
+| Policy | Operação | Quem acessa |
+|---|---|---|
+| `company_users_select_own` | SELECT | Própria linha (`user_id = auth.uid()`) |
+| `company_users_admin_select` | SELECT | **Admin/super_admin da empresa** ✅ |
+| `company_users_update_own` | UPDATE | Própria linha |
+| `company_users_admin_update` | UPDATE | **Admin/super_admin da empresa** ✅ |
+| `company_users_insert_auth` | INSERT | Qualquer autenticado |
+| `company_users_delete_service` | DELETE | Apenas service_role |
+
+```sql
+-- SELECT para admins (usa função SECURITY DEFINER — sem recursão)
+CREATE POLICY "company_users_admin_select"
+ON company_users FOR SELECT
+USING (
+  current_setting('role') = 'service_role'
+  OR user_id = auth.uid()
+  OR auth_user_is_company_admin(company_id)
+);
+
+-- UPDATE para admins
+CREATE POLICY "company_users_admin_update"
+ON company_users FOR UPDATE
+USING (
+  current_setting('role') = 'service_role'
+  OR user_id = auth.uid()
+  OR auth_user_is_company_admin(company_id)
+)
+WITH CHECK (
+  current_setting('role') = 'service_role'
+  OR user_id = auth.uid()
+  OR auth_user_is_company_admin(company_id)
+);
+```
+
+---
+
+### Políticas RLS — Funil de Vendas
+
+| Tabela | Policy adicionada | Efeito |
+|---|---|---|
+| `sales_funnels` | `sales_funnels_member_select` | Membros veem funis da empresa |
+| `funnel_stages` | `funnel_stages_member_select` | Membros veem etapas dos funis |
+| `opportunity_funnel_positions` | `opportunity_funnel_positions_member_select` | Membros veem posições das oportunidades |
+
+```sql
+CREATE POLICY "sales_funnels_member_select"
+ON sales_funnels FOR SELECT
+USING (
+  current_setting('role') = 'service_role'
+  OR company_id IN (SELECT id FROM companies WHERE user_id = auth.uid())
+  OR auth_user_is_company_member(company_id)
+);
+
+CREATE POLICY "funnel_stages_member_select"
+ON funnel_stages FOR SELECT
+USING (
+  funnel_id IN (
+    SELECT sf.id FROM sales_funnels sf
+    WHERE sf.company_id IN (SELECT id FROM companies WHERE user_id = auth.uid())
+    OR auth_user_is_company_member(sf.company_id)
+  )
+);
+
+CREATE POLICY "opportunity_funnel_positions_member_select"
+ON opportunity_funnel_positions FOR SELECT
+USING (
+  funnel_id IN (
+    SELECT sf.id FROM sales_funnels sf
+    WHERE sf.company_id IN (SELECT id FROM companies WHERE user_id = auth.uid())
+    OR auth_user_is_company_member(sf.company_id)
+  )
+);
+```
+
+---
+
+### Políticas RLS — WhatsApp / Chat
+
+| Tabela | Policy adicionada | Efeito |
+|---|---|---|
+| `whatsapp_life_instances` | `whatsapp_instances_member_select` | Membros veem instâncias da empresa |
+
+```sql
+CREATE POLICY "whatsapp_instances_member_select"
+ON whatsapp_life_instances FOR SELECT
+USING (
+  current_setting('role') = 'service_role'
+  OR company_id IN (SELECT id FROM companies WHERE user_id = auth.uid())
+  OR auth_user_is_company_member(company_id)
+);
+```
+
+> `chat_conversations` e `chat_messages` já possuíam policies com padrão UNION que inclui membros via `company_users` — não necessitaram alteração.
+
+---
+
+## 💬 RPC Chat
+
+### `chat_get_conversations`
+
+A validação de acesso foi atualizada para aceitar **membros da empresa**, não apenas o dono:
+
+```sql
+-- Antes (apenas dono)
+IF NOT EXISTS (
+  SELECT 1 FROM companies WHERE id = p_company_id AND user_id = p_user_id
+) THEN
+  RETURN 'Acesso negado';
+END IF;
+
+-- Depois (dono OU membro ativo)
+IF NOT EXISTS (
+  SELECT 1 FROM companies WHERE id = p_company_id AND user_id = p_user_id
+  UNION
+  SELECT 1 FROM company_users
+  WHERE company_id = p_company_id AND user_id = p_user_id AND is_active = true
+) THEN
+  RETURN 'Acesso negado';
+END IF;
+```
+
+> O restante da função (busca, filtros, paginação) permanece idêntico.
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Email não chega
+### Magic link redireciona para dashboard sem mostrar ativação
 
-**Causas:**
-1. SMTP não configurado
-2. Email caiu em spam
-3. Rate limit atingido
-4. Servidor SMTP offline
+**Causa:** `/accept-invite` estava dentro de `PublicRoute`. Quando o magic link autentica o usuário, o `PublicRoute` detecta sessão ativa e redireciona para `/dashboard`.
 
-**Soluções:**
-1. Verificar SMTP: Authentication → Settings → SMTP Settings
-2. Pedir usuário verificar spam
-3. Usar fallback: Gerar magic link manual
-4. Usar fallback: Confirmar manualmente
+**Solução:** A rota deve ser **aberta** em `App.tsx`:
+```tsx
+// ✅ Correto
+<Route path="/accept-invite" element={<AcceptInvite />} />
+```
+
+---
+
+### Conversas do chat aparecem vazias para membros
+
+**Causa:** RPC `chat_get_conversations` validava acesso apenas para o dono da empresa (`companies.user_id = p_user_id`).
+
+**Solução:** Atualizar a RPC para aceitar membros via `company_users` (já aplicado).
+
+---
+
+### Funil de vendas vazio para membros
+
+**Causa:** Policies de `sales_funnels`, `funnel_stages` e `opportunity_funnel_positions` usavam apenas `companies.user_id = auth.uid()` (owner-only).
+
+**Solução:** Policies `_member_select` adicionadas com `auth_user_is_company_member` (já aplicadas).
+
+---
+
+### Erro 406 ao carregar dados da empresa para membros
+
+**Causa:** Policy `companies` usava apenas `user_id = auth.uid()` — membros não eram donos.
+
+**Solução:** Policy `companies_member_select_access` adicionada (já aplicada).
+
+---
+
+### Erro 406 ao editar perfil de usuário (admin editando outro usuário)
+
+**Causa:** Policies de `company_users` só permitiam `user_id = auth.uid()` — admin não podia ler/editar linha de outro usuário.
+
+**Solução:** Policies `company_users_admin_select` e `company_users_admin_update` com `SECURITY DEFINER` (já aplicadas).
+
+---
+
+### Loop infinito / sistema quebrado ao adicionar policies em `company_users`
+
+**Causa:** Policy com subquery na própria tabela (`company_users` verificando `company_users`) causa recursão infinita no RLS do PostgreSQL.
+
+**Solução:** Usar função `SECURITY DEFINER` como intermediária — ela roda como superuser e não aciona policies ao consultar a tabela.
+
+---
+
+### Email de convite não chega
+
+O sistema atual **não depende de email**. O magic link é gerado no backend e exibido diretamente ao admin para envio manual (WhatsApp, Telegram, etc.).
+
+Se necessário usar o fallback de confirmação manual:
+1. Acesse o painel do admin
+2. Clique em "Confirmar manualmente" no usuário
+3. Usuário acessa a tela de login e usa "Esqueci minha senha"
 
 ---
 
 ### Erro 403 ao criar usuário
 
-**Causa:** Service Role Key não configurada
+**Causa:** `SUPABASE_SERVICE_ROLE_KEY` não configurada no Vercel.
 
 **Solução:**
 ```bash
-# Vercel
 vercel env add SUPABASE_SERVICE_ROLE_KEY
-```
-
----
-
-### Usuário ativa mas entra em empresa errada
-
-**Causa:** `company_id` não foi salvo/carregado
-
-**Verificar:**
-1. `user_metadata` contém `company_id`?
-2. `localStorage.invited_company_id` foi salvo?
-3. `AuthContext` verifica `invited_company_id`?
-
-**Solução:**
-```typescript
-// AcceptInvite.tsx
-if (session.user.user_metadata?.company_id) {
-  localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
-}
-
-// AuthContext.tsx
-const invitedCompanyId = localStorage.getItem('invited_company_id');
-if (invitedCompanyId && !company) {
-  // Carregar empresa
-}
 ```
 
 ---
@@ -632,83 +696,57 @@ if (invitedCompanyId && !company) {
 ERROR: new row violates check constraint "valid_role_for_company_type"
 ```
 
-**Causa:** Role incompatível com tipo de empresa
-
-**Exemplos:**
-- ❌ `super_admin` em empresa `client`
-- ❌ `seller` em empresa `parent`
+**Causa:** Role incompatível com tipo de empresa (ex: `seller` em empresa `parent`).
 
 **Solução:**
 ```typescript
-// Validar antes de criar
-const validateRole = (role: string, companyType: string) => {
-  const parentRoles = ['super_admin', 'admin', 'partner'];
-  const clientRoles = ['admin', 'manager', 'seller'];
-  
-  if (companyType === 'parent') {
-    return parentRoles.includes(role);
-  }
-  return clientRoles.includes(role);
-};
+const parentRoles = ['super_admin', 'admin', 'partner'];
+const clientRoles = ['admin', 'manager', 'seller'];
+
+if (companyType === 'parent') return parentRoles.includes(role);
+return clientRoles.includes(role);
 ```
 
 ---
 
-## 📊 Estatísticas
+## 📊 Histórico de Alterações
 
-**Implementação:**
-- Data: 26/03/2026
-- Commits: 3 (lovooDev), 1 (loovocrm)
-- Arquivos modificados: 74
-- Linhas adicionadas: 5,832
-- Linhas removidas: 415
+### v3.0 — 31/03/2026
 
-**Arquivos principais:**
-- `src/services/authAdmin.ts` (removido convite simulado)
-- `src/pages/AcceptInvite.tsx` (simplificado)
-- `src/contexts/AuthContext.tsx` (hierarquia)
-- `api/auth/invite-user.ts` (novo)
-- `api/auth/generate-magic-link.ts` (novo)
-- `api/auth/confirm-user.ts` (novo)
+**Arquivos modificados:**
+- `api/auth/invite-user.ts` — substituído `inviteUserByEmail` por `createUser` + `generateLink`
+- `src/pages/AcceptInvite.tsx` — `onAuthStateChange`, `signOut()` após ativação, logo branco
+- `src/components/UserManagement/UserModal.tsx` — exibe magic link, removido fallback fake
+- `src/components/UserManagement/InviteLink.tsx` — chama API real para gerar magic link
+- `src/components/UserManagement/InviteSuccess.tsx` — exibe link gerado ao admin
+- `src/services/authAdmin.ts` — propagação do `inviteLink` na resposta
+- `src/services/userApi.ts` — repassa `_inviteLink` ao frontend
+- `src/App.tsx` — `/accept-invite` removida do `PublicRoute`
 
----
-
-## 🚀 Próximos Passos
-
-### Melhorias Futuras
-
-1. **UI para Fallbacks**
-   - Botão "Gerar Link Manual" no UserModal
-   - Botão "Confirmar Manualmente" no UserModal
-   - Modal para mostrar magic link gerado
-
-2. **Logs e Auditoria**
-   - Registrar tentativas de convite
-   - Registrar uso de fallbacks
-   - Dashboard de convites pendentes
-
-3. **Notificações**
-   - Notificar admin quando email falha
-   - Notificar usuário quando conta é confirmada
-   - Lembrete para usuários que não ativaram
+**Migrations aplicadas (Supabase):**
+- `companies_member_select_access`
+- `company_users_admin_access_safe` (inclui funções SECURITY DEFINER)
+- `member_select_access_sales_funnel_whatsapp`
+- `fix_chat_rpc_and_funnel_positions_member_access`
 
 ---
 
 ## 📚 Referências
 
 **Migrations:**
-- `20251129072600_create_company_users_system.sql` - Sistema de usuários
+- `20251129072600_create_company_users_system.sql` — Sistema de usuários
 
-**Documentação:**
-- `SISTEMA_GESTAO_USUARIOS.md` - Fotos de perfil
-- `DOCUMENTACAO_IMPLEMENTACAO_RLS_CHAT.md` - RLS com company_users
+**Documentação relacionada:**
+- `legacy_docs/SISTEMA_GESTAO_USUARIOS.md` — Fotos de perfil
+- `legacy_docs/DOCUMENTACAO_IMPLEMENTACAO_RLS_CHAT.md` — RLS com company_users
 
 **Supabase:**
-- [Admin API](https://supabase.com/docs/reference/javascript/auth-admin-inviteUserByEmail)
-- [Email Templates](https://supabase.com/docs/guides/auth/auth-email-templates)
+- [Admin API — createUser](https://supabase.com/docs/reference/javascript/auth-admin-createuser)
+- [Admin API — generateLink](https://supabase.com/docs/reference/javascript/auth-admin-generatelink)
+- [Row Level Security](https://supabase.com/docs/guides/auth/row-level-security)
 
 ---
 
-**Versão:** 2.0  
+**Versão:** 3.0  
 **Status:** ✅ Produção  
-**Última atualização:** 26/03/2026
+**Última atualização:** 31/03/2026
