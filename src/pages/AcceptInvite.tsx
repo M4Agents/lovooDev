@@ -50,7 +50,6 @@ export const AcceptInvite: React.FC = () => {
       
       if (user && !user.email_confirmed_at) {
         console.log('AcceptInvite: User exists but not confirmed');
-        // Usuário existe mas não confirmado - permitir definir senha
         const emailFromUrl = searchParams.get('email');
         if (emailFromUrl) {
           setInviteInfo(prev => ({ ...prev, email: emailFromUrl }));
@@ -64,11 +63,38 @@ export const AcceptInvite: React.FC = () => {
     }
   };
 
+  // Listener para magic link do Supabase (hash com access_token)
+  // Captura o evento SIGNED_IN gerado pelo SDK ao processar o hash da URL
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('AcceptInvite: SIGNED_IN via magic link');
+        const user = session.user;
+        setInviteInfo({
+          email: user.email || '',
+          role: user.user_metadata?.role || '',
+          company_name: user.user_metadata?.company_name || ''
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   // Verificar se há token de convite na URL e processar usuário já confirmado
   useEffect(() => {
     const token = searchParams.get('token');
     const type = searchParams.get('type');
     const confirmed = searchParams.get('confirmed');
+
+    // Detectar redirect do Supabase via hash (magic link gerado pelo backend)
+    // O SDK do Supabase processa o hash automaticamente e dispara onAuthStateChange
+    // Não redirecionar para login nesse caso
+    const hasSupabaseHash = window.location.hash.includes('access_token=');
+    if (hasSupabaseHash) {
+      console.log('AcceptInvite: Supabase magic link hash detected, waiting for auth state');
+      return;
+    }
     
     // NOVA LÓGICA: Verificar se usuário já foi confirmado via email
     if (confirmed === 'true') {
@@ -77,24 +103,19 @@ export const AcceptInvite: React.FC = () => {
     }
     
     if (type === 'invite' && token) {
-      // Token de convite válido
+      // Token de convite válido (link manual de fallback)
       console.log('AcceptInvite: Valid invite token found');
       
-      // Extrair informações do token e URL
       const emailFromUrl = searchParams.get('email') || '';
       const tokenFromUrl = searchParams.get('token') || '';
       
       console.log('AcceptInvite: Email from URL:', emailFromUrl);
       console.log('AcceptInvite: Token from URL:', tokenFromUrl.substring(0, 20) + '...');
       
-      // Tentar decodificar token para extrair informações adicionais
       let decodedEmail = emailFromUrl;
       try {
         if (tokenFromUrl) {
-          const decoded = atob(tokenFromUrl);
-          console.log('AcceptInvite: Token decoded:', decoded);
-          // Token format: user_id:company_user_id:timestamp
-          // Não contém email, então usar da URL
+          atob(tokenFromUrl); // apenas validar se é base64
         }
       } catch (e) {
         console.log('AcceptInvite: Could not decode token, using URL email');
@@ -106,7 +127,7 @@ export const AcceptInvite: React.FC = () => {
         company_name: searchParams.get('company') || ''
       });
     } else {
-      // Redirecionar para login se não há token válido
+      // Sem hash do Supabase nem token válido — redirecionar para login
       console.log('AcceptInvite: No valid token, redirecting to login');
       navigate('/login');
     }
@@ -136,7 +157,6 @@ export const AcceptInvite: React.FC = () => {
     setError(null);
 
     try {
-      // Validação básica
       if (!formData.password) {
         setError('Senha é obrigatória');
         return;
@@ -162,46 +182,48 @@ export const AcceptInvite: React.FC = () => {
         return;
       }
 
-      // FLUXO SIMPLIFICADO: Verificar se usuário já está autenticado (veio do link do email)
+      // CAMINHO 1: Usuário já autenticado via magic link (fluxo principal)
+      // O SDK do Supabase cria a sessão automaticamente ao processar o hash
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        console.log('AcceptInvite: User already authenticated via email link');
+        console.log('AcceptInvite: User authenticated via magic link, setting password');
         
-        // Usuário já autenticado - apenas atualizar senha se fornecida
         const { error: updateError } = await supabase.auth.updateUser({
           password: formData.password
         });
         
-        if (!updateError) {
-          console.log('AcceptInvite: Password updated successfully');
-          
-          // Salvar company_id do convite para AuthContext usar
-          if (session.user.user_metadata?.company_id) {
-            localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
-            console.log('AcceptInvite: Saved invited company_id:', session.user.user_metadata.company_id);
-          }
-          
-          setSuccess(true);
-          setTimeout(() => navigate('/dashboard'), 2000);
+        if (updateError) {
+          console.error('AcceptInvite: Error updating password:', updateError.message);
+          setError('Erro ao definir senha. Tente novamente.');
           return;
         }
+
+        console.log('AcceptInvite: Password set successfully');
+        
+        // Salvar company_id do convite para AuthContext usar
+        if (session.user.user_metadata?.company_id) {
+          localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
+          console.log('AcceptInvite: Saved invited company_id:', session.user.user_metadata.company_id);
+        }
+        
+        setSuccess(true);
+        setTimeout(() => navigate('/dashboard'), 2000);
+        return;
       }
-      
-      // Se não autenticado, tentar login com senha fornecida
-      console.log('AcceptInvite: Attempting login with provided password');
+
+      // CAMINHO 2: Fallback — tentar login com senha (link manual antigo)
+      console.log('AcceptInvite: No active session, attempting signInWithPassword');
       const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: email,
+        email,
         password: formData.password
       });
       
       if (!loginError && loginData.user) {
         console.log('AcceptInvite: Login successful');
         
-        // Salvar company_id do convite
         if (loginData.user.user_metadata?.company_id) {
           localStorage.setItem('invited_company_id', loginData.user.user_metadata.company_id);
-          console.log('AcceptInvite: Saved invited company_id:', loginData.user.user_metadata.company_id);
         }
         
         setSuccess(true);
@@ -209,16 +231,9 @@ export const AcceptInvite: React.FC = () => {
         return;
       }
       
-      // Fallback: Orientar usuário
-      console.log('AcceptInvite: Login failed, showing guidance');
-      setError(`Não foi possível fazer login. 
-
-Possíveis soluções:
-1. Use o link enviado por email para ativar sua conta
-2. Solicite um novo convite ao administrador
-3. Use "Esqueci minha senha" na tela de login
-
-Email: ${email}`);
+      // Nenhum caminho funcionou
+      console.log('AcceptInvite: All paths failed');
+      setError('Não foi possível ativar a conta. Solicite um novo link ao administrador.');
 
     } catch (err) {
       console.error('AcceptInvite: Error in handleAcceptInvite:', err);
@@ -297,7 +312,7 @@ Email: ${email}`);
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div>
                   <h4 className="text-sm font-medium text-red-900 mb-1">Erro</h4>
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
                 </div>
               </div>
             </div>
