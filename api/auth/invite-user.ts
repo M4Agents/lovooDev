@@ -41,7 +41,7 @@ export default async function handler(req: any, res: any) {
     // PASSO 1: Criar conta do usuário (sem envio de email)
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      email_confirm: false,
+      email_confirm: true,
       user_metadata: data || {}
     });
 
