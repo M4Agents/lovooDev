@@ -58,10 +58,13 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    // Variável para guardar o usuário resolvido (novo ou existente)
+    let resolvedUser = userData?.user ?? null;
+
     if (userAlreadyExists) {
       console.warn('invite-user: User already exists, confirming email before generating magic link');
 
-      // Buscar o usuário existente para obter o ID e confirmar o email
+      // Buscar o usuário existente para confirmar email e retornar seus dados
       const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
       const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
 
@@ -74,6 +77,9 @@ export default async function handler(req: any, res: any) {
         } else {
           console.log('invite-user: Email confirmed for existing user:', existingUser.id);
         }
+        // Salvar o usuário existente para retornar na resposta
+        // Isso garante que userApi.ts não receba user: null e perca o inviteLink
+        resolvedUser = existingUser;
       } else {
         console.warn('invite-user: Could not find existing user to confirm email:', listError?.message);
       }
@@ -98,7 +104,7 @@ export default async function handler(req: any, res: any) {
       console.warn('invite-user: generateLink failed:', linkError.message);
       return res.status(200).json({
         success: true,
-        user: userData?.user ?? null,
+        user: resolvedUser,
         inviteLink: null,
         warning: 'Usuário criado mas não foi possível gerar o link de acesso.'
       });
@@ -106,7 +112,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       success: true,
-      user: userData?.user ?? null,
+      user: resolvedUser,
       inviteLink: linkData.properties.action_link,
       isExistingUser: userAlreadyExists
     });
