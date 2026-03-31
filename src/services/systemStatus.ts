@@ -2,8 +2,6 @@
 // DETECÇÃO DE STATUS DO SISTEMA - CONFIGURAÇÃO AUTOMÁTICA
 // =====================================================
 
-import { supabase } from '../lib/supabase';
-
 export interface SystemStatus {
   adminApiAvailable: boolean;
   smtpConfigured: boolean;
@@ -105,19 +103,11 @@ export const getSystemStatus = async (): Promise<SystemStatus> => {
 
 /**
  * Testa se Admin API está disponível
+ * Admin API requer service_role_key (server-side only) — anon key sempre retorna 403
+ * A verificação real é feita pelo endpoint /api/auth/invite-user no servidor
  */
 const testAdminApi = async (): Promise<boolean> => {
-  try {
-    const { error } = await supabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 1
-    });
-    
-    return !error;
-  } catch (error) {
-    console.log('SystemStatus: Admin API not available:', error);
-    return false;
-  }
+  return false;
 };
 
 /**

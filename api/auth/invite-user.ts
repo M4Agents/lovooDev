@@ -50,7 +50,7 @@ export default async function handler(req: any, res: any) {
 
     if (error) {
       console.error('API Route: Error inviting user:', error);
-      const errorMessage = error.message || JSON.stringify(error) || 'Erro desconhecido ao convidar usuário';
+      const errorMessage = error.message || `${error.name} (status: ${error.status})` || 'Erro desconhecido ao convidar usuário';
       return res.status(400).json({ 
         error: errorMessage,
         fallback: errorMessage.includes('403') || errorMessage.includes('Unauthorized')
