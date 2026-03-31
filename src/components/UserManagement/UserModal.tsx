@@ -416,32 +416,24 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // SEMPRE mostrar modal de sucesso quando usuário é criado com convite
         if (formData.sendInvite) {
-          const mode = (result as any)._inviteLink ? 'real' : 'simulated';
+          const inviteUrl = (result as any)._inviteLink || (result as any).app_metadata?.invite_url || null;
+          const mode = inviteUrl ? 'real' : 'simulated';
 
-          // Priorizar link real gerado pelo backend (createUser + generateLink)
-          let inviteUrl = (result as any)._inviteLink || (result as any).app_metadata?.invite_url;
-
-          // Fallback: gerar link manual se o backend não retornou link
+          // Se não gerou link, avisar o admin — não exibir link inválido
           if (!inviteUrl) {
-            inviteUrl = `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`;
+            setError('Usuário criado, mas não foi possível gerar o link de acesso. Acesse o painel de usuários e use "Gerar novo link" para este usuário.');
+            onSave();
+            return;
           }
 
           setInviteData({
             email: formData.email,
             inviteUrl: inviteUrl,
-            mode: mode === 'real' ? 'real' : 'simulated',
-            message: mode === 'real' ? 'Link de acesso gerado — compartilhe com o usuário' : 'Configure Admin API para criação real de usuários'
+            mode: 'real',
+            message: 'Link de acesso gerado — compartilhe com o usuário'
           });
           
           setShowInviteSuccess(true);
-          console.log('UserModal: Showing success modal:', { 
-            mode, 
-            email: formData.email,
-            hasUrl: !!inviteUrl,
-            inviteUrl: inviteUrl
-          });
-          
-          // Não fechar o modal principal ainda - deixar o modal de sucesso aparecer
           onSave();
           return;
         }
@@ -462,17 +454,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           errorMessage.includes('Convite simulado criado')) {
         
         
-        // Se era para enviar convite, mostrar modal de sucesso mesmo assim
+        // Modo compatibilidade: usuário criado sem link real — avisar o admin
         if (formData.sendInvite) {
-          // Usar email do formulário para modo compatibilidade (já é o correto)
-          setInviteData({
-            email: formData.email,
-            inviteUrl: `https://app.lovoocrm.com/accept-invite?token=${btoa(formData.email)}&type=invite&email=${encodeURIComponent(formData.email)}`,
-            mode: 'simulated',
-            message: 'Sistema em modo compatibilidade - Configure Admin API para envio real de emails'
-          });
-          
-          setShowInviteSuccess(true);
+          setError('Usuário criado em modo compatibilidade. Acesse o painel de usuários e use "Gerar novo link" para enviar o acesso ao usuário.');
         }
         
         // Tratar como sucesso

@@ -39,13 +39,18 @@ export default async function handler(req: any, res: any) {
     }
 
     // PASSO 1: Criar conta do usuário (sem envio de email)
+    // Se o usuário já existir, seguir para geração do link mesmo assim
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: data || {}
     });
 
-    if (createError) {
+    const userAlreadyExists = createError?.message?.toLowerCase().includes('already registered') ||
+                              createError?.message?.toLowerCase().includes('already been registered') ||
+                              createError?.message?.toLowerCase().includes('user already exists');
+
+    if (createError && !userAlreadyExists) {
       console.error('invite-user: createUser error:', createError.message);
       return res.status(400).json({
         error: createError.message,
@@ -53,7 +58,12 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    if (userAlreadyExists) {
+      console.warn('invite-user: User already exists, generating new magic link for existing user');
+    }
+
     // PASSO 2: Gerar link de acesso (sem enviar email)
+    // Funciona tanto para usuários novos quanto para existentes
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
@@ -68,20 +78,20 @@ export default async function handler(req: any, res: any) {
     // Implementar apenas após estabilizar o fluxo atual e configurar provedor (ex: Resend).
 
     if (linkError) {
-      // Usuário criado com sucesso, mas geração do link falhou.
-      // Admin pode usar /api/auth/generate-magic-link como fallback manual.
-      console.warn('invite-user: generateLink failed after createUser:', linkError.message);
+      console.warn('invite-user: generateLink failed:', linkError.message);
       return res.status(200).json({
         success: true,
-        user: userData.user,
-        inviteLink: null
+        user: userData?.user ?? null,
+        inviteLink: null,
+        warning: 'Usuário criado mas não foi possível gerar o link de acesso.'
       });
     }
 
     return res.status(200).json({
       success: true,
-      user: userData.user,
-      inviteLink: linkData.properties.action_link
+      user: userData?.user ?? null,
+      inviteLink: linkData.properties.action_link,
+      isExistingUser: userAlreadyExists
     });
 
   } catch (error: any) {
