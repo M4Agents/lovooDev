@@ -59,11 +59,28 @@ export default async function handler(req: any, res: any) {
     }
 
     if (userAlreadyExists) {
-      console.warn('invite-user: User already exists, generating new magic link for existing user');
+      console.warn('invite-user: User already exists, confirming email before generating magic link');
+
+      // Buscar o usuário existente para obter o ID e confirmar o email
+      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+
+      if (existingUser && !listError) {
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+          email_confirm: true
+        });
+        if (updateError) {
+          console.warn('invite-user: Could not confirm email for existing user:', updateError.message);
+        } else {
+          console.log('invite-user: Email confirmed for existing user:', existingUser.id);
+        }
+      } else {
+        console.warn('invite-user: Could not find existing user to confirm email:', listError?.message);
+      }
     }
 
     // PASSO 2: Gerar link de acesso (sem enviar email)
-    // Funciona tanto para usuários novos quanto para existentes
+    // Funciona tanto para usuários novos quanto para existentes (com email confirmado)
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,

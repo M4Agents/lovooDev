@@ -416,7 +416,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // SEMPRE mostrar modal de sucesso quando usuário é criado com convite
         if (formData.sendInvite) {
-          const inviteUrl = (result as any)._inviteLink || (result as any).app_metadata?.invite_url || null;
+          // Usar apenas o link gerado pelo backend (magic link real do Supabase)
+          // app_metadata.invite_url é ignorado — contém formato antigo incompatível
+          const inviteUrl = (result as any)._inviteLink || null;
           const mode = inviteUrl ? 'real' : 'simulated';
 
           // Se não gerou link, avisar o admin — não exibir link inválido
