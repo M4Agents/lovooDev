@@ -63,12 +63,20 @@ export const AcceptInvite: React.FC = () => {
     }
   };
 
+  // [DEBUG] Log da URL completa no carregamento da página
+  useEffect(() => {
+    console.log('[DEBUG AcceptInvite] URL hash:', window.location.hash.substring(0, 80) || '(vazio)');
+    console.log('[DEBUG AcceptInvite] URL search:', window.location.search || '(vazio)');
+    console.log('[DEBUG AcceptInvite] hasSupabaseHash:', window.location.hash.includes('access_token='));
+  }, []);
+
   // Listener para magic link do Supabase (hash com access_token)
   // Captura o evento SIGNED_IN gerado pelo SDK ao processar o hash da URL
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[DEBUG AcceptInvite] onAuthStateChange event:', event, '| has session:', !!session, '| email:', session?.user?.email || 'none');
       if (event === 'SIGNED_IN' && session?.user) {
-        console.log('AcceptInvite: SIGNED_IN via magic link');
+        console.log('[DEBUG AcceptInvite] SIGNED_IN — email_confirmed_at:', session.user.email_confirmed_at || 'null');
         const user = session.user;
         setInviteInfo({
           email: user.email || '',
@@ -184,15 +192,20 @@ export const AcceptInvite: React.FC = () => {
 
       // CAMINHO 1: Usuário já autenticado via magic link (fluxo principal)
       // O SDK do Supabase cria a sessão automaticamente ao processar o hash
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
+      console.log('[DEBUG AcceptInvite] getSession — has session:', !!session, '| email:', session?.user?.email || 'none', '| error:', sessionError?.message || 'none');
+      console.log('[DEBUG AcceptInvite] session user confirmed:', session?.user?.email_confirmed_at || 'null');
+
       if (session?.user) {
-        console.log('AcceptInvite: User authenticated via magic link, setting password');
+        console.log('[DEBUG AcceptInvite] CAMINHO 1: tentando updateUser (magic link)');
         
         const { error: updateError } = await supabase.auth.updateUser({
           password: formData.password
         });
         
+        console.log('[DEBUG AcceptInvite] updateUser error:', updateError?.message || 'none', '| status:', (updateError as any)?.status || 'none');
+
         if (updateError) {
           console.error('AcceptInvite: Error updating password:', updateError.message);
           setError('Erro ao definir senha. Tente novamente.');
@@ -213,11 +226,14 @@ export const AcceptInvite: React.FC = () => {
       }
 
       // CAMINHO 2: Fallback — tentar login com senha (link manual antigo)
-      console.log('AcceptInvite: No active session, attempting signInWithPassword');
+      console.log('[DEBUG AcceptInvite] CAMINHO 2: tentando signInWithPassword para:', email);
       const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password: formData.password
       });
+
+      console.log('[DEBUG AcceptInvite] signInWithPassword error:', loginError?.message || 'none', '| status:', (loginError as any)?.status || 'none');
+      console.log('[DEBUG AcceptInvite] signInWithPassword user:', loginData?.user?.email || 'null');
       
       if (!loginError && loginData.user) {
         console.log('AcceptInvite: Login successful');
