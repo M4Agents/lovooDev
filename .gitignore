@@ -33,3 +33,7 @@ backup/
 # *.md - REMOVIDO para permitir documentação técnica
 # !README.md
 .vercel
+# Segurança e arquivos locais
+.env
+.env.*
+.cursor/
