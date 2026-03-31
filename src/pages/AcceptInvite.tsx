@@ -221,14 +221,12 @@ export const AcceptInvite: React.FC = () => {
 
         console.log('AcceptInvite: Password set successfully');
         
-        // Salvar company_id do convite para AuthContext usar
-        if (session.user.user_metadata?.company_id) {
-          localStorage.setItem('invited_company_id', session.user.user_metadata.company_id);
-          console.log('AcceptInvite: Saved invited company_id:', session.user.user_metadata.company_id);
-        }
+        // Encerrar a sessão do magic link (temporária) e redirecionar para o login
+        // O usuário fará login normalmente com email + senha cadastrada
+        await supabase.auth.signOut();
         
         setSuccess(true);
-        setTimeout(() => navigate('/dashboard'), 2000);
+        setTimeout(() => navigate('/'), 2000);
         return;
       }
 
@@ -277,7 +275,7 @@ export const AcceptInvite: React.FC = () => {
             Conta Ativada com Sucesso!
           </h1>
           <p className="text-slate-600 mb-6">
-            Sua conta foi ativada e você será redirecionado para o dashboard em instantes.
+            Sua senha foi definida. Você será redirecionado para a tela de login em instantes.
           </p>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         </div>
