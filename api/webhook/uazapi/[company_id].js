@@ -304,7 +304,7 @@ async function processMessage(payload) {
     // Buscar instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('id, company_id, companies(id, name, api_key)')
+      .select('id, company_id, provider_token, companies(id, name, api_key)')
       .eq('provider_instance_id', instanceName)
       .eq('status', 'connected')
       .single();
@@ -371,6 +371,7 @@ async function processMessage(payload) {
     const contactId = webhookResult.contact_id;
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;
+    const isNewContact = webhookResult?.lead_created || false;
 
     // =====================================================
     // SINCRONIZAÇÃO INTELIGENTE DE FOTO (NOVO E EXISTENTE)
@@ -408,7 +409,7 @@ async function processMessage(payload) {
         syncContactProfilePictureFromUazapi({
           supabase,
           baseUrl: payload.BaseUrl,
-          token: payload.token,
+          token: instance.provider_token || payload.token,
           instanceName,
           companyId: company.id,
           phoneNumber,
@@ -624,7 +625,7 @@ async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = 
     // 2. BUSCAR DADOS ATUAIS DO CONTATO (query otimizada)
     const { data: contact, error } = await supabase
       .from('chat_contacts')
-      .select('profile_picture_url, updated_at')
+      .select('profile_picture_url, updated_at, photo_updated_at')
       .eq('company_id', companyId)
       .eq('phone_number', phoneNumber)
       .single();
@@ -635,7 +636,7 @@ async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = 
     }
 
     const currentUrl = contact.profile_picture_url;
-    const lastUpdate = new Date(contact.updated_at);
+    const lastUpdate = new Date(contact.photo_updated_at || contact.updated_at);
 
     // 3. SEM FOTO: sincronizar para tentar obter
     if (!currentUrl) {
@@ -872,7 +873,7 @@ async function syncContactProfilePictureFromUazapi({
 
     const { error: updateError } = await supabase
       .from('chat_contacts')
-      .update({ profile_picture_url: finalUrl, updated_at: new Date().toISOString() })
+      .update({ profile_picture_url: finalUrl, photo_updated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('company_id', companyId)
       .eq('phone_number', phoneNumber);
 
