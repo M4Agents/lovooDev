@@ -39,16 +39,17 @@ export const Avatar: React.FC<AvatarProps> = ({
     setImageError(false);
     setImageLoading(!!src);
     // #region agent log
-    if (src && (src.includes('pps.whatsapp.net') || src.includes('mmg.whatsapp.net'))) {
-      console.log('[DEBUG-27238b][H-C] Avatar — URL CDN WhatsApp recebida (deve ser 0 no Funil):', src.substring(0, 80));
-      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'Avatar.tsx:~38',message:'Avatar received WhatsApp CDN URL',data:{url:src.substring(0,80)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
-    }
+    const urlType = !src ? 'null' : src.includes('pps.whatsapp.net') || src.includes('mmg.whatsapp.net') ? 'CDN_WA' : src.includes('contact-avatars') ? 'STORAGE_OK' : src.includes('chat-media') ? 'STORAGE_BROKEN' : 'OTHER';
+    fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'Avatar.tsx:src-changed',message:'Avatar src changed — loading reset',data:{urlType,src:src?src.substring(0,80):null,loadingSetTo:!!src,alt},timestamp:Date.now(),hypothesisId:'H-A-B-C'})}).catch(()=>{});
     // #endregion
   }, [src]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
     setImageError(false);
+    // #region agent log
+    fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'Avatar.tsx:onLoad',message:'Avatar image loaded (onLoad fired)',data:{src:src?src.substring(0,80):null,alt},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    // #endregion
   };
 
   const handleImageError = () => {
