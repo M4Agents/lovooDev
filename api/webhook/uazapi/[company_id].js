@@ -426,7 +426,58 @@ async function processMessage(payload) {
             console.error('❌ Erro no sync de foto (fire-and-forget):', syncError.message);
           });
       } else {
-        console.log('📸 Sem imagePreview CDN no payload — foto não atualizada:', phoneNumber);
+        // Sem imagePreview fresco no payload — verificar se URL atual no banco é CDN e migrar
+        // (cobre mensagens de texto sem campo imagePreview no payload Uazapi)
+        shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact)
+          .then(async (needsSync) => {
+            if (!needsSync) return;
+
+            const { data: contactRow } = await supabase
+              .from('chat_contacts')
+              .select('profile_picture_url')
+              .eq('company_id', company.id)
+              .eq('phone_number', phoneNumber)
+              .single();
+
+            const existingCdnUrl = contactRow?.profile_picture_url;
+            if (!existingCdnUrl || !isWhatsAppCdnPhoto(existingCdnUrl)) {
+              console.log('📸 URL no banco não é CDN ou ausente — nada a migrar:', phoneNumber);
+              return;
+            }
+
+            console.log('📸 URL CDN no banco detectada sem imagePreview — tentando migrar:', phoneNumber);
+
+            const stableUrl = await downloadAndStoreContactAvatar({
+              supabase,
+              profileUrl: existingCdnUrl,
+              companyId: company.id,
+              phoneNumber,
+            });
+
+            if (!stableUrl) {
+              console.log('📸 Download da URL do banco falhou (pode ter expirado):', phoneNumber);
+              return;
+            }
+
+            const { error: photoUpdateError } = await supabase
+              .from('chat_contacts')
+              .update({
+                profile_picture_url: stableUrl,
+                photo_updated_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('company_id', company.id)
+              .eq('phone_number', phoneNumber);
+
+            if (photoUpdateError) {
+              console.error('❌ Erro ao atualizar foto (fallback sem imagePreview):', photoUpdateError.message);
+            } else {
+              console.log('📸 ✅ Foto migrada via URL do banco (sem imagePreview):', phoneNumber);
+            }
+          })
+          .catch((syncError) => {
+            console.error('❌ Erro no sync de foto (fallback sem imagePreview):', syncError.message);
+          });
       }
     } catch (syncInitError) {
       console.error('❌ ERRO AO INICIAR SYNC DE FOTO:', syncInitError.message);
