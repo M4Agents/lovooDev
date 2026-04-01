@@ -333,6 +333,36 @@ export interface LeadPositionFilter {
   max_value?: number
 }
 
+// =====================================================
+// FASE 3 — ARQUITETURA POR COLUNA
+// =====================================================
+
+/** Contadores de uma etapa retornados por get_funnel_stage_counts */
+export interface StageCount {
+  stage_id: string
+  count: number
+  total_value: number
+}
+
+/** Estado de uma coluna no useBoardPositions */
+export interface StagePositionState {
+  positions: OpportunityFunnelPosition[]
+  loading: boolean
+  hasMore: boolean
+  page: number
+}
+
+/**
+ * Snapshot imutável do estado de source e destination antes
+ * de um optimisticMove. Usado para rollback em caso de erro.
+ */
+export interface BoardPositionsSnapshot {
+  fromStageId: string
+  toStageId: string
+  fromPositions: OpportunityFunnelPosition[]
+  toPositions: OpportunityFunnelPosition[]
+}
+
 export interface StageHistoryFilter {
   lead_id?: number
   funnel_id?: string

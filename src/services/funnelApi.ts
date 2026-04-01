@@ -24,7 +24,8 @@ import type {
   FunnelFilter,
   StageFilter,
   LeadPositionFilter,
-  StageHistoryFilter
+  StageHistoryFilter,
+  StageCount
 } from '../types/sales-funnel'
 
 // =====================================================
@@ -938,6 +939,76 @@ class FunnelApiService {
     }
   }
   
+  // ===================================================
+  // FASE 3 — CARREGAMENTO POR COLUNA
+  // ===================================================
+
+  /**
+   * Buscar posições de uma única etapa com paginação.
+   * p_funnel_id é obrigatório como segunda barreira de isolamento
+   * (stage_id + funnel_id + company_id).
+   */
+  async getStagePositionsPaged(
+    funnelId: string,
+    stageId: string,
+    companyId: string,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days'>,
+    limit = 20,
+    offset = 0
+  ): Promise<OpportunityFunnelPosition[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_stage_positions_paged', {
+        p_funnel_id:   funnelId,
+        p_stage_id:    stageId,
+        p_company_id:  companyId,
+        p_search:      filter?.search      ?? null,
+        p_origin:      filter?.origin      ?? null,
+        p_period_days: filter?.period_days ?? null,
+        p_limit:       limit,
+        p_offset:      offset
+      })
+
+      if (error) throw error
+
+      return ((data as OpportunityFunnelPosition[]) || []).map(pos => ({
+        ...pos,
+        days_in_stage: pos.entered_stage_at
+          ? this.calculateDaysInStage(pos.entered_stage_at as unknown as string)
+          : 0
+      }))
+    } catch (error) {
+      console.error('Error fetching stage positions paged:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Buscar contadores (count + total_value) por etapa para um funil inteiro.
+   * Uma única query com os mesmos filtros da listagem de cards.
+   */
+  async getStageCounts(
+    funnelId: string,
+    companyId: string,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days'>
+  ): Promise<StageCount[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_funnel_stage_counts', {
+        p_funnel_id:   funnelId,
+        p_company_id:  companyId,
+        p_search:      filter?.search      ?? null,
+        p_origin:      filter?.origin      ?? null,
+        p_period_days: filter?.period_days ?? null
+      })
+
+      if (error) throw error
+
+      return (data as StageCount[]) || []
+    } catch (error) {
+      console.error('Error fetching stage counts:', error)
+      throw error
+    }
+  }
+
   // ===================================================
   // HELPERS
   // ===================================================

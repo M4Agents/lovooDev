@@ -17,6 +17,14 @@ interface FunnelColumnProps {
   onLeadClick?: (leadId: number) => void
   onAddLead?: (stageId: string) => void
   onEditStage?: (stageId: string) => void
+  /** Fase 3: total real vindo do servidor (get_funnel_stage_counts). */
+  count?: number
+  /** Fase 3: soma de valores vinda do servidor. */
+  totalValue?: number
+  /** Fase 3: se há mais cards além dos já carregados. */
+  hasMore?: boolean
+  /** Fase 3: callback para carregar a próxima página. */
+  onLoadMore?: () => void
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -25,11 +33,19 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   visibleFields,
   onLeadClick,
   onAddLead,
-  onEditStage
+  onEditStage,
+  count,
+  totalValue,
+  hasMore,
+  onLoadMore
 }) => {
-  const totalValue = leads.reduce((sum, pos) => {
+  const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
   }, 0)
+
+  // Usa valores do servidor quando disponíveis (Fase 3); fallback para locais (Fase 2)
+  const displayCount      = count      ?? leads.length
+  const displayTotalValue = totalValue ?? localTotalValue
 
   const getStageTypeColor = (type: string) => {
     switch (type) {
@@ -67,13 +83,13 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </h3>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">
-                {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
+                {displayCount} {displayCount === 1 ? 'lead' : 'leads'}
               </p>
-              {totalValue > 0 && (
+              {displayTotalValue > 0 && (
                 <>
                   <span className="text-xs text-gray-300">•</span>
                   <p className="text-xs text-green-600 font-semibold">
-                    {formatCurrency(totalValue)}
+                    {formatCurrency(displayTotalValue)}
                   </p>
                 </>
               )}
@@ -105,18 +121,18 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
       </div>
 
       {/* Estatísticas */}
-      {(leads.length > 0 || totalValue > 0) && (
+      {(displayCount > 0 || displayTotalValue > 0) && (
         <div className={`px-4 py-3 border-b ${getStageTypeColor(stage.stage_type)}`}>
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-gray-600">
               <Users className="w-3.5 h-3.5" />
-              <span className="font-medium">{leads.length}</span>
+              <span className="font-medium">{displayCount}</span>
             </div>
             
-            {totalValue > 0 && (
+            {displayTotalValue > 0 && (
               <div className="flex items-center gap-1.5 text-green-600 font-semibold">
                 <DollarSign className="w-3.5 h-3.5" />
-                <span>{formatCurrency(totalValue)}</span>
+                <span>{formatCurrency(displayTotalValue)}</span>
               </div>
             )}
           </div>
@@ -167,17 +183,29 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
         )}
       </Droppable>
 
-      {/* Footer com ações */}
-      {stage.stage_type !== 'active' && leads.length > 0 && (
+      {/* Footer: etapas especiais (won/lost) */}
+      {stage.stage_type !== 'active' && displayCount > 0 && (
         <div className="px-4 py-3 border-t bg-gray-50 rounded-b-lg">
           <div className="flex items-center justify-between text-xs">
             <span className="text-gray-600">
               {stage.stage_type === 'won' ? '✅ Ganhos' : '❌ Perdidos'}
             </span>
             <span className="font-semibold text-gray-700">
-              {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
+              {displayCount} {displayCount === 1 ? 'lead' : 'leads'}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Footer: Carregar mais (Fase 3) */}
+      {hasMore && onLoadMore && (
+        <div className="px-4 py-3 border-t bg-gray-50 rounded-b-lg">
+          <button
+            onClick={onLoadMore}
+            className="w-full text-xs text-blue-600 hover:text-blue-700 font-medium text-center py-1 rounded hover:bg-blue-50 transition-colors"
+          >
+            Carregar mais ({leads.length} de {displayCount})
+          </button>
         </div>
       )}
     </div>
