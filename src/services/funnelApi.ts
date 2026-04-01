@@ -763,9 +763,12 @@ class FunnelApiService {
       // Usar RPC quando companyId disponível: traz foto via JOIN, sem N+1
       if (companyId) {
         const { data, error } = await supabase.rpc('get_funnel_positions_with_photos', {
-          p_funnel_id:  funnelId,
-          p_company_id: companyId,
-          p_stage_id:   filter?.stage_id ?? null
+          p_funnel_id:   funnelId,
+          p_company_id:  companyId,
+          p_stage_id:    filter?.stage_id    ?? null,
+          p_search:      filter?.search      ?? null,
+          p_origin:      filter?.origin      ?? null,
+          p_period_days: filter?.period_days ?? null
         })
 
         if (error) throw error

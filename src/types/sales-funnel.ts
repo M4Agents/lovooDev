@@ -326,6 +326,8 @@ export interface LeadPositionFilter {
   funnel_id: string
   stage_id?: string
   search?: string
+  origin?: string
+  period_days?: number
   tags?: string[]
   min_value?: number
   max_value?: number

@@ -4,7 +4,7 @@
 // Objetivo: Board Kanban principal com drag & drop
 // =====================================================
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
@@ -16,7 +16,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { triggerManager } from '../../services/automation/TriggerManager'
 import { supabase } from '../../lib/supabase'
-import type { LeadFunnelPosition, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
+import type { LeadFunnelPosition, LeadPositionFilter, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 
 interface FunnelBoardProps {
   funnelId: string
@@ -47,6 +47,22 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     refreshStages
   } = useFunnelStages(funnelId)
 
+  // Converte selectedPeriod (string da UI) para period_days (int para a RPC)
+  const periodDays = useMemo<number | undefined>(() => {
+    if (selectedPeriod === 'today')  return 1
+    if (selectedPeriod === 'week')   return 7
+    if (selectedPeriod === 'month')  return 30
+    return undefined
+  }, [selectedPeriod])
+
+  // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários no hook
+  const filter = useMemo<LeadPositionFilter>(() => ({
+    funnel_id:   funnelId,
+    search:      searchTerm   || undefined,
+    origin:      selectedOrigin || undefined,
+    period_days: periodDays
+  }), [funnelId, searchTerm, selectedOrigin, periodDays])
+
   const {
     positions,
     loading: positionsLoading,
@@ -54,7 +70,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     moveOpportunityById,
     addLeadToFunnel,
     refreshPositions
-  } = useLeadPositions(funnelId, companyId)
+  } = useLeadPositions(funnelId, companyId, filter)
 
   const [isDragging, setIsDragging] = useState(false)
   const [showEditStageModal, setShowEditStageModal] = useState(false)
@@ -62,45 +78,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [selectedStage, setSelectedStage] = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId] = useState<string>('')
 
-  // Organizar leads por etapa com filtros de busca, origem e período
+  // Organizar leads por etapa — filtros de busca/origem/período já aplicados server-side pela RPC
   const getLeadsByStage = useCallback((stageId: string): LeadFunnelPosition[] => {
-    let filtered = positions.filter(pos => pos.stage_id === stageId)
-
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      filtered = filtered.filter(pos => {
-        const lead = pos.opportunity?.lead
-        if (!lead) return false
-        return (
-          lead.name?.toLowerCase().includes(search) ||
-          lead.email?.toLowerCase().includes(search) ||
-          lead.phone?.includes(search) ||
-          lead.company_name?.toLowerCase().includes(search)
-        )
-      })
-    }
-
-    if (selectedOrigin) {
-      filtered = filtered.filter(pos => pos.opportunity?.lead?.origin === selectedOrigin)
-    }
-
-    if (selectedPeriod) {
-      const now = new Date()
-      let cutoff: Date
-      if (selectedPeriod === 'today') {
-        cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      } else if (selectedPeriod === 'week') {
-        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      } else if (selectedPeriod === 'month') {
-        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      } else {
-        cutoff = new Date(0)
-      }
-      filtered = filtered.filter(pos => {
-        const created = pos.opportunity?.created_at
-        return created ? new Date(created) >= cutoff : false
-      })
-    }
+    const filtered = positions.filter(pos => pos.stage_id === stageId)
 
     // Ordenar por data de criação da oportunidade (mais recente primeiro)
     return filtered.sort((a, b) => {
@@ -115,7 +95,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
       return a.position_in_stage - b.position_in_stage
     })
-  }, [positions, searchTerm, selectedOrigin, selectedPeriod])
+  }, [positions])
 
   // Handlers dos modais
   const handleEditStage = (stageId: string) => {
