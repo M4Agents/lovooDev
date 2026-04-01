@@ -376,47 +376,60 @@ async function processMessage(payload) {
     // =====================================================
     // SINCRONIZAÇÃO DE FOTO VIA imagePreview DO PAYLOAD
     // =====================================================
-    // Usa a foto que já vem direto no webhook (sem chamada extra à API Uazapi)
+    // Usa a foto que já vem direto no webhook (sem chamada extra à API Uazapi).
+    // Executado em fire-and-forget — não bloqueia a resposta 200.
     try {
       const imagePreview = payload.chat?.imagePreview;
-      const isWhatsAppCdnUrl = imagePreview && (
-        imagePreview.includes('pps.whatsapp.net') ||
-        imagePreview.includes('mmg.whatsapp.net')
-      );
+      const hasWhatsAppCdnPreview = isWhatsAppCdnPhoto(imagePreview);
 
-      if (isWhatsAppCdnUrl) {
-        console.log('📸 imagePreview detectado — baixando para Storage:', phoneNumber);
-        // Não bloqueia — executa em background
-        downloadAndStoreContactAvatar({
-          supabase,
-          profileUrl: imagePreview,
-          companyId: company.id,
-          phoneNumber,
-        }).then(async (stableUrl) => {
-          const finalUrl = stableUrl || imagePreview;
-          const { error: photoUpdateError } = await supabase
-            .from('chat_contacts')
-            .update({
-              profile_picture_url: finalUrl,
-              photo_updated_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('company_id', company.id)
-            .eq('phone_number', phoneNumber);
-          if (photoUpdateError) {
-            console.error('❌ Erro ao atualizar foto do contato:', photoUpdateError.message);
-          } else {
-            const type = stableUrl ? 'Storage permanente' : 'URL fresca WhatsApp';
-            console.log(`📸 ✅ Foto salva (${type}):`, phoneNumber);
-          }
-        }).catch((syncError) => {
-          console.error('❌ Erro no download/upload de foto:', syncError.message);
-        });
+      if (hasWhatsAppCdnPreview) {
+        console.log('📸 imagePreview detectado — verificando necessidade de sync:', phoneNumber);
+
+        // Throttle: só prossegue se a foto precisar ser atualizada
+        shouldSyncPhoto(supabase, company.id, phoneNumber, isNewContact)
+          .then(async (needsSync) => {
+            if (!needsSync) {
+              console.log('📸 Sync ignorado pelo throttle:', phoneNumber);
+              return;
+            }
+
+            const stableUrl = await downloadAndStoreContactAvatar({
+              supabase,
+              profileUrl: imagePreview,
+              companyId: company.id,
+              phoneNumber,
+            });
+
+            // Só atualiza banco se obteve URL estável do Storage
+            if (!stableUrl) {
+              console.log('📸 Download falhou — banco não atualizado:', phoneNumber);
+              return;
+            }
+
+            const { error: photoUpdateError } = await supabase
+              .from('chat_contacts')
+              .update({
+                profile_picture_url: stableUrl,
+                photo_updated_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('company_id', company.id)
+              .eq('phone_number', phoneNumber);
+
+            if (photoUpdateError) {
+              console.error('❌ Erro ao atualizar foto do contato:', photoUpdateError.message);
+            } else {
+              console.log('📸 ✅ Foto salva no Storage permanente:', phoneNumber);
+            }
+          })
+          .catch((syncError) => {
+            console.error('❌ Erro no sync de foto (fire-and-forget):', syncError.message);
+          });
       } else {
-        console.log('📸 Sem imagePreview no payload — foto não atualizada:', phoneNumber);
+        console.log('📸 Sem imagePreview CDN no payload — foto não atualizada:', phoneNumber);
       }
     } catch (syncInitError) {
-      console.error('❌ ERRO AO SINCRONIZAR FOTO:', syncInitError.message);
+      console.error('❌ ERRO AO INICIAR SYNC DE FOTO:', syncInitError.message);
       // Não interrompe o fluxo principal
     }
     
@@ -588,10 +601,22 @@ async function downloadAndStoreMedia({
 }
 
 // =====================================================
+// UTILITÁRIO: NORMALIZAÇÃO DE TELEFONE
+// =====================================================
+function normalizePhone(phoneNumber) {
+  return String(phoneNumber || '').replace(/\D/g, '');
+}
+
+// =====================================================
 // FUNÇÃO PARA VERIFICAÇÃO INTELIGENTE DE SINCRONIZAÇÃO
 // =====================================================
-// Implementada em: 2025-11-27 - Otimização de performance e escalabilidade
-// Backup criado: uazapi-webhook-final.js.backup-pre-sync-YYYYMMDD-HHMMSS
+function isWhatsAppCdnPhoto(url) {
+  return url && (
+    url.includes('pps.whatsapp.net') ||
+    url.includes('mmg.whatsapp.net')
+  );
+}
+
 async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = false) {
   try {
     console.log('[shouldSyncPhoto] Verificando necessidade de sincronização:', {
@@ -620,7 +645,6 @@ async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = 
     }
 
     const currentUrl = contact.profile_picture_url;
-    const lastUpdate = new Date(contact.photo_updated_at || contact.updated_at);
 
     // 3. SEM FOTO: sincronizar para tentar obter
     if (!currentUrl) {
@@ -628,28 +652,28 @@ async function shouldSyncPhoto(supabase, companyId, phoneNumber, isNewContact = 
       return true;
     }
 
-    // 4. URL TEMPORÁRIA: sincronizar para migrar para Storage
-    if (currentUrl.includes('pps.whatsapp.net')) {
-      console.log('[shouldSyncPhoto] URL temporária detectada - migrar para Storage');
+    // 4. URL TEMPORÁRIA DO CDN WHATSAPP: migrar para Storage
+    if (isWhatsAppCdnPhoto(currentUrl)) {
+      console.log('[shouldSyncPhoto] URL temporária do WhatsApp CDN - migrar para Storage');
       return true;
     }
 
-    // 5. VERIFICAR SE JÁ SINCRONIZOU HOJE
+    // A partir daqui a URL já é estável (Storage). Aplicar throttle de 24h.
+    const lastUpdate = new Date(contact.photo_updated_at || contact.updated_at);
     const today = new Date().toDateString();
     const lastUpdateDate = lastUpdate.toDateString();
-    
+
     if (today === lastUpdateDate) {
-      console.log('[shouldSyncPhoto] Já sincronizado hoje (' + lastUpdateDate + ') - pular');
+      console.log('[shouldSyncPhoto] URL estável e já sincronizado hoje (' + lastUpdateDate + ') - pular');
       return false;
     }
 
-    // 6. PRIMEIRA INTERAÇÃO DO DIA: sincronizar
+    // 5. PRIMEIRA INTERAÇÃO DO DIA COM URL ESTÁVEL: atualizar
     console.log('[shouldSyncPhoto] Primeira interação do dia (última: ' + lastUpdateDate + ') - sincronizar');
     return true;
 
   } catch (error) {
     console.error('[shouldSyncPhoto] EXCEPTION na verificação:', error);
-    // Em caso de erro, sincronizar por segurança (não quebrar sistema)
     return true;
   }
 }
@@ -697,10 +721,11 @@ async function downloadAndStoreContactAvatar({
 
     console.log('[downloadAndStoreContactAvatar] Download concluído, tamanho:', buffer.length, 'bytes');
 
-    // 3. Definir nome do arquivo no Storage
-    // Formato: avatars/{companyId}/{phoneNumber}_{timestamp}.jpg
-    const timestamp = Date.now();
-    const fileName = `avatars/${companyId}/${phoneNumber}_${timestamp}.jpg`;
+    // 3. Definir nome estável do arquivo no Storage
+    // Formato: avatars/{companyId}/{phone_normalizado}.jpg
+    // upsert:true garante que só existe um arquivo por contato (sem acumulação)
+    const cleanPhone = normalizePhone(phoneNumber);
+    const fileName = `avatars/${companyId}/${cleanPhone}.jpg`;
 
     console.log('[downloadAndStoreContactAvatar] Fazendo upload para Storage:', fileName);
 
@@ -709,7 +734,7 @@ async function downloadAndStoreContactAvatar({
       .from('chat-media')
       .upload(fileName, buffer, {
         contentType: 'image/jpeg',
-        upsert: false, // Não sobrescrever, criar novo arquivo sempre
+        upsert: true,
       });
 
     if (uploadError) {
