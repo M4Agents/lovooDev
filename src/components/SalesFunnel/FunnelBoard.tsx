@@ -1,7 +1,9 @@
 // =====================================================
 // COMPONENTE: FunnelBoard
-// Data: 03/03/2026
+// Data: 03/03/2026 — Fase 3B: 04/04/2026
 // Objetivo: Board Kanban principal com drag & drop
+// Fase 3B: carregamento por coluna, contadores server-side,
+//          DnD otimista com rollback, refresh cirúrgico.
 // =====================================================
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
@@ -11,12 +13,13 @@ import { FunnelColumn } from './FunnelColumn'
 import { EditStageModal } from './EditStageModal'
 import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
-import { useLeadPositions } from '../../hooks/useLeadPositions'
+import { useBoardPositions } from '../../hooks/useBoardPositions'
+import { useStageCounts } from '../../hooks/useStageCounts'
+import { useMoveOpportunity } from '../../hooks/useMoveOpportunity'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
-import { triggerManager } from '../../services/automation/TriggerManager'
 import { supabase } from '../../lib/supabase'
-import type { LeadFunnelPosition, LeadPositionFilter, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
+import type { LeadPositionFilter, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 
 interface FunnelBoardProps {
   funnelId: string
@@ -37,6 +40,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 }) => {
   const { company } = useAuth()
   const companyId = company?.id
+
   const {
     stages,
     loading: stagesLoading,
@@ -49,55 +53,64 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   // Converte selectedPeriod (string da UI) para period_days (int para a RPC)
   const periodDays = useMemo<number | undefined>(() => {
-    if (selectedPeriod === 'today')  return 1
-    if (selectedPeriod === 'week')   return 7
-    if (selectedPeriod === 'month')  return 30
+    if (selectedPeriod === 'today') return 1
+    if (selectedPeriod === 'week')  return 7
+    if (selectedPeriod === 'month') return 30
     return undefined
   }, [selectedPeriod])
 
-  // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários no hook
+  // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários
   const filter = useMemo<LeadPositionFilter>(() => ({
     funnel_id:   funnelId,
-    search:      searchTerm   || undefined,
+    search:      searchTerm    || undefined,
     origin:      selectedOrigin || undefined,
     period_days: periodDays
   }), [funnelId, searchTerm, selectedOrigin, periodDays])
 
+  // =====================================================
+  // FASE 3B — HOOKS DE DADOS POR COLUNA
+  // =====================================================
+
   const {
-    positions,
-    loading: positionsLoading,
-    error: positionsError,
-    moveOpportunityById,
-    addLeadToFunnel,
-    refreshPositions
-  } = useLeadPositions(funnelId, companyId, filter)
+    stageMap,
+    loadMore,
+    refresh: boardRefresh,
+    optimisticMove,
+    rollback
+  } = useBoardPositions(funnelId, stages, companyId, filter)
 
-  const [isDragging, setIsDragging] = useState(false)
-  const [showEditStageModal, setShowEditStageModal] = useState(false)
-  const [showAddLeadModal, setShowAddLeadModal] = useState(false)
-  const [selectedStage, setSelectedStage] = useState<FunnelStage | undefined>()
-  const [selectedStageId, setSelectedStageId] = useState<string>('')
+  const { counts, refresh: refreshCounts } = useStageCounts(funnelId, companyId, filter)
 
-  // Organizar leads por etapa — filtros de busca/origem/período já aplicados server-side pela RPC
-  const getLeadsByStage = useCallback((stageId: string): LeadFunnelPosition[] => {
-    const filtered = positions.filter(pos => pos.stage_id === stageId)
+  const { move } = useMoveOpportunity(companyId)
 
-    // Ordenar por data de criação da oportunidade (mais recente primeiro)
-    return filtered.sort((a, b) => {
-      const dateA = a.opportunity?.created_at
-      const dateB = b.opportunity?.created_at
+  // Verdadeiro apenas antes do primeiro fetch completar (stageMap ainda vazio)
+  const isInitialLoading = stageMap.size === 0
 
-      if (dateA && dateB) {
-        return new Date(dateB).getTime() - new Date(dateA).getTime()
-      }
-      if (dateA) return -1
-      if (dateB) return 1
+  // =====================================================
+  // ESTADO DOS MODAIS
+  // =====================================================
 
-      return a.position_in_stage - b.position_in_stage
-    })
-  }, [positions])
+  const [isDragging, setIsDragging]                 = useState(false)
+  const [showEditStageModal, setShowEditStageModal]  = useState(false)
+  const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
+  const [selectedStage, setSelectedStage]            = useState<FunnelStage | undefined>()
+  const [selectedStageId, setSelectedStageId]        = useState<string>('')
 
-  // Handlers dos modais
+  // =====================================================
+  // LEITURA DE DADOS POR COLUNA
+  // Ordem vinda da RPC (position_in_stage ASC).
+  // Sort frontend removido: reordenar por created_at
+  // desfaria o optimisticMove imediatamente.
+  // =====================================================
+
+  const getLeadsByStage = useCallback((stageId: string) => {
+    return stageMap.get(stageId)?.positions ?? []
+  }, [stageMap])
+
+  // =====================================================
+  // HANDLERS DE MODAIS
+  // =====================================================
+
   const handleEditStage = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId)
     setSelectedStage(stage)
@@ -123,16 +136,53 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     await refreshStages()
   }
 
-  const handleSubmitAddLead = async (leadId: number, stageId: string) => {
-    await addLeadToFunnel(leadId, funnelId)
-    await refreshPositions()
-  }
+  // =====================================================
+  // ADD LEAD AO FUNIL — refresh cirúrgico
+  // Cria oportunidade e recarrega apenas a coluna afetada.
+  // Sem otimismo: operação complexa, custo de 1 refetch é aceitável.
+  // =====================================================
 
-  // Buscar leads disponíveis (não estão no funil)
+  const addLeadToBoard = useCallback(async (leadId: number, targetStageId: string) => {
+    const funnelStages = await funnelApi.getStages(funnelId)
+    const targetStage  = funnelStages.find(s => s.id === targetStageId)
+      || funnelStages.find(s => s.is_system_stage && s.position === 0)
+      || funnelStages[0]
+
+    if (!targetStage) throw new Error('Funil não possui etapas')
+
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('name, company_id, origin, responsible_user_id')
+      .eq('id', leadId)
+      .single()
+
+    if (!lead) throw new Error('Lead não encontrado')
+
+    const opportunity = await funnelApi.createOpportunity({
+      lead_id:        leadId,
+      company_id:     lead.company_id,
+      title:          lead.name,
+      source:         lead.origin,
+      owner_user_id:  lead.responsible_user_id
+    })
+
+    await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, targetStage.id)
+
+    // Refresh cirúrgico: apenas a coluna de entrada + contadores
+    boardRefresh(targetStage.id)
+    refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
+  }, [funnelId, boardRefresh, refreshCounts])
+
+  const handleSubmitAddLead = (leadId: number, stageId: string) =>
+    addLeadToBoard(leadId, stageId)
+
+  // =====================================================
+  // LEADS DISPONÍVEIS PARA O MODAL
+  // Carregado apenas ao abrir o modal, sem depender do stageMap.
+  // =====================================================
+
   const [availableLeads, setAvailableLeads] = useState<Array<{id: number; name: string; email?: string; phone?: string; company_name?: string}>>([])
-  
-  // Carrega leads disponíveis ao abrir o modal (acionado via showAddLeadModal).
-  // Não depende de `positions` para evitar re-fetch a cada movimentação de card.
+
   useEffect(() => {
     if (!showAddLeadModal || !companyId || !funnelId) return
     const fetchAvailableLeads = async () => {
@@ -146,7 +196,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     fetchAvailableLeads()
   }, [showAddLeadModal, companyId, funnelId])
 
-  // Handler do drag & drop
+  // =====================================================
+  // DRAG & DROP — OTIMISTA COM ROLLBACK
+  // Fluxo: optimisticMove → move (API + automação) → rollback se erro
+  // refreshCounts: fire-and-forget com .catch() para não contaminar rollback
+  // =====================================================
+
   const handleDragStart = () => {
     setIsDragging(true)
   }
@@ -156,82 +211,53 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
     const { source, destination, draggableId } = result
 
-    // Se não há destino ou voltou para o mesmo lugar
     if (!destination) return
     if (
       source.droppableId === destination.droppableId &&
       source.index === destination.index
-    ) {
-      return
-    }
+    ) return
 
-    // Extrair opportunity_id do draggableId (formato: "opportunity-<uuid>")
     const opportunityId = draggableId.replace('opportunity-', '')
-    const toStageId = destination.droppableId
-    const newPosition = destination.index
+    const fromStageId   = source.droppableId
+    const toStageId     = destination.droppableId
+    const newPosition   = destination.index
+
+    // Ler posição atual do stageMap (já populado)
+    const currentPosition = stageMap.get(fromStageId)?.positions
+      .find(p => p.opportunity_id === opportunityId)
+    if (!currentPosition) return
+
+    // 1. Atualização visual imediata
+    const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
 
     try {
-      // Buscar dados da posição atual antes de mover
-      const currentPosition = positions.find(p => p.opportunity_id === opportunityId)
-      if (!currentPosition) {
-        console.error('Posição atual não encontrada para oportunidade:', opportunityId)
-        return
-      }
+      // 2. Persistir na API + disparar automação (fire-and-forget dentro do hook)
+      await move({
+        opportunity_id:    opportunityId,
+        funnel_id:         funnelId,
+        from_stage_id:     fromStageId,
+        to_stage_id:       toStageId,
+        position_in_stage: newPosition,
+        lead_id:           currentPosition.lead_id ?? undefined,
+        conversationId:    currentPosition.opportunity?.lead?.chat_conversations?.[0]?.id,
+        opportunityData:   { lead: currentPosition.opportunity?.lead }
+      })
 
-      const oldStageId = currentPosition.stage_id
-
-      // Mover oportunidade para nova etapa
-      await moveOpportunityById(opportunityId, toStageId, newPosition)
-      
-      // Disparar trigger de automação se mudou de etapa
-      if (companyId && opportunityId && oldStageId !== toStageId) {
-        console.log('🔔 Disparando trigger de automação do Funil:', {
-          opportunityId,
-          oldStage: oldStageId,
-          newStage: toStageId,
-          funnel: funnelId
-        })
-
-        try {
-          // Buscar conversationId direto de positions (mesma estrutura do OpportunitiesSection)
-          const conversationId = currentPosition?.opportunity?.lead?.chat_conversations?.[0]?.id
-          
-          console.log('📞 ConversationId encontrado via positions:', conversationId)
-
-          // Disparar trigger com mesma estrutura do OpportunitiesSection
-          await triggerManager.onOpportunityStageChanged(
-            companyId,
-            opportunityId,
-            oldStageId,
-            toStageId,
-            {
-              opportunity_id: opportunityId,
-              funnel_id: funnelId,
-              lead_id: currentPosition.lead_id,
-              lead: currentPosition?.opportunity?.lead,
-              conversation_id: conversationId
-            }
-          )
-
-          console.log('✅ Trigger de automação disparado com sucesso')
-        } catch (automationError) {
-          console.error('❌ Erro ao disparar automação:', automationError)
-          // Não bloquear movimentação se automação falhar
-        }
-      }
-      
-      // Atualizar posições
-      await refreshPositions()
+      // 3. Contadores: fire-and-forget — não pode contaminar o catch de rollback
+      refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
     } catch (error) {
-      console.error('Erro ao mover lead:', error)
-      // TODO: Mostrar toast de erro
+      console.error('Erro ao mover oportunidade:', error)
+      // 4. Rollback visual em caso de erro da API
+      rollback(snapshot)
     }
   }
 
-  // Spinner apenas na carga inicial (sem dados ainda).
-  // Refreshes subsequentes (após mover card) rodam em background
-  // sem desmontar os cards existentes.
-  if ((stagesLoading || positionsLoading) && stages.length === 0 && positions.length === 0) {
+  // =====================================================
+  // ESTADOS DE LOADING / ERRO / VAZIO
+  // =====================================================
+
+  // Spinner na carga inicial: stages ainda não carregaram ou stageMap ainda vazio
+  if ((stagesLoading || isInitialLoading) && stages.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -242,8 +268,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     )
   }
 
-  // Error state
-  if (stagesError || positionsError) {
+  // Erro de carregamento das etapas (erros por coluna são tratados individualmente)
+  if (stagesError) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center max-w-md">
@@ -252,7 +278,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             Erro ao carregar funil
           </h3>
           <p className="text-gray-600 mb-4">
-            {stagesError || positionsError}
+            {stagesError}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -265,7 +291,6 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     )
   }
 
-  // Empty state
   if (stages.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -283,6 +308,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       </div>
     )
   }
+
+  // =====================================================
+  // RENDER DO BOARD
+  // =====================================================
 
   return (
     <div className="h-full">
@@ -304,6 +333,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onLeadClick={onLeadClick}
                 onAddLead={handleAddLead}
                 onEditStage={handleEditStage}
+                count={counts[stage.id]?.count}
+                totalValue={counts[stage.id]?.total_value}
+                hasMore={stageMap.get(stage.id)?.hasMore}
+                onLoadMore={() => loadMore(stage.id)}
               />
             </div>
           ))}
