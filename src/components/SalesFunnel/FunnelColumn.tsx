@@ -5,7 +5,7 @@
 // =====================================================
 
 import { Droppable } from '@hello-pangea/dnd'
-import { Plus, MoreVertical, DollarSign, Users } from 'lucide-react'
+import { Plus, MoreVertical, Users } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -59,17 +59,6 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   const nextLoadCount  = Math.min(remainingCount, pageSize)
 
   const isLastPage     = nextLoadCount < pageSize
-
-  const getStageTypeColor = (type: string) => {
-    switch (type) {
-      case 'won':
-        return 'bg-green-50 border-green-200'
-      case 'lost':
-        return 'bg-red-50 border-red-200'
-      default:
-        return 'bg-gray-50 border-gray-200'
-    }
-  }
 
   const getHeaderColor = (color: string) => {
     return {
@@ -132,25 +121,6 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
           )}
         </div>
       </div>
-
-      {/* Estatísticas */}
-      {(displayCount > 0 || displayTotalValue > 0) && (
-        <div className={`px-4 py-3 border-b ${getStageTypeColor(stage.stage_type)}`}>
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 text-gray-600">
-              <Users className="w-3.5 h-3.5" />
-              <span className="font-medium">{displayCount}</span>
-            </div>
-            
-            {displayTotalValue > 0 && (
-              <div className="flex items-center gap-1.5 text-green-600 font-semibold">
-                <DollarSign className="w-3.5 h-3.5" />
-                <span>{formatCurrency(displayTotalValue)}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Lista de oportunidades com drag & drop */}
       <Droppable droppableId={stage.id}>
