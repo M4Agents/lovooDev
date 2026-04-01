@@ -33,23 +33,17 @@ export const Avatar: React.FC<AvatarProps> = ({
   className = ''
 }) => {
   const [imageError, setImageError] = React.useState(false);
-  const [imageLoading, setImageLoading] = React.useState(true);
+  const [imageLoading, setImageLoading] = React.useState(false);
 
   React.useEffect(() => {
     setImageError(false);
-    setImageLoading(!!src);
-    // #region agent log
-    const urlType = !src ? 'null' : src.includes('pps.whatsapp.net') || src.includes('mmg.whatsapp.net') ? 'CDN_WA' : src.includes('contact-avatars') ? 'STORAGE_OK' : src.includes('chat-media') ? 'STORAGE_BROKEN' : 'OTHER';
-    console.log('[DBG-Avatar] src changed | urlType:', urlType, '| loadingSetTo:', !!src, '| alt:', alt, '| src:', src ? src.substring(0, 80) : null);
-    // #endregion
+    // Não resetar imageLoading aqui: evita o overlay de loading no remount
+    // com imagens já em cache (causa do flicker no DnD do Funil).
   }, [src]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
     setImageError(false);
-    // #region agent log
-    console.log('[DBG-Avatar] onLoad fired | alt:', alt, '| src:', src ? src.substring(0, 80) : null);
-    // #endregion
   };
 
   const handleImageError = () => {
