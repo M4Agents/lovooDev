@@ -13,12 +13,12 @@ import type {
   UseLeadPositionsReturn
 } from '../types/sales-funnel'
 
-export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter): UseLeadPositionsReturn => {
+export const useLeadPositions = (funnelId: string, companyId?: string, filter?: LeadPositionFilter): UseLeadPositionsReturn => {
   const [positions, setPositions] = useState<OpportunityFunnelPosition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
 
-  // Buscar posições (ATUALIZADO PARA OPORTUNIDADES)
+  // Buscar posições — usa RPC com foto quando companyId disponível
   const fetchPositions = useCallback(async () => {
     if (!funnelId) return
     
@@ -26,7 +26,7 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
       setLoading(true)
       setError(undefined)
       
-      const data = await funnelApi.getOpportunityPositions(funnelId, filter)
+      const data = await funnelApi.getOpportunityPositions(funnelId, filter, companyId)
       setPositions(data)
     } catch (err) {
       console.error('Error fetching opportunity positions:', err)
@@ -34,7 +34,7 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     } finally {
       setLoading(false)
     }
-  }, [funnelId, filter])
+  }, [funnelId, filter, companyId])
 
   // Carregar posições ao montar
   useEffect(() => {
@@ -142,8 +142,7 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
         to_stage_id: toStageId,
         position_in_stage: position
       })
-
-      await fetchPositions()
+      // Refresh delegado ao caller (handleDragEnd chama refreshPositions)
     } catch (err) {
       console.error('Error moving opportunity by id:', err)
       const errorMessage = err instanceof Error ? err.message : 'Erro ao mover oportunidade'

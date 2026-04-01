@@ -14,7 +14,6 @@ interface LeadCardProps {
   position: OpportunityFunnelPosition
   index: number
   visibleFields?: string[]
-  leadPhotos?: Record<string, string>
   onClick?: (leadId: number) => void
 }
 
@@ -22,7 +21,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   position,
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
-  leadPhotos,
   onClick
 }) => {
   const opportunity = position.opportunity
@@ -58,7 +56,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 <Avatar
-                  src={lead.phone ? leadPhotos?.[lead.phone.replace(/\D/g, '')] : undefined}
+                  src={lead.profile_picture_url ?? undefined}
                   alt={lead.name}
                   size="md"
                 />

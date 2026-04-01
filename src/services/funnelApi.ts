@@ -745,8 +745,25 @@ class FunnelApiService {
   /**
    * Buscar posições das oportunidades em um funil
    */
-  async getOpportunityPositions(funnelId: string, filter?: LeadPositionFilter): Promise<OpportunityFunnelPosition[]> {
+  async getOpportunityPositions(funnelId: string, filter?: LeadPositionFilter, companyId?: string): Promise<OpportunityFunnelPosition[]> {
     try {
+      // Usar RPC quando companyId disponível: traz foto via JOIN, sem N+1
+      if (companyId) {
+        const { data, error } = await supabase.rpc('get_funnel_positions_with_photos', {
+          p_funnel_id:  funnelId,
+          p_company_id: companyId,
+          p_stage_id:   filter?.stage_id ?? null
+        })
+
+        if (error) throw error
+
+        return ((data as OpportunityFunnelPosition[]) || []).map(pos => ({
+          ...pos,
+          days_in_stage: pos.entered_stage_at ? this.calculateDaysInStage(pos.entered_stage_at as unknown as string) : 0
+        }))
+      }
+
+      // Fallback: query PostgREST sem foto (companyId não disponível)
       let query = supabase
         .from('opportunity_funnel_positions')
         .select(`
@@ -785,26 +802,23 @@ class FunnelApiService {
         `)
         .eq('funnel_id', funnelId)
         .order('position_in_stage', { ascending: true })
-      
+
       if (filter?.stage_id) {
         query = query.eq('stage_id', filter.stage_id)
       }
-      
+
       const { data, error } = await query
-      
+
       if (error) throw error
-      
-      // Filtrar leads deletados no frontend
-      const filteredData = (data || []).filter(pos => 
+
+      const filteredData = (data || []).filter(pos =>
         pos.opportunity?.lead && !pos.opportunity.lead.deleted_at
       )
-      
-      const positions = filteredData.map(pos => ({
+
+      return filteredData.map(pos => ({
         ...pos,
         days_in_stage: pos.entered_stage_at ? this.calculateDaysInStage(pos.entered_stage_at) : 0
       }))
-      
-      return positions
     } catch (error) {
       console.error('Error fetching opportunity positions:', error)
       throw error
