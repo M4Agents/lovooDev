@@ -58,7 +58,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 {/* #region agent log */}
-                {(() => { const resolved = resolvePhotoUrl(lead.profile_picture_url); const rawUrl = lead.profile_picture_url; const urlType = !rawUrl ? 'null' : rawUrl.includes('pps.whatsapp.net')||rawUrl.includes('mmg.whatsapp.net') ? 'CDN_WA' : rawUrl.includes('contact-avatars') ? 'STORAGE_OK' : rawUrl.includes('chat-media') ? 'STORAGE_BROKEN' : 'OTHER'; fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'LeadCard.tsx:render',message:'LeadCard render — resolvePhotoUrl result',data:{lead:lead.name,urlType,raw:rawUrl?rawUrl.substring(0,80):null,resolved:resolved?resolved.substring(0,80):null},timestamp:Date.now(),hypothesisId:'H-A-B-C-D'})}).catch(()=>{}); return null; })()}
+                {(() => { const resolved = resolvePhotoUrl(lead.profile_picture_url); const rawUrl = lead.profile_picture_url; const urlType = !rawUrl ? 'null' : rawUrl.includes('pps.whatsapp.net')||rawUrl.includes('mmg.whatsapp.net') ? 'CDN_WA' : rawUrl.includes('contact-avatars') ? 'STORAGE_OK' : rawUrl.includes('chat-media') ? 'STORAGE_BROKEN' : 'OTHER'; console.log('[DBG-LeadCard] render | lead:', lead.name, '| urlType:', urlType, '| resolved:', resolved ? resolved.substring(0,80) : null); return null; })()}
                 {/* #endregion */}
                 <Avatar
                   src={resolvePhotoUrl(lead.profile_picture_url)}

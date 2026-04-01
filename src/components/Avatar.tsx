@@ -40,7 +40,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     setImageLoading(!!src);
     // #region agent log
     const urlType = !src ? 'null' : src.includes('pps.whatsapp.net') || src.includes('mmg.whatsapp.net') ? 'CDN_WA' : src.includes('contact-avatars') ? 'STORAGE_OK' : src.includes('chat-media') ? 'STORAGE_BROKEN' : 'OTHER';
-    fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'Avatar.tsx:src-changed',message:'Avatar src changed — loading reset',data:{urlType,src:src?src.substring(0,80):null,loadingSetTo:!!src,alt},timestamp:Date.now(),hypothesisId:'H-A-B-C'})}).catch(()=>{});
+    console.log('[DBG-Avatar] src changed | urlType:', urlType, '| loadingSetTo:', !!src, '| alt:', alt, '| src:', src ? src.substring(0, 80) : null);
     // #endregion
   }, [src]);
 
@@ -48,7 +48,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     setImageLoading(false);
     setImageError(false);
     // #region agent log
-    fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'Avatar.tsx:onLoad',message:'Avatar image loaded (onLoad fired)',data:{src:src?src.substring(0,80):null,alt},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    console.log('[DBG-Avatar] onLoad fired | alt:', alt, '| src:', src ? src.substring(0, 80) : null);
     // #endregion
   };
 
