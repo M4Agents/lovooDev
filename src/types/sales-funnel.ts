@@ -372,6 +372,33 @@ export interface StageHistoryFilter {
 }
 
 // =====================================================
+// FASE 4 — REALTIME
+// =====================================================
+
+/**
+ * Campos relevantes de opportunity_funnel_positions recebidos
+ * via Supabase Realtime (postgres_changes).
+ * Com REPLICA IDENTITY FULL, UPDATE inclui old.stage_id.
+ */
+export interface FunnelRealtimePayload {
+  id?: string
+  opportunity_id?: string
+  lead_id?: number
+  funnel_id?: string
+  stage_id?: string
+  position_in_stage?: number
+  entered_stage_at?: string
+  updated_at?: string
+}
+
+/** Evento recebido pelo canal Realtime do funil */
+export interface FunnelRealtimeEvent {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: Partial<FunnelRealtimePayload>
+  old: Partial<FunnelRealtimePayload>
+}
+
+// =====================================================
 // TYPES PARA ESTATÍSTICAS
 // =====================================================
 

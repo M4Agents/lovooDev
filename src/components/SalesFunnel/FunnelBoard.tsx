@@ -1,12 +1,14 @@
 // =====================================================
 // COMPONENTE: FunnelBoard
-// Data: 03/03/2026 — Fase 3B: 04/04/2026
+// Data: 03/03/2026 — Fase 3B: 04/04/2026 — Fase 4: 04/04/2026
 // Objetivo: Board Kanban principal com drag & drop
 // Fase 3B: carregamento por coluna, contadores server-side,
 //          DnD otimista com rollback, refresh cirúrgico.
+// Fase 4: sincronização Realtime incremental por coluna,
+//         deduplicação de eventos próprios, sync ao voltar para aba.
 // =====================================================
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
@@ -16,10 +18,18 @@ import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
 import { useMoveOpportunity } from '../../hooks/useMoveOpportunity'
+import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
 import type { LeadPositionFilter, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
+
+// =====================================================
+// FEATURE FLAG — REALTIME
+// Mude para false para desabilitar Realtime imediatamente
+// sem reverter código (rollback rápido de emergência).
+// =====================================================
+const FUNNEL_REALTIME_ENABLED = true
 
 interface FunnelBoardProps {
   funnelId: string
@@ -82,6 +92,26 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const { counts, refresh: refreshCounts } = useStageCounts(funnelId, companyId, filter)
 
   const { move } = useMoveOpportunity(companyId)
+
+  // =====================================================
+  // FASE 4 — REALTIME
+  // recentlyMovedRef: Map<opportunityId, timestamp> para deduplicação.
+  // Após cada move() bem-sucedido, registra o opportunityId por 3s
+  // para que o useFunnelRealtime ignore o evento gerado pelo próprio usuário.
+  //
+  // LIMITAÇÃO DOCUMENTADA: se outro usuário mover o mesmo card
+  // dentro de 3s, o evento será ignorado. Inconsistência máxima: 3s.
+  // =====================================================
+  const recentlyMovedRef = useRef<Map<string, number>>(new Map())
+
+  useFunnelRealtime(
+    funnelId,
+    companyId,
+    FUNNEL_REALTIME_ENABLED,
+    (stageIds) => stageIds.forEach(id => boardRefresh(id)),
+    () => { refreshCounts().catch(err => console.error('Realtime: erro ao atualizar contadores:', err)) },
+    recentlyMovedRef
+  )
 
   // Verdadeiro apenas antes do primeiro fetch completar (stageMap ainda vazio)
   const isInitialLoading = stageMap.size === 0
@@ -197,6 +227,28 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   }, [showAddLeadModal, companyId, funnelId])
 
   // =====================================================
+  // FASE 4 — SYNC AO VOLTAR PARA A ABA
+  // Refresca todas as etapas não-ocultas (is_hidden === false) e
+  // atualiza contadores quando o usuário retorna à aba após ausência.
+  // Não existe noção de colunas visíveis no viewport — todas as etapas
+  // configuradas como não-ocultas são recarregadas.
+  // =====================================================
+
+  useEffect(() => {
+    if (!FUNNEL_REALTIME_ENABLED) return
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        boardRefresh()
+        refreshCounts().catch(err => console.error('Visibility sync: erro ao atualizar contadores:', err))
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [boardRefresh, refreshCounts])
+
+  // =====================================================
   // DRAG & DROP — OTIMISTA COM ROLLBACK
   // Fluxo: optimisticMove → move (API + automação) → rollback se erro
   // refreshCounts: fire-and-forget com .catch() para não contaminar rollback
@@ -243,11 +295,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         opportunityData:   { lead: currentPosition.opportunity?.lead }
       })
 
-      // 3. Contadores: fire-and-forget — não pode contaminar o catch de rollback
+      // 3. Registra o move para deduplicação Realtime (Fase 4).
+      //    Garante que o evento gerado por este move seja ignorado pelo
+      //    useFunnelRealtime por 3s (DEDUPE_WINDOW_MS).
+      //    Cleanup após 6s (2× a janela) para evitar memory leak.
+      recentlyMovedRef.current.set(opportunityId, Date.now())
+      setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
+
+      // 4. Contadores: fire-and-forget — não pode contaminar o catch de rollback
       refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
     } catch (error) {
       console.error('Erro ao mover oportunidade:', error)
-      // 4. Rollback visual em caso de erro da API
+      // 5. Rollback visual em caso de erro da API
       rollback(snapshot)
     }
   }
