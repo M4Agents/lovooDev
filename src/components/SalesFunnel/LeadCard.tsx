@@ -10,6 +10,7 @@ import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp } fr
 import { Avatar } from '../Avatar'
 import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
+import { resolvePhotoUrl } from '../../utils/imageUtils'
 
 interface LeadCardProps {
   position: OpportunityFunnelPosition
@@ -28,14 +29,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const lead = opportunity?.lead
   
   if (!lead || !opportunity) return null
-
-  // #region agent log
-  React.useEffect(() => {
-    const _url = lead?.profile_picture_url;
-    const _isWA = !!(_url?.includes('pps.whatsapp.net') || _url?.includes('mmg.whatsapp.net'));
-    console.log('[DEBUG-27238b][A-C] LeadCard photo —', lead?.name, '| isWhatsAppCdn:', _isWA, '| url:', _url ? _url.substring(0, 80) : null);
-  }, [lead?.profile_picture_url]);
-  // #endregion
 
   const handleClick = () => {
     if (onClick) {
@@ -65,7 +58,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 <Avatar
-                  src={lead.profile_picture_url ?? undefined}
+                  src={resolvePhotoUrl(lead.profile_picture_url)}
                   alt={lead.name}
                   size="md"
                 />

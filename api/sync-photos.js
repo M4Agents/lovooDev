@@ -138,14 +138,14 @@ export default async function handler(req, res) {
         console.log(`  📥 Download: ${buffer.length} bytes`);
 
         // Upload para Storage
-        const timestamp = Date.now();
-        const fileName = `avatars/${contact.company_id}/${contact.phone_number}_${timestamp}.jpg`;
+        const cleanPhone = contact.phone_number.replace(/\D/g, '');
+        const fileName = `avatars/${contact.company_id}/${cleanPhone}.jpg`;
 
         const { error: uploadError } = await supabase.storage
           .from('chat-media')
           .upload(fileName, buffer, {
             contentType: 'image/jpeg',
-            upsert: false,
+            upsert: true,
           });
 
         if (uploadError) {
@@ -160,11 +160,13 @@ export default async function handler(req, res) {
         console.log(`  📤 Upload concluído`);
 
         // Atualizar banco
+        const now = new Date().toISOString();
         const { error: updateError } = await supabase
           .from('chat_contacts')
           .update({
             profile_picture_url: publicUrl,
-            updated_at: new Date().toISOString()
+            photo_updated_at: now,
+            updated_at: now
           })
           .eq('id', contact.id);
 
