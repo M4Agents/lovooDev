@@ -227,6 +227,17 @@ class FunnelApiService {
         ...serializeSupabaseError(error)
       })
       // #endregion
+
+      // Traduzir erros de constraint do Supabase (23505 = unique_violation)
+      const supaErr = error as Record<string, unknown>
+      if (supaErr?.code === '23505') {
+        const detail = String(supaErr?.details || supaErr?.message || '')
+        if (detail.includes('unique_company_funnel_slug') || detail.includes('slug')) {
+          throw new Error('Já existe um funil com nome semelhante. Tente um nome diferente.')
+        }
+        throw new Error('Já existe um funil com este nome nesta empresa.')
+      }
+
       throw error
     }
   }
