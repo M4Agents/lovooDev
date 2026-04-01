@@ -121,6 +121,37 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     }
   }, [fetchPositions])
 
+  // Mover oportunidade por opportunity_id (lookup direto, sem ambiguidade por lead_id)
+  const moveOpportunityById = useCallback(async (
+    opportunityId: string,
+    toStageId: string,
+    position: number
+  ): Promise<void> => {
+    try {
+      setError(undefined)
+
+      const currentPosition = positions.find(p => p.opportunity_id === opportunityId)
+      if (!currentPosition) {
+        throw new Error('Oportunidade não encontrada no funil')
+      }
+
+      await funnelApi.moveOpportunityToStage({
+        opportunity_id: opportunityId,
+        funnel_id: funnelId,
+        from_stage_id: currentPosition.stage_id,
+        to_stage_id: toStageId,
+        position_in_stage: position
+      })
+
+      await fetchPositions()
+    } catch (err) {
+      console.error('Error moving opportunity by id:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao mover oportunidade'
+      setError(errorMessage)
+      throw new Error(errorMessage)
+    }
+  }, [funnelId, positions, fetchPositions])
+
   // Remover oportunidade do funil (ATUALIZADO)
   const removeLeadFromFunnel = useCallback(async (leadId: number, funnelId: string): Promise<void> => {
     try {
@@ -155,6 +186,7 @@ export const useLeadPositions = (funnelId: string, filter?: LeadPositionFilter):
     loading,
     error,
     moveLeadToStage,
+    moveOpportunityById,
     addLeadToFunnel,
     removeLeadFromFunnel,
     refreshPositions

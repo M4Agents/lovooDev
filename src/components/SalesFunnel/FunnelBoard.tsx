@@ -48,7 +48,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     positions,
     loading: positionsLoading,
     error: positionsError,
-    moveLeadToStage,
+    moveOpportunityById,
     addLeadToFunnel,
     refreshPositions
   } = useLeadPositions(funnelId)
@@ -202,24 +202,23 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       return
     }
 
-    // Extrair lead_id do draggableId (formato: "lead-123")
-    const leadId = parseInt(draggableId.replace('lead-', ''))
+    // Extrair opportunity_id do draggableId (formato: "opportunity-<uuid>")
+    const opportunityId = draggableId.replace('opportunity-', '')
     const toStageId = destination.droppableId
     const newPosition = destination.index
 
     try {
       // Buscar dados da posição atual antes de mover
-      const currentPosition = positions.find(p => p.lead_id === leadId)
+      const currentPosition = positions.find(p => p.opportunity_id === opportunityId)
       if (!currentPosition) {
-        console.error('Posição atual não encontrada para lead:', leadId)
+        console.error('Posição atual não encontrada para oportunidade:', opportunityId)
         return
       }
 
       const oldStageId = currentPosition.stage_id
-      const opportunityId = currentPosition.opportunity_id
 
-      // Mover lead para nova etapa
-      await moveLeadToStage(leadId, toStageId, newPosition)
+      // Mover oportunidade para nova etapa
+      await moveOpportunityById(opportunityId, toStageId, newPosition)
       
       // Disparar trigger de automação se mudou de etapa
       if (companyId && opportunityId && oldStageId !== toStageId) {
@@ -245,7 +244,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             {
               opportunity_id: opportunityId,
               funnel_id: funnelId,
-              lead_id: leadId,
+              lead_id: currentPosition.lead_id,
               lead: currentPosition?.opportunity?.lead,
               conversation_id: conversationId
             }

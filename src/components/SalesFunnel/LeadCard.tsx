@@ -39,7 +39,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const isFieldVisible = (field: string) => visibleFields.includes(field)
 
   return (
-    <Draggable draggableId={`lead-${lead.id}`} index={index}>
+    <Draggable draggableId={`opportunity-${position.opportunity_id}`} index={index}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}

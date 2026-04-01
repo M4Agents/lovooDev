@@ -606,6 +606,7 @@ export interface UseLeadPositionsReturn {
   loading: boolean
   error?: string
   moveLeadToStage: (leadId: number, toStageId: string, position: number) => Promise<void>
+  moveOpportunityById: (opportunityId: string, toStageId: string, position: number) => Promise<void>
   addLeadToFunnel: (leadId: number, funnelId: string) => Promise<void>
   removeLeadFromFunnel: (leadId: number, funnelId: string) => Promise<void>
   refreshPositions: () => Promise<void>
