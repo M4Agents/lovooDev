@@ -38,6 +38,12 @@ export const Avatar: React.FC<AvatarProps> = ({
   React.useEffect(() => {
     setImageError(false);
     setImageLoading(!!src);
+    // #region agent log
+    if (src) {
+      const _isWA = src.includes('pps.whatsapp.net') || src.includes('mmg.whatsapp.net');
+      console.log('[DEBUG-27238b][A-C] Avatar src changed — isWhatsAppCdn:', _isWA, '| url:', src.substring(0, 80));
+    }
+    // #endregion
   }, [src]);
 
   const handleImageLoad = () => {

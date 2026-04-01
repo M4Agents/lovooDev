@@ -757,6 +757,15 @@ class FunnelApiService {
 
         if (error) throw error
 
+        // #region agent log
+        const _dbgSample = ((data as OpportunityFunnelPosition[]) || []).slice(0, 8).map((p: any) => ({
+          lead: p.opportunity?.lead?.name,
+          url: p.opportunity?.lead?.profile_picture_url ?? null,
+          isWA: !!(p.opportunity?.lead?.profile_picture_url?.includes('pps.whatsapp.net') || p.opportunity?.lead?.profile_picture_url?.includes('mmg.whatsapp.net'))
+        }));
+        console.log('[DEBUG-27238b][A-B] funnelApi RPC result — total:', (data as any[])?.length, '| sample:', _dbgSample);
+        // #endregion
+
         return ((data as OpportunityFunnelPosition[]) || []).map(pos => ({
           ...pos,
           days_in_stage: pos.entered_stage_at ? this.calculateDaysInStage(pos.entered_stage_at as unknown as string) : 0

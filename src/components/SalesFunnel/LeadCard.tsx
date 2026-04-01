@@ -4,6 +4,7 @@
 // Objetivo: Card arrastável da oportunidade no Kanban
 // =====================================================
 
+import React from 'react'
 import { Draggable } from '@hello-pangea/dnd'
 import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp } from 'lucide-react'
 import { Avatar } from '../Avatar'
@@ -27,6 +28,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const lead = opportunity?.lead
   
   if (!lead || !opportunity) return null
+
+  // #region agent log
+  React.useEffect(() => {
+    const _url = lead?.profile_picture_url;
+    const _isWA = !!(_url?.includes('pps.whatsapp.net') || _url?.includes('mmg.whatsapp.net'));
+    console.log('[DEBUG-27238b][A-C] LeadCard photo —', lead?.name, '| isWhatsAppCdn:', _isWA, '| url:', _url ? _url.substring(0, 80) : null);
+  }, [lead?.profile_picture_url]);
+  // #endregion
 
   const handleClick = () => {
     if (onClick) {
