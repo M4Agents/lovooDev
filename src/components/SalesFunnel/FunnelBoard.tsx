@@ -227,8 +227,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     }
   }
 
-  // Loading state
-  if (stagesLoading || positionsLoading) {
+  // Spinner apenas na carga inicial (sem dados ainda).
+  // Refreshes subsequentes (após mover card) rodam em background
+  // sem desmontar os cards existentes.
+  if ((stagesLoading || positionsLoading) && stages.length === 0 && positions.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">

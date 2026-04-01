@@ -635,7 +635,7 @@ class FunnelApiService {
     try {
       // Buscar IDs dos leads que já estão no funil
       const { data: leadsInFunnel } = await supabase
-        .from('lead_funnel_positions')
+        .from('opportunity_funnel_positions')
         .select('lead_id')
         .eq('funnel_id', funnelId)
       
