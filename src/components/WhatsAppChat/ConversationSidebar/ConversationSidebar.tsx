@@ -4,7 +4,7 @@
 // Sidebar com lista de conversas e filtros
 // NÃO MODIFICA componentes existentes
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
 import { InstanceSelector } from '../InstanceSelector'
 
@@ -290,6 +290,15 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     }
     return phone
   }
+
+  // #region agent log
+  useEffect(() => {
+    if (photoUrl && (photoUrl.includes('pps.whatsapp.net') || photoUrl.includes('mmg.whatsapp.net'))) {
+      console.log('[DEBUG-27238b][H-A] ConversationItem — CDN WhatsApp detectado:', conversation.contact_name || conversation.contact_phone, '|', photoUrl.substring(0, 80));
+      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'ConversationSidebar.tsx:~295',message:'Chat img — WhatsApp CDN photo',data:{contact:conversation.contact_name||conversation.contact_phone,url:photoUrl.substring(0,80)},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    }
+  }, [photoUrl]);
+  // #endregion
 
   return (
     <button
