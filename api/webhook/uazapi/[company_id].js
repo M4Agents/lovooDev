@@ -731,7 +731,7 @@ async function downloadAndStoreContactAvatar({
 
     // 4. Upload para Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('chat-media')
+      .from('contact-avatars')
       .upload(fileName, buffer, {
         contentType: 'image/jpeg',
         upsert: true,
@@ -746,7 +746,7 @@ async function downloadAndStoreContactAvatar({
 
     // 5. Obter URL pública estável
     const { data: { publicUrl } } = supabase.storage
-      .from('chat-media')
+      .from('contact-avatars')
       .getPublicUrl(fileName);
 
     console.log('[downloadAndStoreContactAvatar] URL estável gerada:', publicUrl?.substring(0, 80) + '...');
