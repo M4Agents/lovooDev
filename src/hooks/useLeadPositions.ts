@@ -103,7 +103,7 @@ export const useLeadPositions = (funnelId: string, companyId?: string, filter?: 
       const opportunity = await funnelApi.createOpportunity({
         lead_id: leadId,
         company_id: lead.company_id,
-        title: `Oportunidade - ${lead.name}`,
+        title: lead.name,
         source: lead.origin,
         owner_user_id: lead.responsible_user_id
       })
