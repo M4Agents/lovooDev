@@ -70,66 +70,22 @@ export default async function handler(req, res) {
       console.log(`\n📞 [${i+1}/${limit}] Processando: ${contact.phone_number}`);
 
       try {
-        // Buscar empresa e instância
-        const { data: company } = await supabase
-          .from('companies')
-          .select('id, name, api_key')
-          .eq('id', contact.company_id)
-          .single();
+        const profileUrl = contact.profile_picture_url;
 
-        if (!company) {
-          console.log(`  ⏭️  Empresa não encontrada`);
-          stats.skipped++;
-          continue;
-        }
-
-        const { data: instance } = await supabase
-          .from('whatsapp_life_instances')
-          .select('id, provider_instance_id')
-          .eq('company_id', contact.company_id)
-          .eq('status', 'connected')
-          .limit(1)
-          .single();
-
-        if (!instance) {
-          console.log(`  ⏭️  Instância WhatsApp não encontrada`);
-          stats.skipped++;
-          continue;
-        }
-
-        // Buscar foto via API Uazapi
-        const url = `https://api.uazapi.com/chat/GetNameAndImageURL/${instance.provider_instance_id}`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': company.api_key,
-          },
-          body: JSON.stringify({ phone: contact.phone_number }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`API Uazapi HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const profileUrl = data?.data?.profilePictureUrl;
-
-        if (!profileUrl) {
-          console.log(`  ⏭️  Sem foto no WhatsApp`);
-          stats.skipped++;
-          continue;
-        }
-
-        console.log(`  ✅ Foto obtida da API`);
-
-        // Download da foto
+        // Tentar baixar diretamente da URL existente no banco.
+        // URLs recentes do CDN WhatsApp ainda podem ser válidas.
+        // URLs expiradas retornarão 403 e serão puladas.
         const photoResponse = await fetch(profileUrl, {
           method: 'GET',
           headers: { 'User-Agent': 'Mozilla/5.0' },
         });
 
         if (!photoResponse.ok) {
+          if (photoResponse.status === 403 || photoResponse.status === 404) {
+            console.log(`  ⏭️  URL expirada (${photoResponse.status}) — necessário novo evento de webhook`);
+            stats.skipped++;
+            continue;
+          }
           throw new Error(`Download falhou: ${photoResponse.status}`);
         }
 
