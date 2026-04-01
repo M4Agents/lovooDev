@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
+import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate } from 'react-router-dom'
 import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
@@ -48,6 +49,10 @@ export default function SalesFunnel() {
   const [selectedTag, setSelectedTag] = useState('')
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState('')
+
+  // Debounce na busca textual: evita requisições a cada tecla (300ms)
+  const debouncedSearch = useDebounce(searchTerm, 300)
+
   const optionsMenuRef = useRef<HTMLDivElement>(null)
 
   // Fechar menu de opções ao clicar fora
@@ -358,11 +363,13 @@ export default function SalesFunnel() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tags
+                  <span className="ml-1.5 text-xs font-normal text-gray-400">(em breve)</span>
                 </label>
-                <select 
+                <select
                   value={selectedTag}
-                  onChange={(e) => setSelectedTag(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled
+                  title="Filtro por tag estará disponível em breve"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                 >
                   <option value="">Todas as tags</option>
                 </select>
@@ -411,7 +418,9 @@ export default function SalesFunnel() {
             funnelId={selectedFunnel.id}
             onLeadClick={handleLeadClick}
             visibleFields={visibleFields}
-            searchTerm={searchTerm}
+            searchTerm={debouncedSearch}
+            selectedOrigin={selectedOrigin}
+            selectedPeriod={selectedPeriod}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

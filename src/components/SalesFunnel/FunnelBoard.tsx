@@ -23,13 +23,17 @@ interface FunnelBoardProps {
   visibleFields?: string[]
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
+  selectedOrigin?: string
+  selectedPeriod?: string
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelId,
   visibleFields,
   onLeadClick,
-  searchTerm = ''
+  searchTerm = '',
+  selectedOrigin = '',
+  selectedPeriod = ''
 }) => {
   const { company } = useAuth()
   const companyId = company?.id
@@ -58,17 +62,15 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [selectedStage, setSelectedStage] = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId] = useState<string>('')
 
-  // Organizar leads por etapa com filtro de busca
+  // Organizar leads por etapa com filtros de busca, origem e período
   const getLeadsByStage = useCallback((stageId: string): LeadFunnelPosition[] => {
     let filtered = positions.filter(pos => pos.stage_id === stageId)
-    
-    // Aplicar filtro de busca
+
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
       filtered = filtered.filter(pos => {
-        const lead = pos.lead
+        const lead = pos.opportunity?.lead
         if (!lead) return false
-        
         return (
           lead.name?.toLowerCase().includes(search) ||
           lead.email?.toLowerCase().includes(search) ||
@@ -77,25 +79,43 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         )
       })
     }
-    
+
+    if (selectedOrigin) {
+      filtered = filtered.filter(pos => pos.opportunity?.lead?.origin === selectedOrigin)
+    }
+
+    if (selectedPeriod) {
+      const now = new Date()
+      let cutoff: Date
+      if (selectedPeriod === 'today') {
+        cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      } else if (selectedPeriod === 'week') {
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      } else if (selectedPeriod === 'month') {
+        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      } else {
+        cutoff = new Date(0)
+      }
+      filtered = filtered.filter(pos => {
+        const created = pos.opportunity?.created_at
+        return created ? new Date(created) >= cutoff : false
+      })
+    }
+
     // Ordenar por data de criação da oportunidade (mais recente primeiro)
     return filtered.sort((a, b) => {
       const dateA = a.opportunity?.created_at
       const dateB = b.opportunity?.created_at
-      
-      // Se ambos têm data de criação, ordenar por mais recente
+
       if (dateA && dateB) {
         return new Date(dateB).getTime() - new Date(dateA).getTime()
       }
-      
-      // Se apenas um tem data, ele vem primeiro
       if (dateA) return -1
       if (dateB) return 1
-      
-      // Fallback: usar position_in_stage
+
       return a.position_in_stage - b.position_in_stage
     })
-  }, [positions, searchTerm])
+  }, [positions, searchTerm, selectedOrigin, selectedPeriod])
 
   // Handlers dos modais
   const handleEditStage = (stageId: string) => {
@@ -131,9 +151,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // Buscar leads disponíveis (não estão no funil)
   const [availableLeads, setAvailableLeads] = useState<Array<{id: number; name: string; email?: string; phone?: string; company_name?: string}>>([])
   
+  // Carrega leads disponíveis ao abrir o modal (acionado via showAddLeadModal).
+  // Não depende de `positions` para evitar re-fetch a cada movimentação de card.
   useEffect(() => {
+    if (!showAddLeadModal || !companyId || !funnelId) return
     const fetchAvailableLeads = async () => {
-      if (!companyId || !funnelId) return
       try {
         const leads = await funnelApi.getAvailableLeads(companyId, funnelId)
         setAvailableLeads(leads)
@@ -141,9 +163,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         console.error('Error fetching available leads:', error)
       }
     }
-    
     fetchAvailableLeads()
-  }, [companyId, funnelId, positions])
+  }, [showAddLeadModal, companyId, funnelId])
 
   // Handler do drag & drop
   const handleDragStart = () => {
