@@ -36,6 +36,26 @@ import type {
 // CLASSE: FunnelApiService
 // =====================================================
 
+// #region agent log — diagnóstico criação/listagem de funis (remover após validação; só console no Vercel)
+function dbgFunnelLog(location: string, message: string, data: Record<string, unknown>) {
+  console.log('[DBG-funnelApi]', location, message, data)
+}
+
+function serializeSupabaseError(err: unknown): Record<string, unknown> {
+  if (err && typeof err === 'object') {
+    const o = err as Record<string, unknown>
+    return {
+      code: o.code,
+      message: o.message,
+      details: o.details,
+      hint: o.hint,
+      name: o.name
+    }
+  }
+  return { raw: String(err) }
+}
+// #endregion
+
 class FunnelApiService {
   
   // ===================================================
@@ -67,10 +87,33 @@ class FunnelApiService {
       const { data, error } = await query
       
       if (error) throw error
+
+      // #region agent log
+      const rows = (data || []).map((f: SalesFunnel) => ({
+        id: f.id,
+        name: f.name,
+        is_active: f.is_active,
+        is_default: f.is_default,
+        display_order: (f as { display_order?: number }).display_order
+      }))
+      dbgFunnelLog('funnelApi.ts:getFunnels', 'getFunnels success', {
+        companyId,
+        filter_is_active: filter?.is_active,
+        filter_search: filter?.search ?? null,
+        count: rows.length,
+        rows
+      })
+      // #endregion
       
       return data || []
     } catch (error) {
       console.error('Error fetching funnels:', error)
+      // #region agent log
+      dbgFunnelLog('funnelApi.ts:getFunnels', 'getFunnels error', {
+        companyId,
+        ...serializeSupabaseError(error)
+      })
+      // #endregion
       throw error
     }
   }
@@ -142,25 +185,48 @@ class FunnelApiService {
    * Criar novo funil
    */
   async createFunnel(companyId: string, data: CreateFunnelForm): Promise<SalesFunnel> {
+    const insertPayload = {
+      company_id: companyId,
+      name: data.name,
+      description: data.description,
+      is_default: data.is_default || false,
+      is_active: data.is_active !== undefined ? data.is_active : true,
+      skip_default_stages: data.skip_default_stages || false
+    }
     try {
+      // #region agent log
+      dbgFunnelLog('funnelApi.ts:createFunnel', 'createFunnel insert (before)', {
+        companyId,
+        insertPayload
+      })
+      // #endregion
+
       const { data: funnel, error } = await supabase
         .from('sales_funnels')
-        .insert({
-          company_id: companyId,
-          name: data.name,
-          description: data.description,
-          is_default: data.is_default || false,
-          is_active: data.is_active !== undefined ? data.is_active : true,
-          skip_default_stages: data.skip_default_stages || false
-        })
+        .insert(insertPayload)
         .select()
         .single()
       
       if (error) throw error
+
+      // #region agent log
+      dbgFunnelLog('funnelApi.ts:createFunnel', 'createFunnel success', {
+        companyId,
+        newFunnelId: funnel?.id,
+        name: funnel?.name
+      })
+      // #endregion
       
       return funnel
     } catch (error) {
       console.error('Error creating funnel:', error)
+      // #region agent log
+      dbgFunnelLog('funnelApi.ts:createFunnel', 'createFunnel error', {
+        companyId,
+        insertPayload,
+        ...serializeSupabaseError(error)
+      })
+      // #endregion
       throw error
     }
   }
