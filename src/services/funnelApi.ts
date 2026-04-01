@@ -1000,10 +1000,17 @@ class FunnelApiService {
         p_period_days: filter?.period_days ?? null
       })
 
+      // #region agent log
+      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'funnelApi.ts:getStageCounts',message:'RPC response',data:{error:error?String(error):null,dataType:Array.isArray(data)?'array':typeof data,dataLength:Array.isArray(data)?data.length:null,dataSample:Array.isArray(data)?data.slice(0,2):data},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
+      // #endregion
+
       if (error) throw error
 
       return (data as StageCount[]) || []
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'funnelApi.ts:getStageCounts:catch',message:'RPC threw error',data:{err:String(error)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Error fetching stage counts:', error)
       throw error
     }

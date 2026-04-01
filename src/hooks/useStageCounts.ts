@@ -49,6 +49,9 @@ export function useStageCounts(
       data.forEach(sc => {
         map[sc.stage_id] = sc
       })
+      // #region agent log
+      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'useStageCounts.ts:fetchCounts',message:'counts map built',data:{stageKeys:Object.keys(map),sample:Object.entries(map).slice(0,3).map(([k,v])=>({stageId:k,count:v.count,total_value:v.total_value}))},timestamp:Date.now(),hypothesisId:'B-C'})}).catch(()=>{});
+      // #endregion
       setCounts(map)
     } catch (err) {
       console.error('Error fetching stage counts:', err)
