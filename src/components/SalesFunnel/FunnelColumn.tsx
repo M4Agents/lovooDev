@@ -25,6 +25,10 @@ interface FunnelColumnProps {
   hasMore?: boolean
   /** Fase 3: callback para carregar a próxima página. */
   onLoadMore?: () => void
+  /** Fase 3: se a coluna está carregando a próxima página. */
+  loading?: boolean
+  /** Fase 3: tamanho de página usado pelo hook de paginação. */
+  pageSize?: number
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -37,7 +41,9 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   count,
   totalValue,
   hasMore,
-  onLoadMore
+  onLoadMore,
+  loading = false,
+  pageSize = 20
 }) => {
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
@@ -46,6 +52,13 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   // Usa valores do servidor quando disponíveis (Fase 3); fallback para locais (Fase 2)
   const displayCount      = count      ?? leads.length
   const displayTotalValue = totalValue ?? localTotalValue
+
+  // Variáveis de paginação — só relevantes quando hasMore === true
+  const loadedCount    = leads.length
+  const remainingCount = Math.max(0, displayCount - loadedCount)
+  const nextLoadCount  = Math.min(remainingCount, pageSize)
+
+  const isLastPage     = nextLoadCount < pageSize
 
   const getStageTypeColor = (type: string) => {
     switch (type) {
@@ -83,7 +96,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </h3>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">
-                {displayCount} {displayCount === 1 ? 'lead' : 'leads'}
+                {displayCount} {displayCount === 1 ? 'oportunidade' : 'oportunidades'}
               </p>
               {displayTotalValue > 0 && (
                 <>
@@ -102,7 +115,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             <button
               onClick={() => onAddLead(stage.id)}
               className="p-1.5 hover:bg-white rounded-md transition-colors"
-              title="Adicionar lead"
+              title="Adicionar oportunidade"
             >
               <Plus className="w-4 h-4 text-gray-600" />
             </button>
@@ -139,7 +152,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
         </div>
       )}
 
-      {/* Lista de leads com drag & drop */}
+      {/* Lista de oportunidades com drag & drop */}
       <Droppable droppableId={stage.id}>
         {(provided, snapshot) => (
           <div
@@ -161,10 +174,10 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   <Users className="w-8 h-8 text-gray-400" />
                 </div>
                 <p className="text-sm text-gray-500 mb-1">
-                  Nenhum lead nesta etapa
+                  Nenhuma oportunidade nesta etapa
                 </p>
                 <p className="text-xs text-gray-400">
-                  Arraste leads para cá
+                  Arraste oportunidades para cá
                 </p>
               </div>
             ) : (
@@ -191,7 +204,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
               {stage.stage_type === 'won' ? '✅ Ganhos' : '❌ Perdidos'}
             </span>
             <span className="font-semibold text-gray-700">
-              {displayCount} {displayCount === 1 ? 'lead' : 'leads'}
+              {displayCount} {displayCount === 1 ? 'oportunidade' : 'oportunidades'}
             </span>
           </div>
         </div>
@@ -200,11 +213,20 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
       {/* Footer: Carregar mais (Fase 3) */}
       {hasMore && onLoadMore && (
         <div className="px-4 py-3 border-t bg-gray-50 rounded-b-lg">
+          <p className="text-xs text-gray-400 text-center mb-2">
+            Mostrando {loadedCount} de {displayCount} oportunidades
+          </p>
           <button
             onClick={onLoadMore}
-            className="w-full text-xs text-blue-600 hover:text-blue-700 font-medium text-center py-1 rounded hover:bg-blue-50 transition-colors"
+            disabled={loading}
+            className="w-full text-xs font-medium text-center py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-blue-600 hover:text-blue-700 hover:bg-blue-50"
           >
-            Carregar mais ({leads.length} de {displayCount})
+            {loading
+              ? 'Carregando...'
+              : isLastPage
+                ? `Carregar ${nextLoadCount} restante${nextLoadCount === 1 ? '' : 's'}`
+                : `Carregar mais ${nextLoadCount}`
+            }
           </button>
         </div>
       )}

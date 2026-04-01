@@ -396,6 +396,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 totalValue={counts[stage.id]?.total_value}
                 hasMore={stageMap.get(stage.id)?.hasMore}
                 onLoadMore={() => loadMore(stage.id)}
+                loading={stageMap.get(stage.id)?.loading}
               />
             </div>
           ))}
