@@ -60,10 +60,6 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
 
   const isLastPage     = nextLoadCount < pageSize
 
-  // #region agent log
-  if (hasMore) fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'27238b'},body:JSON.stringify({sessionId:'27238b',location:'FunnelColumn.tsx:render',message:'pagination vars',data:{stageName:stage.name,countProp:count,loadedCount,displayCount,remainingCount,nextLoadCount,hasMore,loading},timestamp:Date.now(),hypothesisId:'A-C'})}).catch(()=>{});
-  // #endregion
-
   const getStageTypeColor = (type: string) => {
     switch (type) {
       case 'won':
