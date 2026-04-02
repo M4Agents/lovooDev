@@ -8,8 +8,9 @@ import { useState, useEffect } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
+import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import { formatCurrency } from '../../../types/sales-funnel'
-import type { SalesFunnel, FunnelStage, OpportunityFunnelPosition } from '../../../types/sales-funnel'
+import type { SalesFunnel, FunnelStage, OpportunityFunnelPosition, Opportunity } from '../../../types/sales-funnel'
 import { supabase } from '../../../lib/supabase'
 import { funnelApi } from '../../../services/funnelApi'
 import { triggerManager } from '../../../services/automation/TriggerManager'
@@ -115,6 +116,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingOpportunity, setEditingOpportunity] = useState<any>(null)
   const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [detailOpportunity, setDetailOpportunity] = useState<Opportunity | null>(null)
 
   // Buscar funis e posições das oportunidades
   useEffect(() => {
@@ -537,10 +539,11 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               {closedOpportunities.map((opportunity) => (
                 <div
                   key={opportunity.id}
-                  className={`border rounded-lg p-3 ${
+                  onClick={() => setDetailOpportunity(opportunity)}
+                  className={`border rounded-lg p-3 cursor-pointer transition-all ${
                     opportunity.status === 'won'
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : 'bg-red-50 border-red-200'
+                      ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-sm'
+                      : 'bg-red-50 border-red-200 hover:border-red-400 hover:shadow-sm'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-1.5">
@@ -552,7 +555,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                         {getStatusLabel(opportunity.status)}
                       </span>
                       <button
-                        onClick={() => handleDeleteOpportunity(opportunity.id, opportunity.title)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteOpportunity(opportunity.id, opportunity.title) }}
                         disabled={deletingOpportunity === opportunity.id}
                         className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50"
                         title="Excluir"
@@ -617,6 +620,16 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             setShowEditModal(false)
             setEditingOpportunity(null)
           }}
+        />
+      )}
+
+      {/* Modal de Detalhes (oportunidades fechadas) */}
+      {detailOpportunity && (
+        <OpportunityDetailModal
+          isOpen={!!detailOpportunity}
+          onClose={() => setDetailOpportunity(null)}
+          opportunity={detailOpportunity}
+          companyId={companyId}
         />
       )}
     </div>
