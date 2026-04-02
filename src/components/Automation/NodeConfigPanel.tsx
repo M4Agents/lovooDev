@@ -43,15 +43,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
 
   useEffect(() => {
     if (selectedNode) {
-      const loadedConfig = selectedNode.data.config || {}
-      console.log('🔍 [NodeConfigPanel useEffect] Carregando config:', {
-        nodeId: selectedNode.id,
-        nodeType: selectedNode.type,
-        config: loadedConfig,
-        hasActionType: !!loadedConfig.actionType,
-        actionType: loadedConfig.actionType
-      })
-      setConfig(loadedConfig)
+      setConfig(selectedNode.data.config || {})
     }
   }, [selectedNode])
 
@@ -209,28 +201,19 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   if (!selectedNode) return null
 
   const handleSave = () => {
-    console.log('🔍 [NodeConfigPanel handleSave] INÍCIO:', {
-      nodeId: selectedNode.id,
-      nodeType: selectedNode.type,
-      config: config,
-      hasActionType: !!config.actionType
-    })
-    
     // ✅ Validação: Bloco de ação DEVE ter actionType
     if (selectedNode.type === 'action' && !config.actionType) {
-      console.log('❌ [NodeConfigPanel handleSave] ERRO: actionType não existe!')
       alert('⚠️ Por favor, selecione um tipo de ação antes de salvar.')
       return
     }
     
-    console.log('💾 [NodeConfigPanel handleSave] Chamando onSave:', {
+    console.log('💾 NodeConfigPanel salvando:', {
       nodeId: selectedNode.id,
+      nodeType: selectedNode.type,
       config: config
     })
     
     onSave(selectedNode.id, config)
-    
-    console.log('✅ [NodeConfigPanel handleSave] onSave chamado, fechando modal')
     onClose()
   }
 

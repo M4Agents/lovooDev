@@ -116,7 +116,7 @@ export const useChatData = (
   // =====================================================
 
   // Ativar subscription unificada para esta empresa
-  const _realtimeStatus = useChatRealtime(companyId, {
+  const realtimeStatus = useChatRealtime(companyId, {
     enabled: ChatFeatureManager.shouldUseUnifiedRealtime(),
     debug: ChatFeatureManager.shouldShowDebugLogs(),
     fallbackToLegacy: ChatFeatureManager.shouldFallbackToLegacy()

@@ -25,8 +25,8 @@ export default function FlowEditor() {
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [clipboard, setClipboard] = useState<Node | null>(null)
-  const [, setValidationResult] = useState<ValidationResult | null>(null)
-  const [, setShowValidation] = useState(false)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [showValidation, setShowValidation] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -255,49 +255,55 @@ export default function FlowEditor() {
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
 
-    console.log('🔍 [handleNodeConfigSave] INÍCIO:', {
-      nodeId,
-      configRecebido: config,
-      selectedNodeId: selectedNode?.id,
-      flowNodesCount: flow.nodes.length
-    })
+    let updatedSelectedNode: Node | null = null
 
-    const updatedNodes = (flow.nodes as Node[]).map((node: any) => {
+    const updatedNodes = flow.nodes.map((node: any) => {
       if (node.id === nodeId) {
+        // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
         const mergedConfig = {
-          ...node.data.config,
-          ...config
+          ...node.data.config,  // Config anterior
+          ...config              // Novo config (sobrescreve apenas campos enviados)
         }
         
-        console.log('💾 [handleNodeConfigSave] Atualizando config:', {
+        console.log('💾 Salvando config do node:', {
           nodeId,
-          configFinal: mergedConfig,
-          hasActionType: !!mergedConfig.actionType
+          nodeType: node.type,
+          configAnterior: node.data.config,
+          configNovo: config,
+          configFinal: mergedConfig
         })
         
-        return {
+        const updatedNode = {
           ...node,
           data: {
             ...node.data,
             config: mergedConfig
           }
         }
+        
+        // ✅ FIX: Se for o node selecionado, guardar referência para atualizar selectedNode
+        if (selectedNode?.id === nodeId) {
+          updatedSelectedNode = updatedNode
+        }
+        
+        return updatedNode
       }
       return node
     })
 
-    await handleSave(updatedNodes, flow.edges as Edge[])
+    // Salvar direto sem validação (apenas configuração de nó)
+    await automationApi.saveFlowCanvas(id, {
+      nodes: updatedNodes as any,
+      edges: flow.edges as any
+    })
+
+    setFlow({ ...flow, nodes: updatedNodes })
     
-    const updatedSelectedNode = updatedNodes.find(n => n.id === nodeId)
-    if (updatedSelectedNode && selectedNode?.id === nodeId) {
-      console.log('🔄 [handleNodeConfigSave] Atualizando selectedNode:', {
-        nodeId: updatedSelectedNode.id,
-        hasActionType: !!updatedSelectedNode.data.config.actionType
-      })
+    // ✅ FIX: Atualizar selectedNode para manter sincronização
+    if (updatedSelectedNode) {
+      console.log('🔄 Atualizando selectedNode com config salvo')
       setSelectedNode(updatedSelectedNode)
     }
-    
-    console.log('✅ [handleNodeConfigSave] FIM')
   }
 
   const handleNodeSelect = (node: Node | null) => {
@@ -482,7 +488,7 @@ export default function FlowEditor() {
             onDelete={handleDelete}
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
-            onNodeConfigSave={handleNodeConfigSave as any}
+            onNodeConfigSave={handleNodeConfigSave}
           />
         </div>
         {selectedNode && showTriggerConfig ? (
@@ -493,7 +499,7 @@ export default function FlowEditor() {
               setSelectedNode(null)
               setShowTriggerConfig(false)
             }}
-            onSave={(nodeId, config) => handleNodeConfigSave(nodeId, config)}
+            onSave={handleNodeConfigSave}
           />
         ) : selectedNode && !showTriggerConfig ? (
           <NodeConfigPanel
@@ -501,7 +507,7 @@ export default function FlowEditor() {
             flowId={id}
             nodes={flow.nodes as Node[]}
             onClose={() => setSelectedNode(null)}
-            onSave={(nodeId, config) => handleNodeConfigSave(nodeId, config)}
+            onSave={handleNodeConfigSave}
           />
         ) : null}
       </div>
