@@ -61,9 +61,29 @@ export interface Opportunity {
   created_at: string
   updated_at: string
   closed_at?: string
-  
+  loss_reason?: string
+
   // Joins
   lead?: LeadCardData
+}
+
+// =====================================================
+// INTERFACE: OpportunityStatusHistory
+// Linha do tempo de transições de status.
+// Fonte de verdade para relatórios históricos.
+// =====================================================
+
+export interface OpportunityStatusHistory {
+  id: string
+  opportunity_id: string
+  company_id: string
+  from_status?: 'open' | 'won' | 'lost'
+  to_status: 'open' | 'won' | 'lost'
+  value_snapshot?: number
+  loss_reason?: string
+  closed_at?: string
+  changed_at: string
+  changed_by?: string
 }
 
 // =====================================================
@@ -212,7 +232,33 @@ export interface UpdateOpportunityForm {
   probability?: number
   expected_close_date?: string
   actual_close_date?: string
+  closed_at?: string
+  loss_reason?: string
   owner_user_id?: string
+}
+
+// =====================================================
+// FORMS PARA FECHAMENTO/REABERTURA VIA RPC
+// =====================================================
+
+export interface CloseOpportunityParams {
+  opportunity_id: string
+  funnel_id: string
+  to_stage_id: string
+  position_in_stage: number
+  to_status: 'won' | 'lost'
+  value: number
+  loss_reason?: string
+  closed_at: string
+  company_id: string
+}
+
+export interface ReopenOpportunityParams {
+  opportunity_id: string
+  funnel_id: string
+  to_stage_id: string
+  position_in_stage: number
+  company_id: string
 }
 
 export interface MoveOpportunityForm {

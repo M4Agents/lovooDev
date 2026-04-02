@@ -14,6 +14,8 @@ import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
 import { EditStageModal } from './EditStageModal'
 import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
+import { CloseOpportunityModal } from './CloseOpportunityModal'
+import { ReopenOpportunityModal } from './ReopenOpportunityModal'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
@@ -22,7 +24,15 @@ import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
-import type { LeadPositionFilter, FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
+import { triggerManager } from '../../services/automation/TriggerManager'
+import type {
+  LeadPositionFilter,
+  FunnelStage,
+  CreateStageForm,
+  UpdateStageForm,
+  CloseOpportunityParams,
+  ReopenOpportunityParams
+} from '../../types/sales-funnel'
 
 // =====================================================
 // FEATURE FLAG — REALTIME
@@ -125,6 +135,30 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
   const [selectedStage, setSelectedStage]            = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId]        = useState<string>('')
+
+  // =====================================================
+  // ESTADO: TRANSIÇÃO DE FECHAMENTO / REABERTURA
+  // Criado no handleDragEnd quando a transição detectada
+  // exige confirmação modal. Limpo após confirmar ou cancelar.
+  // =====================================================
+
+  interface PendingTransition {
+    opportunityId: string
+    opportunityTitle: string
+    opportunityValue: number
+    opportunityClosed?: string
+    opportunityStatus: 'open' | 'won' | 'lost'
+    snapshot: ReturnType<typeof optimisticMove>
+    fromStageType: 'active' | 'won' | 'lost'
+    toStageType: 'active' | 'won' | 'lost'
+    toStageId: string
+    positionInStage: number
+    fromStageId: string
+    leadId?: number
+    conversationId?: string
+  }
+
+  const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null)
 
   // =====================================================
   // LEITURA DE DADOS POR COLUNA
@@ -250,8 +284,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   // =====================================================
   // DRAG & DROP — OTIMISTA COM ROLLBACK
-  // Fluxo: optimisticMove → move (API + automação) → rollback se erro
-  // refreshCounts: fire-and-forget com .catch() para não contaminar rollback
+  // Fluxo normal (active→active): optimisticMove → move → rollback se erro
+  // Fluxo com modal (qualquer transição que muda status):
+  //   optimisticMove → setPendingTransition → (usuário confirma/cancela)
+  //   → confirmar: RPC → triggerAutomation → refreshCounts
+  //   → cancelar: rollback visual
   // =====================================================
 
   const handleDragStart = () => {
@@ -274,16 +311,50 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const toStageId     = destination.droppableId
     const newPosition   = destination.index
 
+    const fromStage = stages.find(s => s.id === fromStageId)
+    const toStage   = stages.find(s => s.id === toStageId)
+    if (!fromStage || !toStage) return
+
     // Ler posição atual do stageMap (já populado)
     const currentPosition = stageMap.get(fromStageId)?.positions
       .find(p => p.opportunity_id === opportunityId)
     if (!currentPosition) return
 
-    // 1. Atualização visual imediata
+    const opp        = currentPosition.opportunity
+    const fromType   = fromStage.stage_type
+    const toType     = toStage.stage_type
+
+    // Detectar se esta transição muda o status da oportunidade
+    const isClosing  = fromType === 'active' && (toType === 'won' || toType === 'lost')
+    const isReopening = (fromType === 'won' || fromType === 'lost') && toType === 'active'
+    const isCrossClose = (fromType === 'won' && toType === 'lost') || (fromType === 'lost' && toType === 'won')
+    const needsModal = isClosing || isReopening || isCrossClose
+
+    // 1. Atualização visual imediata (em todos os casos)
     const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
 
+    // 2a. Se precisa de modal: guardar estado pendente e aguardar confirmação
+    if (needsModal) {
+      setPendingTransition({
+        opportunityId,
+        opportunityTitle:  opp?.title ?? '',
+        opportunityValue:  opp?.value ?? 0,
+        opportunityClosed: opp?.closed_at,
+        opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
+        snapshot,
+        fromStageType: fromType,
+        toStageType:   toType,
+        toStageId,
+        positionInStage: newPosition,
+        fromStageId,
+        leadId:          currentPosition.lead_id ?? undefined,
+        conversationId:  opp?.lead?.chat_conversations?.[0]?.id
+      })
+      return
+    }
+
+    // 2b. Fluxo normal (active → active)
     try {
-      // 2. Persistir na API + disparar automação (fire-and-forget dentro do hook)
       await move({
         opportunity_id:    opportunityId,
         funnel_id:         funnelId,
@@ -291,25 +362,107 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         to_stage_id:       toStageId,
         position_in_stage: newPosition,
         lead_id:           currentPosition.lead_id ?? undefined,
-        conversationId:    currentPosition.opportunity?.lead?.chat_conversations?.[0]?.id,
-        opportunityData:   { lead: currentPosition.opportunity?.lead }
+        conversationId:    opp?.lead?.chat_conversations?.[0]?.id,
+        opportunityData:   { lead: opp?.lead }
       })
 
-      // 3. Registra o move para deduplicação Realtime (Fase 4).
-      //    Garante que o evento gerado por este move seja ignorado pelo
-      //    useFunnelRealtime por 3s (DEDUPE_WINDOW_MS).
-      //    Cleanup após 6s (2× a janela) para evitar memory leak.
       recentlyMovedRef.current.set(opportunityId, Date.now())
       setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
 
-      // 4. Contadores: fire-and-forget — não pode contaminar o catch de rollback
       refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
     } catch (error) {
       console.error('Erro ao mover oportunidade:', error)
-      // 5. Rollback visual em caso de erro da API
       rollback(snapshot)
     }
   }
+
+  // =====================================================
+  // CONFIRM CLOSE — chama RPC close_opportunity
+  // =====================================================
+
+  const handleConfirmClose = useCallback(async (params: CloseOpportunityParams) => {
+    if (!pendingTransition) return
+
+    const { data, error } = await supabase.rpc('close_opportunity', {
+      p_opportunity_id:    params.opportunity_id,
+      p_funnel_id:         params.funnel_id,
+      p_to_stage_id:       params.to_stage_id,
+      p_position_in_stage: params.position_in_stage,
+      p_to_status:         params.to_status,
+      p_value:             params.value,
+      p_loss_reason:       params.loss_reason ?? null,
+      p_closed_at:         params.closed_at,
+      p_company_id:        params.company_id
+    })
+
+    if (error) throw new Error(error.message)
+
+    const { opportunityId, fromStageId, toStageId, leadId, conversationId } = pendingTransition
+
+    // Registrar para deduplicação Realtime
+    recentlyMovedRef.current.set(opportunityId, Date.now())
+    setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
+
+    // Disparar automação (fire-and-forget)
+    if (companyId && fromStageId !== toStageId) {
+      triggerManager.onOpportunityStageChanged(
+        companyId,
+        opportunityId,
+        fromStageId,
+        toStageId,
+        { opportunity_id: opportunityId, funnel_id: funnelId, lead_id: leadId, conversation_id: conversationId, ...data?.[0] }
+      ).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+    }
+
+    refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
+    setPendingTransition(null)
+  }, [pendingTransition, companyId, funnelId, refreshCounts])
+
+  // =====================================================
+  // CONFIRM REOPEN — chama RPC reopen_opportunity
+  // =====================================================
+
+  const handleConfirmReopen = useCallback(async (params: ReopenOpportunityParams) => {
+    if (!pendingTransition) return
+
+    const { data, error } = await supabase.rpc('reopen_opportunity', {
+      p_opportunity_id:    params.opportunity_id,
+      p_funnel_id:         params.funnel_id,
+      p_to_stage_id:       params.to_stage_id,
+      p_position_in_stage: params.position_in_stage,
+      p_company_id:        params.company_id
+    })
+
+    if (error) throw new Error(error.message)
+
+    const { opportunityId, fromStageId, toStageId, leadId, conversationId } = pendingTransition
+
+    recentlyMovedRef.current.set(opportunityId, Date.now())
+    setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
+
+    if (companyId && fromStageId !== toStageId) {
+      triggerManager.onOpportunityStageChanged(
+        companyId,
+        opportunityId,
+        fromStageId,
+        toStageId,
+        { opportunity_id: opportunityId, funnel_id: funnelId, lead_id: leadId, conversation_id: conversationId, ...data?.[0] }
+      ).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+    }
+
+    refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
+    setPendingTransition(null)
+  }, [pendingTransition, companyId, funnelId, refreshCounts])
+
+  // =====================================================
+  // CANCEL TRANSITION — rollback visual
+  // =====================================================
+
+  const handleCancelTransition = useCallback(() => {
+    if (!pendingTransition) return
+    rollback(pendingTransition.snapshot)
+    setPendingTransition(null)
+  }, [pendingTransition, rollback])
 
   // =====================================================
   // ESTADOS DE LOADING / ERRO / VAZIO
@@ -434,6 +587,40 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         stageId={selectedStageId}
         availableLeads={availableLeads}
       />
+
+      {/* Modal de fechamento (won/lost) */}
+      {pendingTransition && (pendingTransition.toStageType === 'won' || pendingTransition.toStageType === 'lost') && (
+        <CloseOpportunityModal
+          isOpen={true}
+          stageType={pendingTransition.toStageType as 'won' | 'lost'}
+          opportunityTitle={pendingTransition.opportunityTitle}
+          currentValue={pendingTransition.opportunityValue}
+          opportunityId={pendingTransition.opportunityId}
+          funnelId={funnelId}
+          toStageId={pendingTransition.toStageId}
+          positionInStage={pendingTransition.positionInStage}
+          companyId={companyId ?? ''}
+          onConfirm={handleConfirmClose}
+          onCancel={handleCancelTransition}
+        />
+      )}
+
+      {/* Modal de reabertura (won/lost → active) */}
+      {pendingTransition && pendingTransition.toStageType === 'active' && (
+        <ReopenOpportunityModal
+          isOpen={true}
+          opportunityTitle={pendingTransition.opportunityTitle}
+          currentStatus={pendingTransition.opportunityStatus as 'won' | 'lost'}
+          closedAt={pendingTransition.opportunityClosed}
+          opportunityId={pendingTransition.opportunityId}
+          funnelId={funnelId}
+          toStageId={pendingTransition.toStageId}
+          positionInStage={pendingTransition.positionInStage}
+          companyId={companyId ?? ''}
+          onConfirm={handleConfirmReopen}
+          onCancel={handleCancelTransition}
+        />
+      )}
     </div>
   )
 }
