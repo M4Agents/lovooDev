@@ -29,6 +29,8 @@ interface FunnelColumnProps {
   loading?: boolean
   /** Fase 3: tamanho de página usado pelo hook de paginação. */
   pageSize?: number
+  /** Tags inline: company_id para TagSelectorPopover (multi-tenant). */
+  companyId?: string
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -43,7 +45,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   hasMore,
   onLoadMore,
   loading = false,
-  pageSize = 20
+  pageSize = 20,
+  companyId
 }) => {
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
@@ -158,6 +161,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   index={index}
                   visibleFields={visibleFields}
                   onClick={onLeadClick}
+                  companyId={companyId}
                 />
               ))
             )}

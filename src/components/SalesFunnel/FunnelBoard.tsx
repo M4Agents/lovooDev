@@ -397,6 +397,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 hasMore={stageMap.get(stage.id)?.hasMore}
                 onLoadMore={() => loadMore(stage.id)}
                 loading={stageMap.get(stage.id)?.loading}
+                companyId={companyId}
               />
             </div>
           ))}

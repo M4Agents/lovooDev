@@ -4,9 +4,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Tag } from '../types/tags';
-import { tagsApi } from '../services/tagsApi';
 import { TagBadge } from './TagBadge';
 import { useAuth } from '../contexts/AuthContext';
+import { useAvailableTags } from '../hooks/useAvailableTags';
 
 interface LeadTagsFieldProps {
   selectedTags: Tag[];
@@ -20,19 +20,11 @@ export const LeadTagsField: React.FC<LeadTagsFieldProps> = ({
   disabled = false
 }) => {
   const { company } = useAuth();
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const { tags: availableTags, loading } = useAvailableTags(company?.id);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Carregar tags disponíveis
-  useEffect(() => {
-    if (company?.id) {
-      loadAvailableTags();
-    }
-  }, [company?.id]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -46,20 +38,6 @@ export const LeadTagsField: React.FC<LeadTagsFieldProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const loadAvailableTags = async () => {
-    if (!company?.id) return;
-
-    setLoading(true);
-    try {
-      const tags = await tagsApi.getTags(company.id);
-      setAvailableTags(tags);
-    } catch (error) {
-      console.error('Error loading tags:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Filtrar tags disponíveis (excluir as já selecionadas)
   const getFilteredTags = () => {
