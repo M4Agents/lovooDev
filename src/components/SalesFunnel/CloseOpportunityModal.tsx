@@ -10,6 +10,14 @@ import { useState, useEffect } from 'react'
 import { X, Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, MessageSquare } from 'lucide-react'
 import type { CloseOpportunityParams } from '../../types/sales-funnel'
 
+// Converte centavos (inteiro) para string formatada em pt-BR (ex: 150050 → "1.500,50")
+const centsToBRL = (cents: number): string =>
+  (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Extrai centavos de uma string formatada (ex: "1.500,50" → 150050)
+const brlToCents = (formatted: string): number =>
+  parseInt(formatted.replace(/\D/g, '') || '0', 10)
+
 interface CloseOpportunityModalProps {
   isOpen: boolean
   stageType: 'won' | 'lost'
@@ -45,7 +53,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const isWon = stageType === 'won'
 
   const [closeDate, setCloseDate] = useState('')
-  const [finalValue, setFinalValue] = useState('')
+  const [displayValue, setDisplayValue] = useState('')
   const [lossReason, setLossReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
@@ -54,11 +62,16 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCloseDate(toLocalDateTimeInput(new Date()))
-      setFinalValue(currentValue > 0 ? String(currentValue) : '')
+      setDisplayValue(currentValue > 0 ? centsToBRL(Math.round(currentValue * 100)) : '')
       setLossReason('')
       setError(undefined)
     }
   }, [isOpen, currentValue])
+
+  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cents = parseInt(e.target.value.replace(/\D/g, '') || '0', 10)
+    setDisplayValue(cents === 0 ? '' : centsToBRL(cents))
+  }
 
   if (!isOpen) return null
 
@@ -77,7 +90,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         to_stage_id:       toStageId,
         position_in_stage: positionInStage,
         to_status:         stageType,
-        value:             parseFloat(finalValue) || currentValue,
+        value:             brlToCents(displayValue) / 100 || currentValue,
         loss_reason:       lossReason.trim() || undefined,
         closed_at:         closedAtISO,
         company_id:        companyId
@@ -149,11 +162,10 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                 Valor da venda (R$)
               </label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={finalValue}
-                onChange={e => setFinalValue(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                value={displayValue}
+                onChange={handleValueChange}
                 disabled={loading}
                 placeholder="0,00"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"

@@ -329,6 +329,15 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     }
   }
 
+  const getStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'open': return 'Aberta'
+      case 'won':  return 'Ganha'
+      case 'lost': return 'Perdida'
+      default:     return status
+    }
+  }
+
   if (loadingLeadId || loading) {
     return (
       <div className="mb-6">
@@ -400,7 +409,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
-                    Aberta
+                    {getStatusLabel(opportunity.status)}
                   </span>
                   <button
                     onClick={() => handleEditOpportunity(opportunity)}
