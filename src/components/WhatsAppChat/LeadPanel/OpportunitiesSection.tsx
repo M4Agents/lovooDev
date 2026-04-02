@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
@@ -114,6 +114,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingOpportunity, setEditingOpportunity] = useState<any>(null)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
 
   // Buscar funis e posições das oportunidades
   useEffect(() => {
@@ -160,8 +161,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     fetchFunnelsAndPositions()
   }, [companyId, opportunities])
 
-  // Filtrar apenas oportunidades abertas
   const activeOpportunities = opportunities.filter(opp => opp.status === 'open')
+  const closedOpportunities = opportunities.filter(opp => opp.status === 'won' || opp.status === 'lost')
 
   // Função para abrir modal de edição
   const handleEditOpportunity = (opportunity: any) => {
@@ -376,7 +377,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         </button>
       </div>
 
-      {/* Lista de Oportunidades */}
+      {/* Oportunidades Ativas */}
       {activeOpportunities.length === 0 ? (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
           <Briefcase className="w-8 h-8 text-purple-400 mx-auto mb-2" />
@@ -431,21 +432,16 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
               {/* Informações Compactas */}
               <div className="flex items-center gap-4 text-xs">
-                {/* Valor */}
                 {opportunity.value > 0 && (
                   <div className="flex items-center gap-1 text-green-600">
                     <DollarSign className="w-3 h-3" />
                     <span className="font-semibold">{formatCurrency(opportunity.value)}</span>
                   </div>
                 )}
-
-                {/* Probabilidade */}
                 <div className="flex items-center gap-1 text-blue-600">
                   <TrendingUp className="w-3 h-3" />
                   <span className="font-medium">{opportunity.probability}%</span>
                 </div>
-
-                {/* Data Prevista */}
                 {opportunity.expected_close_date && (
                   <div className="text-gray-500">
                     Prev: {new Date(opportunity.expected_close_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
@@ -456,7 +452,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               {/* Seletores de Funil e Etapa */}
               {!loadingFunnels && funnels.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                  {/* Seletor de Funil */}
                   <div>
                     <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
                       <Target className="w-3 h-3" />
@@ -483,7 +478,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     </select>
                   </div>
 
-                  {/* Seletor de Etapa */}
                   {positions[opportunity.id]?.funnel_id && stagesByFunnel[positions[opportunity.id].funnel_id] && (
                     <div>
                       <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
@@ -510,7 +504,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     </div>
                   )}
 
-                  {/* Indicador de loading */}
                   {updatingPosition === opportunity.id && (
                     <div className="flex items-center gap-2 text-xs text-purple-600">
                       <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
@@ -521,14 +514,75 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               )}
             </div>
           ))}
+        </div>
+      )}
 
-          {/* Link para ver todas */}
-          {opportunities.length > 3 && (
-            <button
-              className="w-full text-xs text-purple-600 hover:text-purple-700 font-medium py-2"
-            >
-              Ver todas ({opportunities.length})
-            </button>
+      {/* Histórico — oportunidades fechadas (won/lost) */}
+      {closedOpportunities.length > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setHistoryExpanded(prev => !prev)}
+            className="flex items-center gap-2 w-full text-left py-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Histórico ({closedOpportunities.length} {closedOpportunities.length === 1 ? 'fechada' : 'fechadas'})</span>
+            {historyExpanded
+              ? <ChevronUp className="w-3.5 h-3.5 ml-auto" />
+              : <ChevronDown className="w-3.5 h-3.5 ml-auto" />
+            }
+          </button>
+
+          {historyExpanded && (
+            <div className="space-y-2 mt-1">
+              {closedOpportunities.map((opportunity) => (
+                <div
+                  key={opportunity.id}
+                  className={`border rounded-lg p-3 ${
+                    opportunity.status === 'won'
+                      ? 'bg-emerald-50 border-emerald-200'
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-1.5">
+                    <h4 className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0 pr-2">
+                      {opportunity.title}
+                    </h4>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
+                        {getStatusLabel(opportunity.status)}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteOpportunity(opportunity.id, opportunity.title)}
+                        disabled={deletingOpportunity === opportunity.id}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    {opportunity.value > 0 && (
+                      <div className={`flex items-center gap-1 font-semibold ${opportunity.status === 'won' ? 'text-emerald-700' : 'text-red-700'}`}>
+                        <DollarSign className="w-3 h-3" />
+                        {formatCurrency(opportunity.value)}
+                      </div>
+                    )}
+                    {opportunity.closed_at && (
+                      <span>
+                        Fechada em {new Date(opportunity.closed_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                      </span>
+                    )}
+                    {opportunity.loss_reason && (
+                      <span className="truncate" title={opportunity.loss_reason}>
+                        {opportunity.loss_reason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
