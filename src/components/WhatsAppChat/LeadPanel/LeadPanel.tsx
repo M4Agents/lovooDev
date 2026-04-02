@@ -797,6 +797,55 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
       {/* Campos Fixos - Sempre Visíveis */}
       <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6">
+        {/* Tags do Lead */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            Tags
+          </label>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {formData.tags && formData.tags.length > 0
+              ? formData.tags.map((tagName, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700"
+                  >
+                    {tagName}
+                  </span>
+                ))
+              : (
+                <span className="text-xs text-gray-400 italic">Nenhuma tag</span>
+              )
+            }
+
+            <button
+              ref={tagButtonRef}
+              type="button"
+              disabled={!associatedLeadId}
+              onClick={() => associatedLeadId && setTagPopoverOpen(true)}
+              title={associatedLeadId ? 'Gerenciar tags' : 'Associe um lead para gerenciar tags'}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              + Tag
+            </button>
+          </div>
+
+          {tagPopoverOpen && associatedLeadId && (
+            <TagSelectorPopover
+              leadId={associatedLeadId}
+              companyId={companyId}
+              anchorRef={tagButtonRef}
+              onTagsChanged={(names) => {
+                setFormData(prev => ({ ...prev, tags: names }))
+              }}
+              onClose={() => setTagPopoverOpen(false)}
+            />
+          )}
+        </div>
+
         {/* Seletor de Instância de Envio - MODERNIZADO */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
@@ -867,55 +916,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                 </div>
               )}
             </>
-          )}
-        </div>
-
-        {/* Tags do Lead */}
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-            </svg>
-            Tags
-          </label>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {formData.tags && formData.tags.length > 0
-              ? formData.tags.map((tagName, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700"
-                  >
-                    {tagName}
-                  </span>
-                ))
-              : (
-                <span className="text-xs text-gray-400 italic">Nenhuma tag</span>
-              )
-            }
-
-            <button
-              ref={tagButtonRef}
-              type="button"
-              disabled={!associatedLeadId}
-              onClick={() => associatedLeadId && setTagPopoverOpen(true)}
-              title={associatedLeadId ? 'Gerenciar tags' : 'Associe um lead para gerenciar tags'}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              + Tag
-            </button>
-          </div>
-
-          {tagPopoverOpen && associatedLeadId && (
-            <TagSelectorPopover
-              leadId={associatedLeadId}
-              companyId={companyId}
-              anchorRef={tagButtonRef}
-              onTagsChanged={(names) => {
-                setFormData(prev => ({ ...prev, tags: names }))
-              }}
-              onClose={() => setTagPopoverOpen(false)}
-            />
           )}
         </div>
 

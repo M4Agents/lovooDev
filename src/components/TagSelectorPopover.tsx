@@ -47,13 +47,20 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
     }
   }, [leadTags, loadingLead])
 
-  // Calcular posição do popover abaixo do botão âncora
+  // Calcular posição do popover abaixo do botão âncora.
+  // Garante que o popover não ultrapasse nenhuma das bordas horizontais
+  // do viewport (relevante para painéis estreitos como o chat).
   useEffect(() => {
     if (!anchorRef.current) return
     const rect = anchorRef.current.getBoundingClientRect()
+    const popoverWidth = 280
+    const margin = 4
     setCoords({
-      top: rect.bottom + 4,
-      left: Math.max(4, rect.left)
+      top: rect.bottom + margin,
+      left: Math.min(
+        Math.max(margin, rect.left),
+        window.innerWidth - popoverWidth - margin
+      )
     })
   }, [anchorRef])
 
