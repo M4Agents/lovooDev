@@ -21,6 +21,7 @@ import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
 import { useMoveOpportunity } from '../../hooks/useMoveOpportunity'
 import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
+import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
@@ -131,6 +132,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
 
   const [isDragging, setIsDragging]                 = useState(false)
+  const boardScrollRef = useRef<HTMLDivElement>(null)
+  useBoardAutoScroll(boardScrollRef, isDragging)
   const [showEditStageModal, setShowEditStageModal]  = useState(false)
   const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
   const [selectedStage, setSelectedStage]            = useState<FunnelStage | undefined>()
@@ -531,7 +534,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+        <div ref={boardScrollRef} className="flex gap-4 overflow-x-auto pb-4 h-full">
           {stages.filter(stage => !stage.is_hidden).map(stage => (
             <div
               key={stage.id}
