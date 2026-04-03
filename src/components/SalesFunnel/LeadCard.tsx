@@ -11,8 +11,16 @@ import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plu
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
+import type { CompanyUser } from '../../types/user'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 import { resolvePhotoUrl } from '../../utils/imageUtils'
+
+function getOwnerInitials(user?: CompanyUser): string {
+  const name = user?.display_name || user?.email || ''
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.substring(0, 2).toUpperCase() || '?'
+}
 
 interface LeadCardProps {
   position: OpportunityFunnelPosition
@@ -23,6 +31,8 @@ interface LeadCardProps {
   companyId?: string
   /** Abre o modal de detalhes/jornada da oportunidade. */
   onDetailClick?: (opportunityId: string) => void
+  /** Lista de usuários da empresa para resolver nome do owner. */
+  companyUsers?: CompanyUser[]
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -31,10 +41,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
   onClick,
   companyId,
-  onDetailClick
+  onDetailClick,
+  companyUsers = []
 }) => {
   const opportunity = position.opportunity
   const lead = opportunity?.lead
+  const ownerUser = opportunity?.owner_user_id
+    ? companyUsers.find(u => u.user_id === opportunity.owner_user_id)
+    : undefined
 
   // Override local de tags: atualizado após edição inline sem disparar boardRefresh.
   // Reseta automaticamente na próxima remontagem do card (boardRefresh/Realtime/navegação).
@@ -210,21 +224,35 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             </div>
           )}
 
-          {/* Footer com tempo na etapa */}
-          {position.days_in_stage !== undefined && (
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{formatDaysInStage(position.days_in_stage)}</span>
-              </div>
+          {/* Footer com tempo na etapa + owner */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              {position.days_in_stage !== undefined && (
+                <>
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{formatDaysInStage(position.days_in_stage)}</span>
+                </>
+              )}
+            </div>
 
+            <div className="flex items-center gap-2">
               {isFieldVisible('created_at') && lead.created_at && (
                 <span className="text-xs text-gray-400">
                   {new Date(lead.created_at).toLocaleDateString('pt-BR')}
                 </span>
               )}
+
+              {/* Avatar do owner */}
+              {opportunity?.owner_user_id && (
+                <div
+                  title={ownerUser?.display_name || ownerUser?.email || 'Responsável'}
+                  className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold flex-shrink-0 cursor-default"
+                >
+                  {getOwnerInitials(ownerUser)}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </Draggable>

@@ -6,11 +6,15 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Briefcase, DollarSign, Calendar, Percent, FileText } from 'lucide-react'
+import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
+import { getCompanyUsers } from '../../services/userApi'
 import { supabase } from '../../lib/supabase'
 import type { CreateOpportunityForm } from '../../types/sales-funnel'
+import type { CompanyUser } from '../../types/user'
+
+const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
 interface CreateOpportunityModalProps {
   isOpen: boolean
@@ -29,12 +33,14 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   opportunityData,
   onSuccess
 }) => {
-  const { company } = useAuth()
+  const { company, user, currentRole } = useAuth()
+  const isManager = currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [valueDisplay, setValueDisplay] = useState('0,00')
+  const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const isEditMode = !!opportunityData
-  
+
   const [formData, setFormData] = useState<Partial<CreateOpportunityForm>>({
     title: '',
     description: '',
@@ -42,7 +48,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     currency: 'BRL',
     probability: 50,
     expected_close_date: '',
-    source: ''
+    source: '',
+    owner_user_id: undefined
   })
 
   // Preencher formulário quando estiver editando
@@ -69,28 +76,42 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     }
   }, [isOpen, opportunityData])
 
-  // Buscar origem do lead ao abrir modal
+  // Buscar origem e responsável do lead ao abrir modal
   useEffect(() => {
-    const fetchLeadSource = async () => {
+    const fetchLeadData = async () => {
       if (!isOpen || !leadId) return
-      
+
       try {
         const { data } = await supabase
           .from('leads')
-          .select('lead_source')
+          .select('lead_source, responsible_user_id')
           .eq('id', leadId)
           .single()
-        
-        if (data?.lead_source) {
-          setFormData(prev => ({ ...prev, source: data.lead_source }))
+
+        if (data) {
+          // Prioridade: responsible_user_id do lead → auth.uid() como fallback
+          const defaultOwner = data.responsible_user_id ?? user?.id ?? undefined
+          setFormData(prev => ({
+            ...prev,
+            source: data.lead_source || prev.source,
+            owner_user_id: defaultOwner
+          }))
         }
       } catch (err) {
-        console.error('Erro ao buscar origem do lead:', err)
+        console.error('Erro ao buscar dados do lead:', err)
+        // Fallback: usuário atual
+        setFormData(prev => ({ ...prev, owner_user_id: user?.id ?? undefined }))
       }
     }
-    
-    fetchLeadSource()
-  }, [isOpen, leadId])
+
+    fetchLeadData()
+  }, [isOpen, leadId, user?.id])
+
+  // Buscar usuários da empresa (apenas para admin/manager poderem reatribuir)
+  useEffect(() => {
+    if (!isOpen || !company?.id || !isManager) return
+    getCompanyUsers(company.id).then(setCompanyUsers).catch(() => setCompanyUsers([]))
+  }, [isOpen, company?.id, isManager])
 
   // Resetar formulário quando modal fechar
   useEffect(() => {
@@ -102,10 +123,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         currency: 'BRL',
         probability: 50,
         expected_close_date: '',
-        source: ''
+        source: '',
+        owner_user_id: undefined
       })
       setValueDisplay('0,00')
       setError(undefined)
+      setCompanyUsers([])
     }
   }, [isOpen])
 
@@ -186,7 +209,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           currency: formData.currency || 'BRL',
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || undefined,
-          source: formData.source
+          source: formData.source,
+          owner_user_id: formData.owner_user_id || user?.id || undefined
         }
 
         console.log('📦 CreateOpportunityModal - Payload completo:', newOpportunityData)
@@ -365,6 +389,39 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               onChange={(e) => setFormData({ ...formData, expected_close_date: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
+          </div>
+
+          {/* Responsável */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <User className="w-4 h-4 inline mr-1" />
+              Responsável
+            </label>
+            {isManager ? (
+              <select
+                value={formData.owner_user_id ?? ''}
+                onChange={(e) => setFormData({ ...formData, owner_user_id: e.target.value || undefined })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+              >
+                <option value="">Sem responsável</option>
+                {companyUsers.map(u => (
+                  <option key={u.user_id} value={u.user_id}>
+                    {u.display_name || u.email || u.user_id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                readOnly
+                value={
+                  companyUsers.find(u => u.user_id === formData.owner_user_id)?.display_name
+                  || companyUsers.find(u => u.user_id === formData.owner_user_id)?.email
+                  || (formData.owner_user_id ? 'Você' : 'Sem responsável')
+                }
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-default"
+              />
+            )}
           </div>
 
           {/* Origem */}

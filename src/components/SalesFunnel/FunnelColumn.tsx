@@ -7,6 +7,7 @@
 import { Droppable } from '@hello-pangea/dnd'
 import { Plus, MoreVertical, Users } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
+import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
 
@@ -33,6 +34,8 @@ interface FunnelColumnProps {
   companyId?: string
   /** Abre o modal de detalhes/jornada da oportunidade. */
   onDetailClick?: (opportunityId: string) => void
+  /** Lista de usuários da empresa para exibir nome do owner no card. */
+  companyUsers?: CompanyUser[]
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -49,7 +52,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   loading = false,
   pageSize = 20,
   companyId,
-  onDetailClick
+  onDetailClick,
+  companyUsers
 }) => {
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
@@ -166,6 +170,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   onClick={onLeadClick}
                   companyId={companyId}
                   onDetailClick={onDetailClick}
+                  companyUsers={companyUsers}
                 />
               ))
             )}

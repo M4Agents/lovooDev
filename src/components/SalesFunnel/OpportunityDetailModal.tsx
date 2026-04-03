@@ -18,10 +18,13 @@ import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { getCompanyUsers } from '../../services/userApi'
+import { useAuth } from '../../contexts/AuthContext'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
+
+const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
 type TabType = 'details' | 'journey' | 'status'
 
@@ -161,6 +164,9 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   initialTab = 'details',
   onUpdate
 }) => {
+  const { currentRole } = useAuth()
+  const isManager = currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false
+
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
   const [loadingStatus, setLoadingStatus] = useState(false)
@@ -502,7 +508,12 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     <select
                       value={form.owner_user_id ?? ''}
                       onChange={e => setForm(f => ({ ...f, owner_user_id: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      disabled={!isManager}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isManager
+                          ? 'border-gray-300 bg-white'
+                          : 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                      }`}
                     >
                       <option value="">Sem responsável</option>
                       {companyUsers.map(u => (

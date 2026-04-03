@@ -27,6 +27,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
 import { triggerManager } from '../../services/automation/TriggerManager'
+import { getCompanyUsers } from '../../services/userApi'
 import type {
   LeadPositionFilter,
   FunnelStage,
@@ -36,6 +37,7 @@ import type {
   ReopenOpportunityParams,
   Opportunity
 } from '../../types/sales-funnel'
+import type { CompanyUser } from '../../types/user'
 
 // =====================================================
 // FEATURE FLAG — REALTIME
@@ -61,8 +63,14 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedOrigin = '',
   selectedPeriod = ''
 }) => {
-  const { company } = useAuth()
+  const { company, user } = useAuth()
   const companyId = company?.id
+  const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+
+  useEffect(() => {
+    if (!companyId) return
+    getCompanyUsers(companyId).then(setCompanyUsers).catch(() => setCompanyUsers([]))
+  }, [companyId])
 
   const {
     stages,
@@ -264,7 +272,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       company_id:     lead.company_id,
       title:          lead.name,
       source:         lead.origin,
-      owner_user_id:  lead.responsible_user_id
+      // Prioridade: responsável do lead; fallback: usuário atual criando
+      owner_user_id:  lead.responsible_user_id ?? user?.id ?? undefined
     })
 
     await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, targetStage.id)
@@ -589,6 +598,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 loading={stageMap.get(stage.id)?.loading}
                 companyId={companyId}
                 onDetailClick={handleDetailClick}
+                companyUsers={companyUsers}
               />
             </div>
           ))}
