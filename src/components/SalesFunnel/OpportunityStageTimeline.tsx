@@ -55,7 +55,7 @@ function secondsSince(iso: string | null): number {
 
 function hexToStyle(hex?: string): { bg: string; fg: string } | null {
   if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return null
-  return { bg: hex + '26', fg: hex }  // '26' hex ≈ 15% opacidade
+  return { bg: hex + '4D', fg: hex }  // '4D' hex ≈ 30% opacidade
 }
 
 // =====================================================
@@ -256,7 +256,7 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
         {!isLast && (
           <div
             className="w-px flex-1 my-1 min-h-[16px]"
-            style={stageStyle ? { backgroundColor: stageStyle.fg + '40' } : { backgroundColor: '#E5E7EB' }}
+            style={stageStyle ? { backgroundColor: stageStyle.fg + '50' } : { backgroundColor: '#E5E7EB' }}
           />
         )}
       </div>
