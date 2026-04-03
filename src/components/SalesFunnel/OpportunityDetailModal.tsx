@@ -8,17 +8,20 @@
 // Aba "Status" mantém a linha do tempo de transições de status.
 // =====================================================
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route
+  Clock, AlertCircle, Route, Pencil, Save, User
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
+import { funnelApi } from '../../services/funnelApi'
+import { getCompanyUsers } from '../../services/userApi'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
-import type { Opportunity, OpportunityStatusHistory } from '../../types/sales-funnel'
+import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm } from '../../types/sales-funnel'
+import type { CompanyUser } from '../../types/user'
 
 type TabType = 'details' | 'journey' | 'status'
 
@@ -29,6 +32,8 @@ interface OpportunityDetailModalProps {
   companyId: string
   /** Aba aberta por padrão. Padrão: 'details'. */
   initialTab?: TabType
+  /** Chamado após salvar alterações com sucesso. */
+  onUpdate?: (updated: Opportunity) => void
 }
 
 // =====================================================
@@ -153,13 +158,64 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   onClose,
   opportunity,
   companyId,
-  initialTab = 'details'
+  initialTab = 'details',
+  onUpdate
 }) => {
-  const [activeTab, setActiveTab]       = useState<TabType>(initialTab)
+  const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
   const [loadingStatus, setLoadingStatus] = useState(false)
 
+  // Edição
+  const [editMode, setEditMode]       = useState(false)
+  const [form, setForm]               = useState<UpdateOpportunityForm>({})
+  const [saving, setSaving]           = useState(false)
+  const [saveError, setSaveError]     = useState<string | null>(null)
+  const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+
   const lastEventRef = useRef<HTMLDivElement>(null)
+
+  const handleEditStart = useCallback(() => {
+    setForm({
+      title:               opportunity.title,
+      description:         opportunity.description ?? '',
+      value:               opportunity.value,
+      probability:         opportunity.probability,
+      expected_close_date: opportunity.expected_close_date ?? '',
+      loss_reason:         opportunity.loss_reason ?? '',
+      owner_user_id:       opportunity.owner_user_id ?? '',
+    })
+    setSaveError(null)
+    setEditMode(true)
+  }, [opportunity])
+
+  const handleCancel = useCallback(() => {
+    setEditMode(false)
+    setSaveError(null)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      // Limpar campos vazios opcionais para não sobrescrever com string vazia
+      const payload: UpdateOpportunityForm = {
+        title:       form.title,
+        description: form.description || undefined,
+        value:       form.value,
+        probability: form.probability,
+        expected_close_date: form.expected_close_date || undefined,
+        loss_reason:         form.loss_reason         || undefined,
+        owner_user_id:       form.owner_user_id        || undefined,
+      }
+      const updated = await funnelApi.updateOpportunity(opportunity.id, payload)
+      onUpdate?.(updated)
+      setEditMode(false)
+    } catch {
+      setSaveError('Erro ao salvar. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }, [form, opportunity.id, onUpdate])
 
   // Hook de histórico de etapas (só carrega quando o modal está aberto)
   const {
@@ -175,8 +231,18 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
 
   // Sincronizar aba quando initialTab muda (ex: aberto pelo board sempre em 'journey')
   useEffect(() => {
-    if (isOpen) setActiveTab(initialTab)
+    if (isOpen) {
+      setActiveTab(initialTab)
+      setEditMode(false)
+      setSaveError(null)
+    }
   }, [isOpen, initialTab])
+
+  // Carregar usuários da empresa para o select de responsável
+  useEffect(() => {
+    if (!isOpen || !companyId) return
+    getCompanyUsers(companyId).then(setCompanyUsers).catch(() => {})
+  }, [isOpen, companyId])
 
   // Carregar histórico de status ao abrir
   useEffect(() => {
@@ -271,89 +337,232 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
           {/* ABA: Detalhes */}
           {activeTab === 'details' && (
             <div className="space-y-5">
-              {/* Dados do negócio */}
+
+              {/* Cabeçalho da seção com botão de edição */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  {editMode ? 'Editando oportunidade' : 'Informações da oportunidade'}
+                </p>
+                {!editMode && (
+                  <button
+                    onClick={handleEditStart}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {/* Título */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Dados do Negócio</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                      <DollarSign className="w-3.5 h-3.5" />
-                      Valor
-                    </div>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  Título
+                </label>
+                {editMode ? (
+                  <input
+                    type="text"
+                    value={form.title ?? ''}
+                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Título da oportunidade"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-gray-800">{opportunity.title}</p>
+                )}
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                  <FileText className="w-3.5 h-3.5" />
+                  Descrição
+                </label>
+                {editMode ? (
+                  <textarea
+                    value={form.description ?? ''}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    placeholder="Descrição da oportunidade"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-700">{opportunity.description || <span className="text-gray-400">—</span>}</p>
+                )}
+              </div>
+
+              {/* Grid: Valor + Probabilidade */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Valor ({opportunity.currency})
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={form.value ?? 0}
+                      onChange={e => setForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
                     <p className={`text-sm font-semibold ${opportunity.status === 'won' ? 'text-emerald-700' : 'text-gray-800'}`}>
                       {opportunity.value > 0 ? formatCurrency(opportunity.value) : '—'}
                     </p>
-                  </div>
-
-                  {opportunity.closed_at && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Fechada em
-                      </div>
-                      <p className="text-sm font-medium text-gray-800">
-                        {formatDateShort(opportunity.closed_at)}
-                      </p>
-                    </div>
                   )}
+                </div>
 
-                  {opportunity.loss_reason && (
-                    <div className="col-span-2 bg-red-50 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs text-red-500 mb-1">
-                        <XCircle className="w-3.5 h-3.5" />
-                        Motivo da Perda
-                      </div>
-                      <p className="text-sm text-gray-800">{opportunity.loss_reason}</p>
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    Probabilidade
+                  </label>
+                  {editMode ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={form.probability ?? 0}
+                        onChange={e => setForm(f => ({ ...f, probability: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-500 flex-shrink-0">%</span>
                     </div>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-800">{opportunity.probability}%</p>
                   )}
                 </div>
               </div>
 
-              {/* Informações gerais */}
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Informações</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      Probabilidade
-                    </div>
-                    <p className="text-sm font-medium text-gray-800">{opportunity.probability}%</p>
-                  </div>
-
-                  {opportunity.expected_close_date && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Previsão
-                      </div>
-                      <p className="text-sm font-medium text-gray-800">
-                        {formatDateShort(opportunity.expected_close_date)}
-                      </p>
-                    </div>
+              {/* Grid: Responsável + Previsão de fechamento */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                    <User className="w-3.5 h-3.5" />
+                    Responsável
+                  </label>
+                  {editMode ? (
+                    <select
+                      value={form.owner_user_id ?? ''}
+                      onChange={e => setForm(f => ({ ...f, owner_user_id: e.target.value || undefined }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Sem responsável</option>
+                      {companyUsers.map(u => (
+                        <option key={u.user_id} value={u.user_id}>
+                          {u.display_name || u.email || u.user_id}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-800">
+                      {opportunity.owner_user_id
+                        ? (companyUsers.find(u => u.user_id === opportunity.owner_user_id)?.display_name
+                          || companyUsers.find(u => u.user_id === opportunity.owner_user_id)?.email
+                          || '—')
+                        : <span className="text-gray-400">—</span>
+                      }
+                    </p>
                   )}
+                </div>
 
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Previsão de fechamento
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="date"
+                      value={form.expected_close_date ? form.expected_close_date.substring(0, 10) : ''}
+                      onChange={e => setForm(f => ({ ...f, expected_close_date: e.target.value || undefined }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <p className="text-sm font-medium text-gray-800">
+                      {opportunity.expected_close_date ? formatDateShort(opportunity.expected_close_date) : <span className="text-gray-400">—</span>}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Motivo da perda (editável apenas para status lost) */}
+              {(opportunity.status === 'lost' || (editMode && opportunity.status === 'lost')) && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs text-red-500 mb-1">
+                    <XCircle className="w-3.5 h-3.5" />
+                    Motivo da Perda
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={form.loss_reason ?? ''}
+                      onChange={e => setForm(f => ({ ...f, loss_reason: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
+                      placeholder="Informe o motivo da perda"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-800 bg-red-50 rounded-lg px-3 py-2">
+                      {opportunity.loss_reason || <span className="text-gray-400">—</span>}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Campos somente leitura */}
+              {!editMode && (
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
                   {opportunity.source && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                         <Tag className="w-3.5 h-3.5" />
                         Origem
-                      </div>
+                      </p>
                       <p className="text-sm font-medium text-gray-800">{opportunity.source}</p>
                     </div>
                   )}
 
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                  {opportunity.closed_at && (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Fechada em
+                      </p>
+                      <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.closed_at)}</p>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                       <FileText className="w-3.5 h-3.5" />
                       Criada em
-                    </div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {formatDateShort(opportunity.created_at)}
                     </p>
+                    <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.created_at)}</p>
                   </div>
+
+                  {opportunity.updated_at && (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        Atualizada em
+                      </p>
+                      <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.updated_at)}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* Erro de save */}
+              {saveError && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {saveError}
+                </div>
+              )}
             </div>
           )}
 
@@ -399,12 +608,36 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
 
         {/* Footer */}
         <div className="p-5 pt-0 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Fechar
-          </button>
+          {editMode ? (
+            <div className="flex gap-2">
+              <button
+                onClick={handleCancel}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.title?.trim()}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {saving ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Fechar
+            </button>
+          )}
         </div>
       </div>
     </div>

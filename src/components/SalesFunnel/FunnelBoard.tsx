@@ -160,6 +160,19 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     setDetailOpportunityId(opportunityId)
   }, [])
 
+  // Após salvar edição no modal, faz refresh cirúrgico da coluna onde a oportunidade está
+  const handleOpportunityUpdate = useCallback((updated: Opportunity) => {
+    for (const [stageId, stageData] of stageMap.entries()) {
+      const found = stageData.positions?.some(
+        (p: { opportunity_id: string }) => p.opportunity_id === updated.id
+      )
+      if (found) {
+        boardRefresh(stageId)
+        break
+      }
+    }
+  }, [stageMap, boardRefresh])
+
   // =====================================================
   // ESTADO: TRANSIÇÃO DE FECHAMENTO / REABERTURA
   // Criado no handleDragEnd quando a transição detectada
@@ -655,6 +668,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           opportunity={detailOpportunity}
           companyId={companyId ?? ''}
           initialTab="journey"
+          onUpdate={handleOpportunityUpdate}
         />
       )}
     </div>
