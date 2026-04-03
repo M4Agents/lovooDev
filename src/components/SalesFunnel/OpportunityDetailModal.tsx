@@ -165,10 +165,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   onUpdate
 }) => {
   const { currentRole, company } = useAuth()
-  const isManager = currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false
+  // Legacy Super Admin tem currentRole=null mas company.is_super_admin=true
+  const isManager = (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) || company?.is_super_admin === true
 
   // #region agent log
-  console.log('[DEBUG-owner-field]', { currentRole, isManager, isSuperAdmin: company?.is_super_admin, companyId: company?.id, managementRoles: MANAGEMENT_ROLES });
+  console.log('[DEBUG-owner-field-post-fix]', { currentRole, isManager, isSuperAdmin: company?.is_super_admin, companyId: company?.id });
   // #endregion
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)

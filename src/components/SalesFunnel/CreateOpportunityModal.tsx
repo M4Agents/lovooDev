@@ -34,7 +34,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   onSuccess
 }) => {
   const { company, user, currentRole } = useAuth()
-  const isManager = currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false
+  // Legacy Super Admin tem currentRole=null mas company.is_super_admin=true
+  const isManager = (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) || company?.is_super_admin === true
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [valueDisplay, setValueDisplay] = useState('0,00')
