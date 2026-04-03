@@ -1,4 +1,9 @@
-export type PeriodType = 'today' | 'yesterday' | '7days' | '30days' | '90days' | 'custom';
+export type PeriodType =
+  | 'today' | 'yesterday'
+  | '7days' | '15days' | '30days'
+  | 'this_month' | 'last_month'
+  | '90days' | 'this_quarter' | 'this_year'
+  | 'custom';
 
 export interface PeriodFilter {
   type: PeriodType;
@@ -56,13 +61,33 @@ export const PREDEFINED_PERIODS: Record<PeriodType, Omit<PeriodFilter, 'startDat
     type: '7days',
     label: 'Últimos 7 dias'
   },
+  '15days': {
+    type: '15days',
+    label: 'Últimos 15 dias'
+  },
   '30days': {
     type: '30days',
     label: 'Últimos 30 dias'
   },
+  this_month: {
+    type: 'this_month',
+    label: 'Este mês'
+  },
+  last_month: {
+    type: 'last_month',
+    label: 'Mês passado'
+  },
   '90days': {
     type: '90days',
     label: 'Últimos 90 dias'
+  },
+  this_quarter: {
+    type: 'this_quarter',
+    label: 'Este trimestre'
+  },
+  this_year: {
+    type: 'this_year',
+    label: 'Ano atual'
   },
   custom: {
     type: 'custom',

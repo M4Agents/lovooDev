@@ -19,7 +19,8 @@ import {
   FolderOpen,
   TrendingUp,
   Calendar,
-  Zap
+  Zap,
+  BarChart2
 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
@@ -90,6 +91,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
     { path: '/automations', icon: Zap, label: 'Automações' },
     ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
+    { path: '/reports', icon: BarChart2, label: 'Relatórios' },
     ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];

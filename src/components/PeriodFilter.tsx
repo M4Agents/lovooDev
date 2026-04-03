@@ -58,9 +58,31 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
         startDate = new Date(now);
         startDate.setDate(startDate.getDate() - 30);
         break;
+      case '15days':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 15);
+        break;
       case '90days':
         startDate = new Date(now);
         startDate.setDate(startDate.getDate() - 90);
+        break;
+      case 'this_month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        break;
+      case 'last_month':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+        break;
+      case 'this_quarter': {
+        const q = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), q * 3, 1);
+        endDate = new Date(now.getFullYear(), q * 3 + 3, 0, 23, 59, 59);
+        break;
+      }
+      case 'this_year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
         break;
       default:
         return;
@@ -129,25 +151,44 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
         {isOpen && (
           <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
             <div className="p-2">
-              {/* Predefined Periods */}
-              <div className="space-y-1">
-                {Object.entries(PREDEFINED_PERIODS).map(([key, period]) => {
-                  if (key === 'custom') return null;
-                  
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => handlePredefinedPeriodSelect(key as PeriodType)}
-                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                        selectedPeriod.type === key
-                          ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {period.label}
-                    </button>
-                  );
-                })}
+              {/* Predefined Periods — agrupados */}
+              <div className="space-y-3">
+                {[
+                  {
+                    label: 'Curto prazo',
+                    keys: ['today', 'yesterday', '7days', '15days', '30days'] as PeriodType[],
+                  },
+                  {
+                    label: 'Mensal',
+                    keys: ['this_month', 'last_month'] as PeriodType[],
+                  },
+                  {
+                    label: 'Longo prazo',
+                    keys: ['90days', 'this_quarter', 'this_year'] as PeriodType[],
+                  },
+                ].map((group) => (
+                  <div key={group.label}>
+                    <p className="px-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      {group.label}
+                    </p>
+                    {group.keys.map((key) => {
+                      const period = PREDEFINED_PERIODS[key];
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => handlePredefinedPeriodSelect(key)}
+                          className={`w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${
+                            selectedPeriod.type === key
+                              ? 'bg-blue-50 text-blue-700 font-medium'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {period.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
 
               {/* Custom Period */}

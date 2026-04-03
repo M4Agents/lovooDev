@@ -22,6 +22,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { ChangePasswordRequired } from './pages/ChangePasswordRequired';
 import { DeletedInstances } from './pages/DeletedInstances';
+import Reports from './pages/Reports';
 import { startTrackingQueueProcessor } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -200,6 +201,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <FlowEditor />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <Reports />
           </ProtectedRoute>
         }
       />
