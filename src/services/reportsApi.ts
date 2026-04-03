@@ -39,9 +39,7 @@ export const reportsApi = {
     companyId: string,
     filters: ReportFilters
   ): Promise<StageTimeMetric[]> {
-    const { data, error } = await supabase.rpc('get_stage_time_metrics', {
-      ...toRpcParams(companyId, filters),
-    })
+    const { data, error } = await supabase.rpc('get_stage_time_metrics', toRpcParams(companyId, filters))
     if (error) throw error
     return (data as StageTimeMetric[]) ?? []
   },
@@ -50,9 +48,7 @@ export const reportsApi = {
     companyId: string,
     filters: ReportFilters
   ): Promise<SellerPerformance[]> {
-    const { data, error } = await supabase.rpc('get_seller_performance', {
-      ...toRpcParams(companyId, filters),
-    })
+    const { data, error } = await supabase.rpc('get_seller_performance', toRpcParams(companyId, filters))
     if (error) throw error
     return (data as SellerPerformance[]) ?? []
   },
@@ -61,9 +57,7 @@ export const reportsApi = {
     companyId: string,
     filters: ReportFilters
   ): Promise<CycleTimeMetric[]> {
-    const { data, error } = await supabase.rpc('get_cycle_time_metrics', {
-      ...toRpcParams(companyId, filters),
-    })
+    const { data, error } = await supabase.rpc('get_cycle_time_metrics', toRpcParams(companyId, filters))
     if (error) throw error
     return (data as CycleTimeMetric[]) ?? []
   },

@@ -157,9 +157,9 @@ function OverviewTab({
 function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boolean }) {
   if (loading) return <TableSkeleton rows={6} />
 
-  const totalRow = data.find((d) => d.breakdown_type === 'total')
-  const funnelRows = data.filter((d) => d.breakdown_type === 'funnel')
-  const sellerRows = data.filter((d) => d.breakdown_type === 'seller')
+  const totalRow = data.find((d) => d.dimension === 'total')
+  const funnelRows = data.filter((d) => d.dimension === 'funnel')
+  const sellerRows = data.filter((d) => d.dimension === 'seller')
 
   if (!totalRow && funnelRows.length === 0 && sellerRows.length === 0) {
     return <ReportEmptyState description="Nenhuma oportunidade fechada no período selecionado." />
@@ -187,8 +187,8 @@ function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boo
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.entity_id ?? 'total'} className="border-b border-gray-50 hover:bg-gray-50 last:border-0">
-                  <td className="px-4 py-3 font-medium text-gray-800">{r.entity_name}</td>
+                <tr key={r.group_id ?? 'total'} className="border-b border-gray-50 hover:bg-gray-50 last:border-0">
+                  <td className="px-4 py-3 font-medium text-gray-800">{r.group_name}</td>
                   <td className="px-4 py-3 text-right text-emerald-600 font-semibold">{Number(r.won_count)}</td>
                   <td className="px-4 py-3 text-right text-red-500">{Number(r.lost_count)}</td>
                   <td className="px-4 py-3 text-right text-gray-700">{fmtCycle(r.won_avg_seconds)}</td>

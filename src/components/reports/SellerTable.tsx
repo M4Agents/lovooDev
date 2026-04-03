@@ -116,7 +116,7 @@ export const SellerTable: React.FC<SellerTableProps> = ({ data }) => {
           </thead>
           <tbody>
             {sorted.map((row) => (
-              <tr key={row.owner_user_id} className="border-b border-gray-100 hover:bg-gray-50 last:border-0">
+              <tr key={row.user_id} className="border-b border-gray-100 hover:bg-gray-50 last:border-0">
                 <td className="px-4 py-3 font-medium text-gray-800">{row.user_name}</td>
                 <td className="px-4 py-3 text-right text-gray-600">{Number(row.open_count)}</td>
                 <td className="px-4 py-3 text-right">

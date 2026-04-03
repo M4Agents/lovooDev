@@ -39,7 +39,7 @@ export interface StageTimeMetric {
 
 // Retorno de get_seller_performance — 1 linha por vendedor
 export interface SellerPerformance {
-  owner_user_id: string
+  user_id: string
   user_name: string
   open_count: number
   won_count: number
@@ -51,9 +51,9 @@ export interface SellerPerformance {
 
 // Retorno de get_cycle_time_metrics — 'total' | 'funnel' | 'seller'
 export interface CycleTimeMetric {
-  breakdown_type: 'total' | 'funnel' | 'seller'
-  entity_id: string | null
-  entity_name: string
+  dimension: 'total' | 'funnel' | 'seller'
+  group_id: string | null
+  group_name: string
   won_count: number
   lost_count: number
   won_avg_seconds: number | null
