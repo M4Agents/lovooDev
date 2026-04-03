@@ -14,8 +14,9 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import {
-  LogIn, ArrowRight, Trophy, XCircle, RotateCcw,
-  Clock, AlertCircle, ChevronDown, ChevronUp, Timer
+  LogIn, Trophy, XCircle, RotateCcw,
+  Clock, AlertCircle, ChevronDown, ChevronUp, Timer,
+  TrendingUp, TrendingDown, MoveRight
 } from 'lucide-react'
 import type { OpportunityStageHistory } from '../../types/sales-funnel'
 
@@ -49,40 +50,47 @@ function secondsSince(iso: string | null): number {
 }
 
 // =====================================================
+// Helper: cor da etapa (hex → inline style)
+// =====================================================
+
+function hexToStyle(hex?: string): { bg: string; fg: string } | null {
+  if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return null
+  return { bg: hex + '26', fg: hex }  // '26' hex ≈ 15% opacidade
+}
+
+// =====================================================
 // Configurações visuais por move_type
 // =====================================================
 
 type MoveType = 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened'
 
 const moveTypeConfig: Record<MoveType, {
-  icon: React.ReactNode
   badgeClass: string
   label: string
 }> = {
-  funnel_entry: {
-    icon: <LogIn className="w-3.5 h-3.5" />,
-    badgeClass: 'bg-green-100 text-green-700',
-    label: 'Entrada'
-  },
-  stage_change: {
-    icon: <ArrowRight className="w-3.5 h-3.5" />,
-    badgeClass: 'bg-blue-100 text-blue-700',
-    label: 'Mudança'
-  },
-  won: {
-    icon: <Trophy className="w-3.5 h-3.5" />,
-    badgeClass: 'bg-emerald-100 text-emerald-700',
-    label: 'Ganhou'
-  },
-  lost: {
-    icon: <XCircle className="w-3.5 h-3.5" />,
-    badgeClass: 'bg-red-100 text-red-700',
-    label: 'Perdeu'
-  },
-  reopened: {
-    icon: <RotateCcw className="w-3.5 h-3.5" />,
-    badgeClass: 'bg-amber-100 text-amber-700',
-    label: 'Reaberto'
+  funnel_entry: { badgeClass: 'bg-green-100 text-green-700',   label: 'Entrada'  },
+  stage_change: { badgeClass: 'bg-blue-100 text-blue-700',     label: 'Mudança'  },
+  won:          { badgeClass: 'bg-emerald-100 text-emerald-700', label: 'Ganhou' },
+  lost:         { badgeClass: 'bg-red-100 text-red-700',       label: 'Perdeu'   },
+  reopened:     { badgeClass: 'bg-amber-100 text-amber-700',   label: 'Reaberto' }
+}
+
+// Ícone contextual: detecta avanço vs. retrocesso via posição da etapa
+function getStageIcon(entry: OpportunityStageHistory): React.ReactNode {
+  const size = 'w-3.5 h-3.5'
+  switch (entry.move_type) {
+    case 'funnel_entry': return <LogIn    className={size} />
+    case 'won':          return <Trophy   className={size} />
+    case 'lost':         return <XCircle  className={size} />
+    case 'reopened':     return <RotateCcw className={size} />
+    case 'stage_change': {
+      const fromPos = entry.from_stage?.position ?? 0
+      const toPos   = entry.to_stage?.position   ?? 0
+      if (toPos > fromPos) return <TrendingUp   className={size} />
+      if (toPos < fromPos) return <TrendingDown  className={size} />
+      return <MoveRight className={size} />
+    }
+    default: return <MoveRight className={size} />
   }
 }
 
@@ -225,6 +233,8 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
   const userName   = entry.moved_by
     ? (usersMap.get(entry.moved_by) ?? 'Usuário removido')
     : null
+  const icon       = getStageIcon(entry)
+  const stageStyle = hexToStyle(entry.to_stage?.color)
 
   // Duração: para o último item (atual), calcular a partir de currentEnteredAt
   const durationDisplay = isCurrent
@@ -237,10 +247,18 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
     <div className="flex gap-3">
       {/* Ícone + linha vertical */}
       <div className="flex flex-col items-center">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${config.badgeClass}`}>
-          {config.icon}
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${!stageStyle ? config.badgeClass : ''}`}
+          style={stageStyle ? { backgroundColor: stageStyle.bg, color: stageStyle.fg } : undefined}
+        >
+          {icon}
         </div>
-        {!isLast && <div className="w-px flex-1 bg-gray-200 my-1 min-h-[16px]" />}
+        {!isLast && (
+          <div
+            className="w-px flex-1 my-1 min-h-[16px]"
+            style={stageStyle ? { backgroundColor: stageStyle.fg + '40' } : { backgroundColor: '#E5E7EB' }}
+          />
+        )}
       </div>
 
       {/* Conteúdo */}
@@ -251,7 +269,7 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium text-gray-800">{microcopy}</p>
               <span className={`px-1.5 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${config.badgeClass}`}>
-                {config.icon}
+                {icon}
                 {config.label}
               </span>
               {isCurrent && (
@@ -359,8 +377,9 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
     : history
   const hiddenCount = history.length - 6  // 5 do topo + 1 do fim
 
-  const lastEntry     = history[history.length - 1]
-  const currentStage  = lastEntry?.to_stage?.name ?? '—'
+  const lastEntry          = history[history.length - 1]
+  const currentStage       = lastEntry?.to_stage?.name ?? '—'
+  const currentStageStyle  = hexToStyle(lastEntry?.to_stage?.color)
 
   if (loading) {
     return (
@@ -401,17 +420,38 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
   return (
     <div className="space-y-4">
       {/* Bloco: Etapa Atual */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+      <div
+        className="rounded-lg p-3 border"
+        style={currentStageStyle
+          ? { backgroundColor: currentStageStyle.bg, borderColor: currentStageStyle.fg + '60' }
+          : { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}
+      >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-0.5">
+            <p
+              className="text-xs font-semibold uppercase tracking-wide mb-0.5"
+              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#3B82F6' }}
+            >
               Etapa Atual
             </p>
-            <p className="text-sm font-semibold text-blue-900">{currentStage}</p>
+            <p
+              className="text-sm font-semibold"
+              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#1E3A5F' }}
+            >
+              {currentStage}
+            </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-blue-400 mb-0.5">Tempo em andamento</p>
-            <div className="flex items-center gap-1 text-sm font-medium text-blue-700">
+            <p
+              className="text-xs mb-0.5"
+              style={currentStageStyle ? { color: currentStageStyle.fg + 'aa' } : { color: '#93C5FD' }}
+            >
+              Tempo em andamento
+            </p>
+            <div
+              className="flex items-center gap-1 text-sm font-medium"
+              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#1D4ED8' }}
+            >
               <Timer className="w-3.5 h-3.5" />
               {summary.currentStageSeconds > 0
                 ? formatDuration(summary.currentStageSeconds)
