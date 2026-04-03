@@ -164,8 +164,12 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   initialTab = 'details',
   onUpdate
 }) => {
-  const { currentRole } = useAuth()
+  const { currentRole, company } = useAuth()
   const isManager = currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false
+
+  // #region agent log
+  console.log('[DEBUG-owner-field]', { currentRole, isManager, isSuperAdmin: company?.is_super_admin, companyId: company?.id, managementRoles: MANAGEMENT_ROLES });
+  // #endregion
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
