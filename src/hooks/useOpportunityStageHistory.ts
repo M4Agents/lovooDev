@@ -42,6 +42,10 @@ export function useOpportunityStageHistory(
     setError(null)
 
     const fetchAll = async () => {
+      // #region agent log
+      console.error('[DBG:useOppStageHistory] params', { opportunityId, companyId })
+      fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'75feb2'},body:JSON.stringify({sessionId:'75feb2',location:'useOpportunityStageHistory.ts:44',message:'hook params',data:{opportunityId,companyId},timestamp:Date.now(),hypothesisId:'H_C'})}).catch(()=>{})
+      // #endregion
       try {
         const [historyRes, usersRes, posRes] = await Promise.all([
           // Histórico de etapas com joins para nomes das etapas
@@ -68,6 +72,11 @@ export function useOpportunityStageHistory(
         ])
 
         if (cancelled) return
+
+        // #region agent log
+        console.error('[DBG:useOppStageHistory] historyRes', { data: historyRes.data, error: historyRes.error, count: historyRes.count, dataLength: historyRes.data?.length ?? 'null' })
+        fetch('http://127.0.0.1:7869/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'75feb2'},body:JSON.stringify({sessionId:'75feb2',location:'useOpportunityStageHistory.ts:72',message:'historyRes result',data:{dataLength:historyRes.data?.length??'null',hasError:!!historyRes.error,errorMsg:historyRes.error?.message??null},timestamp:Date.now(),hypothesisId:'H_B_H_D'})}).catch(()=>{})
+        // #endregion
 
         if (historyRes.error) throw historyRes.error
 
