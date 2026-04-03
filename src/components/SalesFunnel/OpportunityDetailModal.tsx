@@ -1,26 +1,39 @@
 // =====================================================
 // COMPONENTE: OpportunityDetailModal
-// Objetivo: Visualização read-only dos detalhes de uma
-//           oportunidade fechada (won/lost), incluindo
-//           linha do tempo de transições de status.
+// Objetivo: Visualização dos detalhes de uma oportunidade
+//           com três abas: Detalhes, Jornada e Status.
+//
+// Generalizado para qualquer status (open, won, lost).
+// Aba "Jornada" usa OpportunityStageTimeline + useOpportunityStageHistory.
+// Aba "Status" mantém a linha do tempo de transições de status.
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle
+  Clock, AlertCircle, Route
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
+import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
+import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import type { Opportunity, OpportunityStatusHistory } from '../../types/sales-funnel'
+
+type TabType = 'details' | 'journey' | 'status'
 
 interface OpportunityDetailModalProps {
   isOpen: boolean
   onClose: () => void
   opportunity: Opportunity
   companyId: string
+  /** Aba aberta por padrão. Padrão: 'details'. */
+  initialTab?: TabType
 }
+
+// =====================================================
+// Helpers de formatação
+// =====================================================
 
 const formatDateTime = (iso?: string): string => {
   if (!iso) return '—'
@@ -37,56 +50,79 @@ const formatDateShort = (iso?: string): string => {
   }).format(new Date(iso))
 }
 
-const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+// =====================================================
+// Configuração visual por status
+// =====================================================
+
+const statusConfig: Record<string, {
+  label: string; color: string; bg: string
+  headerBg: string; headerBorder: string
+  iconBg: string; iconColor: string
+  icon: React.ReactNode
+}> = {
   open: {
     label: 'Em Aberto',
     color: 'text-blue-700',
     bg: 'bg-blue-100',
+    headerBg: 'bg-blue-50',
+    headerBorder: 'border-blue-100',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
     icon: <AlertCircle className="w-3.5 h-3.5" />
   },
   won: {
     label: 'Ganha',
     color: 'text-emerald-700',
     bg: 'bg-emerald-100',
+    headerBg: 'bg-emerald-50',
+    headerBorder: 'border-emerald-100',
+    iconBg: 'bg-emerald-100',
+    iconColor: 'text-emerald-600',
     icon: <CheckCircle2 className="w-3.5 h-3.5" />
   },
   lost: {
     label: 'Perdida',
     color: 'text-red-700',
     bg: 'bg-red-100',
+    headerBg: 'bg-red-50',
+    headerBorder: 'border-red-100',
+    iconBg: 'bg-red-100',
+    iconColor: 'text-red-600',
     icon: <XCircle className="w-3.5 h-3.5" />
   }
 }
 
+// =====================================================
+// TimelineEntry (status history)
+// =====================================================
+
 const TimelineEntry: React.FC<{ entry: OpportunityStatusHistory; isLast: boolean }> = ({ entry, isLast }) => {
-  const toConfig = statusConfig[entry.to_status] ?? statusConfig.open
-  const fromConfig = entry.from_status ? statusConfig[entry.from_status] : null
+  const toConfig   = statusConfig[entry.to_status]   ?? statusConfig.open
+  const fromConfig = entry.from_status ? (statusConfig[entry.from_status] ?? null) : null
 
   return (
     <div className="flex gap-3">
-      {/* Linha vertical */}
       <div className="flex flex-col items-center">
         <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${toConfig.bg} ${toConfig.color}`}>
-          {entry.to_status === 'won' && <CheckCircle2 className="w-4 h-4" />}
+          {entry.to_status === 'won'  && <CheckCircle2 className="w-4 h-4" />}
           {entry.to_status === 'lost' && <XCircle className="w-4 h-4" />}
           {entry.to_status === 'open' && <RotateCcw className="w-4 h-4" />}
         </div>
         {!isLast && <div className="w-px flex-1 bg-gray-200 my-1" />}
       </div>
 
-      {/* Conteúdo */}
-      <div className={`pb-4 flex-1 min-w-0 ${isLast ? '' : ''}`}>
+      <div className="pb-4 flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-sm font-medium text-gray-800">
               {fromConfig ? (
                 <span>
-                  <span className={`${fromConfig.color}`}>{fromConfig.label}</span>
+                  <span className={fromConfig.color}>{fromConfig.label}</span>
                   {' → '}
-                  <span className={`${toConfig.color}`}>{toConfig.label}</span>
+                  <span className={toConfig.color}>{toConfig.label}</span>
                 </span>
               ) : (
-                <span className={toConfig.color}>Status definido: {toConfig.label}</span>
+                <span className={toConfig.color}>Status: {toConfig.label}</span>
               )}
             </p>
             {entry.loss_reason && (
@@ -108,44 +144,74 @@ const TimelineEntry: React.FC<{ entry: OpportunityStatusHistory; isLast: boolean
   )
 }
 
+// =====================================================
+// Modal principal
+// =====================================================
+
 export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   isOpen,
   onClose,
   opportunity,
-  companyId
+  companyId,
+  initialTab = 'details'
 }) => {
-  const [history, setHistory] = useState<OpportunityStatusHistory[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [activeTab, setActiveTab]       = useState<TabType>(initialTab)
+  const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
+  const [loadingStatus, setLoadingStatus] = useState(false)
 
+  const lastEventRef = useRef<HTMLDivElement>(null)
+
+  // Hook de histórico de etapas (só carrega quando o modal está aberto)
+  const {
+    history: stageHistory,
+    usersMap,
+    currentEnteredAt,
+    loading: loadingStage,
+    error: stageError
+  } = useOpportunityStageHistory(
+    isOpen ? opportunity.id : null,
+    companyId
+  )
+
+  // Sincronizar aba quando initialTab muda (ex: aberto pelo board sempre em 'journey')
+  useEffect(() => {
+    if (isOpen) setActiveTab(initialTab)
+  }, [isOpen, initialTab])
+
+  // Carregar histórico de status ao abrir
   useEffect(() => {
     if (!isOpen) return
-
-    const fetchHistory = async () => {
-      setLoadingHistory(true)
-      try {
-        const { data, error } = await supabase
-          .from('opportunity_status_history')
-          .select('*')
-          .eq('opportunity_id', opportunity.id)
-          .eq('company_id', companyId)
-          .order('changed_at', { ascending: true })
-
-        if (!error && data) setHistory(data)
-      } finally {
-        setLoadingHistory(false)
-      }
-    }
-
-    fetchHistory()
+    setLoadingStatus(true)
+    supabase
+      .from('opportunity_status_history')
+      .select('*')
+      .eq('opportunity_id', opportunity.id)
+      .eq('company_id', companyId)
+      .order('changed_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setStatusHistory(data)
+      })
+      .finally(() => setLoadingStatus(false))
   }, [isOpen, opportunity.id, companyId])
+
+  // Auto-scroll para o último evento ao abrir aba Jornada
+  useEffect(() => {
+    if (activeTab !== 'journey' || loadingStage) return
+    const timer = setTimeout(() => {
+      lastEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [activeTab, loadingStage])
 
   if (!isOpen) return null
 
   const statusCfg = statusConfig[opportunity.status] ?? statusConfig.open
-  const isWon = opportunity.status === 'won'
-  const headerBg = isWon ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'
-  const iconBg   = isWon ? 'bg-emerald-100' : 'bg-red-100'
-  const iconColor = isWon ? 'text-emerald-600' : 'text-red-600'
+
+  const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
+    { key: 'details', label: 'Detalhes',  icon: <FileText className="w-3.5 h-3.5" /> },
+    { key: 'journey', label: 'Jornada',   icon: <Route className="w-3.5 h-3.5" /> },
+    { key: 'status',  label: 'Status',    icon: <Clock className="w-3.5 h-3.5" /> }
+  ]
 
   return (
     <div
@@ -157,9 +223,9 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`flex items-center gap-3 p-5 border-b ${headerBg} rounded-t-xl`}>
-          <div className={`p-2 rounded-lg ${iconBg}`}>
-            <Briefcase className={`w-5 h-5 ${iconColor}`} />
+        <div className={`flex items-center gap-3 p-5 border-b ${statusCfg.headerBg} border-${statusCfg.headerBorder} rounded-t-xl`}>
+          <div className={`p-2 rounded-lg ${statusCfg.iconBg}`}>
+            <Briefcase className={`w-5 h-5 ${statusCfg.iconColor}`} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -181,118 +247,158 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
           </button>
         </div>
 
+        {/* Abas */}
+        <div className="flex border-b border-gray-200 px-1">
+          {tabs.map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === key
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Body — scrollável */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5">
 
-          {/* Dados do negócio */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Dados do Negócio</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                  <DollarSign className="w-3.5 h-3.5" />
-                  Valor Final
-                </div>
-                <p className={`text-sm font-semibold ${isWon ? 'text-emerald-700' : 'text-gray-800'}`}>
-                  {opportunity.value > 0 ? formatCurrency(opportunity.value) : '—'}
-                </p>
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Fechada em
-                </div>
-                <p className="text-sm font-medium text-gray-800">
-                  {formatDateShort(opportunity.closed_at)}
-                </p>
-              </div>
-
-              {opportunity.loss_reason && (
-                <div className="col-span-2 bg-red-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-red-500 mb-1">
-                    <XCircle className="w-3.5 h-3.5" />
-                    Motivo da Perda
-                  </div>
-                  <p className="text-sm text-gray-800">{opportunity.loss_reason}</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Informações gerais */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Informações</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  Probabilidade
-                </div>
-                <p className="text-sm font-medium text-gray-800">{opportunity.probability}%</p>
-              </div>
-
-              {opportunity.expected_close_date && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Previsão
-                  </div>
-                  <p className="text-sm font-medium text-gray-800">
-                    {formatDateShort(opportunity.expected_close_date)}
-                  </p>
-                </div>
-              )}
-
-              {opportunity.source && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                    <Tag className="w-3.5 h-3.5" />
-                    Origem
-                  </div>
-                  <p className="text-sm font-medium text-gray-800">{opportunity.source}</p>
-                </div>
-              )}
-
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                  <FileText className="w-3.5 h-3.5" />
-                  Criada em
-                </div>
-                <p className="text-sm font-medium text-gray-800">
-                  {formatDateShort(opportunity.created_at)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Linha do tempo */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Linha do Tempo</p>
-
-            {loadingHistory ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-                Carregando histórico...
-              </div>
-            ) : history.length === 0 ? (
-              <p className="text-sm text-gray-400 py-2">Nenhum registro de transição encontrado.</p>
-            ) : (
+          {/* ABA: Detalhes */}
+          {activeTab === 'details' && (
+            <div className="space-y-5">
+              {/* Dados do negócio */}
               <div>
-                {history.map((entry, idx) => (
-                  <TimelineEntry
-                    key={entry.id}
-                    entry={entry}
-                    isLast={idx === history.length - 1}
-                  />
-                ))}
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Dados do Negócio</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Valor
+                    </div>
+                    <p className={`text-sm font-semibold ${opportunity.status === 'won' ? 'text-emerald-700' : 'text-gray-800'}`}>
+                      {opportunity.value > 0 ? formatCurrency(opportunity.value) : '—'}
+                    </p>
+                  </div>
+
+                  {opportunity.closed_at && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Fechada em
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {formatDateShort(opportunity.closed_at)}
+                      </p>
+                    </div>
+                  )}
+
+                  {opportunity.loss_reason && (
+                    <div className="col-span-2 bg-red-50 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-red-500 mb-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        Motivo da Perda
+                      </div>
+                      <p className="text-sm text-gray-800">{opportunity.loss_reason}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Informações gerais */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Informações</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      Probabilidade
+                    </div>
+                    <p className="text-sm font-medium text-gray-800">{opportunity.probability}%</p>
+                  </div>
+
+                  {opportunity.expected_close_date && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Previsão
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {formatDateShort(opportunity.expected_close_date)}
+                      </p>
+                    </div>
+                  )}
+
+                  {opportunity.source && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Tag className="w-3.5 h-3.5" />
+                        Origem
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">{opportunity.source}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                      <FileText className="w-3.5 h-3.5" />
+                      Criada em
+                    </div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {formatDateShort(opportunity.created_at)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA: Jornada */}
+          {activeTab === 'journey' && (
+            <OpportunityStageTimeline
+              history={stageHistory}
+              usersMap={usersMap}
+              currentEnteredAt={currentEnteredAt}
+              loading={loadingStage}
+              error={stageError}
+              lastEventRef={lastEventRef}
+            />
+          )}
+
+          {/* ABA: Status */}
+          {activeTab === 'status' && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Histórico de Status
+              </p>
+              {loadingStatus ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                  Carregando...
+                </div>
+              ) : statusHistory.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">Nenhum registro de transição de status.</p>
+              ) : (
+                <div>
+                  {statusHistory.map((entry, idx) => (
+                    <TimelineEntry
+                      key={entry.id}
+                      entry={entry}
+                      isLast={idx === statusHistory.length - 1}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="p-5 pt-0 border-t border-gray-100 mt-0">
+        <div className="p-5 pt-0 border-t border-gray-100">
           <button
             onClick={onClose}
             className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"

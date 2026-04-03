@@ -7,7 +7,7 @@
 
 import React, { useState, useRef } from 'react'
 import { Draggable } from '@hello-pangea/dnd'
-import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus } from 'lucide-react'
+import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
@@ -21,6 +21,8 @@ interface LeadCardProps {
   onClick?: (leadId: number) => void
   /** Necessário para TagSelectorPopover (multi-tenant). */
   companyId?: string
+  /** Abre o modal de detalhes/jornada da oportunidade. */
+  onDetailClick?: (opportunityId: string) => void
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -28,7 +30,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
   onClick,
-  companyId
+  companyId,
+  onDetailClick
 }) => {
   const opportunity = position.opportunity
   const lead = opportunity?.lead
@@ -68,14 +71,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           {...provided.dragHandleProps}
           onClick={handleClick}
           className={`
-            bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-3
+            group bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-3
             cursor-pointer transition-all duration-200
             hover:shadow-md hover:border-blue-300
             ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-400 rotate-2' : ''}
           `}
         >
           {/* Header com foto e nome */}
-          <div className="flex items-start gap-3 mb-3">
+          <div className="flex items-start gap-3 mb-3 relative">
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 <Avatar
@@ -86,7 +89,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             )}
 
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 pr-6">
               {/* Título da Oportunidade */}
               <div className="flex items-center gap-1.5 mb-1">
                 <Briefcase className="w-3.5 h-3.5 text-purple-600" />
@@ -108,6 +111,22 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 </p>
               )}
             </div>
+
+            {/* Ícone de detalhes — aparece no hover do card */}
+            {onDetailClick && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDetailClick(position.opportunity_id)
+                }}
+                className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
+                title="Ver detalhes e jornada"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Informações do lead */}

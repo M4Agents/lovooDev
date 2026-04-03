@@ -110,10 +110,43 @@ export interface OpportunityFunnelPosition {
 // Alias para compatibilidade (DEPRECATED)
 export type LeadFunnelPosition = OpportunityFunnelPosition
 
+// =====================================================
+// INTERFACE: OpportunityStageHistory
+// Representa a tabela opportunity_stage_history.
+// Cada linha = permanência em from_stage (etapa de origem).
+// stage_entered_at / stage_left_at = janela temporal em from_stage.
+// =====================================================
+
 export interface OpportunityStageHistory {
   id: string
+  company_id: string
   opportunity_id: string
-  lead_id: number  // Mantido para compatibilidade
+  funnel_id: string
+
+  // Transição
+  from_stage_id?: string   // NULL = funnel_entry (sem etapa anterior)
+  to_stage_id: string
+
+  // Permanência em from_stage
+  stage_entered_at: string  // quando entrou em from_stage
+  stage_left_at: string     // quando saiu de from_stage
+  duration_seconds: number  // coluna gerada (stage_left_at - stage_entered_at)
+
+  // Rastreabilidade
+  moved_by?: string
+  move_type: 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened'
+  created_at: string
+
+  // Joins opcionais
+  from_stage?: FunnelStage
+  to_stage?: FunnelStage
+}
+
+// Alias legado — mapeia para lead_stage_history (tabela antiga via trigger)
+// Mantido apenas enquanto nenhuma área de oportunidades o consume diretamente
+export interface LeadStageHistory {
+  id: string
+  lead_id: number
   funnel_id: string
   from_stage_id?: string
   to_stage_id: string
@@ -123,9 +156,6 @@ export interface OpportunityStageHistory {
   from_stage?: FunnelStage
   to_stage?: FunnelStage
 }
-
-// Alias para compatibilidade (DEPRECATED)
-export type LeadStageHistory = OpportunityStageHistory
 
 export interface LeadCardFieldPreference {
   id: string

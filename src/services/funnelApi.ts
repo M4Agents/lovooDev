@@ -843,25 +843,26 @@ class FunnelApiService {
   }
   
   /**
-   * Mover oportunidade para outra etapa
+   * Mover oportunidade para outra etapa.
+   * Usa a RPC move_opportunity que registra o histórico de etapa atomicamente.
    */
   async moveOpportunityToStage(data: MoveOpportunityForm): Promise<OpportunityFunnelPosition> {
     try {
-      const { data: position, error } = await supabase
-        .from('opportunity_funnel_positions')
-        .update({
-          stage_id: data.to_stage_id,
-          position_in_stage: data.position_in_stage,
-          entered_stage_at: new Date().toISOString()
-        })
-        .eq('opportunity_id', data.opportunity_id)
-        .eq('funnel_id', data.funnel_id)
-        .select()
-        .single()
-      
+      const { data: position, error } = await supabase.rpc('move_opportunity', {
+        p_opportunity_id:    data.opportunity_id,
+        p_funnel_id:         data.funnel_id,
+        p_from_stage_id:     data.from_stage_id,
+        p_to_stage_id:       data.to_stage_id,
+        p_position_in_stage: data.position_in_stage
+      })
+
       if (error) throw error
-      
-      return position
+
+      // A RPC retorna SETOF; pegar o primeiro (e único) registro
+      const result = Array.isArray(position) ? position[0] : position
+      if (!result) throw new Error('move_opportunity não retornou resultado')
+
+      return result as OpportunityFunnelPosition
     } catch (error) {
       console.error('Error moving opportunity:', error)
       throw error

@@ -16,6 +16,7 @@ import { EditStageModal } from './EditStageModal'
 import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
 import { CloseOpportunityModal } from './CloseOpportunityModal'
 import { ReopenOpportunityModal } from './ReopenOpportunityModal'
+import { OpportunityDetailModal } from './OpportunityDetailModal'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
@@ -32,7 +33,8 @@ import type {
   CreateStageForm,
   UpdateStageForm,
   CloseOpportunityParams,
-  ReopenOpportunityParams
+  ReopenOpportunityParams,
+  Opportunity
 } from '../../types/sales-funnel'
 
 // =====================================================
@@ -138,6 +140,25 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
   const [selectedStage, setSelectedStage]            = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId]        = useState<string>('')
+
+  // Modal de detalhes / jornada da oportunidade
+  const [detailOpportunityId, setDetailOpportunityId] = useState<string | null>(null)
+
+  // Encontra o objeto Opportunity a partir do stageMap para passar ao modal
+  const detailOpportunity = useMemo((): Opportunity | null => {
+    if (!detailOpportunityId) return null
+    for (const stageData of stageMap.values()) {
+      const pos = stageData.positions?.find(
+        (p: { opportunity_id: string }) => p.opportunity_id === detailOpportunityId
+      )
+      if (pos?.opportunity) return pos.opportunity as Opportunity
+    }
+    return null
+  }, [detailOpportunityId, stageMap])
+
+  const handleDetailClick = useCallback((opportunityId: string) => {
+    setDetailOpportunityId(opportunityId)
+  }, [])
 
   // =====================================================
   // ESTADO: TRANSIÇÃO DE FECHAMENTO / REABERTURA
@@ -554,6 +575,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onLoadMore={() => loadMore(stage.id)}
                 loading={stageMap.get(stage.id)?.loading}
                 companyId={companyId}
+                onDetailClick={handleDetailClick}
               />
             </div>
           ))}
@@ -622,6 +644,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           companyId={companyId ?? ''}
           onConfirm={handleConfirmReopen}
           onCancel={handleCancelTransition}
+        />
+      )}
+
+      {/* Modal de detalhes / jornada da oportunidade */}
+      {detailOpportunity && (
+        <OpportunityDetailModal
+          isOpen={true}
+          onClose={() => setDetailOpportunityId(null)}
+          opportunity={detailOpportunity}
+          companyId={companyId ?? ''}
+          initialTab="journey"
         />
       )}
     </div>

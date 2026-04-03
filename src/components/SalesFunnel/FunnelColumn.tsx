@@ -31,6 +31,8 @@ interface FunnelColumnProps {
   pageSize?: number
   /** Tags inline: company_id para TagSelectorPopover (multi-tenant). */
   companyId?: string
+  /** Abre o modal de detalhes/jornada da oportunidade. */
+  onDetailClick?: (opportunityId: string) => void
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -46,7 +48,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onLoadMore,
   loading = false,
   pageSize = 20,
-  companyId
+  companyId,
+  onDetailClick
 }) => {
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
@@ -162,6 +165,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   visibleFields={visibleFields}
                   onClick={onLeadClick}
                   companyId={companyId}
+                  onDetailClick={onDetailClick}
                 />
               ))
             )}
