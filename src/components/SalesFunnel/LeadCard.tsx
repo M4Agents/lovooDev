@@ -121,7 +121,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   e.stopPropagation()
                   onDetailClick(position.opportunity_id)
                 }}
-                className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
+                className="absolute top-0 right-0 opacity-40 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
                 title="Ver detalhes e jornada"
               >
                 <Info className="w-4 h-4" />
