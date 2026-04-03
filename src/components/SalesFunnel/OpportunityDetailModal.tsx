@@ -168,10 +168,6 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   // Legacy Super Admin tem currentRole=null mas company.is_super_admin=true
   const isManager = (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) || company?.is_super_admin === true
 
-  // #region agent log
-  console.log('[DEBUG-owner-field-post-fix]', { currentRole, isManager, isSuperAdmin: company?.is_super_admin, companyId: company?.id });
-  // #endregion
-
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
   const [loadingStatus, setLoadingStatus] = useState(false)
