@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
@@ -415,6 +415,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     {getStatusLabel(opportunity.status)}
                   </span>
                   <button
+                    onClick={() => setDetailOpportunity(opportunity)}
+                    className="p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                    title="Ver jornada"
+                  >
+                    <Route className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleEditOpportunity(opportunity)}
                     className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                     title="Editar oportunidade"
@@ -555,6 +562,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                         {getStatusLabel(opportunity.status)}
                       </span>
                       <button
+                        onClick={(e) => { e.stopPropagation(); setDetailOpportunity(opportunity) }}
+                        className="p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-100 rounded transition-colors"
+                        title="Ver jornada"
+                      >
+                        <Route className="w-3.5 h-3.5" />
+                      </button>
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteOpportunity(opportunity.id, opportunity.title) }}
                         disabled={deletingOpportunity === opportunity.id}
                         className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50"
@@ -623,13 +637,15 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         />
       )}
 
-      {/* Modal de Detalhes (oportunidades fechadas) */}
+      {/* Modal de Detalhes / Jornada */}
       {detailOpportunity && (
         <OpportunityDetailModal
           isOpen={!!detailOpportunity}
           onClose={() => setDetailOpportunity(null)}
           opportunity={detailOpportunity}
           companyId={companyId}
+          initialTab="journey"
+          onUpdate={() => refreshOpportunities()}
         />
       )}
     </div>
