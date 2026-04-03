@@ -966,7 +966,6 @@ export class ChatApi {
       email: raw.email,
       profile_picture_url: raw.profile_picture_url,
       lead_source: raw.lead_source,
-      lead_status: raw.lead_status,
       deal_value: raw.deal_value,
       first_contact_at: raw.first_contact_at ? new Date(raw.first_contact_at) : undefined,
       last_activity_at: raw.last_activity_at ? new Date(raw.last_activity_at) : undefined,

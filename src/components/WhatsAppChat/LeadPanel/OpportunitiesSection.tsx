@@ -85,7 +85,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             company_id: companyId,
             phone: phoneNumber,
             name: leadName || phoneNumber,
-            lead_status: 'new',
             lead_source: 'chat'
           })
           .select('id')

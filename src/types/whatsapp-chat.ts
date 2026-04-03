@@ -60,7 +60,6 @@ export interface ChatContact {
   email?: string
   profile_picture_url?: string
   lead_source?: string
-  lead_status: 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost'
   deal_value?: number
   first_contact_at?: Date
   last_activity_at?: Date
@@ -116,7 +115,6 @@ export interface MessageFilter {
 export interface ContactFilter {
   company_id: string
   phone_number?: string
-  lead_status?: string
   search?: string
 }
 
@@ -153,7 +151,6 @@ export interface ContactInfoForm {
   name?: string
   email?: string
   lead_source?: string
-  lead_status: 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost'
   deal_value?: number
   notes?: string
   tags: string[]
@@ -358,10 +355,6 @@ export const isValidMessageType = (type: string): type is ChatMessage['message_t
   return ['text', 'image', 'document', 'audio', 'video'].includes(type)
 }
 
-export const isValidLeadStatus = (status: string): status is ChatContact['lead_status'] => {
-  return ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed', 'lost'].includes(status)
-}
-
 export const isValidFilterType = (type: string): type is ConversationFilter['type'] => {
   return ['all', 'assigned', 'unassigned'].includes(type)
 }
@@ -380,48 +373,6 @@ export const getMessageStatusColor = (status: ChatMessage['status']): string => 
       return 'text-yellow-600'
     default:
       return 'text-gray-600'
-  }
-}
-
-export const getLeadStatusColor = (status: ChatContact['lead_status']): string => {
-  switch (status) {
-    case 'new':
-      return 'bg-blue-100 text-blue-800'
-    case 'contacted':
-      return 'bg-yellow-100 text-yellow-800'
-    case 'qualified':
-      return 'bg-green-100 text-green-800'
-    case 'proposal':
-      return 'bg-purple-100 text-purple-800'
-    case 'negotiation':
-      return 'bg-orange-100 text-orange-800'
-    case 'closed':
-      return 'bg-green-100 text-green-800'
-    case 'lost':
-      return 'bg-red-100 text-red-800'
-    default:
-      return 'bg-gray-100 text-gray-800'
-  }
-}
-
-export const getLeadStatusLabel = (status: ChatContact['lead_status']): string => {
-  switch (status) {
-    case 'new':
-      return 'Novo'
-    case 'contacted':
-      return 'Contatado'
-    case 'qualified':
-      return 'Qualificado'
-    case 'proposal':
-      return 'Proposta'
-    case 'negotiation':
-      return 'Negociação'
-    case 'closed':
-      return 'Fechado'
-    case 'lost':
-      return 'Perdido'
-    default:
-      return 'Desconhecido'
   }
 }
 

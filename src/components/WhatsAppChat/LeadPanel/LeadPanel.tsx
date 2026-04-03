@@ -100,24 +100,13 @@ const convertChatContactToLead = (
   phoneNumber: string,
   conversationData?: any
 ): Lead => {
-  // Mapear status do chat para status do lead
-  const statusMapping = {
-    'new': 'novo',
-    'contacted': 'contatado', 
-    'qualified': 'qualificado',
-    'proposal': 'proposta',
-    'negotiation': 'negociacao',
-    'closed': 'fechado',
-    'lost': 'perdido'
-  };
-
   return {
     id: contact?.id ? parseInt(contact.id) : undefined,
     name: contact?.name || conversationData?.contact_name || '',
     email: contact?.email || '',
     phone: phoneNumber || contact?.phone_number || '',
     origin: 'whatsapp',
-    status: statusMapping[contact?.lead_status as keyof typeof statusMapping] || 'novo',
+    status: 'novo',
     interest: '',
     responsible_user_id: '',
     visitor_id: '',
@@ -457,7 +446,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     name: '',
     email: '',
     lead_source: '',
-    lead_status: 'new',
     deal_value: 0,
     notes: '',
     tags: [],
@@ -490,7 +478,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         name: contact.name || '',
         email: contact.email || '',
         lead_source: contact.lead_source || '',
-        lead_status: contact.lead_status,
         deal_value: contact.deal_value || 0,
         notes: contact.notes || '',
         tags: contact.tags || [],
