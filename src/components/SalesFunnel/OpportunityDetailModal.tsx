@@ -12,7 +12,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User
+  Clock, AlertCircle, Route, Pencil, Save, User, Check
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -165,12 +165,17 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
   const [loadingStatus, setLoadingStatus] = useState(false)
 
-  // Edição
+  // Edição geral
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState<UpdateOpportunityForm>({})
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState<string | null>(null)
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+
+  // Slider de probabilidade (auto-save, independente do edit mode)
+  const [probDraft, setProbDraft]     = useState(opportunity.probability)
+  const [savingProb, setSavingProb]   = useState(false)
+  const [probSaved, setProbSaved]     = useState(false)
 
   const lastEventRef = useRef<HTMLDivElement>(null)
 
@@ -179,19 +184,32 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       title:               opportunity.title,
       description:         opportunity.description ?? '',
       value:               opportunity.value,
-      probability:         opportunity.probability,
+      probability:         probDraft,
       expected_close_date: opportunity.expected_close_date ?? '',
       loss_reason:         opportunity.loss_reason ?? '',
       owner_user_id:       opportunity.owner_user_id ?? '',
     })
     setSaveError(null)
     setEditMode(true)
-  }, [opportunity])
+  }, [opportunity, probDraft])
 
   const handleCancel = useCallback(() => {
     setEditMode(false)
     setSaveError(null)
   }, [])
+
+  const handleProbabilityCommit = useCallback(async (value: number) => {
+    if (value === opportunity.probability) return
+    setSavingProb(true)
+    try {
+      const updated = await funnelApi.updateOpportunity(opportunity.id, { probability: value })
+      onUpdate?.(updated)
+      setProbSaved(true)
+      setTimeout(() => setProbSaved(false), 1500)
+    } finally {
+      setSavingProb(false)
+    }
+  }, [opportunity.id, opportunity.probability, onUpdate])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -235,8 +253,10 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       setActiveTab(initialTab)
       setEditMode(false)
       setSaveError(null)
+      setProbDraft(opportunity.probability)
+      setProbSaved(false)
     }
-  }, [isOpen, initialTab])
+  }, [isOpen, initialTab, opportunity.probability])
 
   // Carregar usuários da empresa para o select de responsável
   useEffect(() => {
@@ -416,25 +436,58 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    Probabilidade
-                  </label>
-                  {editMode ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={form.probability ?? 0}
-                        onChange={e => setForm(f => ({ ...f, probability: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-500 flex-shrink-0">%</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      Probabilidade
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <span className={`text-sm font-semibold ${
+                        probDraft <= 30 ? 'text-red-600' :
+                        probDraft <= 70 ? 'text-amber-600' :
+                        'text-emerald-600'
+                      }`}>
+                        {probDraft}%
+                      </span>
+                      {savingProb && (
+                        <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin ml-1" />
+                      )}
+                      {probSaved && !savingProb && (
+                        <Check className="w-3.5 h-3.5 text-emerald-500 ml-1" />
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-sm font-medium text-gray-800">{opportunity.probability}%</p>
-                  )}
+                  </div>
+
+                  {/* Barra de progresso visual */}
+                  <div className="relative h-2 bg-gray-200 rounded-full mb-2 overflow-hidden">
+                    <div
+                      className={`absolute inset-y-0 left-0 rounded-full transition-all duration-75 ${
+                        probDraft <= 30 ? 'bg-red-500' :
+                        probDraft <= 70 ? 'bg-amber-400' :
+                        'bg-emerald-500'
+                      }`}
+                      style={{ width: `${probDraft}%` }}
+                    />
+                  </div>
+
+                  {/* Slider */}
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={editMode ? (form.probability ?? probDraft) : probDraft}
+                    onChange={e => {
+                      const v = parseInt(e.target.value)
+                      setProbDraft(v)
+                      if (editMode) setForm(f => ({ ...f, probability: v }))
+                    }}
+                    onPointerUp={e => {
+                      const v = parseInt((e.target as HTMLInputElement).value)
+                      if (!editMode) handleProbabilityCommit(v)
+                    }}
+                    className="w-full h-1.5 appearance-none cursor-pointer accent-blue-500"
+                  />
                 </div>
               </div>
 
