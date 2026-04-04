@@ -13,6 +13,7 @@ import { getCompanyUsers } from '../../services/userApi'
 import { supabase } from '../../lib/supabase'
 import type { CreateOpportunityForm } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
+import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
@@ -82,6 +83,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     }
   }, [isOpen, opportunityData])
 
+  // Nova oportunidade: moeda padrão da empresa
+  useEffect(() => {
+    if (!isOpen || opportunityData || !company) return
+    const dc = company.default_currency ?? 'BRL'
+    setFormData(prev => ({ ...prev, currency: dc }))
+  }, [isOpen, opportunityData, company])
+
   // Buscar origem e responsável do lead ao abrir modal
   useEffect(() => {
     const fetchLeadData = async () => {
@@ -126,7 +134,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         title: '',
         description: '',
         value: 0,
-        currency: 'BRL',
+        currency: company?.default_currency ?? 'BRL',
         probability: 50,
         expected_close_date: '',
         source: '',
@@ -136,7 +144,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       setError(undefined)
       setCompanyUsers([])
     }
-  }, [isOpen])
+  }, [isOpen, company?.default_currency])
 
   // Atualizar display do valor com formatação brasileira
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +198,6 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           title: formData.title,
           description: formData.description,
           value: formData.value || 0,
-          currency: formData.currency || 'BRL',
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || undefined
         })
@@ -212,7 +219,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           title: formData.title,
           description: formData.description,
           value: formData.value || 0,
-          currency: formData.currency || 'BRL',
+          currency: formData.currency || company.default_currency || 'BRL',
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || undefined,
           source: formData.source,
@@ -277,7 +284,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         title: '',
         description: '',
         value: 0,
-        currency: 'BRL',
+        currency: company?.default_currency ?? 'BRL',
         probability: 50,
         expected_close_date: '',
         source: ''
@@ -306,7 +313,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               <Briefcase className="w-5 h-5 text-purple-600" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Nova Oportunidade</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {isEditMode ? 'Editar Oportunidade' : 'Nova Oportunidade'}
+              </h2>
               <p className="text-sm text-gray-500">Lead: {leadName}</p>
             </div>
           </div>
@@ -350,12 +359,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             />
           </div>
 
-          {/* Valor e Probabilidade */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
+          {/* Valor, moeda e Probabilidade */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className="w-4 h-4 inline mr-1" />
-                Valor (R$)
+                Valor
               </label>
               <input
                 type="text"
@@ -364,6 +373,26 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 placeholder="0,00"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Moeda (ISO 4217)</label>
+              {isEditMode ? (
+                <p className="px-4 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+                  {opportunityData?.currency ?? formData.currency ?? 'BRL'}{' '}
+                  <span className="text-xs text-gray-400">(não pode ser alterada)</span>
+                </p>
+              ) : (
+                <select
+                  value={formData.currency || 'BRL'}
+                  onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                >
+                  {SUPPORTED_CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -469,12 +498,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Criando...
+                  {isEditMode ? 'Salvando...' : 'Criando...'}
                 </>
               ) : (
                 <>
                   <Briefcase className="w-4 h-4" />
-                  Criar Oportunidade
+                  {isEditMode ? 'Salvar alterações' : 'Criar Oportunidade'}
                 </>
               )}
             </button>

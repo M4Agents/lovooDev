@@ -104,7 +104,12 @@ const statusConfig: Record<string, {
 // TimelineEntry (status history)
 // =====================================================
 
-const TimelineEntry: React.FC<{ entry: OpportunityStatusHistory; isLast: boolean }> = ({ entry, isLast }) => {
+const TimelineEntry: React.FC<{
+  entry: OpportunityStatusHistory
+  isLast: boolean
+  /** Moeda atual da oportunidade — usada quando o snapshot legado não tem currency_code */
+  fallbackCurrency: string
+}> = ({ entry, isLast, fallbackCurrency }) => {
   const toConfig   = statusConfig[entry.to_status]   ?? statusConfig.open
   const fromConfig = entry.from_status ? (statusConfig[entry.from_status] ?? null) : null
 
@@ -138,7 +143,10 @@ const TimelineEntry: React.FC<{ entry: OpportunityStatusHistory; isLast: boolean
             )}
             {entry.value_snapshot != null && entry.value_snapshot > 0 && (
               <p className="text-xs text-gray-500 mt-0.5">
-                Valor: <span className="font-medium text-gray-700">{formatCurrency(entry.value_snapshot)}</span>
+                Valor:{' '}
+                <span className="font-medium text-gray-700">
+                  {formatCurrency(entry.value_snapshot, entry.currency_code ?? fallbackCurrency)}
+                </span>
               </p>
             )}
           </div>
@@ -443,7 +451,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     />
                   ) : (
                     <p className={`text-sm font-semibold ${opportunity.status === 'won' ? 'text-emerald-700' : 'text-gray-800'}`}>
-                      {opportunity.value > 0 ? formatCurrency(opportunity.value) : '—'}
+                      {opportunity.value > 0 ? formatCurrency(opportunity.value, opportunity.currency) : '—'}
                     </p>
                   )}
                 </div>
@@ -669,6 +677,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                       key={entry.id}
                       entry={entry}
                       isLast={idx === statusHistory.length - 1}
+                      fallbackCurrency={opportunity.currency}
                     />
                   ))}
                 </div>

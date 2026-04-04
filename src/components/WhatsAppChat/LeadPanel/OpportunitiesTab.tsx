@@ -127,7 +127,7 @@ export const OpportunitiesTab: React.FC<OpportunitiesTabProps> = ({
                     <div>
                       <p className="text-xs text-gray-500">Valor</p>
                       <p className="text-sm font-semibold text-green-600">
-                        {formatCurrency(opportunity.value)}
+                        {formatCurrency(opportunity.value, opportunity.currency)}
                       </p>
                     </div>
                   </div>

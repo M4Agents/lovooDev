@@ -720,9 +720,12 @@ class FunnelApiService {
    */
   async updateOpportunity(id: string, data: UpdateOpportunityForm): Promise<Opportunity> {
     try {
+      // Moeda é imutável após criação (trigger no banco); nunca enviar currency no update.
+      const { currency: _c, ...payload } = data as UpdateOpportunityForm & { currency?: string }
+      void _c
       const { data: opportunity, error } = await supabase
         .from('opportunities')
-        .update(data)
+        .update(payload)
         .eq('id', id)
         .select()
         .single()

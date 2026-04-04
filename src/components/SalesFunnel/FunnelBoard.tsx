@@ -191,6 +191,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     opportunityId: string
     opportunityTitle: string
     opportunityValue: number
+    opportunityCurrency: string
     opportunityClosed?: string
     opportunityStatus: 'open' | 'won' | 'lost'
     snapshot: ReturnType<typeof optimisticMove>
@@ -272,6 +273,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       company_id:     lead.company_id,
       title:          lead.name,
       source:         lead.origin,
+      currency:       company?.default_currency ?? 'BRL',
       // Prioridade: responsável do lead; fallback: usuário atual criando
       owner_user_id:  lead.responsible_user_id ?? user?.id ?? undefined
     })
@@ -281,7 +283,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     // Refresh cirúrgico: apenas a coluna de entrada + contadores
     boardRefresh(targetStage.id)
     refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
-  }, [funnelId, boardRefresh, refreshCounts])
+  }, [funnelId, boardRefresh, refreshCounts, company?.default_currency, user?.id])
 
   const handleSubmitAddLead = (leadId: number, stageId: string) =>
     addLeadToBoard(leadId, stageId)
@@ -385,6 +387,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         opportunityId,
         opportunityTitle:  opp?.title ?? '',
         opportunityValue:  opp?.value ?? 0,
+        opportunityCurrency: (opp?.currency || 'BRL').toUpperCase(),
         opportunityClosed: opp?.closed_at,
         opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
         snapshot,
@@ -643,6 +646,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           stageType={pendingTransition.toStageType as 'won' | 'lost'}
           opportunityTitle={pendingTransition.opportunityTitle}
           currentValue={pendingTransition.opportunityValue}
+          currencyCode={pendingTransition.opportunityCurrency}
           opportunityId={pendingTransition.opportunityId}
           funnelId={funnelId}
           toStageId={pendingTransition.toStageId}

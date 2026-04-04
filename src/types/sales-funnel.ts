@@ -4,6 +4,8 @@
 // Objetivo: Types TypeScript para o sistema de funil
 // =====================================================
 
+import { formatMoney } from '../lib/formatMoney'
+
 // =====================================================
 // INTERFACES PRINCIPAIS
 // =====================================================
@@ -259,7 +261,6 @@ export interface UpdateOpportunityForm {
   title?: string
   description?: string
   value?: number
-  currency?: string
   status?: 'open' | 'won' | 'lost'
   probability?: number
   expected_close_date?: string
@@ -606,12 +607,9 @@ export const getStageTypeLabel = (type: FunnelStage['stage_type']): string => {
 // HELPERS DE FORMATAÇÃO
 // =====================================================
 
-export const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value)
-}
+/** Valor formatado; `currencyCode` default BRL. */
+export const formatCurrency = (value: number, currencyCode: string = 'BRL'): string =>
+  formatMoney(value, currencyCode)
 
 export const formatDaysInStage = (days: number): string => {
   if (days === 0) return 'Hoje'

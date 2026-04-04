@@ -23,6 +23,8 @@ interface CloseOpportunityModalProps {
   stageType: 'won' | 'lost'
   opportunityTitle: string
   currentValue: number
+  /** ISO 4217 — exibe no rótulo; valor já está na moeda da oportunidade */
+  currencyCode?: string
   opportunityId: string
   funnelId: string
   toStageId: string
@@ -42,6 +44,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   stageType,
   opportunityTitle,
   currentValue,
+  currencyCode = 'BRL',
   opportunityId,
   funnelId,
   toStageId,
@@ -159,7 +162,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
                 <DollarSign className="w-4 h-4 text-gray-400" />
-                Valor da venda (R$)
+                Valor da venda ({currencyCode})
               </label>
               <input
                 type="text"

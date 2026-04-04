@@ -2,10 +2,7 @@ import React, { useState } from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { SellerPerformance } from '../../types/reports'
 import { ReportEmptyState } from './ReportEmptyState'
-
-function fmtCurrency(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
-}
+import { formatMoney } from '../../lib/formatMoney'
 
 function fmtCycle(seconds: number | null): string {
   if (seconds == null || seconds <= 0) return '—'
@@ -19,9 +16,12 @@ type SortKey = 'user_name' | 'won_count' | 'lost_count' | 'won_value' | 'convers
 
 interface SellerTableProps {
   data: SellerPerformance[]
+  /** Moeda para formatação de totais agregados (padrão da empresa). */
+  displayCurrency?: string
 }
 
-export const SellerTable: React.FC<SellerTableProps> = ({ data }) => {
+export const SellerTable: React.FC<SellerTableProps> = ({ data, displayCurrency = 'BRL' }) => {
+  const fmtCurrency = (v: number) => formatMoney(v, displayCurrency)
   const [sortKey, setSortKey] = useState<SortKey>('won_value')
   const [sortAsc, setSortAsc] = useState(false)
   const [search, setSearch] = useState('')

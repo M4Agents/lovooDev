@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Clock, Save } from 'lucide-react'
+import { Clock, Save, Coins, Globe2 } from 'lucide-react'
 import { TimezoneSelector } from './TimezoneSelector'
+import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 
 // Timezones mais comuns para seleção rápida
 const COMMON_TIMEZONES = [
@@ -46,12 +47,30 @@ const COMMON_TIMEZONES = [
 export const SystemSettings: React.FC = () => {
   const { company, refreshCompany } = useAuth()
   const [timezone, setTimezone] = useState(company?.timezone || 'America/Sao_Paulo')
+  const [defaultCurrency, setDefaultCurrency] = useState(company?.default_currency ?? 'BRL')
+  const [countryCode, setCountryCode] = useState((company?.country_code ?? '').trim())
   const [saving, setSaving] = useState(false)
   const [showAllTimezones, setShowAllTimezones] = useState(false)
+
+  useEffect(() => {
+    if (!company) return
+    setTimezone(company.timezone || 'America/Sao_Paulo')
+    setDefaultCurrency(company.default_currency ?? 'BRL')
+    setCountryCode((company.country_code ?? '').trim())
+  }, [company])
+
+  const normalizedCountry = countryCode.trim().toUpperCase() || null
+  const countryInvalid =
+    normalizedCountry !== null && !/^[A-Z]{2}$/.test(normalizedCountry)
+  const companyCountryNorm = (company?.country_code ?? '').trim().toUpperCase() || null
 
   const handleSave = async () => {
     if (!company?.id) {
       alert('❌ Erro: Empresa não encontrada')
+      return
+    }
+    if (countryInvalid) {
+      alert('❌ País: use ISO alpha-2 em maiúsculas (ex.: BR) ou deixe em branco.')
       return
     }
 
@@ -62,23 +81,29 @@ export const SystemSettings: React.FC = () => {
         .from('companies')
         .update({ 
           timezone,
+          default_currency: defaultCurrency,
+          country_code: normalizedCountry,
           updated_at: new Date().toISOString() 
         })
         .eq('id', company.id)
 
       if (error) throw error
 
-      // Atualizar contexto
       await refreshCompany()
 
-      alert('✅ Fuso horário atualizado com sucesso!\n\nRecarregue a página para aplicar as mudanças.')
+      alert('✅ Configurações salvas.\n\nRecarregue a página se algo não atualizar na hora.')
     } catch (error) {
-      console.error('Erro ao salvar timezone:', error)
+      console.error('Erro ao salvar configurações do sistema:', error)
       alert('❌ Erro ao salvar configurações')
     } finally {
       setSaving(false)
     }
   }
+
+  const hasChanges =
+    timezone !== (company?.timezone || 'America/Sao_Paulo') ||
+    defaultCurrency !== (company?.default_currency ?? 'BRL') ||
+    (normalizedCountry ?? '') !== (companyCountryNorm ?? '')
 
   // Agrupar timezones comuns por região
   const groupedCommonTimezones = COMMON_TIMEZONES.reduce((groups, tz) => {
@@ -175,20 +200,74 @@ export const SystemSettings: React.FC = () => {
         </p>
       </div>
 
+      {/* Moeda padrão e país (contexto) */}
+      <div className="border-t border-gray-200 pt-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Coins className="w-6 h-6 text-indigo-600" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Moeda e região</h3>
+            <p className="text-sm text-gray-600">
+              Moeda padrão para <strong>novas oportunidades</strong>. Não há conversão automática entre moedas.
+              O país é opcional e serve apenas como referência (não define a moeda).
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Moeda padrão (ISO 4217)
+            </label>
+            <select
+              value={defaultCurrency}
+              onChange={e => setDefaultCurrency(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+            >
+              {SUPPORTED_CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Globe2 className="w-4 h-4 text-gray-500" />
+              País (ISO 3166-1 alpha-2, opcional)
+            </label>
+            <input
+              type="text"
+              maxLength={2}
+              value={countryCode}
+              onChange={e => setCountryCode(e.target.value.toUpperCase())}
+              placeholder="Ex.: BR"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase ${
+                countryInvalid ? 'border-red-400' : 'border-gray-300'
+              }`}
+            />
+            {countryInvalid && (
+              <p className="text-xs text-red-600 mt-1">Duas letras maiúsculas ou vazio.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Botão Salvar */}
       <div className="flex gap-3">
         <button
           onClick={handleSave}
-          disabled={saving || timezone === company?.timezone}
+          disabled={saving || !hasChanges || countryInvalid}
           className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <Save className="w-4 h-4" />
           {saving ? 'Salvando...' : 'Salvar Configurações'}
         </button>
 
-        {timezone !== company?.timezone && (
+        {hasChanges && (
           <button
-            onClick={() => setTimezone(company?.timezone || 'America/Sao_Paulo')}
+            onClick={() => {
+              setTimezone(company?.timezone || 'America/Sao_Paulo')
+              setDefaultCurrency(company?.default_currency ?? 'BRL')
+              setCountryCode((company?.country_code ?? '').trim())
+            }}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
             Cancelar

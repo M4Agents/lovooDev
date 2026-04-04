@@ -38,6 +38,7 @@ interface PendingStageTransition {
   opportunityId: string
   opportunityTitle: string
   opportunityValue: number
+  opportunityCurrency: string
   opportunityClosed?: string
   opportunityStatus: 'open' | 'won' | 'lost'
   fromStageType: 'active' | 'won' | 'lost'
@@ -461,6 +462,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           opportunityId,
           opportunityTitle: opp?.title ?? '',
           opportunityValue: opp?.value ?? 0,
+          opportunityCurrency: (opp?.currency || 'BRL').toUpperCase(),
           opportunityClosed: opp?.closed_at,
           opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
           fromStageType: 'active',
@@ -516,6 +518,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         opportunityId,
         opportunityTitle: opp?.title ?? '',
         opportunityValue: opp?.value ?? 0,
+        opportunityCurrency: (opp?.currency || 'BRL').toUpperCase(),
         opportunityClosed: opp?.closed_at,
         opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
         fromStageType: fromType,
@@ -664,7 +667,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                 {opportunity.value > 0 && (
                   <div className="flex items-center gap-1 text-green-600">
                     <DollarSign className="w-3 h-3" />
-                    <span className="font-semibold">{formatCurrency(opportunity.value)}</span>
+                    <span className="font-semibold">{formatCurrency(opportunity.value, opportunity.currency)}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-1 text-blue-600">
@@ -803,7 +806,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                     {opportunity.value > 0 && (
                       <div className={`flex items-center gap-1 font-semibold ${opportunity.status === 'won' ? 'text-emerald-700' : 'text-red-700'}`}>
                         <DollarSign className="w-3 h-3" />
-                        {formatCurrency(opportunity.value)}
+                        {formatCurrency(opportunity.value, opportunity.currency)}
                       </div>
                     )}
                     {opportunity.closed_at && (
@@ -877,6 +880,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             stageType={pendingStageTransition.toStageType}
             opportunityTitle={pendingStageTransition.opportunityTitle}
             currentValue={pendingStageTransition.opportunityValue}
+            currencyCode={pendingStageTransition.opportunityCurrency}
             opportunityId={pendingStageTransition.opportunityId}
             funnelId={pendingStageTransition.funnelId}
             toStageId={pendingStageTransition.toStageId}

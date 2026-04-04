@@ -14,12 +14,10 @@ import { ReportEmptyState } from '../components/reports/ReportEmptyState'
 import { useReports, ReportTab } from '../hooks/useReports'
 import { useFunnelMetrics } from '../hooks/useFunnelMetrics'
 import type { CycleTimeMetric } from '../types/reports'
+import { useAuth } from '../contexts/AuthContext'
+import { formatMoney } from '../lib/formatMoney'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
-}
 
 function fmtCycle(seconds: number | null): string {
   if (seconds == null || seconds <= 0) return '—'
@@ -39,13 +37,15 @@ const TABS: { key: ReportTab; label: string }[] = [
 // ─── Aba Visão Geral ────────────────────────────────────────────────────────
 
 function OverviewTab({
-  data, stageData, stalledDays, setStalledDays, loading,
+  data, stageData, stalledDays, setStalledDays, loading, fmtCurrency,
 }: {
   data: ReturnType<typeof useFunnelMetrics>['metrics']['overview']
   stageData: ReturnType<typeof useFunnelMetrics>['metrics']['stageMetrics']
   stalledDays: number
   setStalledDays: (v: number) => void
   loading: boolean
+  /** Agregados podem misturar moedas; formatação usa moeda padrão da empresa. */
+  fmtCurrency: (v: number) => string
 }) {
   if (loading) {
     return (
@@ -224,6 +224,10 @@ function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boo
 // ─── Página Principal ───────────────────────────────────────────────────────
 
 export default function Reports() {
+  const { company } = useAuth()
+  const displayCurrency = company?.default_currency ?? 'BRL'
+  const fmtCurrency = (v: number) => formatMoney(v, displayCurrency)
+
   const {
     activeTab, setActiveTab,
     period, handlePeriodChange,
@@ -293,6 +297,7 @@ export default function Reports() {
             stalledDays={stalledDays}
             setStalledDays={setStalledDays}
             loading={loading}
+            fmtCurrency={fmtCurrency}
           />
         )}
 
@@ -319,7 +324,7 @@ export default function Reports() {
               </h2>
             </div>
             {loading ? <TableSkeleton rows={6} /> : (
-              <SellerTable data={metrics.sellerMetrics} />
+              <SellerTable data={metrics.sellerMetrics} displayCurrency={displayCurrency} />
             )}
           </div>
         )}

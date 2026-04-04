@@ -10,6 +10,20 @@ import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
+import { formatMoney } from '../../lib/formatMoney'
+
+function formatColumnTotals(leads: LeadFunnelPosition[]): string | null {
+  const byCurrency = new Map<string, number>()
+  for (const pos of leads) {
+    const cur = (pos.opportunity?.currency || 'BRL').toUpperCase()
+    const v = pos.opportunity?.value || 0
+    if (v <= 0) continue
+    byCurrency.set(cur, (byCurrency.get(cur) || 0) + v)
+  }
+  if (byCurrency.size === 0) return null
+  const parts = Array.from(byCurrency.entries()).map(([code, sum]) => formatMoney(sum, code))
+  return parts.join(' · ')
+}
 
 interface FunnelColumnProps {
   stage: FunnelStage
@@ -63,6 +77,9 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   const displayCount      = count      ?? leads.length
   const displayTotalValue = totalValue ?? localTotalValue
 
+  /** Soma por moeda nos cards carregados (evita misturar moedas num único número). */
+  const totalLabelFromLoaded = formatColumnTotals(leads)
+
   // Variáveis de paginação — só relevantes quando hasMore === true
   const loadedCount    = leads.length
   const remainingCount = Math.max(0, displayCount - loadedCount)
@@ -97,11 +114,13 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
               <p className="text-xs text-gray-500">
                 {displayCount} {displayCount === 1 ? 'oportunidade' : 'oportunidades'}
               </p>
-              {displayTotalValue > 0 && (
+              {(totalLabelFromLoaded || displayTotalValue > 0) && (
                 <>
                   <span className="text-xs text-gray-300">•</span>
-                  <p className="text-xs text-green-600 font-semibold">
-                    {formatCurrency(displayTotalValue)}
+                  <p className="text-xs text-green-600 font-semibold" title={hasMore ? 'Total parcial: apenas oportunidades já carregadas na coluna.' : undefined}>
+                    {totalLabelFromLoaded
+                      ? totalLabelFromLoaded
+                      : formatCurrency(displayTotalValue, leads[0]?.opportunity?.currency || 'BRL')}
                   </p>
                 </>
               )}
