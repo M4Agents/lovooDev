@@ -1348,6 +1348,7 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
   formatDateTime,
   getStatusIcon
 }) => {
+  const { t } = useTranslation('chat')
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -1393,16 +1394,23 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className={`rounded-lg p-3 max-w-sm shadow-sm ${
-      isOwn ? 'bg-[#dcf8c6]' : 'bg-white border border-gray-200'
-    }`}>
+    <div
+      className={`rounded-lg p-3 max-w-sm shadow-sm ${
+        isOwn ? 'bg-[#dcf8c6]' : 'bg-white border border-gray-200'
+      }`}
+      role="group"
+      aria-label={t('message.a11y.audioPlayer')}
+    >
       <div className="flex items-center space-x-3">
         {/* Player Controls */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2">
             {/* Play/Pause Button */}
             <button 
+              type="button"
               onClick={handlePlayPause}
+              aria-label={isPlaying ? t('message.actions.pause') : t('message.actions.play')}
+              title={isPlaying ? t('message.actions.pause') : t('message.actions.play')}
               className="w-8 h-8 bg-[#34b7f1] hover:bg-[#2da5e0] rounded-full flex items-center justify-center transition-colors"
             >
               {isPlaying ? (
@@ -1464,6 +1472,7 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
       <audio
         ref={audioRef}
         src={message.media_url}
+        aria-label={t('message.labels.audio')}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
@@ -1485,6 +1494,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onVideoError,
   onResetVideoError
 }) => {
+  const { t } = useTranslation('chat')
   const formatDateTime = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -1582,7 +1592,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div className="mb-1">
               <img
                 src={message.media_url}
-                alt={message.content || 'Imagem'}
+                alt={message.content || t('message.a11y.imageAltFallback')}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(message.media_url, '_blank')}
                 onLoad={() => console.log('✅ Imagem carregada:', message.media_url?.substring(0, 50) + '...')}
@@ -1610,6 +1620,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     controls={expandedVideoId === message.id}
                     muted={expandedVideoId !== message.id}
                     crossOrigin="anonymous"
+                    aria-label={t('message.a11y.videoPlayer')}
                     style={{ 
                       maxHeight: expandedVideoId === message.id ? '300px' : '200px' 
                     }}
@@ -1622,6 +1633,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     <div 
                       className="absolute inset-0 flex items-center justify-center cursor-pointer"
                       onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                      title={t('message.a11y.playVideoOverlay')}
+                      aria-label={t('message.a11y.playVideoOverlay')}
                     >
                       <div className="bg-black bg-opacity-50 rounded-full p-3 hover:bg-opacity-70 transition-opacity">
                         <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1632,7 +1645,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   ) : (
                     // Botão para contrair quando expandido
                     <button
+                      type="button"
                       onClick={(e) => onToggleVideoExpansion(message.id, e)}
+                      aria-label={t('message.a11y.closeExpandedVideo')}
+                      title={t('message.a11y.closeExpandedVideo')}
                       className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70 z-10"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -1648,12 +1664,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     <path d="M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11V6m0 8l.01-8M8 8l4-4 4 4"/>
                   </svg>
-                  <p className="text-sm text-gray-500 mb-2">Vídeo indisponível</p>
+                  <p className="text-sm text-gray-500 mb-2">{t('message.states.videoUnavailable')}</p>
                   <button
+                    type="button"
                     onClick={() => onResetVideoError(message.id)}
+                    aria-label={t('message.actions.retry')}
+                    title={t('message.actions.retry')}
                     className="text-xs text-blue-600 hover:text-blue-800 underline"
                   >
-                    Tentar novamente
+                    {t('message.actions.retry')}
                   </button>
                 </div>
               )}
@@ -1667,8 +1686,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-blue-600 underline"
+                title={message.content ? undefined : t('message.actions.openFile')}
               >
-                {message.content || 'Abrir arquivo'}
+                {message.content || t('message.actions.openFile')}
               </a>
             </div>
           )}

@@ -75,6 +75,35 @@
       "cancelRecording": "Cancelar gravação"
     }
   },
+  "message": {
+    "labels": {
+      "audio": "Áudio",
+      "file": "Arquivo",
+      "image": "Imagem",
+      "video": "Vídeo"
+    },
+    "actions": {
+      "download": "Baixar",
+      "open": "Abrir",
+      "openFile": "Abrir arquivo",
+      "play": "Reproduzir",
+      "pause": "Pausar",
+      "retry": "Tentar novamente"
+    },
+    "states": {
+      "loading": "Carregando…",
+      "unsupported": "Não suportado",
+      "noCaption": "Sem legenda",
+      "videoUnavailable": "Vídeo indisponível"
+    },
+    "a11y": {
+      "imageAltFallback": "Imagem",
+      "audioPlayer": "Mensagem de áudio",
+      "videoPlayer": "Vídeo da mensagem",
+      "playVideoOverlay": "Reproduzir vídeo",
+      "closeExpandedVideo": "Fechar visualização do vídeo"
+    }
+  },
   "chatArea": {
     "loadingMessages": "Carregando mensagens...",
     "conversationFallback": "Conversa",
