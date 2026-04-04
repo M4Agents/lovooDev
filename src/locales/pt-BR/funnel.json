@@ -240,5 +240,65 @@
       "valueLabel": "Valor:",
       "statusPrefix": "Status:"
     }
+  },
+  "timeline": {
+    "unknownStage": "etapa desconhecida",
+    "moveBadges": {
+      "funnelEntry": "Entrada",
+      "stageChange": "Mudança",
+      "won": "Ganhou",
+      "lost": "Perdeu",
+      "reopened": "Reaberto"
+    },
+    "events": {
+      "enteredFunnel": "Entrou no funil",
+      "movedTo": "Movido para {{stage}}",
+      "closedWon": "Fechado como ganho",
+      "closedLost": "Fechado como perda",
+      "reopened": "Reaberto"
+    },
+    "durationFmt": {
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}min",
+      "hoursMinutes": "{{hours}}h {{minutes}}min",
+      "daysHoursMinutes": "{{days}}d {{hours}}h {{minutes}}min"
+    },
+    "badges": {
+      "current": "Atual",
+      "reentry": "Reentrada"
+    },
+    "labels": {
+      "stagePrefix": "Etapa:",
+      "entryAt": "Entrada: {{datetime}}",
+      "exitAt": "Saída: {{datetime}}",
+      "inProgress": "Em andamento há {{duration}}",
+      "durationInStage": "{{duration}} nesta etapa",
+      "byUser": "Por: {{name}}"
+    },
+    "userRemoved": "Usuário removido",
+    "states": {
+      "errorPrefix": "Erro ao carregar histórico: {{message}}",
+      "emptyTitle": "Nenhum histórico de etapas disponível.",
+      "emptyHint": "O histórico é registrado a partir da data de ativação desta funcionalidade."
+    },
+    "currentStage": {
+      "title": "Etapa Atual",
+      "timeRunning": "Tempo em andamento",
+      "lessThanOneMinute": "Menos de 1min"
+    },
+    "summary": {
+      "title": "Resumo da Jornada",
+      "totalTime": "Tempo total no funil",
+      "stagesVisited": "Etapas visitadas",
+      "reentries": "Reentradas",
+      "avgPerStage": "Média por etapa",
+      "longestStage": "Etapa mais longa (gargalo)"
+    },
+    "sectionTitle": "Linha do Tempo",
+    "collapse": {
+      "showHidden_one": "Ver {{count}} evento oculto",
+      "showHidden_other": "Ver {{count}} eventos ocultos",
+      "collapse": "Recolher"
+    }
   }
 }

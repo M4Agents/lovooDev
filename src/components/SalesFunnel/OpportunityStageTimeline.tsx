@@ -12,7 +12,9 @@
 //   currentEnteredAt (opportunity_funnel_positions.entered_stage_at)
 // =====================================================
 
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   LogIn, Trophy, XCircle, RotateCcw,
   Clock, AlertCircle, ChevronDown, ChevronUp, Timer,
@@ -24,16 +26,22 @@ import type { OpportunityStageHistory } from '../../types/sales-funnel'
 // Utilitários
 // =====================================================
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
+function formatDuration(seconds: number, t: TFunction): string {
+  if (seconds < 60) return t('timeline.durationFmt.seconds', { count: seconds })
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}min`
+  if (minutes < 60) return t('timeline.durationFmt.minutes', { count: minutes })
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
-  if (hours < 24) return `${hours}h ${remainingMinutes}min`
+  if (hours < 24) {
+    return t('timeline.durationFmt.hoursMinutes', { hours, minutes: remainingMinutes })
+  }
   const days = Math.floor(hours / 24)
   const remainingHours = hours % 24
-  return `${days}d ${remainingHours}h ${remainingMinutes}min`
+  return t('timeline.durationFmt.daysHoursMinutes', {
+    days,
+    hours: remainingHours,
+    minutes: remainingMinutes
+  })
 }
 
 function formatDateShort(iso?: string): string {
@@ -64,15 +72,14 @@ function hexToStyle(hex?: string): { bg: string; fg: string } | null {
 
 type MoveType = 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened'
 
-const moveTypeConfig: Record<MoveType, {
-  badgeClass: string
-  label: string
-}> = {
-  funnel_entry: { badgeClass: 'bg-green-100 text-green-700',   label: 'Entrada'  },
-  stage_change: { badgeClass: 'bg-blue-100 text-blue-700',     label: 'Mudança'  },
-  won:          { badgeClass: 'bg-emerald-100 text-emerald-700', label: 'Ganhou' },
-  lost:         { badgeClass: 'bg-red-100 text-red-700',       label: 'Perdeu'   },
-  reopened:     { badgeClass: 'bg-amber-100 text-amber-700',   label: 'Reaberto' }
+function getMoveTypeConfig(t: TFunction): Record<MoveType, { badgeClass: string; label: string }> {
+  return {
+    funnel_entry: { badgeClass: 'bg-green-100 text-green-700',   label: t('timeline.moveBadges.funnelEntry') },
+    stage_change: { badgeClass: 'bg-blue-100 text-blue-700',     label: t('timeline.moveBadges.stageChange') },
+    won:          { badgeClass: 'bg-emerald-100 text-emerald-700', label: t('timeline.moveBadges.won') },
+    lost:         { badgeClass: 'bg-red-100 text-red-700',       label: t('timeline.moveBadges.lost') },
+    reopened:     { badgeClass: 'bg-amber-100 text-amber-700',   label: t('timeline.moveBadges.reopened') }
+  }
 }
 
 // Ícone contextual: detecta avanço vs. retrocesso via posição da etapa
@@ -94,15 +101,15 @@ function getStageIcon(entry: OpportunityStageHistory): React.ReactNode {
   }
 }
 
-function getMicrocopy(entry: OpportunityStageHistory): string {
-  const toName = entry.to_stage?.name ?? 'etapa desconhecida'
+function getMicrocopy(entry: OpportunityStageHistory, t: TFunction): string {
+  const toName = entry.to_stage?.name ?? t('timeline.unknownStage')
   switch (entry.move_type) {
-    case 'funnel_entry': return 'Entrou no funil'
-    case 'stage_change': return `Movido para ${toName}`
-    case 'won':          return 'Fechado como ganho'
-    case 'lost':         return 'Fechado como perda'
-    case 'reopened':     return 'Reaberto'
-    default:             return `Movido para ${toName}`
+    case 'funnel_entry': return t('timeline.events.enteredFunnel')
+    case 'stage_change': return t('timeline.events.movedTo', { stage: toName })
+    case 'won':          return t('timeline.events.closedWon')
+    case 'lost':         return t('timeline.events.closedLost')
+    case 'reopened':     return t('timeline.events.reopened')
+    default:             return t('timeline.events.movedTo', { stage: toName })
   }
 }
 
@@ -228,19 +235,21 @@ interface TimelineItemProps {
 const TimelineItem: React.FC<TimelineItemProps> = ({
   entry, isLast, isCurrent, isReentry, usersMap, currentEnteredAt
 }) => {
+  const { t } = useTranslation('funnel')
+  const moveTypeConfig = useMemo(() => getMoveTypeConfig(t), [t])
   const config     = moveTypeConfig[entry.move_type as MoveType] ?? moveTypeConfig.stage_change
-  const microcopy  = getMicrocopy(entry)
+  const microcopy  = useMemo(() => getMicrocopy(entry, t), [entry, t])
   const userName   = entry.moved_by
-    ? (usersMap.get(entry.moved_by) ?? 'Usuário removido')
+    ? (usersMap.get(entry.moved_by) ?? t('timeline.userRemoved'))
     : null
   const icon       = getStageIcon(entry)
   const stageStyle = hexToStyle(entry.to_stage?.color)
 
   // Duração: para o último item (atual), calcular a partir de currentEnteredAt
   const durationDisplay = isCurrent
-    ? formatDuration(secondsSince(currentEnteredAt))
+    ? formatDuration(secondsSince(currentEnteredAt), t)
     : (entry.duration_seconds != null && entry.duration_seconds > 0
-        ? formatDuration(entry.duration_seconds)
+        ? formatDuration(entry.duration_seconds, t)
         : null)
 
   return (
@@ -274,12 +283,12 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
               </span>
               {isCurrent && (
                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500 text-white">
-                  Atual
+                  {t('timeline.badges.current')}
                 </span>
               )}
               {isReentry && (
                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
-                  Reentrada
+                  {t('timeline.badges.reentry')}
                 </span>
               )}
             </div>
@@ -294,14 +303,15 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
             )}
             {!entry.from_stage && entry.to_stage && (
               <p className="text-xs text-gray-500 mt-0.5">
-                Etapa: <span className="font-medium text-gray-700">{entry.to_stage.name}</span>
+                {t('timeline.labels.stagePrefix')}{' '}
+                <span className="font-medium text-gray-700">{entry.to_stage.name}</span>
               </p>
             )}
 
             {/* Entrada */}
             {entry.move_type !== 'funnel_entry' && (
               <p className="text-xs text-gray-400 mt-0.5">
-                Entrada: {formatDateShort(entry.stage_entered_at)}
+                {t('timeline.labels.entryAt', { datetime: formatDateShort(entry.stage_entered_at) })}
               </p>
             )}
 
@@ -309,19 +319,25 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
             {isCurrent ? (
               <div className="flex items-center gap-1 mt-0.5 text-xs text-blue-500">
                 <Timer className="w-3 h-3" />
-                <span>Em andamento há {durationDisplay}</span>
+                <span>
+                  {t('timeline.labels.inProgress', {
+                    duration: durationDisplay ?? ''
+                  })}
+                </span>
               </div>
             ) : (
               <>
                 {entry.move_type !== 'funnel_entry' && (
                   <p className="text-xs text-gray-400">
-                    Saída: {formatDateShort(entry.stage_left_at)}
+                    {t('timeline.labels.exitAt', { datetime: formatDateShort(entry.stage_left_at) })}
                   </p>
                 )}
                 {durationDisplay && (
                   <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
                     <Clock className="w-3 h-3" />
-                    <span>{durationDisplay} nesta etapa</span>
+                    <span>
+                      {t('timeline.labels.durationInStage', { duration: durationDisplay })}
+                    </span>
                   </div>
                 )}
               </>
@@ -329,7 +345,9 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
 
             {/* Usuário responsável */}
             {userName && (
-              <p className="text-xs text-gray-400 mt-0.5">Por: {userName}</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {t('timeline.labels.byUser', { name: userName })}
+              </p>
             )}
           </div>
 
@@ -357,6 +375,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
   error,
   lastEventRef
 }) => {
+  const { t } = useTranslation('funnel')
   const [expanded, setExpanded] = useState(false)
 
   // Calcular reentradas
@@ -402,7 +421,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
     return (
       <div className="flex items-center gap-2 text-sm text-red-500 py-4">
         <AlertCircle className="w-4 h-4 flex-shrink-0" />
-        <span>Erro ao carregar histórico: {error}</span>
+        <span>{t('timeline.states.errorPrefix', { message: error })}</span>
       </div>
     )
   }
@@ -411,8 +430,8 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
     return (
       <div className="text-center py-6 text-gray-400">
         <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
-        <p className="text-sm">Nenhum histórico de etapas disponível.</p>
-        <p className="text-xs mt-1">O histórico é registrado a partir da data de ativação desta funcionalidade.</p>
+        <p className="text-sm">{t('timeline.states.emptyTitle')}</p>
+        <p className="text-xs mt-1">{t('timeline.states.emptyHint')}</p>
       </div>
     )
   }
@@ -432,7 +451,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
               className="text-xs font-semibold uppercase tracking-wide mb-0.5"
               style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#3B82F6' }}
             >
-              Etapa Atual
+              {t('timeline.currentStage.title')}
             </p>
             <p
               className="text-sm font-semibold"
@@ -446,7 +465,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
               className="text-xs mb-0.5"
               style={currentStageStyle ? { color: currentStageStyle.fg + 'aa' } : { color: '#93C5FD' }}
             >
-              Tempo em andamento
+              {t('timeline.currentStage.timeRunning')}
             </p>
             <div
               className="flex items-center gap-1 text-sm font-medium"
@@ -454,8 +473,8 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
             >
               <Timer className="w-3.5 h-3.5" />
               {summary.currentStageSeconds > 0
-                ? formatDuration(summary.currentStageSeconds)
-                : 'Menos de 1min'
+                ? formatDuration(summary.currentStageSeconds, t)
+                : t('timeline.currentStage.lessThanOneMinute')
               }
             </div>
           </div>
@@ -465,21 +484,21 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
       {/* Bloco: Resumo */}
       <div className="bg-gray-50 rounded-lg p-3">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-          Resumo da Jornada
+          {t('timeline.summary.title')}
         </p>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <p className="text-xs text-gray-500">Tempo total no funil</p>
+            <p className="text-xs text-gray-500">{t('timeline.summary.totalTime')}</p>
             <p className="text-sm font-semibold text-gray-800">
-              {summary.totalSeconds > 0 ? formatDuration(summary.totalSeconds) : '—'}
+              {summary.totalSeconds > 0 ? formatDuration(summary.totalSeconds, t) : '—'}
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Etapas visitadas</p>
+            <p className="text-xs text-gray-500">{t('timeline.summary.stagesVisited')}</p>
             <p className="text-sm font-semibold text-gray-800">{summary.uniqueStageCount}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Reentradas</p>
+            <p className="text-xs text-gray-500">{t('timeline.summary.reentries')}</p>
             <p className="text-sm font-semibold text-gray-800">
               {summary.reentryCount > 0
                 ? <span className="text-amber-600">{summary.reentryCount}</span>
@@ -488,19 +507,19 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Média por etapa</p>
+            <p className="text-xs text-gray-500">{t('timeline.summary.avgPerStage')}</p>
             <p className="text-sm font-semibold text-gray-800">
-              {summary.avgStageSeconds > 0 ? formatDuration(summary.avgStageSeconds) : '—'}
+              {summary.avgStageSeconds > 0 ? formatDuration(summary.avgStageSeconds, t) : '—'}
             </p>
           </div>
           {summary.longestStageName && (
             <div className="col-span-2">
-              <p className="text-xs text-gray-500">Etapa mais longa (gargalo)</p>
+              <p className="text-xs text-gray-500">{t('timeline.summary.longestStage')}</p>
               <p className="text-sm font-semibold text-orange-600">
                 {summary.longestStageName}
                 {' '}
                 <span className="text-gray-500 font-normal text-xs">
-                  ({formatDuration(summary.longestStageSeconds)})
+                  ({formatDuration(summary.longestStageSeconds, t)})
                 </span>
               </p>
             </div>
@@ -511,7 +530,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
       {/* Timeline */}
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-          Linha do Tempo
+          {t('timeline.sectionTitle')}
         </p>
 
         <div>
@@ -535,7 +554,10 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
                       className="flex items-center gap-1.5 mb-3 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
                     >
                       <ChevronDown className="w-3.5 h-3.5" />
-                      Ver {hiddenCount} evento{hiddenCount !== 1 ? 's' : ''} oculto{hiddenCount !== 1 ? 's' : ''}
+                      {hiddenCount === 1
+                        ? t('timeline.collapse.showHidden_one', { count: hiddenCount })
+                        : t('timeline.collapse.showHidden_other', { count: hiddenCount })
+                      }
                     </button>
                   </div>
                 )}
@@ -562,7 +584,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
             className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded transition-colors mt-1"
           >
             <ChevronUp className="w-3.5 h-3.5" />
-            Recolher
+            {t('timeline.collapse.collapse')}
           </button>
         )}
       </div>
