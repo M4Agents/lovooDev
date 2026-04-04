@@ -20,6 +20,10 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const BRAZIL_UF_CODES = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+] as const;
+
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission } = useAuth();
@@ -292,19 +296,16 @@ export const Settings: React.FC = () => {
       await refreshCompany();
       
       console.log('✅ Dados salvos com sucesso!');
-      alert('Dados da empresa atualizados com sucesso!');
+      alert(t('company.messages.saveSuccess'));
     } catch (error) {
       console.error('❌ Error saving company data:', error);
-      
-      // Mostrar erro mais detalhado
-      let errorMessage = 'Erro ao salvar dados da empresa';
-      if (error instanceof Error) {
-        errorMessage += ': ' + error.message;
-      } else if (typeof error === 'object' && error !== null && 'message' in error) {
-        errorMessage += ': ' + (error as any).message;
-      }
-      
-      alert(errorMessage);
+      const msg =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as any).message)
+            : '';
+      alert(msg ? t('company.messages.saveError', { message: msg }) : t('company.messages.saveErrorGeneric'));
     } finally {
       setSavingCompany(false);
     }
@@ -2422,141 +2423,141 @@ export const Settings: React.FC = () => {
                 <div className="p-2 bg-orange-100 rounded-lg">
                   <Building className="w-5 h-5 text-orange-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">Dados Principais</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{t('company.sections.mainData')}</h2>
               </div>
 
               <form onSubmit={handleSaveCompany} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Nome da Conta *
+                      {t('company.fields.accountName')}
                     </label>
                     <input
                       type="text"
                       value={companyData.name}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, name: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Nome da sua conta"
+                      placeholder={t('company.placeholders.accountName')}
                       required
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Nome Fantasia
+                      {t('company.fields.tradeName')}
                     </label>
                     <input
                       type="text"
                       value={companyData.nome_fantasia}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Nome fantasia"
+                      placeholder={t('company.placeholders.tradeName')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      CNPJ
+                      {t('company.fields.cnpj')}
                     </label>
                     <input
                       type="text"
                       value={companyData.cnpj}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, cnpj: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="00.000.000/0000-00"
+                      placeholder={t('company.placeholders.cnpj')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Razão Social
+                      {t('company.fields.legalName')}
                     </label>
                     <input
                       type="text"
                       value={companyData.razao_social}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, razao_social: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Razão social da empresa"
+                      placeholder={t('company.placeholders.legalName')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Inscrição Estadual
+                      {t('company.fields.stateRegistration')}
                     </label>
                     <input
                       type="text"
                       value={companyData.inscricao_estadual}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_estadual: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Inscrição estadual"
+                      placeholder={t('company.placeholders.stateRegistration')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Inscrição Municipal
+                      {t('company.fields.municipalRegistration')}
                     </label>
                     <input
                       type="text"
                       value={companyData.inscricao_municipal}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, inscricao_municipal: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Inscrição municipal"
+                      placeholder={t('company.placeholders.municipalRegistration')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Tipo de Empresa
+                      {t('company.fields.companyType')}
                     </label>
                     <select
                       value={companyData.tipo_empresa}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, tipo_empresa: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
-                      <option value="">Selecionar</option>
-                      <option value="MEI">MEI</option>
-                      <option value="LTDA">Ltda</option>
-                      <option value="SA">S.A.</option>
-                      <option value="EIRELI">EIRELI</option>
-                      <option value="Outro">Outro</option>
+                      <option value="">{t('company.select.choose')}</option>
+                      <option value="MEI">{t('company.select.companyType.mei')}</option>
+                      <option value="LTDA">{t('company.select.companyType.ltda')}</option>
+                      <option value="SA">{t('company.select.companyType.sa')}</option>
+                      <option value="EIRELI">{t('company.select.companyType.eireli')}</option>
+                      <option value="Outro">{t('company.select.companyType.other')}</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Porte da Empresa
+                      {t('company.fields.companySize')}
                     </label>
                     <select
                       value={companyData.porte_empresa}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, porte_empresa: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
-                      <option value="">Selecionar</option>
-                      <option value="Microempresa">Microempresa</option>
-                      <option value="Pequena">Pequena</option>
-                      <option value="Média">Média</option>
-                      <option value="Grande">Grande</option>
+                      <option value="">{t('company.select.choose')}</option>
+                      <option value="Microempresa">{t('company.select.companySize.micro')}</option>
+                      <option value="Pequena">{t('company.select.companySize.small')}</option>
+                      <option value="Média">{t('company.select.companySize.medium')}</option>
+                      <option value="Grande">{t('company.select.companySize.large')}</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Ramo de Atividade
+                      {t('company.fields.activity')}
                     </label>
                     <input
                       type="text"
                       value={companyData.ramo_atividade}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, ramo_atividade: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Ramo de atividade"
+                      placeholder={t('company.placeholders.activity')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Data de Fundação
+                      {t('company.fields.foundedAt')}
                     </label>
                     <input
                       type="date"
@@ -2568,47 +2569,47 @@ export const Settings: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Site Principal
+                      {t('company.fields.mainSite')}
                     </label>
                     <input
                       type="url"
                       value={companyData.site_principal}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, site_principal: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="https://www.empresa.com"
+                      placeholder={t('company.placeholders.mainSite')}
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Descrição da Empresa
+                    {t('company.fields.companyDescription')}
                   </label>
                   <textarea
                     value={companyData.descricao_empresa}
                     onChange={(e) => setCompanyData(prev => ({ ...prev, descricao_empresa: e.target.value }))}
                     rows={3}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 resize-vertical"
-                    placeholder="Descreva brevemente sua empresa..."
+                    placeholder={t('company.placeholders.companyDescription')}
                   />
                 </div>
 
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-2">Informações da Conta</h4>
+                  <h4 className="font-medium text-orange-900 mb-2">{t('company.account.title')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div>
-                      <span className="font-medium text-orange-800">Tipo:</span>
+                      <span className="font-medium text-orange-800">{t('company.account.typeLabel')}</span>
                       <span className="ml-2 text-orange-700">
-                        {company?.is_super_admin ? 'Super Admin' : 'Empresa Filha'}
+                        {company?.is_super_admin ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
                       </span>
                     </div>
                     <div>
-                      <span className="font-medium text-orange-800">Plano:</span>
+                      <span className="font-medium text-orange-800">{t('company.account.planLabel')}</span>
                       <span className="ml-2 text-orange-700 capitalize">
-                        {company?.plan === 'basic' ? 'Básico' : 
-                         company?.plan === 'pro' ? 'Pro' : 
-                         company?.plan === 'enterprise' ? 'Enterprise' : 
-                         company?.plan || 'Não definido'}
+                        {company?.plan === 'basic' ? t('company.account.plans.basic') : 
+                         company?.plan === 'pro' ? t('company.account.plans.pro') : 
+                         company?.plan === 'enterprise' ? t('company.account.plans.enterprise') : 
+                         (company?.plan || t('company.account.plans.undefined'))}
                       </span>
                     </div>
                   </div>
@@ -2620,7 +2621,7 @@ export const Settings: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {savingCompany ? 'Salvando...' : 'Salvar Dados Principais'}
+                  {savingCompany ? t('company.actions.saving') : t('company.actions.saveMainData')}
                 </button>
               </form>
             </div>
@@ -2632,139 +2633,115 @@ export const Settings: React.FC = () => {
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <MapPin className="w-5 h-5 text-blue-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{t('company.sections.address')}</h2>
               </div>
 
               <form onSubmit={handleSaveCompany} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      CEP
+                      {t('company.fields.zipCode')}
                     </label>
                     <input
                       type="text"
                       value={companyData.cep}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, cep: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="00000-000"
+                      placeholder={t('company.placeholders.zipCode')}
                     />
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Logradouro
+                      {t('company.fields.street')}
                     </label>
                     <input
                       type="text"
                       value={companyData.logradouro}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, logradouro: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Rua, Avenida, etc."
+                      placeholder={t('company.placeholders.street')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Número
+                      {t('company.fields.number')}
                     </label>
                     <input
                       type="text"
                       value={companyData.numero}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, numero: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Número"
+                      placeholder={t('company.placeholders.number')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Bairro
+                      {t('company.fields.neighborhood')}
                     </label>
                     <input
                       type="text"
                       value={companyData.bairro}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, bairro: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Bairro"
+                      placeholder={t('company.placeholders.neighborhood')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Cidade
+                      {t('company.fields.city')}
                     </label>
                     <input
                       type="text"
                       value={companyData.cidade}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, cidade: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Cidade"
+                      placeholder={t('company.placeholders.city')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Estado/UF
+                      {t('company.fields.state')}
                     </label>
                     <select
                       value={companyData.estado}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, estado: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">Selecione</option>
-                      <option value="AC">Acre</option>
-                      <option value="AL">Alagoas</option>
-                      <option value="AP">Amapá</option>
-                      <option value="AM">Amazonas</option>
-                      <option value="BA">Bahia</option>
-                      <option value="CE">Ceará</option>
-                      <option value="DF">Distrito Federal</option>
-                      <option value="ES">Espírito Santo</option>
-                      <option value="GO">Goiás</option>
-                      <option value="MA">Maranhão</option>
-                      <option value="MT">Mato Grosso</option>
-                      <option value="MS">Mato Grosso do Sul</option>
-                      <option value="MG">Minas Gerais</option>
-                      <option value="PA">Pará</option>
-                      <option value="PB">Paraíba</option>
-                      <option value="PR">Paraná</option>
-                      <option value="PE">Pernambuco</option>
-                      <option value="PI">Piauí</option>
-                      <option value="RJ">Rio de Janeiro</option>
-                      <option value="RN">Rio Grande do Norte</option>
-                      <option value="RS">Rio Grande do Sul</option>
-                      <option value="RO">Rondônia</option>
-                      <option value="RR">Roraima</option>
-                      <option value="SC">Santa Catarina</option>
-                      <option value="SP">São Paulo</option>
-                      <option value="SE">Sergipe</option>
-                      <option value="TO">Tocantins</option>
+                      <option value="">{t('company.select.chooseState')}</option>
+                      {BRAZIL_UF_CODES.map((uf) => (
+                        <option key={uf} value={uf}>{t(`company.brazilStates.${uf}`)}</option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Complemento
+                      {t('company.fields.complement')}
                     </label>
                     <input
                       type="text"
                       value={companyData.complemento}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, complemento: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Apto, Sala, etc."
+                      placeholder={t('company.placeholders.complement')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      País
+                      {t('company.fields.country')}
                     </label>
                     <input
                       type="text"
                       value={companyData.pais}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, pais: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="País"
+                      placeholder={t('company.placeholders.country')}
                     />
                   </div>
                 </div>
@@ -2775,7 +2752,7 @@ export const Settings: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {savingCompany ? 'Salvando...' : 'Salvar Endereço'}
+                  {savingCompany ? t('company.actions.saving') : t('company.actions.saveAddress')}
                 </button>
               </form>
             </div>
@@ -2787,110 +2764,110 @@ export const Settings: React.FC = () => {
                 <div className="p-2 bg-green-100 rounded-lg">
                   <Phone className="w-5 h-5 text-green-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">Contatos</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{t('company.sections.contacts')}</h2>
               </div>
 
               <form onSubmit={handleSaveCompany} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Telefone Principal
+                      {t('company.fields.phonePrimary')}
                     </label>
                     <input
                       type="text"
                       value={companyData.telefone_principal}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_principal: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="(11) 99999-9999"
+                      placeholder={t('company.placeholders.phone')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Telefone Secundário
+                      {t('company.fields.phoneSecondary')}
                     </label>
                     <input
                       type="text"
                       value={companyData.telefone_secundario}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, telefone_secundario: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="(11) 99999-9999"
+                      placeholder={t('company.placeholders.phone')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      WhatsApp
+                      {t('company.fields.whatsapp')}
                     </label>
                     <input
                       type="text"
                       value={companyData.whatsapp}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, whatsapp: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="(11) 99999-9999"
+                      placeholder={t('company.placeholders.phone')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Email Principal
+                      {t('company.fields.emailMain')}
                     </label>
                     <input
                       type="email"
                       value={companyData.email_principal}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, email_principal: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="contato@empresa.com"
+                      placeholder={t('company.placeholders.emailGeneric')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Email Comercial
+                      {t('company.fields.emailCommercial')}
                     </label>
                     <input
                       type="email"
                       value={companyData.email_comercial}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, email_comercial: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="comercial@empresa.com"
+                      placeholder={t('company.placeholders.emailCommercial')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Email Financeiro
+                      {t('company.fields.emailFinancial')}
                     </label>
                     <input
                       type="email"
                       value={companyData.email_financeiro}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, email_financeiro: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="financeiro@empresa.com"
+                      placeholder={t('company.placeholders.emailFinancial')}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Email Suporte
+                      {t('company.fields.emailSupport')}
                     </label>
                     <input
                       type="email"
                       value={companyData.email_suporte}
                       onChange={(e) => setCompanyData(prev => ({ ...prev, email_suporte: e.target.value }))}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="suporte@empresa.com"
+                      placeholder={t('company.placeholders.emailSupport')}
                     />
                   </div>
                 </div>
 
                 {/* Responsável Principal */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-900 mb-4">Responsável Principal</h4>
+                  <h4 className="font-medium text-green-900 mb-4">{t('company.subsections.mainResponsible')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Nome
+                        {t('company.fields.name')}
                       </label>
                       <input
                         type="text"
@@ -2900,12 +2877,12 @@ export const Settings: React.FC = () => {
                           responsavel_principal: { ...prev.responsavel_principal, nome: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="Nome do responsável"
+                        placeholder={t('company.placeholders.responsibleName')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Cargo
+                        {t('company.fields.role')}
                       </label>
                       <input
                         type="text"
@@ -2915,7 +2892,7 @@ export const Settings: React.FC = () => {
                           responsavel_principal: { ...prev.responsavel_principal, cargo: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="Cargo do responsável"
+                        placeholder={t('company.placeholders.responsibleRole')}
                       />
                     </div>
                   </div>
@@ -2923,11 +2900,11 @@ export const Settings: React.FC = () => {
 
                 {/* Contato Financeiro */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-900 mb-4">Contato Financeiro</h4>
+                  <h4 className="font-medium text-green-900 mb-4">{t('company.subsections.financialContact')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Nome
+                        {t('company.fields.name')}
                       </label>
                       <input
                         type="text"
@@ -2937,12 +2914,12 @@ export const Settings: React.FC = () => {
                           contato_financeiro: { ...prev.contato_financeiro, nome: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="Nome do contato financeiro"
+                        placeholder={t('company.placeholders.financialContactName')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Email
+                        {t('company.fields.email')}
                       </label>
                       <input
                         type="email"
@@ -2952,12 +2929,12 @@ export const Settings: React.FC = () => {
                           contato_financeiro: { ...prev.contato_financeiro, email: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="email@empresa.com"
+                        placeholder={t('company.placeholders.emailShort')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Telefone
+                        {t('company.fields.phone')}
                       </label>
                       <input
                         type="text"
@@ -2967,7 +2944,7 @@ export const Settings: React.FC = () => {
                           contato_financeiro: { ...prev.contato_financeiro, telefone: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="(11) 99999-9999"
+                        placeholder={t('company.placeholders.phone')}
                       />
                     </div>
                   </div>
@@ -2979,7 +2956,7 @@ export const Settings: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {savingCompany ? 'Salvando...' : 'Salvar Contatos'}
+                  {savingCompany ? t('company.actions.saving') : t('company.actions.saveContacts')}
                 </button>
               </form>
             </div>
@@ -2991,30 +2968,30 @@ export const Settings: React.FC = () => {
                 <div className="p-2 bg-purple-100 rounded-lg">
                   <Globe className="w-5 h-5 text-purple-600" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">Domínios & URLs</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{t('company.sections.domains')}</h2>
               </div>
 
               <form onSubmit={handleSaveCompany} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    URL do Google My Business
+                    {t('company.fields.googleBusinessUrl')}
                   </label>
                   <input
                     type="url"
                     value={companyData.url_google_business}
                     onChange={(e) => setCompanyData(prev => ({ ...prev, url_google_business: e.target.value }))}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://goo.gl/maps/..."
+                    placeholder={t('company.placeholders.googleBusiness')}
                   />
                 </div>
                 
                 {/* Redes Sociais */}
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <h4 className="font-medium text-purple-900 mb-4">Redes Sociais</h4>
+                  <h4 className="font-medium text-purple-900 mb-4">{t('company.subsections.socialNetworks')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Facebook
+                        {t('company.fields.facebook')}
                       </label>
                       <input
                         type="url"
@@ -3024,12 +3001,12 @@ export const Settings: React.FC = () => {
                           redes_sociais: { ...prev.redes_sociais, facebook: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="https://facebook.com/..."
+                        placeholder={t('company.placeholders.facebook')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Instagram
+                        {t('company.fields.instagram')}
                       </label>
                       <input
                         type="url"
@@ -3039,12 +3016,12 @@ export const Settings: React.FC = () => {
                           redes_sociais: { ...prev.redes_sociais, instagram: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="https://instagram.com/..."
+                        placeholder={t('company.placeholders.instagram')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        LinkedIn
+                        {t('company.fields.linkedin')}
                       </label>
                       <input
                         type="url"
@@ -3054,12 +3031,12 @@ export const Settings: React.FC = () => {
                           redes_sociais: { ...prev.redes_sociais, linkedin: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="https://linkedin.com/company/..."
+                        placeholder={t('company.placeholders.linkedin')}
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Twitter
+                        {t('company.fields.twitter')}
                       </label>
                       <input
                         type="url"
@@ -3069,12 +3046,12 @@ export const Settings: React.FC = () => {
                           redes_sociais: { ...prev.redes_sociais, twitter: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="https://twitter.com/..."
+                        placeholder={t('company.placeholders.twitter')}
                       />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        YouTube
+                        {t('company.fields.youtube')}
                       </label>
                       <input
                         type="url"
@@ -3084,7 +3061,7 @@ export const Settings: React.FC = () => {
                           redes_sociais: { ...prev.redes_sociais, youtube: e.target.value }
                         }))}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="https://youtube.com/..."
+                        placeholder={t('company.placeholders.youtube')}
                       />
                     </div>
                   </div>
@@ -3093,7 +3070,7 @@ export const Settings: React.FC = () => {
                 {/* Domínios Secundários */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Domínios Secundários
+                    {t('company.fields.secondaryDomains')}
                   </label>
                   <textarea
                     value={Array.isArray(companyData.dominios_secundarios) ? companyData.dominios_secundarios.join('\n') : ''}
@@ -3103,15 +3080,15 @@ export const Settings: React.FC = () => {
                     }))}
                     rows={3}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-vertical"
-                    placeholder="Digite os domínios secundários, um por linha&#10;exemplo.com&#10;outro-dominio.com.br"
+                    placeholder={t('company.placeholders.secondaryDomains')}
                   />
-                  <p className="text-xs text-slate-500 mt-1">Digite um domínio por linha</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('company.helpers.onePerLineDomains')}</p>
                 </div>
 
                 {/* URLs Landing Pages */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    URLs Landing Pages
+                    {t('company.fields.landingPageUrls')}
                   </label>
                   <textarea
                     value={Array.isArray(companyData.urls_landing_pages) ? companyData.urls_landing_pages.join('\n') : ''}
@@ -3121,9 +3098,9 @@ export const Settings: React.FC = () => {
                     }))}
                     rows={3}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-vertical"
-                    placeholder="Digite as URLs das landing pages, uma por linha&#10;https://landing1.com&#10;https://landing2.com"
+                    placeholder={t('company.placeholders.landingPages')}
                   />
-                  <p className="text-xs text-slate-500 mt-1">Digite uma URL por linha</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('company.helpers.onePerLineUrls')}</p>
                 </div>
 
                 <button
@@ -3132,7 +3109,7 @@ export const Settings: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {savingCompany ? 'Salvando...' : 'Salvar Domínios & URLs'}
+                  {savingCompany ? t('company.actions.saving') : t('company.actions.saveDomains')}
                 </button>
               </form>
             </div>

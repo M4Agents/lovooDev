@@ -21,5 +21,172 @@
     "api": "API",
     "webhookAdvanced": "Webhook Avançado",
     "salesFunnel": "Funil de Vendas"
+  },
+  "company": {
+    "sections": {
+      "mainData": "Dados Principais",
+      "address": "Endereço",
+      "contacts": "Contatos",
+      "domains": "Domínios & URLs"
+    },
+    "account": {
+      "title": "Informações da Conta",
+      "typeLabel": "Tipo:",
+      "planLabel": "Plano:",
+      "types": {
+        "superAdmin": "Super Admin",
+        "childCompany": "Empresa Filha"
+      },
+      "plans": {
+        "basic": "Básico",
+        "pro": "Pro",
+        "enterprise": "Enterprise",
+        "undefined": "Não definido"
+      }
+    },
+    "subsections": {
+      "mainResponsible": "Responsável Principal",
+      "financialContact": "Contato Financeiro",
+      "socialNetworks": "Redes Sociais"
+    },
+    "fields": {
+      "accountName": "Nome da Conta *",
+      "tradeName": "Nome Fantasia",
+      "cnpj": "CNPJ",
+      "legalName": "Razão Social",
+      "stateRegistration": "Inscrição Estadual",
+      "municipalRegistration": "Inscrição Municipal",
+      "companyType": "Tipo de Empresa",
+      "companySize": "Porte da Empresa",
+      "activity": "Ramo de Atividade",
+      "foundedAt": "Data de Fundação",
+      "mainSite": "Site Principal",
+      "companyDescription": "Descrição da Empresa",
+      "zipCode": "CEP",
+      "street": "Logradouro",
+      "number": "Número",
+      "neighborhood": "Bairro",
+      "city": "Cidade",
+      "state": "Estado/UF",
+      "complement": "Complemento",
+      "country": "País",
+      "phonePrimary": "Telefone Principal",
+      "phoneSecondary": "Telefone Secundário",
+      "whatsapp": "WhatsApp",
+      "emailMain": "Email Principal",
+      "emailCommercial": "Email Comercial",
+      "emailFinancial": "Email Financeiro",
+      "emailSupport": "Email Suporte",
+      "name": "Nome",
+      "role": "Cargo",
+      "email": "Email",
+      "phone": "Telefone",
+      "googleBusinessUrl": "URL do Google My Business",
+      "secondaryDomains": "Domínios Secundários",
+      "landingPageUrls": "URLs Landing Pages",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "linkedin": "LinkedIn",
+      "twitter": "Twitter",
+      "youtube": "YouTube"
+    },
+    "placeholders": {
+      "accountName": "Nome da sua conta",
+      "tradeName": "Nome fantasia",
+      "cnpj": "00.000.000/0000-00",
+      "legalName": "Razão social da empresa",
+      "stateRegistration": "Inscrição estadual",
+      "municipalRegistration": "Inscrição municipal",
+      "activity": "Ramo de atividade",
+      "mainSite": "https://www.empresa.com",
+      "companyDescription": "Descreva brevemente sua empresa...",
+      "zipCode": "00000-000",
+      "street": "Rua, Avenida, etc.",
+      "number": "Número",
+      "neighborhood": "Bairro",
+      "city": "Cidade",
+      "complement": "Apto, Sala, etc.",
+      "country": "País",
+      "phone": "(11) 99999-9999",
+      "emailGeneric": "contato@empresa.com",
+      "emailCommercial": "comercial@empresa.com",
+      "emailFinancial": "financeiro@empresa.com",
+      "emailSupport": "suporte@empresa.com",
+      "responsibleName": "Nome do responsável",
+      "responsibleRole": "Cargo do responsável",
+      "financialContactName": "Nome do contato financeiro",
+      "emailShort": "email@empresa.com",
+      "googleBusiness": "https://goo.gl/maps/...",
+      "facebook": "https://facebook.com/...",
+      "instagram": "https://instagram.com/...",
+      "linkedin": "https://linkedin.com/company/...",
+      "twitter": "https://twitter.com/...",
+      "youtube": "https://youtube.com/...",
+      "secondaryDomains": "Digite os domínios secundários, um por linha\nexemplo.com\noutro-dominio.com.br",
+      "landingPages": "Digite as URLs das landing pages, uma por linha\nhttps://landing1.com\nhttps://landing2.com"
+    },
+    "helpers": {
+      "onePerLineDomains": "Digite um domínio por linha",
+      "onePerLineUrls": "Digite uma URL por linha"
+    },
+    "select": {
+      "choose": "Selecionar",
+      "chooseState": "Selecione",
+      "companyType": {
+        "mei": "MEI",
+        "ltda": "Ltda",
+        "sa": "S.A.",
+        "eireli": "EIRELI",
+        "other": "Outro"
+      },
+      "companySize": {
+        "micro": "Microempresa",
+        "small": "Pequena",
+        "medium": "Média",
+        "large": "Grande"
+      }
+    },
+    "brazilStates": {
+      "AC": "Acre",
+      "AL": "Alagoas",
+      "AP": "Amapá",
+      "AM": "Amazonas",
+      "BA": "Bahia",
+      "CE": "Ceará",
+      "DF": "Distrito Federal",
+      "ES": "Espírito Santo",
+      "GO": "Goiás",
+      "MA": "Maranhão",
+      "MT": "Mato Grosso",
+      "MS": "Mato Grosso do Sul",
+      "MG": "Minas Gerais",
+      "PA": "Pará",
+      "PB": "Paraíba",
+      "PR": "Paraná",
+      "PE": "Pernambuco",
+      "PI": "Piauí",
+      "RJ": "Rio de Janeiro",
+      "RN": "Rio Grande do Norte",
+      "RS": "Rio Grande do Sul",
+      "RO": "Rondônia",
+      "RR": "Roraima",
+      "SC": "Santa Catarina",
+      "SP": "São Paulo",
+      "SE": "Sergipe",
+      "TO": "Tocantins"
+    },
+    "actions": {
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saveMainData": "Salvar Dados Principais",
+      "saveAddress": "Salvar Endereço",
+      "saveContacts": "Salvar Contatos",
+      "saveDomains": "Salvar Domínios & URLs"
+    },
+    "messages": {
+      "saveSuccess": "Dados da empresa atualizados com sucesso!",
+      "saveError": "Erro ao salvar dados da empresa: {{message}}",
+      "saveErrorGeneric": "Erro ao salvar dados da empresa"
+    }
   }
 }
