@@ -1,0 +1,43 @@
+{
+  "header": {
+    "title": "Instâncias Deletadas",
+    "description": "Gerencie instâncias WhatsApp que foram deletadas (soft delete)"
+  },
+  "actions": {
+    "refresh": "Atualizar"
+  },
+  "error": {
+    "title": "Erro",
+    "loadFailed": "Erro ao carregar instâncias deletadas",
+    "restoreFailed": "Erro ao restaurar instância"
+  },
+  "empty": {
+    "title": "Nenhuma instância deletada",
+    "description": "Todas as suas instâncias WhatsApp estão ativas"
+  },
+  "table": {
+    "columns": {
+      "instance": "Instância",
+      "phone": "Telefone",
+      "conversations": "Conversas",
+      "deletedAt": "Deletada em",
+      "status": "Status",
+      "actions": "Ações"
+    }
+  },
+  "instance": {
+    "phoneMissing": "Sem telefone",
+    "statusDeleted": "Deletada"
+  },
+  "restore": {
+    "restoring": "Restaurando...",
+    "action": "Restaurar"
+  },
+  "info": {
+    "title": "Sobre Instâncias Deletadas",
+    "bulletSoftDelete": "Instâncias deletadas ficam ocultas mas podem ser restauradas",
+    "bulletConversations": "Todas as conversas são preservadas e continuam acessíveis",
+    "bulletRestoredState": "Ao restaurar, a instância volta como \"desconectada\"",
+    "bulletReconnect": "Você precisará reconectar a instância após restaurar"
+  }
+}

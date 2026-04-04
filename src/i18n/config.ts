@@ -3,6 +3,8 @@ import { initReactI18next } from 'react-i18next'
 import settingsSystem from '../locales/pt-BR/settings.system.json'
 import layout from '../locales/pt-BR/layout.json'
 import auth from '../locales/pt-BR/auth.json'
+import deletedInstances from '../locales/pt-BR/deletedInstances.json'
+import analytics from '../locales/pt-BR/analytics.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -12,9 +14,11 @@ void i18n.use(initReactI18next).init({
       'settings.system': settingsSystem,
       layout,
       auth,
+      deletedInstances,
+      analytics,
     },
   },
-  ns: ['settings.system', 'layout', 'auth'],
+  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,

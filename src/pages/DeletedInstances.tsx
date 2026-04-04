@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trash2, RefreshCw, AlertCircle, Clock, MessageSquare } from 'lucide-react'
@@ -13,6 +14,7 @@ interface DeletedInstance {
 }
 
 export const DeletedInstances: React.FC = () => {
+  const { t } = useTranslation('deletedInstances')
   const { company } = useAuth()
   const [instances, setInstances] = useState<DeletedInstance[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,7 +42,7 @@ export const DeletedInstances: React.FC = () => {
 
       setInstances(data?.data || [])
     } catch (err: any) {
-      setError(err.message || 'Erro ao carregar instâncias deletadas')
+      setError(err.message || t('error.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -63,10 +65,10 @@ export const DeletedInstances: React.FC = () => {
       if (data?.success) {
         await fetchDeletedInstances()
       } else {
-        throw new Error(data?.error || 'Erro ao restaurar instância')
+        throw new Error(data?.error || t('error.restoreFailed'))
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao restaurar instância')
+      setError(err.message || t('error.restoreFailed'))
     } finally {
       setRestoring(null)
     }
@@ -92,10 +94,10 @@ export const DeletedInstances: React.FC = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
                 <Trash2 className="w-8 h-8 text-red-600" />
-                Instâncias Deletadas
+                {t('header.title')}
               </h1>
               <p className="mt-2 text-gray-600">
-                Gerencie instâncias WhatsApp que foram deletadas (soft delete)
+                {t('header.description')}
               </p>
             </div>
             <button
@@ -104,7 +106,7 @@ export const DeletedInstances: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
+              {t('actions.refresh')}
             </button>
           </div>
         </div>
@@ -114,7 +116,7 @@ export const DeletedInstances: React.FC = () => {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-red-800">Erro</h3>
+              <h3 className="text-sm font-medium text-red-800">{t('error.title')}</h3>
               <p className="text-sm text-red-700 mt-1">{error}</p>
             </div>
           </div>
@@ -132,10 +134,10 @@ export const DeletedInstances: React.FC = () => {
               <Trash2 className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Nenhuma instância deletada
+              {t('empty.title')}
             </h3>
             <p className="text-gray-600">
-              Todas as suas instâncias WhatsApp estão ativas
+              {t('empty.description')}
             </p>
           </div>
         ) : (
@@ -146,22 +148,22 @@ export const DeletedInstances: React.FC = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Instância
+                      {t('table.columns.instance')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Telefone
+                      {t('table.columns.phone')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conversas
+                      {t('table.columns.conversations')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Deletada em
+                      {t('table.columns.deletedAt')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      {t('table.columns.status')}
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
+                      {t('table.columns.actions')}
                     </th>
                   </tr>
                 </thead>
@@ -182,7 +184,7 @@ export const DeletedInstances: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {instance.phone_number || 'Sem telefone'}
+                          {instance.phone_number || t('instance.phoneMissing')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -201,7 +203,7 @@ export const DeletedInstances: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Deletada
+                          {t('instance.statusDeleted')}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -211,7 +213,7 @@ export const DeletedInstances: React.FC = () => {
                           className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                         >
                           <RefreshCw className={`w-4 h-4 ${restoring === instance.id ? 'animate-spin' : ''}`} />
-                          {restoring === instance.id ? 'Restaurando...' : 'Restaurar'}
+                          {restoring === instance.id ? t('restore.restoring') : t('restore.action')}
                         </button>
                       </td>
                     </tr>
@@ -228,13 +230,13 @@ export const DeletedInstances: React.FC = () => {
             <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="text-sm font-medium text-blue-800 mb-1">
-                Sobre Instâncias Deletadas
+                {t('info.title')}
               </h3>
               <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Instâncias deletadas ficam ocultas mas podem ser restauradas</li>
-                <li>• Todas as conversas são preservadas e continuam acessíveis</li>
-                <li>• Ao restaurar, a instância volta como "desconectada"</li>
-                <li>• Você precisará reconectar a instância após restaurar</li>
+                <li>• {t('info.bulletSoftDelete')}</li>
+                <li>• {t('info.bulletConversations')}</li>
+                <li>• {t('info.bulletRestoredState')}</li>
+                <li>• {t('info.bulletReconnect')}</li>
               </ul>
             </div>
           </div>
