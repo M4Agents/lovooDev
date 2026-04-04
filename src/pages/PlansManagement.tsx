@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { 
@@ -53,6 +54,7 @@ interface PlanFormData {
 }
 
 export const PlansManagement: React.FC = () => {
+  const { t } = useTranslation('plans');
   const { company } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +106,7 @@ export const PlansManagement: React.FC = () => {
       setPlans(plansWithParsedFeatures);
     } catch (err) {
       console.error('Erro ao carregar planos:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao carregar planos');
+      setError(err instanceof Error ? err.message : t('errors.load'));
     } finally {
       setLoading(false);
     }
@@ -170,14 +172,14 @@ export const PlansManagement: React.FC = () => {
       }
 
       if (!result.data?.success) {
-        throw new Error(result.data?.error || 'Erro ao salvar plano');
+        throw new Error(result.data?.error || t('errors.save'));
       }
 
       closeModal();
       loadPlans();
     } catch (err) {
       console.error('Erro ao salvar plano:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao salvar plano');
+      setError(err instanceof Error ? err.message : t('errors.save'));
     } finally {
       setSaving(false);
     }
@@ -187,7 +189,7 @@ export const PlansManagement: React.FC = () => {
   // DELETAR PLANO
   // =====================================================
   const deletePlan = async (plan: Plan) => {
-    if (!confirm(`Tem certeza que deseja deletar o plano "${plan.name}"?`)) {
+    if (!confirm(t('confirm.deletePlan', { name: plan.name }))) {
       return;
     }
 
@@ -203,13 +205,13 @@ export const PlansManagement: React.FC = () => {
       }
 
       if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao deletar plano');
+        throw new Error(data?.error || t('errors.delete'));
       }
 
       loadPlans();
     } catch (err) {
       console.error('Erro ao deletar plano:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao deletar plano');
+      setError(err instanceof Error ? err.message : t('errors.delete'));
     }
   };
 
@@ -289,7 +291,7 @@ export const PlansManagement: React.FC = () => {
   // UTILS
   // =====================================================
   const formatPrice = (price: number, currency: string) => {
-    if (price === 0) return 'Gratuito';
+    if (price === 0) return t('pricing.free');
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: currency === 'BRL' ? 'BRL' : 'USD'
@@ -333,8 +335,8 @@ export const PlansManagement: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Acesso Negado</h2>
-          <p className="text-gray-600">Apenas super administradores podem acessar esta página.</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('accessDenied.title')}</h2>
+          <p className="text-gray-600">{t('accessDenied.description')}</p>
         </div>
       </div>
     );
@@ -345,15 +347,15 @@ export const PlansManagement: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Gestão de Planos</h1>
-          <p className="text-slate-600 mt-1">Gerencie os planos disponíveis na plataforma</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t('header.title')}</h1>
+          <p className="text-slate-600 mt-1">{t('header.subtitle')}</p>
         </div>
         <button
           onClick={openCreateModal}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Novo Plano
+          {t('actions.create')}
         </button>
       </div>
 
@@ -384,13 +386,13 @@ export const PlansManagement: React.FC = () => {
                 <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                   <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
                     <Star className="w-3 h-3" />
-                    Popular
+                    {t('badges.popular')}
                   </span>
                 </div>
               )}
 
               {/* Status Badge */}
-              <div className="absolute top-4 right-4" title={plan.is_active ? "Ativo" : "Inativo"}>
+              <div className="absolute top-4 right-4" title={plan.is_active ? t('status.active') : t('status.inactive')}>
                 {plan.is_active ? (
                   <Eye className="w-5 h-5 text-green-500" />
                 ) : (
@@ -406,7 +408,7 @@ export const PlansManagement: React.FC = () => {
                   {formatPrice(plan.price, plan.currency)}
                   {plan.price > 0 && (
                     <span className="text-sm font-normal text-slate-500">
-                      /{plan.billing_cycle === 'monthly' ? 'mês' : 'ano'}
+                      {plan.billing_cycle === 'monthly' ? t('billing.perMonth') : t('billing.perYear')}
                     </span>
                   )}
                 </div>
@@ -416,25 +418,25 @@ export const PlansManagement: React.FC = () => {
               <div className="space-y-2 mb-4">
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <MessageSquare className="w-4 h-4" />
-                  <span>{plan.max_whatsapp_instances} WhatsApp</span>
+                  <span>{t('card.whatsappLimit', { count: plan.max_whatsapp_instances })}</span>
                 </div>
                 {plan.max_landing_pages && (
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <FileText className="w-4 h-4" />
-                    <span>{plan.max_landing_pages} Landing Pages</span>
+                    <span>{t('card.landingPagesLimit', { count: plan.max_landing_pages })}</span>
                   </div>
                 )}
                 {plan.max_users && (
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <Users className="w-4 h-4" />
-                    <span>{plan.max_users} Usuários</span>
+                    <span>{t('card.usersLimit', { count: plan.max_users })}</span>
                   </div>
                 )}
               </div>
 
               {/* Features */}
               <div className="mb-6">
-                <h4 className="font-medium text-slate-900 mb-2">Recursos:</h4>
+                <h4 className="font-medium text-slate-900 mb-2">{t('card.featuresTitle')}</h4>
                 <ul className="space-y-1">
                   {(Array.isArray(plan.features) ? plan.features : []).slice(0, 3).map((feature, index) => (
                     <li key={index} className="text-sm text-slate-600 flex items-start gap-2">
@@ -444,7 +446,7 @@ export const PlansManagement: React.FC = () => {
                   ))}
                   {Array.isArray(plan.features) && plan.features.length > 3 && (
                     <li className="text-sm text-slate-500">
-                      +{plan.features.length - 3} recursos adicionais
+                      {t('card.moreFeatures', { count: plan.features.length - 3 })}
                     </li>
                   )}
                 </ul>
@@ -457,9 +459,11 @@ export const PlansManagement: React.FC = () => {
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   <Edit2 className="w-4 h-4" />
-                  Editar
+                  {t('actions.edit')}
                 </button>
                 <button
+                  type="button"
+                  aria-label={t('actions.delete')}
                   onClick={() => deletePlan(plan)}
                   className="flex items-center justify-center px-3 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors"
                 >
@@ -479,7 +483,7 @@ export const PlansManagement: React.FC = () => {
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">
-                  {editingPlan ? 'Editar Plano' : 'Novo Plano'}
+                  {editingPlan ? t('modals.edit.title') : t('modals.create.title')}
                 </h2>
                 <button
                   onClick={closeModal}
@@ -495,40 +499,40 @@ export const PlansManagement: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Nome do Plano *
+                      {t('form.labels.name')}
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ex: Plano Básico"
+                      placeholder={t('form.placeholders.name')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Slug *
+                      {t('form.labels.slug')}
                     </label>
                     <input
                       type="text"
                       value={formData.slug}
                       onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ex: basic"
+                      placeholder={t('form.placeholders.slug')}
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Descrição
+                    {t('form.labels.description')}
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows={3}
-                    placeholder="Descrição do plano..."
+                    placeholder={t('form.placeholders.description')}
                   />
                 </div>
 
@@ -536,7 +540,7 @@ export const PlansManagement: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Preço *
+                      {t('form.labels.price')}
                     </label>
                     <input
                       type="number"
@@ -549,29 +553,29 @@ export const PlansManagement: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Moeda
+                      {t('form.labels.currency')}
                     </label>
                     <select
                       value={formData.currency}
                       onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="BRL">BRL (R$)</option>
-                      <option value="USD">USD ($)</option>
+                      <option value="BRL">{t('form.currency.brl')}</option>
+                      <option value="USD">{t('form.currency.usd')}</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Ciclo
+                      {t('form.labels.billingCycle')}
                     </label>
                     <select
                       value={formData.billing_cycle}
                       onChange={(e) => setFormData({ ...formData, billing_cycle: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="monthly">Mensal</option>
-                      <option value="yearly">Anual</option>
-                      <option value="lifetime">Vitalício</option>
+                      <option value="monthly">{t('form.billing.monthly')}</option>
+                      <option value="yearly">{t('form.billing.yearly')}</option>
+                      <option value="lifetime">{t('form.billing.lifetime')}</option>
                     </select>
                   </div>
                 </div>
@@ -580,7 +584,7 @@ export const PlansManagement: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      WhatsApp *
+                      {t('form.labels.whatsapp')}
                     </label>
                     <input
                       type="number"
@@ -592,7 +596,7 @@ export const PlansManagement: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Landing Pages
+                      {t('form.labels.landingPages')}
                     </label>
                     <input
                       type="number"
@@ -600,12 +604,12 @@ export const PlansManagement: React.FC = () => {
                       value={formData.max_landing_pages || ''}
                       onChange={(e) => setFormData({ ...formData, max_landing_pages: e.target.value ? parseInt(e.target.value) : null })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ilimitado"
+                      placeholder={t('form.placeholders.unlimited')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Leads
+                      {t('form.labels.leads')}
                     </label>
                     <input
                       type="number"
@@ -613,12 +617,12 @@ export const PlansManagement: React.FC = () => {
                       value={formData.max_leads || ''}
                       onChange={(e) => setFormData({ ...formData, max_leads: e.target.value ? parseInt(e.target.value) : null })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ilimitado"
+                      placeholder={t('form.placeholders.unlimited')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Usuários
+                      {t('form.labels.users')}
                     </label>
                     <input
                       type="number"
@@ -626,7 +630,7 @@ export const PlansManagement: React.FC = () => {
                       value={formData.max_users || ''}
                       onChange={(e) => setFormData({ ...formData, max_users: e.target.value ? parseInt(e.target.value) : null })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ilimitado"
+                      placeholder={t('form.placeholders.unlimited')}
                     />
                   </div>
                 </div>
@@ -634,7 +638,7 @@ export const PlansManagement: React.FC = () => {
                 {/* Features */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Recursos do Plano
+                    {t('form.labels.planFeatures')}
                   </label>
                   <div className="space-y-2">
                     {formData.features.map((feature, index) => (
@@ -658,7 +662,7 @@ export const PlansManagement: React.FC = () => {
                         onChange={(e) => setNewFeature(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && addFeature()}
                         className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Adicionar recurso..."
+                        placeholder={t('form.placeholders.addFeature')}
                       />
                       <button
                         type="button"
@@ -675,7 +679,7 @@ export const PlansManagement: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Ordem
+                      {t('form.labels.sortOrder')}
                     </label>
                     <input
                       type="number"
@@ -693,7 +697,7 @@ export const PlansManagement: React.FC = () => {
                         onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm font-medium text-slate-700">Ativo</span>
+                      <span className="text-sm font-medium text-slate-700">{t('form.labels.active')}</span>
                     </label>
                   </div>
                   <div className="flex items-center">
@@ -704,7 +708,7 @@ export const PlansManagement: React.FC = () => {
                         onChange={(e) => setFormData({ ...formData, is_popular: e.target.checked })}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm font-medium text-slate-700">Popular</span>
+                      <span className="text-sm font-medium text-slate-700">{t('form.labels.popular')}</span>
                     </label>
                   </div>
                 </div>
@@ -716,7 +720,7 @@ export const PlansManagement: React.FC = () => {
                   onClick={closeModal}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                 >
-                  Cancelar
+                  {t('form.cancel')}
                 </button>
                 <button
                   onClick={savePlan}
@@ -728,7 +732,7 @@ export const PlansManagement: React.FC = () => {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  {saving ? 'Salvando...' : 'Salvar'}
+                  {saving ? t('form.saving') : t('form.save')}
                 </button>
               </div>
             </div>

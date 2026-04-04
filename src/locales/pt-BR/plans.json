@@ -1,0 +1,89 @@
+{
+  "accessDenied": {
+    "title": "Acesso Negado",
+    "description": "Apenas super administradores podem acessar esta página."
+  },
+  "header": {
+    "title": "Gestão de Planos",
+    "subtitle": "Gerencie os planos disponíveis na plataforma"
+  },
+  "actions": {
+    "create": "Novo Plano",
+    "edit": "Editar",
+    "delete": "Excluir"
+  },
+  "badges": {
+    "popular": "Popular"
+  },
+  "status": {
+    "active": "Ativo",
+    "inactive": "Inativo"
+  },
+  "card": {
+    "featuresTitle": "Recursos:",
+    "whatsappLimit": "{{count}} WhatsApp",
+    "landingPagesLimit": "{{count}} Landing Pages",
+    "usersLimit": "{{count}} Usuários",
+    "moreFeatures": "+{{count}} recursos adicionais"
+  },
+  "billing": {
+    "perMonth": "/mês",
+    "perYear": "/ano"
+  },
+  "pricing": {
+    "free": "Gratuito"
+  },
+  "confirm": {
+    "deletePlan": "Tem certeza que deseja deletar o plano \"{{name}}\"?"
+  },
+  "errors": {
+    "load": "Erro ao carregar planos",
+    "save": "Erro ao salvar plano",
+    "delete": "Erro ao deletar plano"
+  },
+  "modals": {
+    "create": {
+      "title": "Novo Plano"
+    },
+    "edit": {
+      "title": "Editar Plano"
+    }
+  },
+  "form": {
+    "labels": {
+      "name": "Nome do Plano *",
+      "slug": "Slug *",
+      "description": "Descrição",
+      "price": "Preço *",
+      "currency": "Moeda",
+      "billingCycle": "Ciclo",
+      "whatsapp": "WhatsApp *",
+      "landingPages": "Landing Pages",
+      "leads": "Leads",
+      "users": "Usuários",
+      "planFeatures": "Recursos do Plano",
+      "sortOrder": "Ordem",
+      "active": "Ativo",
+      "popular": "Popular"
+    },
+    "placeholders": {
+      "name": "Ex: Plano Básico",
+      "slug": "Ex: basic",
+      "description": "Descrição do plano...",
+      "unlimited": "Ilimitado",
+      "addFeature": "Adicionar recurso..."
+    },
+    "currency": {
+      "brl": "BRL (R$)",
+      "usd": "USD ($)"
+    },
+    "billing": {
+      "monthly": "Mensal",
+      "yearly": "Anual",
+      "lifetime": "Vitalício"
+    },
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "saving": "Salvando..."
+  }
+}
