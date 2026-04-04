@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -9,6 +10,7 @@ import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
 import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Building, MapPin, Phone, Globe, Save } from 'lucide-react';
 
 export const Companies: React.FC = () => {
+  const { t } = useTranslation('companies');
   const { company, user, impersonateUser } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -359,7 +361,7 @@ export const Companies: React.FC = () => {
       loadCompanies();
     } catch (error) {
       console.error('Error saving company:', error);
-      alert('Erro ao criar empresa: ' + (error as any).message);
+      alert(t('messages.createError', { message: (error as Error).message }));
     }
   };
 
@@ -376,7 +378,7 @@ export const Companies: React.FC = () => {
   };
 
   const handleDelete = async (companyId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta empresa?')) return;
+    if (!confirm(t('confirms.deleteCompany'))) return;
 
     try {
       await api.deleteClientCompany(companyId);
@@ -409,7 +411,7 @@ export const Companies: React.FC = () => {
 
   const handleImpersonate = async (companyId: string) => {
     const targetCompany = companies.find(comp => comp.id === companyId);
-    if (!confirm(`Deseja entrar como usuário da empresa "${targetCompany?.name}"?\n\nVocê poderá voltar ao seu usuário original a qualquer momento através do banner laranja que aparecerá no topo.`)) return;
+    if (!confirm(t('confirms.impersonate', { name: targetCompany?.name ?? '' }))) return;
 
     try {
       await impersonateUser(companyId);
@@ -422,7 +424,7 @@ export const Companies: React.FC = () => {
       }, 500); // Aumentar delay para 500ms
     } catch (error) {
       console.error('Error impersonating user:', error);
-      alert('Erro ao entrar como usuário: ' + (error as any).message);
+      alert(t('messages.impersonateError', { message: (error as Error).message }));
     }
   };
 
@@ -511,28 +513,17 @@ export const Companies: React.FC = () => {
           console.log('Usuário mock criado e associado:', result);
           
           alert(
-            `✅ Credenciais criadas com sucesso!\n\n` +
-            `📧 Email: ${userFormData.email}\n` +
-            `🔑 Senha: ${userFormData.newPassword}\n\n` +
-            `⚠️ IMPORTANTE - PRÓXIMOS PASSOS:\n\n` +
-            `1️⃣ COMPARTILHE AS CREDENCIAIS:\n` +
-            `   • Email: ${userFormData.email}\n` +
-            `   • Senha: ${userFormData.newPassword}\n\n` +
-            `2️⃣ INSTRUA O CLIENTE:\n` +
-            `   • Acesse: ${window.location.origin}\n` +
-            `   • Clique em "Registrar"\n` +
-            `   • Nome da Empresa: "${managingCompany.name}" (EXATO)\n` +
-            `   • Use o email e senha fornecidos\n\n` +
-            `3️⃣ APÓS O REGISTRO:\n` +
-            `   • O sistema associará automaticamente\n` +
-            `   • A empresa terá um user_id válido\n` +
-            `   • Todas as funcionalidades funcionarão\n\n` +
-            `📋 O cliente deve se registrar para ativar a conta!`
+            t('alerts.credentialsCreated', {
+              email: userFormData.email,
+              password: userFormData.newPassword,
+              origin: window.location.origin,
+              companyName: managingCompany.name,
+            })
           );
           
         } catch (error) {
           console.error('Erro ao criar usuário mock:', error);
-          alert('Erro ao criar usuário: ' + (error as any).message);
+          alert(t('alerts.createUserError', { message: (error as Error).message }));
           return;
         }
         
@@ -540,12 +531,12 @@ export const Companies: React.FC = () => {
         // Alterar usuário existente
         if (userFormData.email !== managingCompany.name) {
           console.log('Simulando alteração de email para:', userFormData.email);
-          alert(`✅ Email alterado com sucesso!\n\nNovo email: ${userFormData.email}\n\n⚠️ Em produção, isso seria feito via API server-side.`);
+          alert(t('alerts.emailChanged', { email: userFormData.email }));
         }
 
         if (userFormData.newPassword) {
           console.log('Simulando reset de senha');
-          alert(`✅ Senha alterada com sucesso!\n\n⚠️ Em produção, isso seria feito via API server-side.\n\nO usuário receberá um email para confirmar a nova senha.`);
+          alert(t('alerts.passwordChanged'));
         }
       }
 
@@ -557,7 +548,7 @@ export const Companies: React.FC = () => {
       loadCompanies();
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Erro ao atualizar usuário: ' + (error as any).message);
+      alert(t('alerts.updateUserError', { message: (error as Error).message }));
     }
   };
 
@@ -579,10 +570,29 @@ export const Companies: React.FC = () => {
     }
   };
 
+  const planLabel = (plan: string) => {
+    switch (plan) {
+      case 'basic':
+        return t('planLabels.basic');
+      case 'pro':
+        return t('planLabels.pro');
+      case 'enterprise':
+        return t('planLabels.enterprise');
+      default:
+        return plan;
+    }
+  };
+
+  const statusLabel = (status: string) => {
+    if (status === 'active') return t('status.active');
+    if (status === 'suspended') return t('status.suspended');
+    return t('status.cancelled');
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center h-64" role="status" aria-label={t('states.loading')}>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden />
       </div>
     );
   }
@@ -592,7 +602,7 @@ export const Companies: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Acesso restrito a administradores</p>
+          <p className="text-gray-600">{t('accessDenied')}</p>
         </div>
       </div>
     );
@@ -602,15 +612,15 @@ export const Companies: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Empresas</h1>
-          <p className="text-slate-600 mt-1">Gerencie suas empresas clientes</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t('header.title')}</h1>
+          <p className="text-slate-600 mt-1">{t('header.subtitle')}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Nova Empresa
+          {t('actions.create')}
         </button>
       </div>
 
@@ -628,30 +638,37 @@ export const Companies: React.FC = () => {
                 </div>
               </div>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(comp.status)}`}>
-                {comp.status === 'active' ? 'Ativo' : comp.status === 'suspended' ? 'Suspenso' : 'Cancelado'}
+                {statusLabel(comp.status)}
               </span>
             </div>
 
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Users className="w-4 h-4" />
-                <span>Plano: {comp.plan}</span>
+                <span>{t('card.plan', { plan: planLabel(comp.plan) })}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <TrendingUp className="w-4 h-4" />
-                <span>Criada em: {new Date(comp.created_at).toLocaleDateString('pt-BR')}</span>
+                <span>
+                  {t('card.createdAt', {
+                    date: new Date(comp.created_at).toLocaleDateString('pt-BR'),
+                  })}
+                </span>
               </div>
             </div>
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => handleImpersonate(comp.id)}
                 className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 <LogIn className="w-4 h-4" />
-                Entrar
+                {t('actions.enter')}
               </button>
               <button
+                type="button"
+                aria-label={t('actions.manageUser')}
                 onClick={() => {
                   setManagingCompany(comp);
                   setUserFormData({ email: '', newPassword: '' });
@@ -662,6 +679,8 @@ export const Companies: React.FC = () => {
                 <UserCog className="w-4 h-4" />
               </button>
               <button
+                type="button"
+                aria-label={t('actions.editCompany')}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1267,6 +1286,8 @@ export const Companies: React.FC = () => {
                 <Edit2 className="w-4 h-4" />
               </button>
               <button
+                type="button"
+                aria-label={t('actions.deleteCompany')}
                 onClick={() => handleDelete(comp.id)}
                 className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               >
@@ -1283,14 +1304,14 @@ export const Companies: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-xl font-semibold text-slate-900">
-                {editingCompany ? 'Editar Empresa' : 'Nova Empresa'}
+                {editingCompany ? t('modals.editTitle') : t('modals.createTitle')}
               </h2>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nome da Empresa
+                  {t('modals.companyName')}
                 </label>
                 <input
                   type="text"
@@ -1303,29 +1324,29 @@ export const Companies: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Domínio (opcional)
+                  {t('modals.domainOptional')}
                 </label>
                 <input
                   type="text"
                   value={formData.domain}
                   onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="exemplo.com"
+                  placeholder={t('modals.domainPlaceholder')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Plano
+                  {t('modals.plan')}
                 </label>
                 <select
                   value={formData.plan}
                   onChange={(e) => setFormData({ ...formData, plan: e.target.value as any })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="basic">Básico</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
+                  <option value="basic">{t('planLabels.basic')}</option>
+                  <option value="pro">{t('planLabels.pro')}</option>
+                  <option value="enterprise">{t('planLabels.enterprise')}</option>
                 </select>
               </div>
 
@@ -1333,7 +1354,7 @@ export const Companies: React.FC = () => {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Email do Administrador
+                      {t('modals.adminEmail')}
                     </label>
                     <input
                       type="email"
@@ -1346,7 +1367,7 @@ export const Companies: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Senha do Administrador
+                      {t('modals.adminPassword')}
                     </label>
                     <input
                       type="password"
@@ -1368,19 +1389,19 @@ export const Companies: React.FC = () => {
                       className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                     />
                     <label htmlFor="sendInviteEmail" className="text-sm font-medium text-blue-800">
-                      📧 Enviar convite por email automaticamente
+                      {t('modals.sendInviteAuto')}
                     </label>
                   </div>
                   
                   {formData.sendInviteEmail && (
                     <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
-                      ✅ <strong>Convite automático:</strong> O cliente receberá um email com link para definir sua senha e acessar o sistema.
+                      {t('modals.inviteAutoHint')}
                     </div>
                   )}
                   
                   {!formData.sendInviteEmail && (
                     <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                      ⚠️ <strong>Processo manual:</strong> As credenciais serão exibidas para você copiar e enviar manualmente ao cliente.
+                      {t('modals.inviteManualHint')}
                     </div>
                   )}
                 </>
@@ -1396,13 +1417,13 @@ export const Companies: React.FC = () => {
                   }}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
                 >
-                  Cancelar
+                  {t('actions.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  {editingCompany ? 'Salvar' : 'Criar'}
+                  {editingCompany ? t('actions.save') : t('actions.createSubmit')}
                 </button>
               </div>
             </form>
@@ -1416,7 +1437,7 @@ export const Companies: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-xl font-semibold text-slate-900">
-                Gerenciar Usuário - {managingCompany.name}
+                {t('userModal.title', { name: managingCompany.name })}
               </h2>
             </div>
 
@@ -1424,7 +1445,7 @@ export const Companies: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <Mail className="w-4 h-4 inline mr-2" />
-                  Email do Usuário
+                  {t('userModal.userEmail')}
                 </label>
                 <input
                   type="email"
@@ -1432,17 +1453,17 @@ export const Companies: React.FC = () => {
                   onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   required
-                  placeholder="usuario@empresa.com"
+                  placeholder={t('userModal.emailPlaceholder')}
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Este será o novo email de login do usuário
+                  {t('userModal.emailHint')}
                 </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <Key className="w-4 h-4 inline mr-2" />
-                  Nova Senha (opcional)
+                  {t('userModal.newPasswordOptional')}
                 </label>
                 <input
                   type="password"
@@ -1450,19 +1471,19 @@ export const Companies: React.FC = () => {
                   onChange={(e) => setUserFormData({ ...userFormData, newPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   minLength={6}
-                  placeholder="Deixe em branco para manter a atual"
+                  placeholder={t('userModal.passwordPlaceholder')}
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Mínimo 6 caracteres. Deixe em branco para não alterar.
+                  {t('userModal.passwordHint')}
                 </p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">ℹ️ Informações:</h4>
+                <h4 className="font-medium text-blue-900 mb-2">{t('userModal.infoTitle')}</h4>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• As alterações são aplicadas imediatamente</li>
-                  <li>• O usuário será notificado por email</li>
-                  <li>• Em caso de alteração de senha, será enviado um link de confirmação</li>
+                  <li>{t('userModal.infoBullet1')}</li>
+                  <li>{t('userModal.infoBullet2')}</li>
+                  <li>{t('userModal.infoBullet3')}</li>
                 </ul>
               </div>
 
@@ -1476,13 +1497,13 @@ export const Companies: React.FC = () => {
                   }}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
                 >
-                  Cancelar
+                  {t('actions.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
                 >
-                  Salvar Alterações
+                  {t('actions.saveChanges')}
                 </button>
               </div>
             </form>
@@ -1494,32 +1515,38 @@ export const Companies: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="p-6 border-b border-slate-200">
-              <h2 className="text-xl font-semibold text-slate-900">Empresa Criada!</h2>
+              <h2 className="text-xl font-semibold text-slate-900">{t('successModal.title')}</h2>
             </div>
             
             <div className="p-6 space-y-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h3 className="font-medium text-green-900 mb-2">✅ Empresa criada com sucesso!</h3>
+                <h3 className="font-medium text-green-900 mb-2">{t('successModal.successTitle')}</h3>
                 <div className="space-y-2 text-sm text-green-800">
-                  <p><strong>Nome:</strong> {createdCompany.name}</p>
-                  <p><strong>API Key:</strong> <code className="bg-green-100 px-2 py-1 rounded">{createdCompany.api_key}</code></p>
+                  <p>
+                    <strong>{t('successModal.labelName')}</strong> {createdCompany.name}
+                  </p>
+                  <p>
+                    <strong>{t('successModal.labelApiKey')}</strong>{' '}
+                    <code className="bg-green-100 px-2 py-1 rounded">{createdCompany.api_key}</code>
+                  </p>
                 </div>
               </div>
               
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">📧 Próximos passos:</h4>
+                <h4 className="font-medium text-blue-900 mb-2">{t('successModal.nextStepsTitle')}</h4>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• O usuário receberá um email de confirmação</li>
-                  <li>• Ele deve confirmar o email para ativar a conta</li>
-                  <li>• Após confirmação, poderá fazer login normalmente</li>
+                  <li>{t('successModal.nextStep1')}</li>
+                  <li>{t('successModal.nextStep2')}</li>
+                  <li>{t('successModal.nextStep3')}</li>
                 </ul>
               </div>
               
               <button
+                type="button"
                 onClick={() => setCreatedCompany(null)}
                 className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Entendi
+                {t('actions.gotIt')}
               </button>
             </div>
           </div>

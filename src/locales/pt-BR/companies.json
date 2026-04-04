@@ -1,0 +1,88 @@
+{
+  "states": {
+    "loading": "Carregando empresas..."
+  },
+  "accessDenied": "Acesso restrito a administradores",
+  "header": {
+    "title": "Empresas",
+    "subtitle": "Gerencie suas empresas clientes"
+  },
+  "actions": {
+    "create": "Nova Empresa",
+    "enter": "Entrar",
+    "manageUser": "Gerenciar usuário",
+    "editCompany": "Editar empresa",
+    "deleteCompany": "Excluir empresa",
+    "save": "Salvar",
+    "createSubmit": "Criar",
+    "cancel": "Cancelar",
+    "saveChanges": "Salvar Alterações",
+    "gotIt": "Entendi"
+  },
+  "card": {
+    "plan": "Plano: {{plan}}",
+    "createdAt": "Criada em: {{date}}"
+  },
+  "status": {
+    "active": "Ativo",
+    "suspended": "Suspenso",
+    "cancelled": "Cancelado"
+  },
+  "planLabels": {
+    "basic": "Básico",
+    "pro": "Pro",
+    "enterprise": "Enterprise"
+  },
+  "modals": {
+    "createTitle": "Nova Empresa",
+    "editTitle": "Editar Empresa",
+    "companyName": "Nome da Empresa",
+    "domainOptional": "Domínio (opcional)",
+    "domainPlaceholder": "exemplo.com",
+    "plan": "Plano",
+    "adminEmail": "Email do Administrador",
+    "adminPassword": "Senha do Administrador",
+    "sendInviteAuto": "📧 Enviar convite por email automaticamente",
+    "inviteAutoHint": "✅ Convite automático: o cliente receberá um email com link para definir sua senha e acessar o sistema.",
+    "inviteManualHint": "⚠️ Processo manual: as credenciais serão exibidas para você copiar e enviar manualmente ao cliente."
+  },
+  "userModal": {
+    "title": "Gerenciar Usuário - {{name}}",
+    "userEmail": "Email do Usuário",
+    "emailPlaceholder": "usuario@empresa.com",
+    "emailHint": "Este será o novo email de login do usuário",
+    "newPasswordOptional": "Nova Senha (opcional)",
+    "passwordPlaceholder": "Deixe em branco para manter a atual",
+    "passwordHint": "Mínimo 6 caracteres. Deixe em branco para não alterar.",
+    "infoTitle": "ℹ️ Informações:",
+    "infoBullet1": "• As alterações são aplicadas imediatamente",
+    "infoBullet2": "• O usuário será notificado por email",
+    "infoBullet3": "• Em caso de alteração de senha, será enviado um link de confirmação"
+  },
+  "successModal": {
+    "title": "Empresa Criada!",
+    "successTitle": "✅ Empresa criada com sucesso!",
+    "labelName": "Nome:",
+    "labelApiKey": "API Key:",
+    "nextStepsTitle": "📧 Próximos passos:",
+    "nextStep1": "• O usuário receberá um email de confirmação",
+    "nextStep2": "• Ele deve confirmar o email para ativar a conta",
+    "nextStep3": "• Após confirmação, poderá fazer login normalmente"
+  },
+  "confirms": {
+    "deleteCompany": "Tem certeza que deseja excluir esta empresa?",
+    "impersonate": "Deseja entrar como usuário da empresa \"{{name}}\"?\n\nVocê poderá voltar ao seu usuário original a qualquer momento através do banner laranja que aparecerá no topo.",
+    "noUser": "A empresa \"{{name}}\" não possui um usuário associado.\n\nClique OK para criar credenciais de acesso para esta empresa.\nClique Cancelar para voltar."
+  },
+  "messages": {
+    "createError": "Erro ao criar empresa: {{message}}",
+    "impersonateError": "Erro ao entrar como usuário: {{message}}"
+  },
+  "alerts": {
+    "credentialsCreated": "✅ Credenciais criadas com sucesso!\n\n📧 Email: {{email}}\n🔑 Senha: {{password}}\n\n⚠️ IMPORTANTE - PRÓXIMOS PASSOS:\n\n1️⃣ COMPARTILHE AS CREDENCIAIS:\n   • Email: {{email}}\n   • Senha: {{password}}\n\n2️⃣ INSTRUA O CLIENTE:\n   • Acesse: {{origin}}\n   • Clique em \"Registrar\"\n   • Nome da Empresa: \"{{companyName}}\" (EXATO)\n   • Use o email e senha fornecidos\n\n3️⃣ APÓS O REGISTRO:\n   • O sistema associará automaticamente\n   • A empresa terá um user_id válido\n   • Todas as funcionalidades funcionarão\n\n📋 O cliente deve se registrar para ativar a conta!",
+    "createUserError": "Erro ao criar usuário: {{message}}",
+    "emailChanged": "✅ Email alterado com sucesso!\n\nNovo email: {{email}}\n\n⚠️ Em produção, isso seria feito via API server-side.",
+    "passwordChanged": "✅ Senha alterada com sucesso!\n\n⚠️ Em produção, isso seria feito via API server-side.\n\nO usuário receberá um email para confirmar a nova senha.",
+    "updateUserError": "Erro ao atualizar usuário: {{message}}"
+  }
+}
