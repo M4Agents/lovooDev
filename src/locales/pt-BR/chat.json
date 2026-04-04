@@ -59,12 +59,27 @@
     "disconnectedBody": "A instância {{name}} foi desconectada.",
     "reconnectHint": "Reconecte em Configurações → Integrações → WhatsApp Life"
   },
+  "input": {
+    "placeholder": "Digite sua mensagem...",
+    "actions": {
+      "send": "Enviar",
+      "attach": "Anexar arquivo",
+      "record": "Gravar áudio",
+      "emoji": "Abrir seletor de emojis"
+    },
+    "states": {
+      "recording": "Gravando…",
+      "releaseToSend": "Solte para enviar"
+    },
+    "a11y": {
+      "cancelRecording": "Cancelar gravação"
+    }
+  },
   "chatArea": {
     "loadingMessages": "Carregando mensagens...",
     "conversationFallback": "Conversa",
     "contactFallback": "Contato",
     "reloadMessagesTitle": "Recarregar mensagens",
-    "messageInputPlaceholder": "Digite sua mensagem...",
     "assignedBadge": "Atribuída",
     "dragTitle": "Arraste arquivo aqui",
     "dragSubtitle": "Imagens, vídeos, documentos e áudios",

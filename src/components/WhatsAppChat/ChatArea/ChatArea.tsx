@@ -4,7 +4,7 @@
 // Área principal do chat com mensagens e input
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
@@ -1247,7 +1247,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onSendMessage={handleSendMessage}
           onPreviewFile={openPreviewModal}
           disabled={sending}
-          placeholder={t('chatArea.messageInputPlaceholder')}
+          placeholder={t('input.placeholder')}
           companyId={companyId}
           conversationId={conversationId}
         />
@@ -1719,10 +1719,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   onPreviewFile,
   disabled,
-  placeholder = 'Digite sua mensagem...',
+  placeholder,
   companyId,
   conversationId
 }) => {
+  const { t } = useTranslation('chat')
+  const resolvedPlaceholder = useMemo(
+    () => placeholder ?? t('input.placeholder'),
+    [placeholder, t]
+  )
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -1948,6 +1953,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   console.error('Erro ao cancelar gravação:', error)
                 }
               }}
+              aria-label={t('input.a11y.cancelRecording')}
+              title={t('input.a11y.cancelRecording')}
               className="p-1 rounded-full border border-gray-400 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-400"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1955,8 +1962,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
               </svg>
             </button>
 
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-medium text-gray-700 min-w-[2.5rem]">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+            <span className="text-xs font-medium text-gray-700">{t('input.states.recording')}</span>
+            <span className="text-xs font-medium text-gray-700 min-w-[2.5rem] tabular-nums">
               {`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60)
                 .toString()
                 .padStart(2, '0')}`}
@@ -1976,7 +1984,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           value={message}
           onChange={handleAutoResize}
           onKeyPress={handleKeyPress}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           disabled={disabled}
           rows={1}
           ref={textareaRef}
@@ -2004,8 +2012,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onClick={() => !disabled && setIsEmojiOpen((prev) => !prev)}
         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
         disabled={disabled}
+        aria-label={t('input.actions.emoji')}
+        title={t('input.actions.emoji')}
       >
-        <span role="img" aria-label="Emoji" className="text-xl">
+        <span role="img" aria-hidden className="text-xl">
           😊
         </span>
       </button>
@@ -2014,6 +2024,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
         type="button"
         onClick={handleToggleRecord}
         disabled={disabled}
+        aria-label={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
+        title={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
         className={`p-2 rounded-lg ${
           isRecording
             ? 'text-red-600 bg-red-50'
@@ -2031,6 +2043,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
         type="button"
         onClick={handleAttachClick}
         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+        aria-label={t('input.actions.attach')}
+        title={t('input.actions.attach')}
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -2047,9 +2061,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
       <button
         type="submit"
         disabled={!message.trim() || disabled}
+        aria-label={t('input.actions.send')}
+        title={t('input.actions.send')}
         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-5 h-5" aria-hidden fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
         </svg>
       </button>
