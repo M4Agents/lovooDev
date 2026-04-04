@@ -3,11 +3,13 @@
 // =====================================================
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const ForgotPassword: React.FC = () => {
+  const { t } = useTranslation('auth');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -17,12 +19,12 @@ export const ForgotPassword: React.FC = () => {
     e.preventDefault();
     
     if (!email.trim()) {
-      setError('Por favor, digite seu email');
+      setError(t('forgotPassword.errors.emailRequired'));
       return;
     }
 
     if (!email.includes('@')) {
-      setError('Por favor, digite um email válido');
+      setError(t('forgotPassword.errors.emailInvalid'));
       return;
     }
 
@@ -41,7 +43,7 @@ export const ForgotPassword: React.FC = () => {
       setSuccess(true);
     } catch (err) {
       console.error('Error sending reset email:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao enviar email de recuperação');
+      setError(err instanceof Error ? err.message : t('forgotPassword.errors.sendFailed'));
     } finally {
       setLoading(false);
     }
@@ -57,23 +59,23 @@ export const ForgotPassword: React.FC = () => {
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Email Enviado!
+              {t('forgotPassword.success.title')}
             </h1>
             <p className="text-gray-600">
-              Verifique sua caixa de entrada
+              {t('forgotPassword.success.subtitle')}
             </p>
           </div>
 
           {/* Instructions */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="font-semibold text-blue-900 mb-2">
-              📧 Próximos passos:
+              {t('forgotPassword.success.nextStepsTitle')}
             </h3>
             <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Verifique seu email: <strong>{email}</strong></li>
-              <li>• Clique no link de recuperação</li>
-              <li>• Defina sua nova senha</li>
-              <li>• Faça login com a nova senha</li>
+              <li>{t('forgotPassword.success.steps.verifyEmail', { email })}</li>
+              <li>{t('forgotPassword.success.steps.clickLink')}</li>
+              <li>{t('forgotPassword.success.steps.setPassword')}</li>
+              <li>{t('forgotPassword.success.steps.loginWithNew')}</li>
             </ul>
           </div>
 
@@ -87,7 +89,7 @@ export const ForgotPassword: React.FC = () => {
               }}
               className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
-              Enviar Novamente
+              {t('forgotPassword.success.sendAgain')}
             </button>
             
             <Link
@@ -95,14 +97,14 @@ export const ForgotPassword: React.FC = () => {
               className="w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              Voltar ao Login
+              {t('forgotPassword.success.backToLogin')}
             </Link>
           </div>
 
           {/* Footer */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              Não recebeu o email? Verifique sua pasta de spam
+              {t('forgotPassword.success.spamHint')}
             </p>
           </div>
         </div>
@@ -119,10 +121,10 @@ export const ForgotPassword: React.FC = () => {
             <Mail className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Esqueci Minha Senha
+            {t('forgotPassword.title')}
           </h1>
           <p className="text-gray-600">
-            Digite seu email para receber o link de recuperação
+            {t('forgotPassword.description')}
           </p>
         </div>
 
@@ -130,7 +132,7 @@ export const ForgotPassword: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
+              {t('forgotPassword.fields.email')}
             </label>
             <input
               id="email"
@@ -140,7 +142,7 @@ export const ForgotPassword: React.FC = () => {
                 setEmail(e.target.value);
                 setError(null);
               }}
-              placeholder="seu@email.com"
+              placeholder={t('forgotPassword.fields.emailPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               disabled={loading}
               autoFocus
@@ -161,12 +163,12 @@ export const ForgotPassword: React.FC = () => {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Enviando...
+                {t('forgotPassword.actions.sending')}
               </>
             ) : (
               <>
                 <Mail className="w-4 h-4" />
-                Enviar Link de Recuperação
+                {t('forgotPassword.actions.sendRecoveryLink')}
               </>
             )}
           </button>
@@ -179,14 +181,14 @@ export const ForgotPassword: React.FC = () => {
             className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
-            Voltar ao Login
+            {t('forgotPassword.linkBackToLogin')}
           </Link>
         </div>
 
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            A inteligência que impulsiona suas vendas.
+            {t('marketing.tagline')}
           </p>
         </div>
       </div>

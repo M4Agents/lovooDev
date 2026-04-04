@@ -2,12 +2,14 @@
 // PÁGINA REDEFINIR SENHA - DESIGN ELEGANTE
 // =====================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const ResetPassword: React.FC = () => {
+  const { t } = useTranslation('auth');
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
@@ -20,6 +22,13 @@ export const ResetPassword: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [validToken, setValidToken] = useState(true);
 
+  const validatePassword = useCallback((pass: string) => {
+    if (pass.length < 6) {
+      return t('resetPassword.validation.minLength');
+    }
+    return null;
+  }, [t]);
+
   // Verificar se há token válido na URL
   useEffect(() => {
     const accessToken = searchParams.get('access_token');
@@ -28,7 +37,7 @@ export const ResetPassword: React.FC = () => {
 
     if (type !== 'recovery' || !accessToken || !refreshToken) {
       setValidToken(false);
-      setError('Link de recuperação inválido ou expirado');
+      setError(t('resetPassword.errors.invalidOrExpiredLink'));
       return;
     }
 
@@ -37,14 +46,7 @@ export const ResetPassword: React.FC = () => {
       access_token: accessToken,
       refresh_token: refreshToken
     });
-  }, [searchParams]);
-
-  const validatePassword = (pass: string) => {
-    if (pass.length < 6) {
-      return 'A senha deve ter pelo menos 6 caracteres';
-    }
-    return null;
-  };
+  }, [searchParams, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +59,7 @@ export const ResetPassword: React.FC = () => {
     }
 
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('resetPassword.validation.mismatch'));
       return;
     }
 
@@ -82,7 +84,7 @@ export const ResetPassword: React.FC = () => {
 
     } catch (err) {
       console.error('Error updating password:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar senha');
+      setError(err instanceof Error ? err.message : t('resetPassword.errors.updateFailed'));
     } finally {
       setLoading(false);
     }
@@ -98,16 +100,16 @@ export const ResetPassword: React.FC = () => {
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Link Inválido
+              {t('resetPassword.invalidToken.title')}
             </h1>
             <p className="text-gray-600 mb-4">
-              Este link de recuperação é inválido ou expirou
+              {t('resetPassword.invalidToken.description')}
             </p>
             <button
               onClick={() => navigate('/forgot-password')}
               className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
-              Solicitar Novo Link
+              {t('resetPassword.invalidToken.requestNewLink')}
             </button>
           </div>
         </div>
@@ -125,21 +127,21 @@ export const ResetPassword: React.FC = () => {
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Senha Alterada!
+              {t('resetPassword.success.title')}
             </h1>
             <p className="text-gray-600 mb-4">
-              Sua senha foi alterada com sucesso
+              {t('resetPassword.success.subtitle')}
             </p>
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
               <p className="text-sm text-green-800">
-                Redirecionando para o login em alguns segundos...
+                {t('resetPassword.success.redirecting')}
               </p>
             </div>
             <button
               onClick={() => navigate('/login')}
               className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
-              Ir para Login
+              {t('resetPassword.success.goToLogin')}
             </button>
           </div>
         </div>
@@ -156,10 +158,10 @@ export const ResetPassword: React.FC = () => {
             <Lock className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Nova Senha
+            {t('resetPassword.form.title')}
           </h1>
           <p className="text-gray-600">
-            Digite sua nova senha para continuar
+            {t('resetPassword.form.subtitle')}
           </p>
         </div>
 
@@ -168,7 +170,7 @@ export const ResetPassword: React.FC = () => {
           {/* Nova Senha */}
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Nova Senha
+              {t('resetPassword.form.newPassword')}
             </label>
             <div className="relative">
               <input
@@ -179,7 +181,7 @@ export const ResetPassword: React.FC = () => {
                   setPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder="Digite sua nova senha"
+                placeholder={t('resetPassword.form.newPasswordPlaceholder')}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 disabled={loading}
                 autoFocus
@@ -195,7 +197,7 @@ export const ResetPassword: React.FC = () => {
             {password && (
               <div className="mt-2">
                 <div className={`text-xs ${password.length >= 6 ? 'text-green-600' : 'text-red-600'}`}>
-                  {password.length >= 6 ? '✓' : '×'} Mínimo 6 caracteres
+                  {password.length >= 6 ? '✓' : '×'} {t('resetPassword.form.hintMinLength')}
                 </div>
               </div>
             )}
@@ -204,7 +206,7 @@ export const ResetPassword: React.FC = () => {
           {/* Confirmar Senha */}
           <div>
             <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-              Confirmar Nova Senha
+              {t('resetPassword.form.confirmPassword')}
             </label>
             <div className="relative">
               <input
@@ -215,7 +217,7 @@ export const ResetPassword: React.FC = () => {
                   setConfirmPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder="Confirme sua nova senha"
+                placeholder={t('resetPassword.form.confirmPasswordPlaceholder')}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 disabled={loading}
               />
@@ -230,7 +232,7 @@ export const ResetPassword: React.FC = () => {
             {confirmPassword && (
               <div className="mt-2">
                 <div className={`text-xs ${password === confirmPassword ? 'text-green-600' : 'text-red-600'}`}>
-                  {password === confirmPassword ? '✓' : '×'} Senhas coincidem
+                  {password === confirmPassword ? '✓' : '×'} {t('resetPassword.form.hintMatch')}
                 </div>
               </div>
             )}
@@ -250,12 +252,12 @@ export const ResetPassword: React.FC = () => {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Alterando Senha...
+                {t('resetPassword.actions.changing')}
               </>
             ) : (
               <>
                 <Lock className="w-4 h-4" />
-                Alterar Senha
+                {t('resetPassword.actions.submit')}
               </>
             )}
           </button>
@@ -264,7 +266,7 @@ export const ResetPassword: React.FC = () => {
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            Plataforma SaaS para análise comportamental de visitantes
+            {t('marketing.productDescription')}
           </p>
         </div>
       </div>

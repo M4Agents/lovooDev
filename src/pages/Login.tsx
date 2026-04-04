@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn, Mail, Lock, Building2 } from 'lucide-react';
 
 export const Login: React.FC = () => {
+  const { t } = useTranslation('auth');
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +41,7 @@ export const Login: React.FC = () => {
       }
       navigate('/dashboard');
     } catch (err: any) {
-      const errorMessage = err.message || 'An error occurred';
+      const errorMessage = err.message || t('login.errors.generic');
       setError(errorMessage);
       
       // 🔧 MOSTRAR BOTÃO DE REENVIO SE FOR ERRO DE EMAIL NÃO CONFIRMADO
@@ -56,7 +58,7 @@ export const Login: React.FC = () => {
   // 🔧 FUNÇÃO PARA REENVIAR EMAIL DE CONFIRMAÇÃO
   const handleResendConfirmation = async () => {
     if (!email) {
-      setError('Por favor, digite seu email primeiro.');
+      setError(t('login.errors.enterEmailFirst'));
       return;
     }
 
@@ -66,9 +68,9 @@ export const Login: React.FC = () => {
       setError('');
       setShowResendButton(false);
       // Mostrar mensagem de sucesso
-      setError('✅ Email de confirmação reenviado! Verifique sua caixa de entrada.');
+      setError(t('login.successConfirmationResent'));
     } catch (err: any) {
-      setError(err.message || 'Erro ao reenviar email de confirmação');
+      setError(err.message || t('login.errors.resendConfirmationFailed'));
     } finally {
       setLoading(false);
     }
@@ -84,12 +86,12 @@ export const Login: React.FC = () => {
             <div className="mx-auto mb-1 flex items-center justify-center" style={{ width: '226px', height: '96px' }}>
               <img 
                 src="https://app.lovoocrm.com/images/emails/logo_fundo_branco-300x128.png" 
-                alt="Lovoo CRM Logo" 
+                alt={t('login.brandLogoAlt')} 
                 className="w-full h-full object-contain"
               />
             </div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-1">Leads Otimizados. Vendas Voando.</h2>
-            <p className="text-sm text-gray-500">Faça login para acessar sua plataforma</p>
+            <h2 className="text-xl font-semibold text-gray-800 mb-1">{t('login.heroTagline')}</h2>
+            <p className="text-sm text-gray-500">{t('login.heroSubtitle')}</p>
           </div>
 
           {/* Form Section */}
@@ -105,7 +107,7 @@ export const Login: React.FC = () => {
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Entrar
+              {t('login.toggleSignIn')}
             </button>
             <button
               type="button"
@@ -116,7 +118,7 @@ export const Login: React.FC = () => {
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Criar Conta
+              {t('login.toggleSignUp')}
             </button>
           </div>
 
@@ -125,7 +127,7 @@ export const Login: React.FC = () => {
             {!isLogin && (
               <div>
                 <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome da Empresa
+                  {t('login.fields.companyName')}
                 </label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -135,7 +137,7 @@ export const Login: React.FC = () => {
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white"
-                    placeholder="Minha Empresa"
+                    placeholder={t('login.fields.companyPlaceholder')}
                     required={!isLogin}
                   />
                 </div>
@@ -144,7 +146,7 @@ export const Login: React.FC = () => {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
+                {t('login.fields.email')}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -154,7 +156,7 @@ export const Login: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white"
-                  placeholder="seu@email.com"
+                  placeholder={t('login.fields.emailPlaceholder')}
                   required
                 />
               </div>
@@ -162,7 +164,7 @@ export const Login: React.FC = () => {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Senha
+                {t('login.fields.password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -172,7 +174,7 @@ export const Login: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white"
-                  placeholder="••••••••"
+                  placeholder={t('login.fields.passwordPlaceholder')}
                   required
                 />
               </div>
@@ -200,7 +202,7 @@ export const Login: React.FC = () => {
                       disabled={loading}
                       className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm"
                     >
-                      {loading ? 'Reenviando...' : '📧 Reenviar Email de Confirmação'}
+                      {loading ? t('login.actions.resending') : t('login.actions.resendConfirmation')}
                     </button>
                   </div>
                 )}
@@ -214,7 +216,7 @@ export const Login: React.FC = () => {
                   to="/forgot-password"
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
                 >
-                  Esqueci minha senha
+                  {t('login.linkForgotPassword')}
                 </Link>
               </div>
             )}
@@ -229,14 +231,14 @@ export const Login: React.FC = () => {
               ) : (
                 <LogIn className="w-5 h-5" />
               )}
-              {loading ? 'Processando...' : isLogin ? 'Entrar' : 'Criar Conta'}
+              {loading ? t('login.actions.processing') : isLogin ? t('login.actions.signIn') : t('login.actions.createAccount')}
             </button>
           </form>
 
             {/* Footer */}
             <div className="mt-8 pt-6 border-t border-gray-200 text-center">
               <p className="text-sm text-gray-500">
-                A inteligência que impulsiona suas vendas.
+                {t('marketing.tagline')}
               </p>
             </div>
           </div>
@@ -245,7 +247,7 @@ export const Login: React.FC = () => {
         {/* Bottom Text */}
         <div className="text-center mt-6">
           <p className="text-sm text-gray-500">
-            Seguro • Confiável • Moderno
+            {t('marketing.trustBadges')}
           </p>
         </div>
       </div>

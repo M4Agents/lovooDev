@@ -2,13 +2,15 @@
 // PÁGINA ALTERAÇÃO OBRIGATÓRIA DE SENHA
 // =====================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, Loader2, AlertTriangle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ChangePasswordRequired: React.FC = () => {
+  const { t } = useTranslation('auth');
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   
@@ -19,6 +21,31 @@ export const ChangePasswordRequired: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+
+  const validatePassword = useCallback((password: string) => {
+    if (password.length < 6) {
+      return t('changePasswordRequired.validation.minLength');
+    }
+    return null;
+  }, [t]);
+
+  const formatTimeRemaining = useCallback(() => {
+    if (!expiresAt) return null;
+    
+    const now = new Date();
+    const expires = new Date(expiresAt);
+    const diff = expires.getTime() - now.getTime();
+    
+    if (diff <= 0) return t('changePasswordRequired.time.expired');
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return t('changePasswordRequired.time.hoursMinutes', { hours, minutes });
+    }
+    return t('changePasswordRequired.time.minutesOnly', { minutes });
+  }, [expiresAt, t]);
 
   // Verificar se realmente precisa alterar senha
   useEffect(() => {
@@ -46,13 +73,6 @@ export const ChangePasswordRequired: React.FC = () => {
     checkPasswordRequirement();
   }, [user, navigate, signOut]);
 
-  const validatePassword = (password: string) => {
-    if (password.length < 6) {
-      return 'A senha deve ter pelo menos 6 caracteres';
-    }
-    return null;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -64,7 +84,7 @@ export const ChangePasswordRequired: React.FC = () => {
     }
 
     if (newPassword !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError(t('changePasswordRequired.validation.mismatch'));
       return;
     }
 
@@ -100,7 +120,7 @@ export const ChangePasswordRequired: React.FC = () => {
 
     } catch (err) {
       console.error('Error changing password:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao alterar senha');
+      setError(err instanceof Error ? err.message : t('changePasswordRequired.errors.changeFailed'));
     } finally {
       setLoading(false);
     }
@@ -109,24 +129,6 @@ export const ChangePasswordRequired: React.FC = () => {
   const handleLogout = () => {
     signOut();
     navigate('/login');
-  };
-
-  const formatTimeRemaining = () => {
-    if (!expiresAt) return null;
-    
-    const now = new Date();
-    const expires = new Date(expiresAt);
-    const diff = expires.getTime() - now.getTime();
-    
-    if (diff <= 0) return 'Expirado';
-    
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m restantes`;
-    }
-    return `${minutes}m restantes`;
   };
 
   return (
@@ -138,10 +140,10 @@ export const ChangePasswordRequired: React.FC = () => {
             <Lock className="w-8 h-8 text-orange-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Alteração de Senha Obrigatória
+            {t('changePasswordRequired.title')}
           </h1>
           <p className="text-gray-600">
-            Por segurança, você deve definir uma nova senha
+            {t('changePasswordRequired.subtitle')}
           </p>
         </div>
 
@@ -152,7 +154,7 @@ export const ChangePasswordRequired: React.FC = () => {
               <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
               <div>
                 <h4 className="text-sm font-medium text-orange-900 mb-1">
-                  Senha Temporária
+                  {t('changePasswordRequired.temporaryPassword.title')}
                 </h4>
                 <p className="text-sm text-orange-700">
                   {formatTimeRemaining()}
@@ -167,7 +169,7 @@ export const ChangePasswordRequired: React.FC = () => {
           {/* Nova Senha */}
           <div>
             <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-2">
-              Nova Senha
+              {t('changePasswordRequired.fields.newPassword')}
             </label>
             <div className="relative">
               <input
@@ -179,7 +181,7 @@ export const ChangePasswordRequired: React.FC = () => {
                   setError(null);
                 }}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Digite sua nova senha"
+                placeholder={t('changePasswordRequired.fields.newPasswordPlaceholder')}
                 disabled={loading}
                 autoFocus
               />
@@ -194,7 +196,7 @@ export const ChangePasswordRequired: React.FC = () => {
             {newPassword && (
               <div className="mt-2">
                 <div className={`text-xs ${newPassword.length >= 6 ? 'text-green-600' : 'text-red-600'}`}>
-                  {newPassword.length >= 6 ? '✓' : '×'} Mínimo 6 caracteres
+                  {newPassword.length >= 6 ? '✓' : '×'} {t('changePasswordRequired.fields.hintMinLength')}
                 </div>
               </div>
             )}
@@ -203,7 +205,7 @@ export const ChangePasswordRequired: React.FC = () => {
           {/* Confirmar Senha */}
           <div>
             <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-              Confirmar Nova Senha
+              {t('changePasswordRequired.fields.confirmPassword')}
             </label>
             <div className="relative">
               <input
@@ -215,7 +217,7 @@ export const ChangePasswordRequired: React.FC = () => {
                   setError(null);
                 }}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Confirme sua nova senha"
+                placeholder={t('changePasswordRequired.fields.confirmPasswordPlaceholder')}
                 disabled={loading}
               />
               <button
@@ -229,7 +231,7 @@ export const ChangePasswordRequired: React.FC = () => {
             {confirmPassword && (
               <div className="mt-2">
                 <div className={`text-xs ${newPassword === confirmPassword ? 'text-green-600' : 'text-red-600'}`}>
-                  {newPassword === confirmPassword ? '✓' : '×'} Senhas coincidem
+                  {newPassword === confirmPassword ? '✓' : '×'} {t('changePasswordRequired.fields.hintMatch')}
                 </div>
               </div>
             )}
@@ -252,12 +254,12 @@ export const ChangePasswordRequired: React.FC = () => {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Alterando Senha...
+                {t('changePasswordRequired.actions.changing')}
               </>
             ) : (
               <>
                 <CheckCircle className="w-4 h-4" />
-                Confirmar Nova Senha
+                {t('changePasswordRequired.actions.confirm')}
               </>
             )}
           </button>
@@ -269,14 +271,14 @@ export const ChangePasswordRequired: React.FC = () => {
             onClick={handleLogout}
             className="text-sm text-gray-500 hover:text-gray-700 font-medium"
           >
-            Sair da conta
+            {t('changePasswordRequired.signOut')}
           </button>
         </div>
 
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
-            Esta alteração é obrigatória por motivos de segurança
+            {t('changePasswordRequired.footerSecurity')}
           </p>
         </div>
       </div>

@@ -2,12 +2,14 @@
 // PÁGINA DE ACEITE DE CONVITE - ATIVAÇÃO DE CONTA
 // =====================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle, AlertCircle, Lock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export const AcceptInvite: React.FC = () => {
+  const { t } = useTranslation('auth');
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
@@ -130,7 +132,7 @@ export const AcceptInvite: React.FC = () => {
       }
       
       setInviteInfo({
-        email: decodedEmail || 'Email não encontrado',
+        email: decodedEmail || t('acceptInvite.fallbackEmailNotFound'),
         role: searchParams.get('role') || '',
         company_name: searchParams.get('company') || ''
       });
@@ -146,24 +148,24 @@ export const AcceptInvite: React.FC = () => {
         }
       });
     }
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, t]);
 
   // Validar senha
-  const validatePassword = (password: string): string | null => {
+  const validatePassword = useCallback((password: string): string | null => {
     if (password.length < 8) {
-      return 'A senha deve ter pelo menos 8 caracteres';
+      return t('acceptInvite.validation.minLength');
     }
     if (!/(?=.*[a-z])/.test(password)) {
-      return 'A senha deve conter pelo menos uma letra minúscula';
+      return t('acceptInvite.validation.lowercase');
     }
     if (!/(?=.*[A-Z])/.test(password)) {
-      return 'A senha deve conter pelo menos uma letra maiúscula';
+      return t('acceptInvite.validation.uppercase');
     }
     if (!/(?=.*\d)/.test(password)) {
-      return 'A senha deve conter pelo menos um número';
+      return t('acceptInvite.validation.number');
     }
     return null;
-  };
+  }, [t]);
 
   // Aceitar convite
   const handleAcceptInvite = async (e: React.FormEvent) => {
@@ -173,7 +175,7 @@ export const AcceptInvite: React.FC = () => {
 
     try {
       if (!formData.password) {
-        setError('Senha é obrigatória');
+        setError(t('acceptInvite.validation.passwordRequired'));
         return;
       }
 
@@ -184,7 +186,7 @@ export const AcceptInvite: React.FC = () => {
       }
 
       if (formData.password !== formData.confirmPassword) {
-        setError('As senhas não coincidem');
+        setError(t('acceptInvite.validation.mismatch'));
         return;
       }
 
@@ -193,7 +195,7 @@ export const AcceptInvite: React.FC = () => {
       console.log('AcceptInvite: Processing invite for email:', email);
 
       if (!email) {
-        setError('Email não encontrado. Verifique se o link está correto.');
+        setError(t('acceptInvite.errors.emailMissing'));
         return;
       }
 
@@ -215,7 +217,7 @@ export const AcceptInvite: React.FC = () => {
 
         if (updateError) {
           console.error('AcceptInvite: Error updating password:', updateError.message);
-          setError('Erro ao definir senha. Tente novamente.');
+          setError(t('acceptInvite.errors.setPasswordFailed'));
           return;
         }
 
@@ -254,11 +256,11 @@ export const AcceptInvite: React.FC = () => {
       
       // Nenhum caminho funcionou
       console.log('AcceptInvite: All paths failed');
-      setError('Não foi possível ativar a conta. Solicite um novo link ao administrador.');
+      setError(t('acceptInvite.errors.activationFailed'));
 
     } catch (err) {
       console.error('AcceptInvite: Error in handleAcceptInvite:', err);
-      setError('Erro inesperado. Tente novamente.');
+      setError(t('acceptInvite.errors.unexpected'));
     } finally {
       setLoading(false);
     }
@@ -272,10 +274,10 @@ export const AcceptInvite: React.FC = () => {
             <CheckCircle className="w-12 h-12 text-green-600 mx-auto mt-2" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-4">
-            Conta Ativada com Sucesso!
+            {t('acceptInvite.success.title')}
           </h1>
           <p className="text-slate-600 mb-6">
-            Sua senha foi definida. Você será redirecionado para a tela de login em instantes.
+            {t('acceptInvite.success.subtitle')}
           </p>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         </div>
@@ -290,12 +292,12 @@ export const AcceptInvite: React.FC = () => {
         <div className="bg-white px-8 pt-8 pb-4 text-center border-b border-slate-100">
           <img
             src="/images/emails/logo_fundo_branco-300x128.png"
-            alt="Lovoo CRM"
+            alt={t('acceptInvite.header.logoAlt')}
             className="h-14 mx-auto mb-4 object-contain"
           />
-          <h1 className="text-xl font-semibold text-slate-800 mb-1">Ativar Conta</h1>
+          <h1 className="text-xl font-semibold text-slate-800 mb-1">{t('acceptInvite.header.title')}</h1>
           <p className="text-sm text-slate-500">
-            Complete o cadastro para acessar o sistema
+            {t('acceptInvite.header.subtitle')}
           </p>
         </div>
 
@@ -304,24 +306,24 @@ export const AcceptInvite: React.FC = () => {
           {/* Informações do convite */}
           {inviteInfo.email && (
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-slate-700 mb-2">Informações do Convite</h3>
+              <h3 className="text-sm font-medium text-slate-700 mb-2">{t('acceptInvite.inviteDetails.title')}</h3>
               <div className="space-y-1 text-sm text-slate-600">
                 {inviteInfo.email && (
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4" />
-                    <span>Email: {inviteInfo.email}</span>
+                    <span>{t('acceptInvite.inviteDetails.emailLine', { value: inviteInfo.email })}</span>
                   </div>
                 )}
                 {inviteInfo.role && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
-                    <span>Role: {inviteInfo.role}</span>
+                    <span>{t('acceptInvite.inviteDetails.roleLine', { value: inviteInfo.role })}</span>
                   </div>
                 )}
                 {inviteInfo.company_name && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
-                    <span>Empresa: {inviteInfo.company_name}</span>
+                    <span>{t('acceptInvite.inviteDetails.companyLine', { value: inviteInfo.company_name })}</span>
                   </div>
                 )}
               </div>
@@ -334,7 +336,7 @@ export const AcceptInvite: React.FC = () => {
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-red-900 mb-1">Erro</h4>
+                  <h4 className="text-sm font-medium text-red-900 mb-1">{t('acceptInvite.errorBlock.title')}</h4>
                   <p className="text-sm text-red-700 whitespace-pre-line">{error}</p>
                 </div>
               </div>
@@ -346,7 +348,7 @@ export const AcceptInvite: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Lock className="w-4 h-4 inline mr-2" />
-                Nova Senha
+                {t('acceptInvite.form.newPassword')}
               </label>
               <div className="relative">
                 <input
@@ -354,7 +356,7 @@ export const AcceptInvite: React.FC = () => {
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Digite sua nova senha"
+                  placeholder={t('acceptInvite.form.newPasswordPlaceholder')}
                   disabled={loading}
                 />
                 <button
@@ -366,21 +368,21 @@ export const AcceptInvite: React.FC = () => {
                 </button>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Mínimo 8 caracteres, incluindo maiúscula, minúscula e número
+                {t('acceptInvite.form.hintRules')}
               </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Lock className="w-4 h-4 inline mr-2" />
-                Confirmar Senha
+                {t('acceptInvite.form.confirmPassword')}
               </label>
               <input
                 type="password"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Confirme sua nova senha"
+                placeholder={t('acceptInvite.form.confirmPasswordPlaceholder')}
                 disabled={loading}
               />
             </div>
@@ -397,18 +399,18 @@ export const AcceptInvite: React.FC = () => {
             ) : (
               <CheckCircle className="w-5 h-5" />
             )}
-            {loading ? 'Ativando conta...' : 'Ativar Conta'}
+            {loading ? t('acceptInvite.actions.activating') : t('acceptInvite.actions.activate')}
           </button>
 
           {/* Link para login */}
           <div className="text-center">
             <p className="text-sm text-slate-600">
-              Já tem uma conta?{' '}
+              {t('acceptInvite.hasAccount.prefix')}{' '}
               <button
                 onClick={() => navigate('/login')}
                 className="text-blue-600 hover:text-blue-800 font-medium"
               >
-                Fazer login
+                {t('acceptInvite.hasAccount.signIn')}
               </button>
             </p>
           </div>
