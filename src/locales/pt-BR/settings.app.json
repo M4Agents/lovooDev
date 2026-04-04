@@ -579,5 +579,149 @@
       "copyTitle": "Copiar link",
       "openTitle": "Abrir link"
     }
+  },
+  "tracking": {
+    "sections": {
+      "landingPages": "Landing Pages",
+      "trackingCode": "Código de Tracking",
+      "webhookConversions": "Webhook para Conversões",
+      "verification": "Verificação da Tag de Tracking",
+      "installGuide": "📖 Guia de Instalação - LovoCRM Analytics"
+    },
+    "header": {
+      "title": "Landing Pages",
+      "subtitle": {
+        "superAdmin": "Todas as landing pages da plataforma",
+        "company": "Gerencie suas páginas de captura"
+      }
+    },
+    "stats": {
+      "totalPages": "Total de Páginas",
+      "activePages": "Páginas Ativas",
+      "pausedPages": "Páginas Pausadas",
+      "conversionsToday": "Conversões Hoje"
+    },
+    "fields": {
+      "name": "Nome",
+      "url": "URL"
+    },
+    "placeholders": {
+      "name": "Página de Captura",
+      "url": "https://meusite.com/lp"
+    },
+    "status": {
+      "active": "Ativo",
+      "paused": "Pausado"
+    },
+    "actions": {
+      "newLandingPage": "Nova Landing Page",
+      "createFirst": "Criar Primeira Landing Page",
+      "pause": "Pausar",
+      "activate": "Ativar",
+      "edit": "Editar",
+      "code": "Código",
+      "verifyTag": "Verificar Tag",
+      "verifying": "Verificando...",
+      "delete": "Excluir",
+      "analytics": "Analytics",
+      "analyticsPro": "Analytics Pro",
+      "cancel": "Cancelar",
+      "create": "Criar",
+      "save": "Salvar",
+      "copy": "Copiar",
+      "copied": "Copiado!",
+      "installGuide": "Guia de Instalação",
+      "understoodClose": "Entendi, Fechar"
+    },
+    "modals": {
+      "editLandingPage": "Editar Landing Page",
+      "newLandingPage": "Nova Landing Page"
+    },
+    "empty": {
+      "title": "Nenhuma landing page cadastrada",
+      "description": "Crie sua primeira landing page para começar a rastrear o comportamento dos visitantes."
+    },
+    "trackingCode": {
+      "pasteInstructions": "Cole este código dentro da tag {{bodyTagOpen}}, no final do body, imediatamente antes do fechamento {{bodyTagClose}} (nunca no head):",
+      "helpBanner": "📖 Precisa de ajuda? Veja onde colocar este código",
+      "howToTitle": "Como usar:",
+      "howToStep1": "1. Copie o código acima",
+      "howToStep2": "2. Cole antes da tag </body> da sua landing page",
+      "howToStep3": "3. Publique a página",
+      "howToStep4": "4. Os dados começarão a aparecer no analytics",
+      "webhookIntro": "Para registrar conversões (leads), configure seu formulário para enviar dados para este webhook:",
+      "requiredParams": "Parâmetros obrigatórios:",
+      "formDataBullet": "Dados do formulário (nome, email, telefone, etc.)",
+      "exampleUsage": "Exemplo de uso:"
+    },
+    "verification": {
+      "title": "Verificação da Tag de Tracking",
+      "installedTitle": "Tag Instalada Corretamente!",
+      "installedBody": "A tag de tracking foi encontrada em {{pageName}}",
+      "notFoundTitle": "Tag Não Encontrada",
+      "notFoundBody": "A tag de tracking não foi encontrada ou não está configurada corretamente",
+      "detailsTitle": "Detalhes da Verificação:",
+      "scriptFound": "Script LovoCRM encontrado",
+      "scriptNotFound": "Script LovoCRM não encontrado",
+      "codeFound": "Código de tracking encontrado",
+      "codeNotFound": "Código de tracking não encontrado",
+      "positionOk": "Posição do script correta (antes do </body>)",
+      "positionWarn": "Posição do script pode estar incorreta",
+      "limitationTitle": "Limitação da Verificação",
+      "corsTip": "💡 Dica: Acesse sua landing page e verifique se o console do navegador mostra erros relacionados ao M4Track.",
+      "howToFixTitle": "Como corrigir:",
+      "howToFixStep1": "Acesse o código HTML da sua landing page",
+      "howToFixStep2": "Certifique-se de que o código de tracking está instalado antes da tag </body>",
+      "howToFixStep3": "Verifique se o código está exatamente como fornecido (sem alterações)",
+      "howToFixStep4": "Publique as alterações e teste novamente",
+      "metaPageLabel": "Página:",
+      "metaUrlLabel": "URL:"
+    },
+    "installGuide": {
+      "mainRuleTitle": "🎯 Regra Principal",
+      "mainRuleBody": "SEMPRE cole o código dentro da tag <body>, no final do body, imediatamente antes do fechamento </body>. NUNCA no <head>",
+      "correctPositionTitle": "✅ Posição Correta",
+      "wrongPositionTitle": "❌ Posição Incorreta",
+      "platformExamplesTitle": "🛠️ Exemplos por Plataforma",
+      "platformWordPress": "WordPress",
+      "platformElementor": "Elementor/Divi",
+      "elementorStep1": "1. Configurações → Avançado",
+      "elementorStep2": "2. \"Código antes do </body>\"",
+      "elementorStep3": "3. Cole o código lá",
+      "elementorStep4": "4. Salvar e publicar",
+      "platformHtml": "HTML Puro",
+      "platformGtm": "Google Tag Manager",
+      "gtmStep1": "1. Criar nova tag \"HTML Personalizado\"",
+      "gtmStep2": "2. Cole o código na tag",
+      "gtmStep3": "3. Trigger: \"All Pages\"",
+      "gtmStep4": "4. Publicar container",
+      "whyPositionTitle": "🚨 Por que Esta Posição é Importante?",
+      "bodyAdvantagesTitle": "✅ Vantagens do Final do Body",
+      "bodyAdvantage1": "• DOM completamente carregado",
+      "bodyAdvantage2": "• Não bloqueia carregamento da página",
+      "bodyAdvantage3": "• Acesso a todos os elementos",
+      "bodyAdvantage4": "• Melhor performance",
+      "bodyAdvantage5": "• Compatibilidade garantida",
+      "headProblemsTitle": "❌ Problemas do Head",
+      "headProblem1": "• DOM ainda não existe",
+      "headProblem2": "• Bloqueia carregamento",
+      "headProblem3": "• Pode gerar erros JavaScript",
+      "headProblem4": "• Performance ruim",
+      "headProblem5": "• Usuário espera mais",
+      "checklistTitle": "✅ Checklist de Verificação",
+      "checklist1": "• ✅ Código está DENTRO do <body>?",
+      "checklist2": "• ✅ Código está no FINAL do body?",
+      "checklist3": "• ✅ NÃO está no <head>?",
+      "checklist4": "• ✅ Tracking code está correto?",
+      "checklist5": "• ✅ URL do script está correta?",
+      "checklist6": "• ✅ Página foi publicada?",
+      "footerTip": "💡 Dica: Após instalar, use o botão \"Verificar Tag\" para confirmar se está funcionando"
+    },
+    "messages": {
+      "confirmDelete": "Tem certeza que deseja excluir esta landing page?",
+      "errorNoCompany": "Erro: Não foi possível identificar a empresa",
+      "saveError": "Erro ao salvar landing page: {{message}}",
+      "verifyGenericError": "Ocorreu um erro durante a verificação."
+    }
   }
 }

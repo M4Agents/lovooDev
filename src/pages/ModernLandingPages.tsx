@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { LandingPage } from '../lib/supabase';
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 
 export const ModernLandingPages: React.FC = () => {
+  const { t } = useTranslation('settings.app');
   const { company } = useAuth();
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +116,7 @@ export const ModernLandingPages: React.FC = () => {
     
     if (!companyId) {
       console.error('ModernLandingPages: No company ID available');
-      alert('Erro: Não foi possível identificar a empresa');
+      alert(t('tracking.messages.errorNoCompany'));
       return;
     }
 
@@ -142,7 +144,7 @@ export const ModernLandingPages: React.FC = () => {
       }
     } catch (error) {
       console.error('ModernLandingPages: Error saving page:', error);
-      alert('Erro ao salvar landing page: ' + (error as any).message);
+      alert(t('tracking.messages.saveError', { message: String((error as any)?.message ?? '') }));
     }
   };
 
@@ -153,7 +155,7 @@ export const ModernLandingPages: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta landing page?')) return;
+    if (!confirm(t('tracking.messages.confirmDelete'))) return;
 
     try {
       await api.deleteLandingPage(id);
@@ -207,7 +209,7 @@ export const ModernLandingPages: React.FC = () => {
       setVerificationResult({
         isInstalled: false,
         error: 'Erro interno',
-        details: 'Ocorreu um erro durante a verificação.',
+        details: t('tracking.messages.verifyGenericError'),
         pageName: page.name,
         pageUrl: page.url
       });
@@ -230,11 +232,11 @@ export const ModernLandingPages: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Landing Pages</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('tracking.header.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
             {company?.is_super_admin 
-              ? 'Todas as landing pages da plataforma' 
-              : 'Gerencie suas páginas de captura'
+              ? t('tracking.header.subtitle.superAdmin')
+              : t('tracking.header.subtitle.company')
             }
           </p>
         </div>
@@ -242,7 +244,7 @@ export const ModernLandingPages: React.FC = () => {
           icon={<Plus className="w-4 h-4" />}
           onClick={() => setShowModal(true)}
         >
-          Nova Landing Page
+          {t('tracking.actions.newLandingPage')}
         </Button>
       </div>
 
@@ -251,7 +253,7 @@ export const ModernLandingPages: React.FC = () => {
         <Card hover>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Total de Páginas</p>
+              <p className="text-sm text-gray-500">{t('tracking.stats.totalPages')}</p>
               <p className="text-2xl font-semibold text-gray-900">{pages.length}</p>
             </div>
             <div className="p-3 bg-blue-50 rounded-xl">
@@ -277,7 +279,7 @@ export const ModernLandingPages: React.FC = () => {
         <Card hover>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Páginas Pausadas</p>
+              <p className="text-sm text-gray-500">{t('tracking.stats.pausedPages')}</p>
               <p className="text-2xl font-semibold text-gray-900">
                 {pages.filter(p => p.status === 'paused').length}
               </p>
@@ -291,7 +293,7 @@ export const ModernLandingPages: React.FC = () => {
         <Card hover>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Conversões Hoje</p>
+              <p className="text-sm text-gray-500">{t('tracking.stats.conversionsToday')}</p>
               <p className="text-2xl font-semibold text-gray-900">0</p>
             </div>
             <div className="p-3 bg-purple-50 rounded-xl">
@@ -309,17 +311,17 @@ export const ModernLandingPages: React.FC = () => {
               <Code className="w-8 h-8 text-blue-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Nenhuma landing page cadastrada
+              {t('tracking.empty.title')}
             </h3>
             <p className="text-gray-500 mb-8">
-              Crie sua primeira landing page para começar a rastrear o comportamento dos visitantes.
+              {t('tracking.empty.description')}
             </p>
             <Button 
               icon={<Plus className="w-5 h-5" />}
               onClick={() => setShowModal(true)}
               size="lg"
             >
-              Criar Primeira Landing Page
+              {t('tracking.actions.createFirst')}
             </Button>
           </div>
         </Card>
@@ -338,7 +340,7 @@ export const ModernLandingPages: React.FC = () => {
                         ? 'bg-green-100 text-green-700'
                         : 'bg-orange-100 text-orange-700'
                     }`}>
-                      {page.status === 'active' ? 'Ativo' : 'Pausado'}
+                      {page.status === 'active' ? t('tracking.status.active') : t('tracking.status.paused')}
                     </span>
                   </div>
                   
@@ -371,7 +373,7 @@ export const ModernLandingPages: React.FC = () => {
                   icon={page.status === 'active' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   onClick={() => toggleStatus(page)}
                 >
-                  {page.status === 'active' ? 'Pausar' : 'Ativar'}
+                  {page.status === 'active' ? t('tracking.actions.pause') : t('tracking.actions.activate')}
                 </Button>
                 
                 <Button
@@ -380,7 +382,7 @@ export const ModernLandingPages: React.FC = () => {
                   icon={<Edit2 className="w-4 h-4" />}
                   onClick={() => handleEdit(page)}
                 >
-                  Editar
+                  {t('tracking.actions.edit')}
                 </Button>
                 
                 <Button
@@ -389,7 +391,7 @@ export const ModernLandingPages: React.FC = () => {
                   icon={<Code className="w-4 h-4" />}
                   onClick={() => showTrackingCodeModal(page)}
                 >
-                  Código
+                  {t('tracking.actions.code')}
                 </Button>
                 
                 <Button
@@ -400,7 +402,7 @@ export const ModernLandingPages: React.FC = () => {
                   disabled={verifyingPage === page.id}
                   className="text-green-600 hover:text-green-700"
                 >
-                  {verifyingPage === page.id ? 'Verificando...' : 'Verificar Tag'}
+                  {verifyingPage === page.id ? t('tracking.actions.verifying') : t('tracking.actions.verifyTag')}
                 </Button>
                 
                 <Button
@@ -410,7 +412,7 @@ export const ModernLandingPages: React.FC = () => {
                   onClick={() => handleDelete(page.id)}
                   className="text-red-600 hover:text-red-700"
                 >
-                  Excluir
+                  {t('tracking.actions.delete')}
                 </Button>
               </div>
 
@@ -421,7 +423,7 @@ export const ModernLandingPages: React.FC = () => {
                   onClick={() => window.location.href = `/analytics/${page.id}`}
                   className="text-xs"
                 >
-                  Analytics
+                  {t('tracking.actions.analytics')}
                 </Button>
                 <Button
                   variant="outline"
@@ -429,7 +431,7 @@ export const ModernLandingPages: React.FC = () => {
                   onClick={() => window.location.href = `/advanced-analytics/${page.id}`}
                   className="text-xs bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200 text-blue-700 hover:from-blue-100 hover:to-purple-100"
                 >
-                  Analytics Pro
+                  {t('tracking.actions.analyticsPro')}
                 </Button>
               </div>
             </Card>
@@ -443,7 +445,7 @@ export const ModernLandingPages: React.FC = () => {
           <Card className="max-w-md w-full">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                {editingPage ? 'Editar Landing Page' : 'Nova Landing Page'}
+                {editingPage ? t('tracking.modals.editLandingPage') : t('tracking.modals.newLandingPage')}
               </h2>
               <Button
                 variant="ghost"
@@ -460,19 +462,19 @@ export const ModernLandingPages: React.FC = () => {
             
             <form onSubmit={handleSubmit} className="space-y-4">
               <Input
-                label="Nome"
+                label={t('tracking.fields.name')}
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Página de Captura"
+                placeholder={t('tracking.placeholders.name')}
                 required
               />
               
               <Input
-                label="URL"
+                label={t('tracking.fields.url')}
                 type="url"
                 value={formData.url}
                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                placeholder="https://meusite.com/lp"
+                placeholder={t('tracking.placeholders.url')}
                 required
               />
               
@@ -487,10 +489,10 @@ export const ModernLandingPages: React.FC = () => {
                     setFormData({ name: '', url: '' });
                   }}
                 >
-                  Cancelar
+                  {t('tracking.actions.cancel')}
                 </Button>
                 <Button type="submit" className="flex-1">
-                  {editingPage ? 'Salvar' : 'Criar'}
+                  {editingPage ? t('tracking.actions.save') : t('tracking.actions.create')}
                 </Button>
               </div>
             </form>
@@ -504,7 +506,7 @@ export const ModernLandingPages: React.FC = () => {
           <Card className="max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-6 flex-shrink-0">
               <h2 className="text-xl font-semibold text-gray-900">
-                Código de Tracking
+                {t('tracking.sections.trackingCode')}
               </h2>
               <Button
                 variant="ghost"
@@ -521,11 +523,14 @@ export const ModernLandingPages: React.FC = () => {
             <div className="space-y-4 overflow-y-auto flex-1">
               <div>
                 <p className="text-sm text-gray-600 mb-2">
-                  Cole este código <strong>dentro da tag <code className="bg-gray-100 px-1 rounded">&lt;body&gt;</code></strong>, no final do body, imediatamente antes do fechamento <code className="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> (nunca no head):
+                  {t('tracking.trackingCode.pasteInstructions', {
+                    bodyTagOpen: '<body>',
+                    bodyTagClose: '</body>',
+                  })}
                 </p>
                 <div className="mb-3 flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded">
                   <span className="text-xs text-blue-700">
-                    📖 <strong>Precisa de ajuda?</strong> Veja onde colocar este código
+                    {t('tracking.trackingCode.helpBanner')}
                   </span>
                   <Button
                     size="sm"
@@ -533,7 +538,7 @@ export const ModernLandingPages: React.FC = () => {
                     className="text-xs h-6 px-2"
                     onClick={() => setShowInstallGuide(true)}
                   >
-                    Guia de Instalação
+                    {t('tracking.actions.installGuide')}
                   </Button>
                 </div>
                 <div className="relative">
@@ -551,18 +556,18 @@ export const ModernLandingPages: React.FC = () => {
                     icon={copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     onClick={copyTrackingCode}
                   >
-                    {copiedCode ? 'Copiado!' : 'Copiar'}
+                    {copiedCode ? t('tracking.actions.copied') : t('tracking.actions.copy')}
                   </Button>
                 </div>
               </div>
               
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Como usar:</h4>
+                <h4 className="font-medium text-blue-900 mb-2">{t('tracking.trackingCode.howToTitle')}</h4>
                 <ol className="text-sm text-blue-800 space-y-1">
-                  <li>1. Copie o código acima</li>
-                  <li>2. Cole antes da tag &lt;/body&gt; da sua landing page</li>
-                  <li>3. Publique a página</li>
-                  <li>4. Os dados começarão a aparecer no analytics</li>
+                  <li>{t('tracking.trackingCode.howToStep1')}</li>
+                  <li>{t('tracking.trackingCode.howToStep2')}</li>
+                  <li>{t('tracking.trackingCode.howToStep3')}</li>
+                  <li>{t('tracking.trackingCode.howToStep4')}</li>
                 </ol>
               </div>
 
@@ -570,12 +575,12 @@ export const ModernLandingPages: React.FC = () => {
               <div className="border-t pt-6">
                 <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                   <Globe className="w-4 h-4" />
-                  Webhook para Conversões
+                  {t('tracking.sections.webhookConversions')}
                 </h4>
                 
                 <div className="space-y-4">
                   <p className="text-sm text-gray-600">
-                    Para registrar conversões (leads), configure seu formulário para enviar dados para este webhook:
+                    {t('tracking.trackingCode.webhookIntro')}
                   </p>
                   
                   <div className="relative">
@@ -595,21 +600,21 @@ export const ModernLandingPages: React.FC = () => {
                         setTimeout(() => setCopiedWebhook(false), 2000);
                       }}
                     >
-                      {copiedWebhook ? 'Copiado!' : 'Copiar'}
+                      {copiedWebhook ? t('tracking.actions.copied') : t('tracking.actions.copy')}
                     </Button>
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <h5 className="font-medium text-green-900 mb-2">Parâmetros obrigatórios:</h5>
+                      <h5 className="font-medium text-green-900 mb-2">{t('tracking.trackingCode.requiredParams')}</h5>
                       <ul className="text-sm text-green-800 space-y-1">
                         <li>• <code className="bg-green-100 px-1 rounded">tracking_code</code>: {selectedPage.tracking_code}</li>
-                        <li>• Dados do formulário (nome, email, telefone, etc.)</li>
+                        <li>• {t('tracking.trackingCode.formDataBullet')}</li>
                       </ul>
                     </div>
 
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <h5 className="font-medium text-yellow-900 mb-2">Exemplo de uso:</h5>
+                      <h5 className="font-medium text-yellow-900 mb-2">{t('tracking.trackingCode.exampleUsage')}</h5>
                       <pre className="text-xs text-yellow-800 bg-yellow-100 p-2 rounded overflow-x-auto whitespace-pre-wrap">
 {`POST ${window.location.origin}/webhook/conversion
 Content-Type: application/json
@@ -636,7 +641,7 @@ Content-Type: application/json
           <Card className="max-w-2xl w-full">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                Verificação da Tag de Tracking
+                {t('tracking.verification.title')}
               </h2>
               <Button
                 variant="ghost"
@@ -659,9 +664,9 @@ Content-Type: application/json
                       <CheckCircle className="w-6 h-6 text-green-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-green-900">Tag Instalada Corretamente!</h3>
+                      <h3 className="font-semibold text-green-900">{t('tracking.verification.installedTitle')}</h3>
                       <p className="text-sm text-green-700">
-                        A tag de tracking foi encontrada em <strong>{verificationResult.pageName}</strong>
+                        {t('tracking.verification.installedBody', { pageName: verificationResult.pageName })}
                       </p>
                     </div>
                   </>
@@ -671,9 +676,9 @@ Content-Type: application/json
                       <XCircle className="w-6 h-6 text-red-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-red-900">Tag Não Encontrada</h3>
+                      <h3 className="font-semibold text-red-900">{t('tracking.verification.notFoundTitle')}</h3>
                       <p className="text-sm text-red-700">
-                        A tag de tracking não foi encontrada ou não está configurada corretamente
+                        {t('tracking.verification.notFoundBody')}
                       </p>
                     </div>
                   </>
@@ -683,7 +688,7 @@ Content-Type: application/json
               {/* Detalhes da verificação */}
               {verificationResult.details && !verificationResult.error && (
                 <div className="space-y-3">
-                  <h4 className="font-medium text-gray-900">Detalhes da Verificação:</h4>
+                  <h4 className="font-medium text-gray-900">{t('tracking.verification.detailsTitle')}</h4>
                   
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -693,7 +698,7 @@ Content-Type: application/json
                         <XCircle className="w-4 h-4 text-red-600" />
                       )}
                       <span className="text-sm">
-                        Script LovoCRM {verificationResult.hasScript ? 'encontrado' : 'não encontrado'}
+                        {verificationResult.hasScript ? t('tracking.verification.scriptFound') : t('tracking.verification.scriptNotFound')}
                       </span>
                     </div>
                     
@@ -704,7 +709,7 @@ Content-Type: application/json
                         <XCircle className="w-4 h-4 text-red-600" />
                       )}
                       <span className="text-sm">
-                        Código de tracking {verificationResult.hasTrackingCode ? 'encontrado' : 'não encontrado'}
+                        {verificationResult.hasTrackingCode ? t('tracking.verification.codeFound') : t('tracking.verification.codeNotFound')}
                       </span>
                     </div>
                     
@@ -715,7 +720,7 @@ Content-Type: application/json
                         <AlertCircle className="w-4 h-4 text-orange-500" />
                       )}
                       <span className="text-sm">
-                        Posição do script {verificationResult.isInCorrectPosition ? 'correta (antes do </body>)' : 'pode estar incorreta'}
+                        {verificationResult.isInCorrectPosition ? t('tracking.verification.positionOk') : t('tracking.verification.positionWarn')}
                       </span>
                     </div>
                   </div>
@@ -728,13 +733,13 @@ Content-Type: application/json
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-orange-900">Limitação da Verificação</h4>
+                      <h4 className="font-medium text-orange-900">{t('tracking.verification.limitationTitle')}</h4>
                       <p className="text-sm text-orange-800 mt-1">
                         {verificationResult.details}
                       </p>
                       {verificationResult.error === 'Erro de CORS' && (
                         <p className="text-xs text-orange-700 mt-2">
-                          💡 <strong>Dica:</strong> Acesse sua landing page e verifique se o console do navegador mostra erros relacionados ao M4Track.
+                          {t('tracking.verification.corsTip')}
                         </p>
                       )}
                     </div>
@@ -745,20 +750,20 @@ Content-Type: application/json
               {/* Instruções para correção */}
               {!verificationResult.isInstalled && !verificationResult.error && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                  <h4 className="font-medium text-blue-900 mb-2">Como corrigir:</h4>
+                  <h4 className="font-medium text-blue-900 mb-2">{t('tracking.verification.howToFixTitle')}</h4>
                   <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                    <li>Acesse o código HTML da sua landing page</li>
-                    <li>Certifique-se de que o código de tracking está instalado antes da tag &lt;/body&gt;</li>
-                    <li>Verifique se o código está exatamente como fornecido (sem alterações)</li>
-                    <li>Publique as alterações e teste novamente</li>
+                    <li>{t('tracking.verification.howToFixStep1')}</li>
+                    <li>{t('tracking.verification.howToFixStep2')}</li>
+                    <li>{t('tracking.verification.howToFixStep3')}</li>
+                    <li>{t('tracking.verification.howToFixStep4')}</li>
                   </ol>
                 </div>
               )}
 
               {/* Informações da página */}
               <div className="text-xs text-gray-500 border-t pt-4">
-                <p><strong>Página:</strong> {verificationResult.pageName}</p>
-                <p><strong>URL:</strong> {verificationResult.pageUrl}</p>
+                <p><strong>{t('tracking.verification.metaPageLabel')}</strong> {verificationResult.pageName}</p>
+                <p><strong>{t('tracking.verification.metaUrlLabel')}</strong> {verificationResult.pageUrl}</p>
               </div>
             </div>
           </Card>
@@ -771,7 +776,7 @@ Content-Type: application/json
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-semibold text-gray-900">
-                📖 Guia de Instalação - LovoCRM Analytics
+                {t('tracking.sections.installGuide')}
               </h2>
               <Button
                 variant="ghost"
@@ -786,15 +791,15 @@ Content-Type: application/json
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               {/* Regra Principal */}
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h3 className="font-semibold text-green-800 mb-2">🎯 Regra Principal</h3>
+                <h3 className="font-semibold text-green-800 mb-2">{t('tracking.installGuide.mainRuleTitle')}</h3>
                 <p className="text-green-700">
-                  <strong>SEMPRE</strong> cole o código <strong>dentro da tag <code>&lt;body&gt;</code></strong>, no final do body, imediatamente antes do fechamento <code>&lt;/body&gt;</code>. <strong>NUNCA</strong> no <code>&lt;head&gt;</code>
+                  {t('tracking.installGuide.mainRuleBody')}
                 </p>
               </div>
 
               {/* Posição Correta */}
               <div>
-                <h3 className="font-semibold text-gray-800 mb-3">✅ Posição Correta</h3>
+                <h3 className="font-semibold text-gray-800 mb-3">{t('tracking.installGuide.correctPositionTitle')}</h3>
                 <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
 {`<!DOCTYPE html>
 <html>
@@ -821,7 +826,7 @@ Content-Type: application/json
 
               {/* Posição Incorreta */}
               <div>
-                <h3 className="font-semibold text-red-800 mb-3">❌ Posição Incorreta</h3>
+                <h3 className="font-semibold text-red-800 mb-3">{t('tracking.installGuide.wrongPositionTitle')}</h3>
                 <pre className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm overflow-x-auto">
 {`<head>
     <title>Minha Landing Page</title>
@@ -834,11 +839,11 @@ Content-Type: application/json
 
               {/* Exemplos por Plataforma */}
               <div>
-                <h3 className="font-semibold text-gray-800 mb-3">🛠️ Exemplos por Plataforma</h3>
+                <h3 className="font-semibold text-gray-800 mb-3">{t('tracking.installGuide.platformExamplesTitle')}</h3>
                 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium text-blue-600 mb-2">WordPress</h4>
+                    <h4 className="font-medium text-blue-600 mb-2">{t('tracking.installGuide.platformWordPress')}</h4>
                     <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
 {`<!-- No arquivo footer.php do tema -->
 <?php wp_footer(); ?>
@@ -853,17 +858,17 @@ Content-Type: application/json
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium text-blue-600 mb-2">Elementor/Divi</h4>
+                    <h4 className="font-medium text-blue-600 mb-2">{t('tracking.installGuide.platformElementor')}</h4>
                     <div className="text-sm text-gray-600 space-y-1">
-                      <p>1. Configurações → Avançado</p>
-                      <p>2. "Código antes do &lt;/body&gt;"</p>
-                      <p>3. Cole o código lá</p>
-                      <p>4. Salvar e publicar</p>
+                      <p>{t('tracking.installGuide.elementorStep1')}</p>
+                      <p>{t('tracking.installGuide.elementorStep2')}</p>
+                      <p>{t('tracking.installGuide.elementorStep3')}</p>
+                      <p>{t('tracking.installGuide.elementorStep4')}</p>
                     </div>
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium text-blue-600 mb-2">HTML Puro</h4>
+                    <h4 className="font-medium text-blue-600 mb-2">{t('tracking.installGuide.platformHtml')}</h4>
                     <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
 {`<!-- Final da página -->
     <!-- Conteúdo -->
@@ -875,12 +880,12 @@ Content-Type: application/json
                   </div>
 
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium text-blue-600 mb-2">Google Tag Manager</h4>
+                    <h4 className="font-medium text-blue-600 mb-2">{t('tracking.installGuide.platformGtm')}</h4>
                     <div className="text-sm text-gray-600 space-y-1">
-                      <p>1. Criar nova tag "HTML Personalizado"</p>
-                      <p>2. Cole o código na tag</p>
-                      <p>3. Trigger: "All Pages"</p>
-                      <p>4. Publicar container</p>
+                      <p>{t('tracking.installGuide.gtmStep1')}</p>
+                      <p>{t('tracking.installGuide.gtmStep2')}</p>
+                      <p>{t('tracking.installGuide.gtmStep3')}</p>
+                      <p>{t('tracking.installGuide.gtmStep4')}</p>
                     </div>
                   </div>
                 </div>
@@ -888,28 +893,28 @@ Content-Type: application/json
 
               {/* Por que esta posição */}
               <div>
-                <h3 className="font-semibold text-gray-800 mb-3">🚨 Por que Esta Posição é Importante?</h3>
+                <h3 className="font-semibold text-gray-800 mb-3">{t('tracking.installGuide.whyPositionTitle')}</h3>
                 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium text-green-800 mb-2">✅ Vantagens do Final do Body</h4>
+                    <h4 className="font-medium text-green-800 mb-2">{t('tracking.installGuide.bodyAdvantagesTitle')}</h4>
                     <ul className="text-sm text-green-700 space-y-1">
-                      <li>• DOM completamente carregado</li>
-                      <li>• Não bloqueia carregamento da página</li>
-                      <li>• Acesso a todos os elementos</li>
-                      <li>• Melhor performance</li>
-                      <li>• Compatibilidade garantida</li>
+                      <li>{t('tracking.installGuide.bodyAdvantage1')}</li>
+                      <li>{t('tracking.installGuide.bodyAdvantage2')}</li>
+                      <li>{t('tracking.installGuide.bodyAdvantage3')}</li>
+                      <li>{t('tracking.installGuide.bodyAdvantage4')}</li>
+                      <li>{t('tracking.installGuide.bodyAdvantage5')}</li>
                     </ul>
                   </div>
 
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h4 className="font-medium text-red-800 mb-2">❌ Problemas do Head</h4>
+                    <h4 className="font-medium text-red-800 mb-2">{t('tracking.installGuide.headProblemsTitle')}</h4>
                     <ul className="text-sm text-red-700 space-y-1">
-                      <li>• DOM ainda não existe</li>
-                      <li>• Bloqueia carregamento</li>
-                      <li>• Pode gerar erros JavaScript</li>
-                      <li>• Performance ruim</li>
-                      <li>• Usuário espera mais</li>
+                      <li>{t('tracking.installGuide.headProblem1')}</li>
+                      <li>{t('tracking.installGuide.headProblem2')}</li>
+                      <li>{t('tracking.installGuide.headProblem3')}</li>
+                      <li>{t('tracking.installGuide.headProblem4')}</li>
+                      <li>{t('tracking.installGuide.headProblem5')}</li>
                     </ul>
                   </div>
                 </div>
@@ -917,14 +922,14 @@ Content-Type: application/json
 
               {/* Checklist */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-800 mb-3">✅ Checklist de Verificação</h3>
+                <h3 className="font-semibold text-blue-800 mb-3">{t('tracking.installGuide.checklistTitle')}</h3>
                 <div className="grid md:grid-cols-2 gap-2 text-sm text-blue-700">
-                  <div>• ✅ Código está DENTRO do &lt;body&gt;?</div>
-                  <div>• ✅ Código está no FINAL do body?</div>
-                  <div>• ✅ NÃO está no &lt;head&gt;?</div>
-                  <div>• ✅ Tracking code está correto?</div>
-                  <div>• ✅ URL do script está correta?</div>
-                  <div>• ✅ Página foi publicada?</div>
+                  <div>{t('tracking.installGuide.checklist1')}</div>
+                  <div>{t('tracking.installGuide.checklist2')}</div>
+                  <div>{t('tracking.installGuide.checklist3')}</div>
+                  <div>{t('tracking.installGuide.checklist4')}</div>
+                  <div>{t('tracking.installGuide.checklist5')}</div>
+                  <div>{t('tracking.installGuide.checklist6')}</div>
                 </div>
               </div>
             </div>
@@ -932,13 +937,13 @@ Content-Type: application/json
             <div className="p-6 border-t bg-gray-50">
               <div className="flex justify-between items-center">
                 <p className="text-sm text-gray-600">
-                  💡 <strong>Dica:</strong> Após instalar, use o botão "Verificar Tag" para confirmar se está funcionando
+                  {t('tracking.installGuide.footerTip')}
                 </p>
                 <Button
                   onClick={() => setShowInstallGuide(false)}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  Entendi, Fechar
+                  {t('tracking.actions.understoodClose')}
                 </Button>
               </div>
             </div>
