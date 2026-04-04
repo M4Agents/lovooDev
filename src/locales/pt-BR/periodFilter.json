@@ -1,0 +1,31 @@
+{
+  "groups": {
+    "shortTerm": "Curto prazo",
+    "monthly": "Mensal",
+    "longTerm": "Longo prazo"
+  },
+  "periods": {
+    "today": "Hoje",
+    "yesterday": "Ontem",
+    "7days": "Últimos 7 dias",
+    "15days": "Últimos 15 dias",
+    "30days": "Últimos 30 dias",
+    "this_month": "Este mês",
+    "last_month": "Mês passado",
+    "90days": "Últimos 90 dias",
+    "this_quarter": "Este trimestre",
+    "this_year": "Ano atual",
+    "custom": "Período personalizado"
+  },
+  "custom": {
+    "title": "Período personalizado",
+    "startDate": "Data de início",
+    "endDate": "Data de término",
+    "apply": "Aplicar período",
+    "placeholder": "dd/mm/aaaa"
+  },
+  "validation": {
+    "startBeforeEnd": "A data de início deve ser anterior à data de término."
+  },
+  "autoRefresh": "Atualização automática"
+}

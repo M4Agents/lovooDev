@@ -11,6 +11,7 @@ import plans from '../locales/pt-BR/plans.json'
 import mediaLibrary from '../locales/pt-BR/mediaLibrary.json'
 import companies from '../locales/pt-BR/companies.json'
 import reports from '../locales/pt-BR/reports.json'
+import periodFilter from '../locales/pt-BR/periodFilter.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -28,9 +29,10 @@ void i18n.use(initReactI18next).init({
       mediaLibrary,
       companies,
       reports,
+      periodFilter,
     },
   },
-  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies', 'reports'],
+  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies', 'reports', 'periodFilter'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,
