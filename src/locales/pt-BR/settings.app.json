@@ -72,10 +72,6 @@
         "body": "Funcionalidade em desenvolvimento. Em breve você poderá criar e gerenciar modelos de mensagens para automações do WhatsApp."
       }
     },
-    "apiLeads": {
-      "title": "API para Leads",
-      "subtitle": "Crie leads automaticamente a partir de qualquer formulário"
-    },
     "apiDoc": {
       "title": "📖 Documentação da API",
       "subtitle": "Acesse o guia completo para desenvolvedores com exemplos de código e configurações técnicas",
@@ -89,12 +85,189 @@
       "calloutTitle": "🚀 Sistema Completo",
       "calloutBody": "Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex.: lead convertido). Diferente do webhook simples, aqui o sistema envia dados para você automaticamente."
     },
-    "funnelApi": {
-      "title": "API de Funil de Vendas",
-      "subtitle": "Mova leads entre etapas do funil via webhook"
-    },
     "states": {
       "inDevelopment": "Em desenvolvimento"
+    },
+    "actions": {
+      "copy": "Copiar",
+      "loading": "Carregando..."
+    },
+    "apiLeads": {
+      "title": "API para Leads",
+      "subtitle": "Crie leads automaticamente a partir de qualquer formulário",
+      "urlLabel": "🚀 URL Ultra-Simples para Leads",
+      "urlHint": "Envie qualquer JSON e criamos o lead automaticamente!",
+      "apiKeyLabel": "🔑 Sua API Key (incluir no JSON)",
+      "apiKeyHelp": "Use esta chave no campo \"api_key\" do seu JSON para identificar sua empresa",
+      "howToTitle": "Como usar (3 passos):",
+      "howToStep1": "Configure seu formulário para enviar POST para a URL acima",
+      "howToStep2": "Inclua sua API Key + dados do formulário em formato JSON",
+      "howToStep3": "Pronto! O lead será criado automaticamente",
+      "hybridTitle": "Sistema Híbrido V5:",
+      "hybridMethod": "Método:",
+      "hybridPost": "POST",
+      "hybridContentType": "Content-Type:",
+      "hybridJson": "application/json",
+      "hybridStandardTitle": "Campos padrão (por nome):",
+      "hybridCustomTitle": "Campos personalizados (por ID):",
+      "exampleTitle": "Exemplo de Uso:",
+      "hybridFooter": "Sistema Híbrido: Campos azuis são padrão (por nome), campos roxos são personalizados (por ID numérico)!",
+      "quickTestTitle": "Teste Rápido:",
+      "quickTestHint": "Clique no botão abaixo para testar se o webhook está funcionando:",
+      "testing": "Testando...",
+      "testWebhook": "Testar Webhook",
+      "testSuccess": "Sucesso! Lead de teste criado: {{leadId}}",
+      "testErrorLabel": "Erro:",
+      "tooltips": {
+        "hideApiKey": "Ocultar API Key",
+        "showApiKey": "Mostrar API Key"
+      }
+    },
+    "webhookAdvanced": {
+      "form": {
+        "titleNew": "➕ Nova Configuração de Webhook",
+        "titleEdit": "✏️ Editar Configuração de Webhook",
+        "cancelEdit": "Cancelar Edição",
+        "configName": "Nome da Configuração *",
+        "configNamePlaceholder": "Ex: Webhook Lead Convertido",
+        "webhookUrl": "URL do Webhook *",
+        "webhookUrlPlaceholder": "https://seu-sistema.com/webhook",
+        "triggerEvent": "Evento de Disparo",
+        "timeoutSeconds": "Timeout (segundos)",
+        "retryAttempts": "Tentativas",
+        "payloadSectionTitle": "Configuração do Payload",
+        "payloadSectionHint": "Selecione quais campos incluir no webhook",
+        "payloadLeadTitle": "Dados do Lead",
+        "payloadCompanyTitle": "Empresa do Lead",
+        "payloadCustomTitle": "Campos Personalizados",
+        "payloadTipTitle": "Dica de Configuração",
+        "payloadTipBody": "Selecione apenas os campos necessários para otimizar o payload. O ID do lead é sempre incluído automaticamente.",
+        "headersLabel": "Headers Personalizados (JSON)",
+        "saving": "Salvando...",
+        "submitCreate": "Criar Configuração",
+        "submitUpdate": "Atualizar Configuração",
+        "testing": "Testando...",
+        "testWebhook": "Testar Webhook"
+      },
+      "triggerOptions": {
+        "lead_created": "Lead Criado",
+        "lead_converted": "Lead Convertido",
+        "lead_updated": "Lead Atualizado"
+      },
+      "fieldTypes": {
+        "text": "Campo de texto",
+        "number": "Campo numérico",
+        "date": "Campo de data",
+        "boolean": "Campo sim/não",
+        "select": "Lista de opções"
+      },
+      "payload": {
+        "lead": {
+          "name": { "label": "Nome", "desc": "Nome completo do lead" },
+          "email": { "label": "Email", "desc": "Endereço de email" },
+          "phone": { "label": "Telefone", "desc": "Número de telefone" },
+          "status": { "label": "Status", "desc": "Status atual do lead" },
+          "origin": { "label": "Origem", "desc": "Fonte de origem do lead" },
+          "interest": { "label": "Interesse", "desc": "Interesse do lead" },
+          "responsible_user_id": { "label": "Responsável", "desc": "Usuário responsável" },
+          "created_at": { "label": "Data de Criação", "desc": "Quando o lead foi criado" },
+          "updated_at": { "label": "Última Atualização", "desc": "Última modificação" }
+        },
+        "empresa": {
+          "company_name": { "label": "Nome da Empresa", "desc": "Nome da empresa do lead" },
+          "company_cnpj": { "label": "CNPJ", "desc": "CNPJ da empresa do lead" },
+          "company_razao_social": { "label": "Razão Social", "desc": "Razão social da empresa" },
+          "company_nome_fantasia": { "label": "Nome Fantasia", "desc": "Nome fantasia da empresa" },
+          "company_telefone": { "label": "Telefone", "desc": "Telefone da empresa" },
+          "company_email": { "label": "Email", "desc": "Email da empresa" },
+          "company_site": { "label": "Site", "desc": "Website da empresa" },
+          "company_cidade": { "label": "Cidade", "desc": "Cidade da empresa" },
+          "company_estado": { "label": "Estado", "desc": "Estado da empresa" },
+          "company_cep": { "label": "CEP", "desc": "CEP da empresa" },
+          "company_endereco": { "label": "Endereço", "desc": "Endereço completo" }
+        }
+      },
+      "configsTitle": "⚙️ Configurações Existentes",
+      "configsEmpty": "Nenhuma configuração criada ainda",
+      "configsEmptyHint": "Crie sua primeira configuração acima",
+      "eventLabel": "Evento:",
+      "statusLabel": "Status:",
+      "statusActive": "Ativo",
+      "statusInactive": "Inativo",
+      "timeoutLabel": "Timeout:",
+      "retryLabel": "Retry:",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "deleting": "Excluindo...",
+      "logsTitle": "📊 Logs de Disparos",
+      "logsSubtitle": "Histórico de execuções dos webhooks",
+      "refresh": "Atualizar",
+      "refreshing": "Atualizando...",
+      "statsTotal": "Total",
+      "statsSuccess": "Sucessos",
+      "statsErrors": "Erros",
+      "statsLast24h": "Últimas 24h",
+      "filtersTitle": "🔍 Filtros",
+      "filterStatus": "Status",
+      "filterAll": "Todos",
+      "filterSuccess": "Sucesso",
+      "filterError": "Erro",
+      "filterDateFrom": "Data Início",
+      "filterDateTo": "Data Fim",
+      "applyFilters": "Aplicar",
+      "clearFilters": "Limpar",
+      "logsLoading": "Carregando logs...",
+      "logsEmpty": "Nenhum log de disparo encontrado",
+      "logsEmptyHint": "Os logs aparecerão aqui quando webhooks forem disparados",
+      "logSuccess": "Sucesso",
+      "logError": "Erro",
+      "logCheckHint": "Verificar logs",
+      "viewPayload": "Ver Payload",
+      "viewPayloadTitle": "Visualizar payload enviado",
+      "responseLabel": "Resposta:",
+      "infoLabel": "Informação:",
+      "debugInfoP1": "O webhook foi disparado mas está marcado como erro no banco de dados.",
+      "debugInfoManual": "Teste manual: O webhook responde corretamente (200 OK) quando testado diretamente.",
+      "debugInfoProblem": "Problema: A função RPC que registra os logs precisa ser atualizada.",
+      "footerSummary": "Mostrando {{count}} log(s) • Atualizado automaticamente • Dados em tempo real",
+      "errorPrefix": "Erro:",
+      "logDatePrefix": "Data:",
+      "logDateUnavailable": "Data não disponível"
+    },
+    "funnelApi": {
+      "title": "API de Funil de Vendas",
+      "subtitle": "Mova leads entre etapas do funil via webhook",
+      "endpointMappingLabel": "Consultar Funis e Etapas",
+      "endpointMoveLabel": "Mover Lead entre Etapas",
+      "apiKeyLabel": "Sua API Key",
+      "apiKeyHelp": "Use esta chave no parâmetro api_key de todas as requisições",
+      "howToTitle": "Como usar (3 passos):",
+      "howToStep1": "Consulte o endpoint de mapeamento para obter slugs",
+      "howToStep2": "Envie POST com lead_id, funnel_slug e stage_slug",
+      "howToStep3": "Lead será movido automaticamente com histórico",
+      "techInfoTitle": "Informações Técnicas:",
+      "exampleMappingTitle": "Exemplo 1: Consultar Funis",
+      "exampleMoveTitle": "Exemplo 2: Mover Lead (RECOMENDADO)",
+      "advantageLabel": "Vantagem:",
+      "exampleMoveFooter": "Funciona mesmo se o usuário renomear a etapa",
+      "exampleSuccessTitle": "Resposta de Sucesso:",
+      "externalIdsTitle": "External IDs do Funil SDR:"
+    },
+    "modals": {
+      "documentation": {
+        "title": "Documentação Completa da API",
+        "subtitle": "Guia completo para desenvolvedores"
+      },
+      "payload": {
+        "title": "Payload Enviado",
+        "urlLabel": "URL:",
+        "statusLabel": "Status:",
+        "executionTimeLabel": "Tempo de Execução:",
+        "dateLabel": "Data/Hora:",
+        "jsonTitle": "Payload JSON",
+        "copyTitle": "Copiar payload",
+        "close": "Fechar"
+      }
     }
   },
   "company": {
@@ -288,6 +461,23 @@
       "name": "Nome",
       "email": "Email",
       "role": "Função"
+    },
+    "templateSelector": {
+      "label": "Template de Perfil",
+      "optional": "(Opcional)",
+      "loadError": "Erro ao carregar templates",
+      "defaultTitle": "{{role}} Padrão",
+      "defaultHint": "Usar permissões padrão do role {{role}}",
+      "systemBadge": "Sistema",
+      "basePrefix": "Base:",
+      "usageCount": "{{count}} usos",
+      "usedOn": "Usado em {{date}}",
+      "emptyTitle": "Nenhum template disponível para o role {{role}}",
+      "emptyHint": "Use as permissões padrão ou crie um template personalizado",
+      "aboutTitle": "Sobre Templates:",
+      "aboutBullet1": "Templates aplicam permissões personalizadas sobre o role base",
+      "aboutBullet2": "Templates do sistema não podem ser editados",
+      "aboutBullet3": "Você pode criar templates personalizados para sua empresa"
     },
     "table": {
       "columns": {

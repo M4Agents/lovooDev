@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { UserTemplate, UserRole } from '../../types/user';
 import { getRecommendedTemplates } from '../../services/userTemplates';
 import { Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Users } from 'lucide-react';
@@ -22,6 +23,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
   onSelectTemplate,
   disabled = false
 }) => {
+  const { t } = useTranslation('settings.app');
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         
       } catch (err) {
         console.error('TemplateSelector: Error loading templates:', err);
-        setError('Erro ao carregar templates');
+        setError(t('users.templateSelector.loadError'));
         setTemplates([]);
       } finally {
         setLoading(false);
@@ -48,7 +50,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     if (companyId && selectedRole) {
       loadTemplates();
     }
-  }, [companyId, selectedRole]);
+  }, [companyId, selectedRole, t]);
 
   // Ícone do role base
   const getRoleIcon = (role: UserRole) => {
@@ -70,31 +72,16 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     }
   };
 
-  // Nome do role em português
   const getRoleName = (role: UserRole): string => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Admin';
-      case 'support':
-        return 'Suporte';
-      case 'admin':
-        return 'Administrador';
-      case 'partner':
-        return 'Parceiro';
-      case 'manager':
-        return 'Gerente';
-      case 'seller':
-        return 'Vendedor';
-      default:
-        return 'Usuário';
-    }
+    const key = `users.roles.${role}` as const;
+    return t(key);
   };
 
   if (loading) {
     return (
       <div className="space-y-3">
         <label className="block text-sm font-medium text-slate-700">
-          Template de Perfil
+          {t('users.templateSelector.label')}
         </label>
         <div className="animate-pulse">
           <div className="h-20 bg-slate-200 rounded-lg"></div>
@@ -107,7 +94,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     return (
       <div className="space-y-3">
         <label className="block text-sm font-medium text-slate-700">
-          Template de Perfil
+          {t('users.templateSelector.label')}
         </label>
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-600">{error}</p>
@@ -119,8 +106,8 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-slate-700">
-        Template de Perfil
-        <span className="text-xs text-slate-500 ml-2">(Opcional)</span>
+        {t('users.templateSelector.label')}
+        <span className="text-xs text-slate-500 ml-2">{t('users.templateSelector.optional')}</span>
       </label>
       
       <div className="space-y-3">
@@ -139,15 +126,15 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
             </div>
             <div className="flex-1">
               <h4 className="font-medium text-slate-900">
-                {getRoleName(selectedRole)} Padrão
+                {t('users.templateSelector.defaultTitle', { role: getRoleName(selectedRole) })}
               </h4>
               <p className="text-sm text-slate-600 mt-1">
-                Usar permissões padrão do role {getRoleName(selectedRole).toLowerCase()}
+                {t('users.templateSelector.defaultHint', { role: getRoleName(selectedRole).toLowerCase() })}
               </p>
               <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
                 <span className="flex items-center space-x-1">
                   <Tag className="w-3 h-3" />
-                  <span>Sistema</span>
+                  <span>{t('users.templateSelector.systemBadge')}</span>
                 </span>
               </div>
             </div>
@@ -176,7 +163,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                   </h4>
                   {template.isSystem && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                      Sistema
+                      {t('users.templates.badgeSystem')}
                     </span>
                   )}
                 </div>
@@ -188,13 +175,13 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                 <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
                   <span className="flex items-center space-x-1">
                     <Tag className="w-3 h-3" />
-                    <span>Base: {getRoleName(template.baseRole)}</span>
+                    <span>{t('users.templates.baseLabel', { role: getRoleName(template.baseRole) })}</span>
                   </span>
                   
                   {template.usage_count && (
                     <span className="flex items-center space-x-1">
                       <Users className="w-3 h-3" />
-                      <span>{template.usage_count} usos</span>
+                      <span>{t('users.templateSelector.usageCount', { count: template.usage_count })}</span>
                     </span>
                   )}
                   
@@ -202,7 +189,9 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                     <span className="flex items-center space-x-1">
                       <Clock className="w-3 h-3" />
                       <span>
-                        Usado em {new Date(template.last_used).toLocaleDateString('pt-BR')}
+                        {t('users.templateSelector.usedOn', {
+                          date: new Date(template.last_used).toLocaleDateString('pt-BR')
+                        })}
                       </span>
                     </span>
                   )}
@@ -231,10 +220,10 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
           <div className="text-center py-8 text-slate-500">
             <User className="w-12 h-12 mx-auto mb-3 text-slate-300" />
             <p className="text-sm">
-              Nenhum template disponível para o role {getRoleName(selectedRole).toLowerCase()}
+              {t('users.templateSelector.emptyTitle', { role: getRoleName(selectedRole).toLowerCase() })}
             </p>
             <p className="text-xs mt-1">
-              Use as permissões padrão ou crie um template personalizado
+              {t('users.templateSelector.emptyHint')}
             </p>
           </div>
         )}
@@ -249,11 +238,11 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
             </div>
           </div>
           <div className="text-xs text-slate-600">
-            <p className="font-medium mb-1">Sobre Templates:</p>
+            <p className="font-medium mb-1">{t('users.templateSelector.aboutTitle')}</p>
             <ul className="space-y-1">
-              <li>• Templates aplicam permissões personalizadas sobre o role base</li>
-              <li>• Templates do sistema não podem ser editados</li>
-              <li>• Você pode criar templates personalizados para sua empresa</li>
+              <li>• {t('users.templateSelector.aboutBullet1')}</li>
+              <li>• {t('users.templateSelector.aboutBullet2')}</li>
+              <li>• {t('users.templateSelector.aboutBullet3')}</li>
             </ul>
           </div>
         </div>

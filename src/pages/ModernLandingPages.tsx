@@ -265,7 +265,7 @@ export const ModernLandingPages: React.FC = () => {
         <Card hover>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Páginas Ativas</p>
+              <p className="text-sm text-gray-500">{t('tracking.stats.activePages')}</p>
               <p className="text-2xl font-semibold text-gray-900">
                 {pages.filter(p => p.status === 'active').length}
               </p>

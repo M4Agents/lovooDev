@@ -1330,7 +1330,7 @@ export const Settings: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    🚀 URL Ultra-Simples para Leads
+                    {t('integrations.apiLeads.urlLabel')}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -1343,29 +1343,29 @@ export const Settings: React.FC = () => {
                       onClick={() => copyToClipboard('https://app.lovoocrm.com/api/webhook-lead')}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
                     >
-                      Copiar
+                      {t('integrations.actions.copy')}
                     </button>
                   </div>
                   <p className="text-xs text-emerald-600 mt-2 font-medium">
-                    ✨ Envie qualquer JSON e criamos o lead automaticamente!
+                    ✨ {t('integrations.apiLeads.urlHint')}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    🔑 Sua API Key (incluir no JSON)
+                    {t('integrations.apiLeads.apiKeyLabel')}
                   </label>
                   <div className="flex gap-2">
                     <input
                       type={showApiKey ? "text" : "password"}
-                      value={company?.api_key || 'Carregando...'}
+                      value={company?.api_key || t('integrations.actions.loading')}
                       readOnly
                       className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
                     />
                     <button
                       onClick={() => setShowApiKey(!showApiKey)}
                       className="px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-                      title={showApiKey ? "Ocultar API Key" : "Mostrar API Key"}
+                      title={showApiKey ? t('integrations.apiLeads.tooltips.hideApiKey') : t('integrations.apiLeads.tooltips.showApiKey')}
                     >
                       {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1373,36 +1373,36 @@ export const Settings: React.FC = () => {
                       onClick={() => copyToClipboard(company?.api_key || '')}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
                     >
-                      Copiar
+                      {t('integrations.actions.copy')}
                     </button>
                   </div>
                   <p className="text-xs text-slate-500 mt-2">
-                    Use esta chave no campo "api_key" do seu JSON para identificar sua empresa
+                    {t('integrations.apiLeads.apiKeyHelp')}
                   </p>
                 </div>
 
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <h4 className="font-medium text-emerald-900 mb-2">📋 Como usar (3 passos):</h4>
+                  <h4 className="font-medium text-emerald-900 mb-2">📋 {t('integrations.apiLeads.howToTitle')}</h4>
                   <div className="space-y-2 text-sm text-emerald-800">
-                    <p><strong>1.</strong> Configure seu formulário para enviar POST para a URL acima</p>
-                    <p><strong>2.</strong> Inclua sua API Key + dados do formulário em formato JSON</p>
-                    <p><strong>3.</strong> Pronto! O lead será criado automaticamente</p>
+                    <p><strong>1.</strong> {t('integrations.apiLeads.howToStep1')}</p>
+                    <p><strong>2.</strong> {t('integrations.apiLeads.howToStep2')}</p>
+                    <p><strong>3.</strong> {t('integrations.apiLeads.howToStep3')}</p>
                   </div>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">🔧 Sistema Híbrido V5:</h4>
+                  <h4 className="font-medium text-blue-900 mb-2">🔧 {t('integrations.apiLeads.hybridTitle')}</h4>
                   <div className="space-y-2 text-sm text-blue-800">
-                    <p><strong>Método:</strong> POST</p>
-                    <p><strong>Content-Type:</strong> application/json</p>
-                    <p><strong>Campos padrão (por nome):</strong></p>
+                    <p><strong>{t('integrations.apiLeads.hybridMethod')}</strong> {t('integrations.apiLeads.hybridPost')}</p>
+                    <p><strong>{t('integrations.apiLeads.hybridContentType')}</strong> {t('integrations.apiLeads.hybridJson')}</p>
+                    <p><strong>{t('integrations.apiLeads.hybridStandardTitle')}</strong></p>
                     <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
                       <li>Nome: name, nome, full_name, cliente</li>
                       <li>Email: email, e-mail, mail</li>
                       <li>Telefone: phone, telefone, celular, whatsapp</li>
                       <li>Origem: origin, origem, source, fonte</li>
                     </ul>
-                    <p><strong>Campos personalizados (por ID):</strong></p>
+                    <p><strong>{t('integrations.apiLeads.hybridCustomTitle')}</strong></p>
                     <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
                       <li>Use o ID numérico: "1": "valor", "2": "valor"</li>
                       <li>Crie campos em: Configurações → Campos Personalizados</li>
@@ -1415,7 +1415,7 @@ export const Settings: React.FC = () => {
               {/* Exemplo e Teste */}
               <div className="space-y-4">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo de Uso:</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">📝 {t('integrations.apiLeads.exampleTitle')}</h4>
                   <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                     <div className="text-gray-600">{`// Sistema Híbrido V5 - Exemplo de JSON:`}</div>
                     <div className="text-green-600 mt-2">{`{`}</div>
@@ -1431,15 +1431,15 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
                     <p className="text-xs text-purple-800">
-                      <strong>🎯 Sistema Híbrido:</strong> Campos <span className="text-blue-600 font-mono">azuis</span> são padrão (por nome), campos <span className="text-purple-600 font-mono">roxos</span> são personalizados (por ID numérico)!
+                      <strong>🎯</strong> {t('integrations.apiLeads.hybridFooter')}
                     </p>
                   </div>
                 </div>
 
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h4 className="font-medium text-yellow-900 mb-2">⚡ Teste Rápido:</h4>
+                  <h4 className="font-medium text-yellow-900 mb-2">⚡ {t('integrations.apiLeads.quickTestTitle')}</h4>
                   <p className="text-sm text-yellow-800 mb-3">
-                    Clique no botão abaixo para testar se o webhook está funcionando:
+                    {t('integrations.apiLeads.quickTestHint')}
                   </p>
                   <button
                     onClick={() => testWebhookLead()}
@@ -1449,12 +1449,12 @@ export const Settings: React.FC = () => {
                     {testingWebhook ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Testando...
+                        {t('integrations.apiLeads.testing')}
                       </>
                     ) : (
                       <>
                         <Webhook className="w-4 h-4" />
-                        Testar Webhook
+                        {t('integrations.apiLeads.testWebhook')}
                       </>
                     )}
                   </button>
@@ -1466,11 +1466,11 @@ export const Settings: React.FC = () => {
                     }`}>
                       {webhookTestResult.success ? (
                         <>
-                          ✅ <strong>Sucesso!</strong> Lead de teste criado: {webhookTestResult.lead_id}
+                          ✅ {t('integrations.apiLeads.testSuccess', { leadId: String(webhookTestResult.lead_id ?? '') })}
                         </>
                       ) : (
                         <>
-                          ❌ <strong>Erro:</strong> {webhookTestResult.error}
+                          ❌ <strong>{t('integrations.apiLeads.testErrorLabel')}</strong> {webhookTestResult.error}
                         </>
                       )}
                     </div>
@@ -1508,7 +1508,7 @@ export const Settings: React.FC = () => {
                 <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-orange-900">
-                      {editingConfigId ? '✏️ Editar Configuração de Webhook' : '➕ Nova Configuração de Webhook'}
+                      {editingConfigId ? t('integrations.webhookAdvanced.form.titleEdit') : t('integrations.webhookAdvanced.form.titleNew')}
                     </h3>
                     {editingConfigId && (
                       <button
@@ -1516,7 +1516,7 @@ export const Settings: React.FC = () => {
                         onClick={handleCancelEdit}
                         className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
                       >
-                        Cancelar Edição
+                        {t('integrations.webhookAdvanced.form.cancelEdit')}
                       </button>
                     )}
                   </div>
@@ -1525,13 +1525,13 @@ export const Settings: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Nome da Configuração *
+                          {t('integrations.webhookAdvanced.form.configName')}
                         </label>
                         <input
                           type="text"
                           value={webhookConfig.name}
                           onChange={(e) => handleWebhookConfigChange('name', e.target.value)}
-                          placeholder="Ex: Webhook Lead Convertido"
+                          placeholder={t('integrations.webhookAdvanced.form.configNamePlaceholder')}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                           required
                         />
@@ -1539,13 +1539,13 @@ export const Settings: React.FC = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          URL do Webhook *
+                          {t('integrations.webhookAdvanced.form.webhookUrl')}
                         </label>
                         <input
                           type="url"
                           value={webhookConfig.webhook_url}
                           onChange={(e) => handleWebhookConfigChange('webhook_url', e.target.value)}
-                          placeholder="https://seu-sistema.com/webhook"
+                          placeholder={t('integrations.webhookAdvanced.form.webhookUrlPlaceholder')}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                           required
                         />
@@ -1555,22 +1555,22 @@ export const Settings: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Evento de Disparo
+                          {t('integrations.webhookAdvanced.form.triggerEvent')}
                         </label>
                         <select
                           value={webhookConfig.trigger_event}
                           onChange={(e) => handleWebhookConfigChange('trigger_event', e.target.value)}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
-                          <option value="lead_created">Lead Criado</option>
-                          <option value="lead_converted">Lead Convertido</option>
-                          <option value="lead_updated">Lead Atualizado</option>
+                          <option value="lead_created">{t('integrations.webhookAdvanced.triggerOptions.lead_created')}</option>
+                          <option value="lead_converted">{t('integrations.webhookAdvanced.triggerOptions.lead_converted')}</option>
+                          <option value="lead_updated">{t('integrations.webhookAdvanced.triggerOptions.lead_updated')}</option>
                         </select>
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Timeout (segundos)
+                          {t('integrations.webhookAdvanced.form.timeoutSeconds')}
                         </label>
                         <input
                           type="number"
@@ -1584,7 +1584,7 @@ export const Settings: React.FC = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Tentativas
+                          {t('integrations.webhookAdvanced.form.retryAttempts')}
                         </label>
                         <input
                           type="number"
@@ -1606,8 +1606,8 @@ export const Settings: React.FC = () => {
                           </svg>
                         </div>
                         <div>
-                          <h3 className="text-base font-semibold text-slate-900">Configuração do Payload</h3>
-                          <p className="text-xs text-slate-600">Selecione quais campos incluir no webhook</p>
+                          <h3 className="text-base font-semibold text-slate-900">{t('integrations.webhookAdvanced.form.payloadSectionTitle')}</h3>
+                          <p className="text-xs text-slate-600">{t('integrations.webhookAdvanced.form.payloadSectionHint')}</p>
                         </div>
                       </div>
 
@@ -1620,33 +1620,23 @@ export const Settings: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
                             </div>
-                            <h4 className="text-sm font-semibold text-slate-900">Dados do Lead</h4>
+                            <h4 className="text-sm font-semibold text-slate-900">{t('integrations.webhookAdvanced.form.payloadLeadTitle')}</h4>
                           </div>
                           <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                            {[
-                              { key: 'name', label: 'Nome', desc: 'Nome completo do lead' },
-                              { key: 'email', label: 'Email', desc: 'Endereço de email' },
-                              { key: 'phone', label: 'Telefone', desc: 'Número de telefone' },
-                              { key: 'status', label: 'Status', desc: 'Status atual do lead' },
-                              { key: 'origin', label: 'Origem', desc: 'Fonte de origem do lead' },
-                              { key: 'interest', label: 'Interesse', desc: 'Interesse do lead' },
-                              { key: 'responsible_user_id', label: 'Responsável', desc: 'Usuário responsável' },
-                              { key: 'created_at', label: 'Data de Criação', desc: 'Quando o lead foi criado' },
-                              { key: 'updated_at', label: 'Última Atualização', desc: 'Última modificação' }
-                            ].map((field) => (
-                              <label key={field.key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
+                            {(['name', 'email', 'phone', 'status', 'origin', 'interest', 'responsible_user_id', 'created_at', 'updated_at'] as const).map((key) => (
+                              <label key={key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
                                 <input
                                   type="checkbox"
-                                  checked={webhookConfig.payload_fields.lead.includes(field.key)}
-                                  onChange={() => handleFieldToggle('lead', field.key)}
+                                  checked={webhookConfig.payload_fields.lead.includes(key)}
+                                  onChange={() => handleFieldToggle('lead', key)}
                                   className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-slate-900 group-hover:text-orange-600 transition-colors">
-                                    {field.label}
+                                    {t(`integrations.webhookAdvanced.payload.lead.${key}.label`)}
                                   </div>
                                   <div className="text-xs text-slate-500 leading-tight">
-                                    {field.desc}
+                                    {t(`integrations.webhookAdvanced.payload.lead.${key}.desc`)}
                                   </div>
                                 </div>
                               </label>
@@ -1662,35 +1652,23 @@ export const Settings: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                               </svg>
                             </div>
-                            <h4 className="text-sm font-semibold text-slate-900">Empresa do Lead</h4>
+                            <h4 className="text-sm font-semibold text-slate-900">{t('integrations.webhookAdvanced.form.payloadCompanyTitle')}</h4>
                           </div>
                           <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                            {[
-                              { key: 'company_name', label: 'Nome da Empresa', desc: 'Nome da empresa do lead' },
-                              { key: 'company_cnpj', label: 'CNPJ', desc: 'CNPJ da empresa do lead' },
-                              { key: 'company_razao_social', label: 'Razão Social', desc: 'Razão social da empresa' },
-                              { key: 'company_nome_fantasia', label: 'Nome Fantasia', desc: 'Nome fantasia da empresa' },
-                              { key: 'company_telefone', label: 'Telefone', desc: 'Telefone da empresa' },
-                              { key: 'company_email', label: 'Email', desc: 'Email da empresa' },
-                              { key: 'company_site', label: 'Site', desc: 'Website da empresa' },
-                              { key: 'company_cidade', label: 'Cidade', desc: 'Cidade da empresa' },
-                              { key: 'company_estado', label: 'Estado', desc: 'Estado da empresa' },
-                              { key: 'company_cep', label: 'CEP', desc: 'CEP da empresa' },
-                              { key: 'company_endereco', label: 'Endereço', desc: 'Endereço completo' }
-                            ].map((field) => (
-                              <label key={field.key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
+                            {(['company_name', 'company_cnpj', 'company_razao_social', 'company_nome_fantasia', 'company_telefone', 'company_email', 'company_site', 'company_cidade', 'company_estado', 'company_cep', 'company_endereco'] as const).map((key) => (
+                              <label key={key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
                                 <input
                                   type="checkbox"
-                                  checked={webhookConfig.payload_fields.empresa.includes(field.key)}
-                                  onChange={() => handleFieldToggle('empresa', field.key)}
+                                  checked={webhookConfig.payload_fields.empresa.includes(key)}
+                                  onChange={() => handleFieldToggle('empresa', key)}
                                   className="mt-0.5 w-3.5 h-3.5 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-1"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-slate-900 group-hover:text-emerald-600 transition-colors">
-                                    {field.label}
+                                    {t(`integrations.webhookAdvanced.payload.empresa.${key}.label`)}
                                   </div>
                                   <div className="text-xs text-slate-500 leading-tight">
-                                    {field.desc}
+                                    {t(`integrations.webhookAdvanced.payload.empresa.${key}.desc`)}
                                   </div>
                                 </div>
                               </label>
@@ -1707,7 +1685,7 @@ export const Settings: React.FC = () => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
                                 </svg>
                               </div>
-                              <h4 className="text-sm font-semibold text-slate-900">Campos Personalizados</h4>
+                              <h4 className="text-sm font-semibold text-slate-900">{t('integrations.webhookAdvanced.form.payloadCustomTitle')}</h4>
                             </div>
                             <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
                               {availableCustomFields.map((field) => (
@@ -1728,11 +1706,11 @@ export const Settings: React.FC = () => {
                                       {field.field_label}
                                     </div>
                                     <div className="text-xs text-slate-500 leading-tight">
-                                      {field.field_type === 'text' && 'Campo de texto'}
-                                      {field.field_type === 'number' && 'Campo numérico'}
-                                      {field.field_type === 'date' && 'Campo de data'}
-                                      {field.field_type === 'boolean' && 'Campo sim/não'}
-                                      {field.field_type === 'select' && 'Lista de opções'}
+                                      {field.field_type === 'text' && t('integrations.webhookAdvanced.fieldTypes.text')}
+                                      {field.field_type === 'number' && t('integrations.webhookAdvanced.fieldTypes.number')}
+                                      {field.field_type === 'date' && t('integrations.webhookAdvanced.fieldTypes.date')}
+                                      {field.field_type === 'boolean' && t('integrations.webhookAdvanced.fieldTypes.boolean')}
+                                      {field.field_type === 'select' && t('integrations.webhookAdvanced.fieldTypes.select')}
                                     </div>
                                   </div>
                                 </label>
@@ -1749,9 +1727,9 @@ export const Settings: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           <div>
-                            <h5 className="text-sm font-medium text-blue-900 mb-0.5">Dica de Configuração</h5>
+                            <h5 className="text-sm font-medium text-blue-900 mb-0.5">{t('integrations.webhookAdvanced.form.payloadTipTitle')}</h5>
                             <p className="text-xs text-blue-800 leading-relaxed">
-                              Selecione apenas os campos necessários para otimizar o payload. O ID do lead é sempre incluído automaticamente.
+                              {t('integrations.webhookAdvanced.form.payloadTipBody')}
                             </p>
                           </div>
                         </div>
@@ -1760,7 +1738,7 @@ export const Settings: React.FC = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Headers Personalizados (JSON)
+                        {t('integrations.webhookAdvanced.form.headersLabel')}
                       </label>
                       <textarea
                         value={webhookConfig.headers}
@@ -1779,7 +1757,7 @@ export const Settings: React.FC = () => {
                         className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         <Save className="w-4 h-4" />
-                        {savingWebhook ? 'Salvando...' : (editingConfigId ? 'Atualizar Configuração' : 'Criar Configuração')}
+                        {savingWebhook ? t('integrations.webhookAdvanced.form.saving') : (editingConfigId ? t('integrations.webhookAdvanced.form.submitUpdate') : t('integrations.webhookAdvanced.form.submitCreate'))}
                       </button>
                       <button
                         type="button"
@@ -1787,7 +1765,7 @@ export const Settings: React.FC = () => {
                         disabled={testingWebhook}
                         className="px-6 py-3 border border-orange-300 text-orange-700 rounded-lg font-medium hover:bg-orange-50 transition-colors disabled:opacity-50"
                       >
-                        {testingWebhook ? 'Testando...' : 'Testar Webhook'}
+                        {testingWebhook ? t('integrations.webhookAdvanced.form.testing') : t('integrations.webhookAdvanced.form.testWebhook')}
                       </button>
                     </div>
                   </form>
@@ -1795,12 +1773,12 @@ export const Settings: React.FC = () => {
 
                 {/* Lista de Configurações */}
                 <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4">⚙️ Configurações Existentes</h3>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('integrations.webhookAdvanced.configsTitle')}</h3>
                   
                   {webhookConfigs.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
-                      <p>Nenhuma configuração criada ainda</p>
-                      <p className="text-sm">Crie sua primeira configuração acima</p>
+                      <p>{t('integrations.webhookAdvanced.configsEmpty')}</p>
+                      <p className="text-sm">{t('integrations.webhookAdvanced.configsEmptyHint')}</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -1811,27 +1789,27 @@ export const Settings: React.FC = () => {
                               <h4 className="font-medium text-slate-900">{config.name}</h4>
                               <p className="text-sm text-slate-600 mt-1">{config.webhook_url}</p>
                               <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                                <span>Evento: {config.trigger_events?.[0] || 'N/A'}</span>
-                                <span>Status: {config.is_active ? '✅ Ativo' : '❌ Inativo'}</span>
-                                <span>Timeout: {config.timeout_seconds}s</span>
-                                <span>Retry: {config.retry_attempts}x</span>
+                                <span>{t('integrations.webhookAdvanced.eventLabel')} {config.trigger_events?.[0] || t('users.notAvailable')}</span>
+                                <span>{t('integrations.webhookAdvanced.statusLabel')} {config.is_active ? `✅ ${t('integrations.webhookAdvanced.statusActive')}` : `❌ ${t('integrations.webhookAdvanced.statusInactive')}`}</span>
+                                <span>{t('integrations.webhookAdvanced.timeoutLabel')} {config.timeout_seconds}s</span>
+                                <span>{t('integrations.webhookAdvanced.retryLabel')} {config.retry_attempts}x</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button 
                                 onClick={() => handleEditWebhookConfig(config)}
                                 className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                                title="Editar configuração"
+                                title={t('integrations.webhookAdvanced.edit')}
                               >
-                                Editar
+                                {t('integrations.webhookAdvanced.edit')}
                               </button>
                               <button 
                                 onClick={() => handleDeleteWebhookConfig(config.id, config.name)}
                                 disabled={deletingConfigId === config.id}
                                 className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50"
-                                title="Excluir configuração"
+                                title={t('integrations.webhookAdvanced.delete')}
                               >
-                                {deletingConfigId === config.id ? 'Excluindo...' : 'Excluir'}
+                                {deletingConfigId === config.id ? t('integrations.webhookAdvanced.deleting') : t('integrations.webhookAdvanced.delete')}
                               </button>
                             </div>
                           </div>
@@ -1849,8 +1827,8 @@ export const Settings: React.FC = () => {
                         <Clock className="w-5 h-5 text-purple-600" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">📊 Logs de Disparos</h3>
-                        <p className="text-sm text-slate-600">Histórico de execuções dos webhooks</p>
+                        <h3 className="text-lg font-semibold text-slate-900">{t('integrations.webhookAdvanced.logsTitle')}</h3>
+                        <p className="text-sm text-slate-600">{t('integrations.webhookAdvanced.logsSubtitle')}</p>
                       </div>
                     </div>
                     <button
@@ -1859,7 +1837,7 @@ export const Settings: React.FC = () => {
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Clock className="w-4 h-4" />
-                      {loadingAdvancedLogs ? 'Atualizando...' : 'Atualizar'}
+                      {loadingAdvancedLogs ? t('integrations.webhookAdvanced.refreshing') : t('integrations.webhookAdvanced.refresh')}
                     </button>
                   </div>
 
@@ -1867,40 +1845,40 @@ export const Settings: React.FC = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-slate-50 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-slate-900">{advancedLogsStats.total}</div>
-                      <div className="text-sm text-slate-600">Total</div>
+                      <div className="text-sm text-slate-600">{t('integrations.webhookAdvanced.statsTotal')}</div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-green-600">{advancedLogsStats.success}</div>
-                      <div className="text-sm text-green-700">Sucessos</div>
+                      <div className="text-sm text-green-700">{t('integrations.webhookAdvanced.statsSuccess')}</div>
                     </div>
                     <div className="bg-red-50 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-red-600">{advancedLogsStats.errors}</div>
-                      <div className="text-sm text-red-700">Erros</div>
+                      <div className="text-sm text-red-700">{t('integrations.webhookAdvanced.statsErrors')}</div>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-blue-600">{advancedLogsStats.last24h}</div>
-                      <div className="text-sm text-blue-700">Últimas 24h</div>
+                      <div className="text-sm text-blue-700">{t('integrations.webhookAdvanced.statsLast24h')}</div>
                     </div>
                   </div>
 
                   {/* Filtros */}
                   <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                    <h4 className="font-medium text-slate-900 mb-3">🔍 Filtros</h4>
+                    <h4 className="font-medium text-slate-900 mb-3">{t('integrations.webhookAdvanced.filtersTitle')}</h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">{t('integrations.webhookAdvanced.filterStatus')}</label>
                         <select
                           value={logsFilters.status}
                           onChange={(e) => handleLogsFilterChange('status', e.target.value)}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                         >
-                          <option value="">Todos</option>
-                          <option value="success">Sucesso</option>
-                          <option value="error">Erro</option>
+                          <option value="">{t('integrations.webhookAdvanced.filterAll')}</option>
+                          <option value="success">{t('integrations.webhookAdvanced.filterSuccess')}</option>
+                          <option value="error">{t('integrations.webhookAdvanced.filterError')}</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Data Início</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">{t('integrations.webhookAdvanced.filterDateFrom')}</label>
                         <input
                           type="date"
                           value={logsFilters.dateFrom}
@@ -1909,7 +1887,7 @@ export const Settings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Data Fim</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">{t('integrations.webhookAdvanced.filterDateTo')}</label>
                         <input
                           type="date"
                           value={logsFilters.dateTo}
@@ -1922,13 +1900,13 @@ export const Settings: React.FC = () => {
                           onClick={applyLogsFilters}
                           className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors text-sm"
                         >
-                          Aplicar
+                          {t('integrations.webhookAdvanced.applyFilters')}
                         </button>
                         <button
                           onClick={clearLogsFilters}
                           className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm"
                         >
-                          Limpar
+                          {t('integrations.webhookAdvanced.clearFilters')}
                         </button>
                       </div>
                     </div>
@@ -1938,13 +1916,13 @@ export const Settings: React.FC = () => {
                   {loadingAdvancedLogs ? (
                     <div className="text-center py-8">
                       <Clock className="w-8 h-8 mx-auto mb-2 text-slate-400 animate-spin" />
-                      <p className="text-slate-600">Carregando logs...</p>
+                      <p className="text-slate-600">{t('integrations.webhookAdvanced.logsLoading')}</p>
                     </div>
                   ) : advancedLogs.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
                       <Clock className="w-12 h-12 mx-auto mb-2 text-slate-400" />
-                      <p>Nenhum log de disparo encontrado</p>
-                      <p className="text-sm">Os logs aparecerão aqui quando webhooks forem disparados</p>
+                      <p>{t('integrations.webhookAdvanced.logsEmpty')}</p>
+                      <p className="text-sm">{t('integrations.webhookAdvanced.logsEmptyHint')}</p>
                     </div>
                   ) : (
                     <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -1957,19 +1935,19 @@ export const Settings: React.FC = () => {
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
                                   log.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                                 }`}>
-                                  {log.success ? '✅ Sucesso' : '❌ Erro'}
+                                  {log.success ? `✅ ${t('integrations.webhookAdvanced.logSuccess')}` : `❌ ${t('integrations.webhookAdvanced.logError')}`}
                                 </span>
                                 {log.success === false && (
                                   <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-700">
-                                    ⚠️ Verificar logs
+                                    ⚠️ {t('integrations.webhookAdvanced.logCheckHint')}
                                   </span>
                                 )}
                               </div>
                               <p className="text-sm text-slate-600 mb-2">{log.webhook_url}</p>
                               <div className="flex items-center gap-4 text-xs text-slate-500">
-                                <span>Evento: {log.trigger_event || 'N/A'}</span>
-                                {log.response_status && <span>Status: {log.response_status}</span>}
-                                <span>Data: {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : 'Data não disponível'}</span>
+                                <span>{t('integrations.webhookAdvanced.eventLabel')} {log.trigger_event || t('users.notAvailable')}</span>
+                                {log.response_status && <span>{t('integrations.webhookAdvanced.statusLabel')} {log.response_status}</span>}
+                                <span>{t('integrations.webhookAdvanced.logDatePrefix')} {log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : t('integrations.webhookAdvanced.logDateUnavailable')}</span>
                               </div>
                             </div>
                             
@@ -1978,13 +1956,13 @@ export const Settings: React.FC = () => {
                               <button
                                 onClick={() => handleViewPayload(log)}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
-                                title="Visualizar payload enviado"
+                                title={t('integrations.webhookAdvanced.viewPayloadTitle')}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
-                                Ver Payload
+                                {t('integrations.webhookAdvanced.viewPayload')}
                               </button>
                             </div>
                           </div>
@@ -1992,7 +1970,7 @@ export const Settings: React.FC = () => {
                           {log.error_message && (
                             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm">
                               <div className="flex items-start gap-2">
-                                <span className="text-red-600 font-medium">❌ Erro:</span>
+                                <span className="text-red-600 font-medium">❌ {t('integrations.webhookAdvanced.errorPrefix')}</span>
                                 <span className="text-red-700">{log.error_message}</span>
                               </div>
                             </div>
@@ -2001,7 +1979,7 @@ export const Settings: React.FC = () => {
                           {log.response_body && (
                             <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded text-sm">
                               <div className="flex items-start gap-2">
-                                <span className="text-slate-600 font-medium">📄 Resposta:</span>
+                                <span className="text-slate-600 font-medium">📄 {t('integrations.webhookAdvanced.responseLabel')}</span>
                                 <span className="text-slate-700 font-mono text-xs">{log.response_body}</span>
                               </div>
                             </div>
@@ -2011,13 +1989,13 @@ export const Settings: React.FC = () => {
                           {log.success === false && !log.error_message && (
                             <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
                               <div className="flex items-start gap-2">
-                                <span className="text-blue-600 font-medium">ℹ️ Informação:</span>
+                                <span className="text-blue-600 font-medium">ℹ️ {t('integrations.webhookAdvanced.infoLabel')}</span>
                                 <div className="text-blue-700">
-                                  <p>O webhook foi disparado mas está marcado como erro no banco de dados.</p>
+                                  <p>{t('integrations.webhookAdvanced.debugInfoP1')}</p>
                                   <p className="mt-1 text-xs">
-                                    <strong>Teste manual:</strong> O webhook responde corretamente (200 OK) quando testado diretamente.
+                                    {t('integrations.webhookAdvanced.debugInfoManual')}
                                     <br />
-                                    <strong>Problema:</strong> A função RPC que registra os logs precisa ser atualizada.
+                                    {t('integrations.webhookAdvanced.debugInfoProblem')}
                                   </p>
                                 </div>
                               </div>
@@ -2031,9 +2009,7 @@ export const Settings: React.FC = () => {
                   {/* Rodapé com informações */}
                   <div className="mt-4 pt-4 border-t border-slate-200 text-center">
                     <p className="text-xs text-slate-500">
-                      Mostrando {advancedLogs.length} log(s) • 
-                      Atualizado automaticamente • 
-                      Dados em tempo real
+                      {t('integrations.webhookAdvanced.footerSummary', { count: advancedLogs.length })}
                     </p>
                   </div>
                 </div>
@@ -2080,7 +2056,7 @@ export const Settings: React.FC = () => {
                   {/* Endpoint de Mapeamento */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      📋 Consultar Funis e Etapas
+                      📋 {t('integrations.funnelApi.endpointMappingLabel')}
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -2093,7 +2069,7 @@ export const Settings: React.FC = () => {
                         onClick={() => copyToClipboard('https://app.lovoocrm.com/api/funnel/mapping')}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                       >
-                        Copiar
+                        {t('integrations.actions.copy')}
                       </button>
                     </div>
                     <p className="text-xs text-blue-600 mt-2 font-medium">
@@ -2104,7 +2080,7 @@ export const Settings: React.FC = () => {
                   {/* Endpoint de Movimentação */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      🚀 Mover Lead entre Etapas
+                      🚀 {t('integrations.funnelApi.endpointMoveLabel')}
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -2117,7 +2093,7 @@ export const Settings: React.FC = () => {
                         onClick={() => copyToClipboard('https://app.lovoocrm.com/api/funnel/move-lead')}
                         className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
                       >
-                        Copiar
+                        {t('integrations.actions.copy')}
                       </button>
                     </div>
                     <p className="text-xs text-orange-600 mt-2 font-medium">
@@ -2128,19 +2104,19 @@ export const Settings: React.FC = () => {
                   {/* API Key */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      🔑 Sua API Key
+                      🔑 {t('integrations.funnelApi.apiKeyLabel')}
                     </label>
                     <div className="flex gap-2">
                       <input
                         type={showApiKey ? "text" : "password"}
-                        value={company?.api_key || 'Carregando...'}
+                        value={company?.api_key || t('integrations.actions.loading')}
                         readOnly
                         className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
                       />
                       <button
                         onClick={() => setShowApiKey(!showApiKey)}
                         className="px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-                        title={showApiKey ? "Ocultar API Key" : "Mostrar API Key"}
+                        title={showApiKey ? t('integrations.apiLeads.tooltips.hideApiKey') : t('integrations.apiLeads.tooltips.showApiKey')}
                       >
                         {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -2148,27 +2124,27 @@ export const Settings: React.FC = () => {
                         onClick={() => copyToClipboard(company?.api_key || '')}
                         className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
                       >
-                        Copiar
+                        {t('integrations.actions.copy')}
                       </button>
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                      Use esta chave no parâmetro api_key de todas as requisições
+                      {t('integrations.funnelApi.apiKeyHelp')}
                     </p>
                   </div>
 
                   {/* Como Usar */}
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                    <h4 className="font-medium text-orange-900 mb-2">📋 Como usar (3 passos):</h4>
+                    <h4 className="font-medium text-orange-900 mb-2">📋 {t('integrations.funnelApi.howToTitle')}</h4>
                     <div className="space-y-2 text-sm text-orange-800">
-                      <p><strong>1.</strong> Consulte o endpoint de mapeamento para obter slugs</p>
-                      <p><strong>2.</strong> Envie POST com lead_id, funnel_slug e stage_slug</p>
-                      <p><strong>3.</strong> Lead será movido automaticamente com histórico</p>
+                      <p><strong>1.</strong> {t('integrations.funnelApi.howToStep1')}</p>
+                      <p><strong>2.</strong> {t('integrations.funnelApi.howToStep2')}</p>
+                      <p><strong>3.</strong> {t('integrations.funnelApi.howToStep3')}</p>
                     </div>
                   </div>
 
                   {/* Informações Técnicas */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2">🔧 Informações Técnicas:</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">🔧 {t('integrations.funnelApi.techInfoTitle')}</h4>
                     <div className="space-y-2 text-sm text-blue-800">
                       <p><strong>Método Mapeamento:</strong> GET</p>
                       <p><strong>Método Movimentação:</strong> POST</p>
@@ -2195,7 +2171,7 @@ export const Settings: React.FC = () => {
                   
                   {/* Exemplo 1: Consultar Mapeamento */}
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">📝 Exemplo 1: Consultar Funis</h4>
+                    <h4 className="font-medium text-gray-900 mb-2">📝 {t('integrations.funnelApi.exampleMappingTitle')}</h4>
                     <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                       <div className="text-gray-600">{'// GET /api/funnel/mapping?api_key=SUA_KEY'}</div>
                       <div className="text-green-600 mt-2">{'// Resposta:'}</div>
@@ -2222,7 +2198,7 @@ export const Settings: React.FC = () => {
 
                   {/* Exemplo 2: Mover Lead (RECOMENDADO - usando external_id) */}
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium text-green-900 mb-2">✅ Exemplo 2: Mover Lead (RECOMENDADO)</h4>
+                    <h4 className="font-medium text-green-900 mb-2">✅ {t('integrations.funnelApi.exampleMoveTitle')}</h4>
                     <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                       <div className="text-gray-600">{'// POST /api/funnel/move-lead'}</div>
                       <div className="text-green-600 mt-2">{'{'}</div>
@@ -2234,13 +2210,13 @@ export const Settings: React.FC = () => {
                       <div className="text-green-600">{'}'}</div>
                     </div>
                     <p className="text-xs text-green-700 mt-2">
-                      💡 <strong>Vantagem:</strong> Funciona mesmo se o usuário renomear a etapa
+                      💡 <strong>{t('integrations.funnelApi.advantageLabel')}</strong> {t('integrations.funnelApi.exampleMoveFooter')}
                     </p>
                   </div>
 
                   {/* Resposta de Sucesso */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2">✅ Resposta de Sucesso:</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">✅ {t('integrations.funnelApi.exampleSuccessTitle')}</h4>
                     <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
                       <div className="text-green-600">{'{'}</div>
                       <div className="ml-2">{'  "success": true,'}</div>
@@ -2259,7 +2235,7 @@ export const Settings: React.FC = () => {
 
                   {/* External IDs Disponíveis */}
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h4 className="font-medium text-purple-900 mb-2">🏷️ External IDs do Funil SDR:</h4>
+                    <h4 className="font-medium text-purple-900 mb-2">🏷️ {t('integrations.funnelApi.externalIdsTitle')}</h4>
                     <div className="space-y-1 text-sm text-purple-800">
                       <p className="font-mono text-xs flex justify-between">
                         <span className="text-green-600 font-bold">stage_0_12134b5f</span>
@@ -3126,15 +3102,15 @@ export const Settings: React.FC = () => {
                   <SettingsIcon className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Documentação Completa da API</h2>
-                  <p className="text-sm text-slate-600">Guia completo para desenvolvedores</p>
+                  <h2 className="text-xl font-semibold text-slate-900">{t('integrations.modals.documentation.title')}</h2>
+                  <p className="text-sm text-slate-600">{t('integrations.modals.documentation.subtitle')}</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowDocumentationModal(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <span className="sr-only">Fechar</span>
+                <span className="sr-only">{t('users.actions.close')}</span>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -3363,7 +3339,7 @@ export const Settings: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-slate-200">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Payload Enviado</h2>
+                <h2 className="text-xl font-semibold text-slate-900">{t('integrations.modals.payload.title')}</h2>
                 <p className="text-sm text-slate-600 mt-1">{selectedPayload.webhookName}</p>
               </div>
               <button
@@ -3380,21 +3356,21 @@ export const Settings: React.FC = () => {
               {/* Informações do Webhook */}
               <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
                 <div>
-                  <span className="text-sm font-medium text-slate-600">URL:</span>
+                  <span className="text-sm font-medium text-slate-600">{t('integrations.modals.payload.urlLabel')}</span>
                   <p className="text-sm text-slate-900 font-mono break-all">{selectedPayload.webhookUrl}</p>
                 </div>
                 <div>
-                  <span className="text-sm font-medium text-slate-600">Status:</span>
-                  <p className="text-sm text-slate-900">{selectedPayload.responseStatus || 'N/A'}</p>
+                  <span className="text-sm font-medium text-slate-600">{t('integrations.modals.payload.statusLabel')}</span>
+                  <p className="text-sm text-slate-900">{selectedPayload.responseStatus || t('users.notAvailable')}</p>
                 </div>
                 <div>
-                  <span className="text-sm font-medium text-slate-600">Tempo de Execução:</span>
-                  <p className="text-sm text-slate-900">{selectedPayload.executionTime ? `${selectedPayload.executionTime}ms` : 'N/A'}</p>
+                  <span className="text-sm font-medium text-slate-600">{t('integrations.modals.payload.executionTimeLabel')}</span>
+                  <p className="text-sm text-slate-900">{selectedPayload.executionTime ? `${selectedPayload.executionTime}ms` : t('users.notAvailable')}</p>
                 </div>
                 <div>
-                  <span className="text-sm font-medium text-slate-600">Data/Hora:</span>
+                  <span className="text-sm font-medium text-slate-600">{t('integrations.modals.payload.dateLabel')}</span>
                   <p className="text-sm text-slate-900">
-                    {selectedPayload.triggeredAt ? new Date(selectedPayload.triggeredAt).toLocaleString('pt-BR') : 'N/A'}
+                    {selectedPayload.triggeredAt ? new Date(selectedPayload.triggeredAt).toLocaleString('pt-BR') : t('users.notAvailable')}
                   </p>
                 </div>
               </div>
@@ -3402,19 +3378,19 @@ export const Settings: React.FC = () => {
               {/* Payload JSON */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-medium text-slate-900">Payload JSON</h3>
+                  <h3 className="text-lg font-medium text-slate-900">{t('integrations.modals.payload.jsonTitle')}</h3>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(JSON.stringify(selectedPayload.payload, null, 2));
                       // Você pode adicionar um toast aqui se quiser
                     }}
                     className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
-                    title="Copiar payload"
+                    title={t('integrations.modals.payload.copyTitle')}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    Copiar
+                    {t('integrations.actions.copy')}
                   </button>
                 </div>
                 
@@ -3431,7 +3407,7 @@ export const Settings: React.FC = () => {
                 onClick={() => setPayloadModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
               >
-                Fechar
+                {t('integrations.modals.payload.close')}
               </button>
             </div>
           </div>
