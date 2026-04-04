@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Loader2, AlertCircle, Search } from 'lucide-react'
 
 interface Lead {
@@ -31,6 +32,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
   stageId,
   availableLeads
 }) => {
+  const { t } = useTranslation('funnel')
   const [selectedLeadId, setSelectedLeadId] = useState<number>()
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(false)
@@ -50,7 +52,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
     e.preventDefault()
     
     if (!selectedLeadId) {
-      setError('Selecione um lead')
+      setError(t('addLeadModal.selectLead'))
       return
     }
 
@@ -61,7 +63,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
       
       handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao adicionar lead')
+      setError(err instanceof Error ? err.message : t('addLeadModal.errorAdd'))
     } finally {
       setLoading(false)
     }
@@ -84,7 +86,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            Adicionar Lead ao Funil
+            {t('addLeadModal.title')}
           </h2>
           <button
             onClick={handleClose}
@@ -103,7 +105,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nome, email ou telefone..."
+              placeholder={t('addLeadModal.searchPlaceholder')}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
             />
@@ -115,7 +117,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
           {filteredLeads.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500">
-                {searchTerm ? 'Nenhum lead encontrado' : 'Nenhum lead disponível'}
+                {searchTerm ? t('addLeadModal.emptySearch') : t('addLeadModal.emptyList')}
               </p>
             </div>
           ) : (
@@ -186,7 +188,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
             disabled={loading}
             className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            Cancelar
+            {t('form.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -194,7 +196,7 @@ export const AddLeadToFunnelModal: React.FC<AddLeadToFunnelModalProps> = ({
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Adicionando...' : 'Adicionar Lead'}
+            {loading ? t('addLeadModal.adding') : t('addLeadModal.submit')}
           </button>
         </div>
       </div>

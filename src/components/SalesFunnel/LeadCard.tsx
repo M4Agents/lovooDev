@@ -6,6 +6,7 @@
 // =====================================================
 
 import React, { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Draggable } from '@hello-pangea/dnd'
 import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info } from 'lucide-react'
 import { Avatar } from '../Avatar'
@@ -44,6 +45,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   onDetailClick,
   companyUsers = []
 }) => {
+  const { t } = useTranslation('funnel')
   const opportunity = position.opportunity
   const lead = opportunity?.lead
   const ownerUser = opportunity?.owner_user_id
@@ -136,7 +138,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   onDetailClick(position.opportunity_id)
                 }}
                 className="absolute top-0 right-0 opacity-40 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
-                title="Ver detalhes e jornada"
+                title={t('leadCard.detailTooltip')}
               >
                 <Info className="w-4 h-4" />
               </button>
@@ -185,7 +187,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('last_contact_at') && lead.last_contact_at && (
               <div className="flex items-center gap-2 text-xs text-gray-600">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                <span>Último contato: {new Date(lead.last_contact_at).toLocaleDateString('pt-BR')}</span>
+                <span>
+                  {t('leadCard.lastContact', {
+                    date: new Date(lead.last_contact_at).toLocaleDateString('pt-BR')
+                  })}
+                </span>
               </div>
             )}
           </div>
@@ -216,7 +222,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   onMouseDown={e => e.stopPropagation()}
                   onClick={handleOpenTagPopover}
                   className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                  title="Gerenciar tags"
+                  title={t('leadCard.manageTagsTooltip')}
                 >
                   <Plus className="w-3 h-3" />
                 </button>
@@ -245,7 +251,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               {/* Avatar do owner */}
               {opportunity?.owner_user_id && (
                 <div
-                  title={ownerUser?.display_name || ownerUser?.email || 'Responsável'}
+                  title={ownerUser?.display_name || ownerUser?.email || t('leadCard.ownerFallback')}
                   className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold flex-shrink-0 cursor-default"
                 >
                   {getOwnerInitials(ownerUser)}

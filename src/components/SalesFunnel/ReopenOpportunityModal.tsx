@@ -8,6 +8,7 @@
 
 import { Loader2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReopenOpportunityParams } from '../../types/sales-funnel'
 
 interface ReopenOpportunityModalProps {
@@ -24,14 +25,6 @@ interface ReopenOpportunityModalProps {
   onCancel: () => void
 }
 
-const formatDate = (iso?: string): string => {
-  if (!iso) return 'data não registrada'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  }).format(new Date(iso))
-}
-
 export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
   isOpen,
   opportunityTitle,
@@ -45,12 +38,21 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
   onConfirm,
   onCancel
 }) => {
+  const { t } = useTranslation('funnel')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
 
+  const formatClosedDate = (iso?: string): string => {
+    if (!iso) return t('reopenOpportunity.dateUnknown')
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    }).format(new Date(iso))
+  }
+
   if (!isOpen) return null
 
-  const statusLabel = currentStatus === 'won' ? 'Ganha' : 'Perdida'
+  const statusLabel = currentStatus === 'won' ? t('reopenOpportunity.statusWon') : t('reopenOpportunity.statusLost')
 
   const handleConfirm = async () => {
     setError(undefined)
@@ -64,7 +66,7 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
         company_id:        companyId
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao reabrir oportunidade')
+      setError(err instanceof Error ? err.message : t('reopenOpportunity.errorGeneric'))
     } finally {
       setLoading(false)
     }
@@ -87,7 +89,7 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
             <RotateCcw className="w-5 h-5 text-amber-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-amber-900">Reabrir Oportunidade</h2>
+            <h2 className="text-base font-semibold text-amber-900">{t('reopenOpportunity.title')}</h2>
             <p className="text-sm text-gray-500 truncate">{opportunityTitle}</p>
           </div>
         </div>
@@ -100,48 +102,51 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
             <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
             <div className="text-sm text-gray-700 space-y-1">
               <p>
-                Esta oportunidade está marcada como <span className="font-semibold">{statusLabel}</span>
-                {closedAt && <span> em {formatDate(closedAt)}</span>}.
+                {t('reopenOpportunity.introPrefix')}{' '}
+                <span className="font-semibold">{statusLabel}</span>
+                {closedAt && <span>{t('reopenOpportunity.introDate', { date: formatClosedDate(closedAt) })}</span>}.
               </p>
               <p className="text-gray-500">
-                Ao confirmar, ela voltará ao status <span className="font-medium text-gray-700">Em Aberto</span>.
+                {t('reopenOpportunity.willOpen')}{' '}
+                <span className="font-medium text-gray-700">{t('reopenOpportunity.statusOpen')}</span>.
               </p>
             </div>
           </div>
 
           {/* O que acontece */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">O que será alterado</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('reopenOpportunity.changesHeading')}</p>
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                Status volta para <span className="font-medium text-gray-800">Em Aberto</span>
+                {t('reopenOpportunity.change1')}{' '}
+                <span className="font-medium text-gray-800">{t('reopenOpportunity.change1b')}</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                Data de fechamento será removida
+                {t('reopenOpportunity.change2')}
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                Motivo de perda será removido (se houver)
+                {t('reopenOpportunity.change3')}
               </li>
             </ul>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">O que será preservado</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('reopenOpportunity.preservedHeading')}</p>
             <ul className="space-y-1.5 text-sm text-gray-600">
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                Histórico de fechamento anterior (para relatórios)
+                {t('reopenOpportunity.preserve1')}
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                Valor da oportunidade
+                {t('reopenOpportunity.preserve2')}
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                Todos os dados e contato do lead
+                {t('reopenOpportunity.preserve3')}
               </li>
             </ul>
           </div>
@@ -161,7 +166,7 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
             disabled={loading}
             className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            Cancelar
+            {t('form.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -169,7 +174,7 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-50"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            Confirmar Reabertura
+            {t('reopenOpportunity.confirmReopen')}
           </button>
         </div>
 

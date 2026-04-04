@@ -8,7 +8,8 @@
 // Aba "Status" mantém a linha do tempo de transições de status.
 // =====================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
@@ -109,9 +110,11 @@ const TimelineEntry: React.FC<{
   isLast: boolean
   /** Moeda atual da oportunidade — usada quando o snapshot legado não tem currency_code */
   fallbackCurrency: string
-}> = ({ entry, isLast, fallbackCurrency }) => {
-  const toConfig   = statusConfig[entry.to_status]   ?? statusConfig.open
-  const fromConfig = entry.from_status ? (statusConfig[entry.from_status] ?? null) : null
+  statusConfig: typeof statusConfig
+}> = ({ entry, isLast, fallbackCurrency, statusConfig: sc }) => {
+  const { t } = useTranslation('funnel')
+  const toConfig   = sc[entry.to_status]   ?? sc.open
+  const fromConfig = entry.from_status ? (sc[entry.from_status] ?? null) : null
 
   return (
     <div className="flex gap-3">
@@ -135,15 +138,19 @@ const TimelineEntry: React.FC<{
                   <span className={toConfig.color}>{toConfig.label}</span>
                 </span>
               ) : (
-                <span className={toConfig.color}>Status: {toConfig.label}</span>
+                <span className={toConfig.color}>
+                  {t('opportunityDetail.timeline.statusPrefix')} {toConfig.label}
+                </span>
               )}
             </p>
             {entry.loss_reason && (
-              <p className="text-xs text-gray-500 mt-0.5">Motivo: {entry.loss_reason}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {t('opportunityDetail.timeline.lossReason', { reason: entry.loss_reason })}
+              </p>
             )}
             {entry.value_snapshot != null && entry.value_snapshot > 0 && (
               <p className="text-xs text-gray-500 mt-0.5">
-                Valor:{' '}
+                {t('opportunityDetail.timeline.valueLabel')}{' '}
                 <span className="font-medium text-gray-700">
                   {formatCurrency(entry.value_snapshot, entry.currency_code ?? fallbackCurrency)}
                 </span>
@@ -172,6 +179,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   initialTab = 'details',
   onUpdate
 }) => {
+  const { t } = useTranslation('funnel')
   const { currentRole, company, userRoles } = useAuth()
   // Legacy: company.is_super_admin. Em empresa filha, currentRole pode ser null — usar userRoles (super_admin/support).
   const hasPlatformElevatedRole = userRoles.some(
@@ -250,11 +258,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       onUpdate?.(updated)
       setEditMode(false)
     } catch {
-      setSaveError('Erro ao salvar. Tente novamente.')
+      setSaveError(t('opportunityDetail.errors.saveFailed'))
     } finally {
       setSaving(false)
     }
-  }, [form, opportunity.id, onUpdate])
+  }, [form, opportunity.id, onUpdate, t])
 
   // Hook de histórico de etapas (só carrega quando o modal está aberto)
   const {
@@ -310,15 +318,24 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     return () => clearTimeout(timer)
   }, [activeTab, loadingStage])
 
-  if (!isOpen) return null
+  const statusConfigResolved = useMemo(
+    () => ({
+      open: { ...statusConfig.open, label: t('opportunityDetail.badge.open') },
+      won: { ...statusConfig.won, label: t('opportunityDetail.badge.won') },
+      lost: { ...statusConfig.lost, label: t('opportunityDetail.badge.lost') }
+    }),
+    [t]
+  )
 
-  const statusCfg = statusConfig[opportunity.status] ?? statusConfig.open
+  const statusCfg = statusConfigResolved[opportunity.status] ?? statusConfigResolved.open
 
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
-    { key: 'details', label: 'Detalhes',  icon: <FileText className="w-3.5 h-3.5" /> },
-    { key: 'journey', label: 'Jornada',   icon: <Route className="w-3.5 h-3.5" /> },
-    { key: 'status',  label: 'Status',    icon: <Clock className="w-3.5 h-3.5" /> }
+    { key: 'details', label: t('opportunityDetail.tabs.details'), icon: <FileText className="w-3.5 h-3.5" /> },
+    { key: 'journey', label: t('opportunityDetail.tabs.journey'), icon: <Route className="w-3.5 h-3.5" /> },
+    { key: 'status', label: t('opportunityDetail.tabs.status'), icon: <Clock className="w-3.5 h-3.5" /> }
   ]
+
+  if (!isOpen) return null
 
   return (
     <div
@@ -382,7 +399,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
               {/* Cabeçalho da seção com botão de edição */}
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  {editMode ? 'Editando oportunidade' : 'Informações da oportunidade'}
+                  {editMode ? t('opportunityDetail.sectionEditing') : t('opportunityDetail.sectionInfo')}
                 </p>
                 {!editMode && (
                   <button
@@ -390,7 +407,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
                   >
                     <Pencil className="w-3.5 h-3.5" />
-                    Editar
+                    {t('form.edit')}
                   </button>
                 )}
               </div>
@@ -399,7 +416,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
               <div>
                 <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                   <Briefcase className="w-3.5 h-3.5" />
-                  Título
+                  {t('opportunityDetail.fields.title')}
                 </label>
                 {editMode ? (
                   <input
@@ -407,7 +424,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     value={form.title ?? ''}
                     onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Título da oportunidade"
+                    placeholder={t('opportunityDetail.fields.titlePlaceholder')}
                   />
                 ) : (
                   <p className="text-sm font-medium text-gray-800">{opportunity.title}</p>
@@ -418,7 +435,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
               <div>
                 <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                   <FileText className="w-3.5 h-3.5" />
-                  Descrição
+                  {t('opportunityDetail.fields.description')}
                 </label>
                 {editMode ? (
                   <textarea
@@ -426,7 +443,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                     rows={3}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                    placeholder="Descrição da oportunidade"
+                    placeholder={t('opportunityDetail.fields.descriptionPlaceholder')}
                   />
                 ) : (
                   <p className="text-sm text-gray-700">{opportunity.description || <span className="text-gray-400">—</span>}</p>
@@ -438,7 +455,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                     <DollarSign className="w-3.5 h-3.5" />
-                    Valor ({opportunity.currency})
+                    {t('opportunityDetail.fields.value', { currency: opportunity.currency })}
                   </label>
                   {editMode ? (
                     <input
@@ -460,7 +477,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                   <div className="flex items-center justify-between mb-2">
                     <label className="flex items-center gap-1.5 text-xs text-gray-500">
                       <TrendingUp className="w-3.5 h-3.5" />
-                      Probabilidade
+                      {t('opportunityDetail.fields.probability')}
                     </label>
                     <div className="flex items-center gap-1">
                       <span className={`text-sm font-semibold ${
@@ -517,7 +534,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                     <User className="w-3.5 h-3.5" />
-                    Responsável
+                    {t('opportunityDetail.fields.owner')}
                   </label>
                   {editMode ? (
                     <select
@@ -530,7 +547,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                           : 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                       }`}
                     >
-                      <option value="">Sem responsável</option>
+                      <option value="">{t('opportunityDetail.fields.noOwner')}</option>
                       {companyUsers.map(u => (
                         <option key={u.user_id} value={u.user_id}>
                           {u.display_name || u.email || u.user_id}
@@ -552,7 +569,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    Previsão de fechamento
+                    {t('opportunityDetail.fields.expectedClose')}
                   </label>
                   {editMode ? (
                     <input
@@ -574,7 +591,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-red-500 mb-1">
                     <XCircle className="w-3.5 h-3.5" />
-                    Motivo da Perda
+                    {t('opportunityDetail.fields.lossReason')}
                   </label>
                   {editMode ? (
                     <input
@@ -582,7 +599,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                       value={form.loss_reason ?? ''}
                       onChange={e => setForm(f => ({ ...f, loss_reason: e.target.value }))}
                       className="w-full px-3 py-2 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
-                      placeholder="Informe o motivo da perda"
+                      placeholder={t('opportunityDetail.fields.lossReasonPlaceholder')}
                     />
                   ) : (
                     <p className="text-sm text-gray-800 bg-red-50 rounded-lg px-3 py-2">
@@ -599,7 +616,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     <div>
                       <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                         <Tag className="w-3.5 h-3.5" />
-                        Origem
+                        {t('opportunityDetail.fields.source')}
                       </p>
                       <p className="text-sm font-medium text-gray-800">{opportunity.source}</p>
                     </div>
@@ -609,7 +626,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     <div>
                       <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                         <Calendar className="w-3.5 h-3.5" />
-                        Fechada em
+                        {t('opportunityDetail.fields.closedAt')}
                       </p>
                       <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.closed_at)}</p>
                     </div>
@@ -618,7 +635,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                   <div>
                     <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                       <FileText className="w-3.5 h-3.5" />
-                      Criada em
+                      {t('opportunityDetail.fields.createdAt')}
                     </p>
                     <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.created_at)}</p>
                   </div>
@@ -627,7 +644,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     <div>
                       <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                         <Clock className="w-3.5 h-3.5" />
-                        Atualizada em
+                        {t('opportunityDetail.fields.updatedAt')}
                       </p>
                       <p className="text-sm font-medium text-gray-800">{formatDateShort(opportunity.updated_at)}</p>
                     </div>
@@ -661,15 +678,15 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
           {activeTab === 'status' && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                Histórico de Status
+                {t('opportunityDetail.statusTab.title')}
               </p>
               {loadingStatus ? (
                 <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
                   <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-                  Carregando...
+                  {t('form.loading')}
                 </div>
               ) : statusHistory.length === 0 ? (
-                <p className="text-sm text-gray-400 py-2">Nenhum registro de transição de status.</p>
+                <p className="text-sm text-gray-400 py-2">{t('opportunityDetail.statusTab.empty')}</p>
               ) : (
                 <div>
                   {statusHistory.map((entry, idx) => (
@@ -678,6 +695,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                       entry={entry}
                       isLast={idx === statusHistory.length - 1}
                       fallbackCurrency={opportunity.currency}
+                      statusConfig={statusConfigResolved}
                     />
                   ))}
                 </div>
@@ -695,7 +713,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 disabled={saving}
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                Cancelar
+                {t('form.cancel')}
               </button>
               <button
                 onClick={handleSave}
@@ -707,7 +725,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                {saving ? 'Salvando…' : 'Salvar'}
+                {saving ? t('form.savingEllipsis') : t('form.save')}
               </button>
             </div>
           ) : (
@@ -715,7 +733,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
               onClick={onClose}
               className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              Fechar
+              {t('form.close')}
             </button>
           )}
         </div>

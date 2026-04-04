@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -34,6 +35,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   opportunityData,
   onSuccess
 }) => {
+  const { t } = useTranslation('funnel')
   const { company, user, currentRole, userRoles } = useAuth()
   const hasPlatformElevatedRole = userRoles.some(
     r => r.role === 'super_admin' || r.role === 'support'
@@ -176,12 +178,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     e.preventDefault()
     
     if (!company?.id) {
-      setError('Empresa não identificada')
+      setError(t('createOpportunity.errors.companyRequired'))
       return
     }
 
     if (!formData.title?.trim()) {
-      setError('Título é obrigatório')
+      setError(t('createOpportunity.errors.titleRequired'))
       return
     }
 
@@ -295,7 +297,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       onClose()
     } catch (err) {
       console.error('Erro ao criar oportunidade:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao criar oportunidade')
+      setError(err instanceof Error ? err.message : t('createOpportunity.errors.generic'))
     } finally {
       setLoading(false)
     }
@@ -314,9 +316,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">
-                {isEditMode ? 'Editar Oportunidade' : 'Nova Oportunidade'}
+                {isEditMode ? t('createOpportunity.titleEdit') : t('createOpportunity.titleNew')}
               </h2>
-              <p className="text-sm text-gray-500">Lead: {leadName}</p>
+              <p className="text-sm text-gray-500">{t('createOpportunity.leadLine', { name: leadName })}</p>
             </div>
           </div>
           <button
@@ -332,13 +334,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Título da Oportunidade *
+              {t('createOpportunity.fields.title')}
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="Ex: Venda de Produto X"
+              placeholder={t('createOpportunity.fields.titlePlaceholder')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               required
             />
@@ -348,12 +350,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <FileText className="w-4 h-4 inline mr-1" />
-              Descrição
+              {t('createOpportunity.fields.description')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Detalhes sobre a oportunidade..."
+              placeholder={t('createOpportunity.fields.descriptionPlaceholder')}
               rows={3}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
             />
@@ -364,23 +366,23 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             <div className="sm:col-span-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className="w-4 h-4 inline mr-1" />
-                Valor
+                {t('createOpportunity.fields.value')}
               </label>
               <input
                 type="text"
                 value={valueDisplay}
                 onChange={handleValueChange}
-                placeholder="0,00"
+                placeholder={t('createOpportunity.fields.valuePlaceholder')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Moeda (ISO 4217)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('createOpportunity.fields.currencyIso')}</label>
               {isEditMode ? (
                 <p className="px-4 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
                   {opportunityData?.currency ?? formData.currency ?? 'BRL'}{' '}
-                  <span className="text-xs text-gray-400">(não pode ser alterada)</span>
+                  <span className="text-xs text-gray-400">{t('createOpportunity.fields.currencyLocked')}</span>
                 </p>
               ) : (
                 <select
@@ -398,7 +400,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <Percent className="w-4 h-4 inline mr-1" />
-                Probabilidade (%)
+                {t('createOpportunity.fields.probability')}
               </label>
               <input
                 type="number"
@@ -416,7 +418,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Calendar className="w-4 h-4 inline mr-1" />
-              Data Prevista de Fechamento
+              {t('createOpportunity.fields.expectedClose')}
             </label>
             <input
               type="date"
@@ -430,7 +432,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 inline mr-1" />
-              Responsável
+              {t('createOpportunity.fields.owner')}
             </label>
             {isManager ? (
               <select
@@ -438,7 +440,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, owner_user_id: e.target.value || undefined })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
               >
-                <option value="">Sem responsável</option>
+                <option value="">{t('createOpportunity.fields.noOwner')}</option>
                 {companyUsers.map(u => (
                   <option key={u.user_id} value={u.user_id}>
                     {u.display_name || u.email || u.user_id}
@@ -452,7 +454,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 value={
                   companyUsers.find(u => u.user_id === formData.owner_user_id)?.display_name
                   || companyUsers.find(u => u.user_id === formData.owner_user_id)?.email
-                  || (formData.owner_user_id ? 'Você' : 'Sem responsável')
+                  || (formData.owner_user_id ? t('createOpportunity.fields.you') : t('createOpportunity.fields.noOwner'))
                 }
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-default"
               />
@@ -462,13 +464,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           {/* Origem */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Origem
+              {t('createOpportunity.fields.source')}
             </label>
             <input
               type="text"
               value={formData.source}
               onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-              placeholder="Ex: WhatsApp, Site, Indicação"
+              placeholder={t('createOpportunity.fields.sourcePlaceholder')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
           </div>
@@ -488,7 +490,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               disabled={loading}
             >
-              Cancelar
+              {t('form.cancel')}
             </button>
             <button
               type="submit"
@@ -498,12 +500,12 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  {isEditMode ? 'Salvando...' : 'Criando...'}
+                  {isEditMode ? t('form.saving') : t('createOpportunity.creating')}
                 </>
               ) : (
                 <>
                   <Briefcase className="w-4 h-4" />
-                  {isEditMode ? 'Salvar alterações' : 'Criar Oportunidade'}
+                  {isEditMode ? t('form.updateChanges') : t('createOpportunity.createSubmit')}
                 </>
               )}
             </button>

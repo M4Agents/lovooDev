@@ -7,6 +7,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, MessageSquare } from 'lucide-react'
 import type { CloseOpportunityParams } from '../../types/sales-funnel'
 
@@ -53,6 +54,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   onConfirm,
   onCancel
 }) => {
+  const { t } = useTranslation('funnel')
   const isWon = stageType === 'won'
 
   const [closeDate, setCloseDate] = useState('')
@@ -99,7 +101,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         company_id:        companyId
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao fechar oportunidade')
+      setError(err instanceof Error ? err.message : t('closeOpportunity.errorGeneric'))
     } finally {
       setLoading(false)
     }
@@ -126,7 +128,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
           </div>
           <div className="flex-1 min-w-0">
             <h2 className={`text-base font-semibold ${isWon ? 'text-emerald-900' : 'text-red-900'}`}>
-              {isWon ? 'Confirmar Ganho' : 'Confirmar Perda'}
+              {isWon ? t('closeOpportunity.confirmWon') : t('closeOpportunity.confirmLost')}
             </h2>
             <p className="text-sm text-gray-500 truncate">{opportunityTitle}</p>
           </div>
@@ -146,7 +148,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
               <Calendar className="w-4 h-4 text-gray-400" />
-              Data e hora do fechamento
+              {t('closeOpportunity.closeDateTime')}
             </label>
             <input
               type="datetime-local"
@@ -162,7 +164,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
                 <DollarSign className="w-4 h-4 text-gray-400" />
-                Valor da venda ({currencyCode})
+                {t('closeOpportunity.saleValue', { code: currencyCode })}
               </label>
               <input
                 type="text"
@@ -170,11 +172,11 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                 value={displayValue}
                 onChange={handleValueChange}
                 disabled={loading}
-                placeholder="0,00"
+                placeholder={t('createOpportunity.fields.valuePlaceholder')}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Será salvo como valor final desta oportunidade.
+                {t('closeOpportunity.saleValueHint')}
               </p>
             </div>
           )}
@@ -184,15 +186,15 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
                 <MessageSquare className="w-4 h-4 text-gray-400" />
-                Motivo da perda
-                <span className="text-gray-400 font-normal">(opcional)</span>
+                {t('closeOpportunity.lossReason')}
+                <span className="text-gray-400 font-normal">{t('closeOpportunity.optional')}</span>
               </label>
               <textarea
                 value={lossReason}
                 onChange={e => setLossReason(e.target.value)}
                 disabled={loading}
                 rows={3}
-                placeholder="Ex: preço, concorrência, projeto cancelado..."
+                placeholder={t('closeOpportunity.lossReasonPlaceholder')}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 resize-none"
               />
             </div>
@@ -213,7 +215,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             disabled={loading}
             className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            Cancelar
+            {t('form.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -225,7 +227,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             }`}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isWon ? 'Confirmar Ganho' : 'Confirmar Perda'}
+            {isWon ? t('closeOpportunity.confirmWonBtn') : t('closeOpportunity.confirmLostBtn')}
           </button>
         </div>
 

@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Loader2, AlertCircle, Trash2 } from 'lucide-react'
 import { HexColorPicker } from 'react-colorful'
 import type { FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
@@ -29,6 +30,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
   funnelId,
   existingStages
 }) => {
+  const { t } = useTranslation('funnel')
   const isEditing = !!stage
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -96,7 +98,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
       
       handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar etapa')
+      setError(err instanceof Error ? err.message : t('editStage.errorSave'))
     } finally {
       setLoading(false)
     }
@@ -111,7 +113,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
       await onDelete(stage.id)
       handleClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao deletar etapa')
+      setError(err instanceof Error ? err.message : t('editStage.errorDelete'))
       setShowDeleteConfirm(false)
     } finally {
       setLoading(false)
@@ -142,7 +144,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
           <h2 className="text-xl font-semibold text-gray-900">
-            {isEditing ? 'Editar Etapa' : 'Nova Etapa'}
+            {isEditing ? t('editStage.titleEdit') : t('editStage.titleNew')}
           </h2>
           <button
             onClick={handleClose}
@@ -158,13 +160,13 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           {/* Nome */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nome da Etapa *
+              {t('editStage.name')}
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Ex: Proposta Enviada"
+              placeholder={t('editStage.namePlaceholder')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading || stage?.is_system_stage}
               required
@@ -172,7 +174,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
             />
             {stage?.is_system_stage && (
               <p className="text-xs text-gray-500 mt-1">
-                Etapas do sistema não podem ter o nome alterado
+                {t('editStage.systemNameLocked')}
               </p>
             )}
           </div>
@@ -180,12 +182,12 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descrição
+              {t('editStage.description')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Descreva esta etapa..."
+              placeholder={t('editStage.descriptionPlaceholder')}
               rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               disabled={loading}
@@ -195,7 +197,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           {/* Cor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Cor da Etapa *
+              {t('editStage.color')}
             </label>
             <div className="flex items-center gap-3">
               <button
@@ -240,7 +242,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           {/* Tipo de Etapa */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tipo de Etapa *
+              {t('editStage.stageType')}
             </label>
             <select
               value={formData.stage_type}
@@ -248,14 +250,14 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
             >
-              <option value="active">Ativa (em andamento)</option>
-              <option value="won">Ganhou (fechado com sucesso)</option>
-              <option value="lost">Perdeu (fechado sem sucesso)</option>
+              <option value="active">{t('editStage.stageTypeActive')}</option>
+              <option value="won">{t('editStage.stageTypeWon')}</option>
+              <option value="lost">{t('editStage.stageTypeLost')}</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              {formData.stage_type === 'active' && 'Leads nesta etapa estão em processo de venda'}
-              {formData.stage_type === 'won' && 'Leads nesta etapa foram convertidos em clientes'}
-              {formData.stage_type === 'lost' && 'Leads nesta etapa não foram convertidos'}
+              {formData.stage_type === 'active' && t('editStage.hintActive')}
+              {formData.stage_type === 'won' && t('editStage.hintWon')}
+              {formData.stage_type === 'lost' && t('editStage.hintLost')}
             </p>
           </div>
 
@@ -271,7 +273,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           {showDeleteConfirm && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-sm text-red-800 mb-3">
-                Tem certeza que deseja deletar esta etapa? Todos os leads serão movidos para a primeira etapa do funil.
+                {t('editStage.deleteConfirm')}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -280,7 +282,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                   disabled={loading}
                   className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
-                  Sim, deletar
+                  {t('editStage.deleteYes')}
                 </button>
                 <button
                   type="button"
@@ -288,7 +290,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                   disabled={loading}
                   className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded text-sm hover:bg-gray-50 transition-colors"
                 >
-                  Cancelar
+                  {t('form.cancel')}
                 </button>
               </div>
             </div>
@@ -304,7 +306,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                 className="px-4 py-2 text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 <Trash2 className="w-4 h-4" />
-                Deletar
+                {t('editStage.delete')}
               </button>
             ) : (
               <div />
@@ -317,7 +319,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                 disabled={loading}
                 className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                Cancelar
+                {t('form.cancel')}
               </button>
               <button
                 type="submit"
@@ -325,7 +327,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Salvando...' : isEditing ? 'Salvar' : 'Criar Etapa'}
+                {loading ? t('form.saving') : isEditing ? t('form.save') : t('editStage.createSubmit')}
               </button>
             </div>
           </div>

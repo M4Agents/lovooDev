@@ -84,5 +84,161 @@
       "entryDate": "Data de Entrada",
       "daysInStage": "Dias na Etapa"
     }
+  },
+  "form": {
+    "save": "Salvar",
+    "saving": "Salvando...",
+    "savingEllipsis": "Salvando…",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "edit": "Editar",
+    "create": "Criar",
+    "updateChanges": "Salvar alterações",
+    "loading": "Carregando..."
+  },
+  "leadCard": {
+    "detailTooltip": "Ver detalhes e jornada",
+    "manageTagsTooltip": "Gerenciar tags",
+    "lastContact": "Último contato: {{date}}",
+    "ownerFallback": "Responsável"
+  },
+  "addLeadModal": {
+    "title": "Adicionar Lead ao Funil",
+    "searchPlaceholder": "Buscar por nome, email ou telefone...",
+    "emptySearch": "Nenhum lead encontrado",
+    "emptyList": "Nenhum lead disponível",
+    "selectLead": "Selecione um lead",
+    "errorAdd": "Erro ao adicionar lead",
+    "adding": "Adicionando...",
+    "submit": "Adicionar Lead"
+  },
+  "createOpportunity": {
+    "titleNew": "Nova Oportunidade",
+    "titleEdit": "Editar Oportunidade",
+    "leadLine": "Lead: {{name}}",
+    "errors": {
+      "companyRequired": "Empresa não identificada",
+      "titleRequired": "Título é obrigatório",
+      "generic": "Erro ao criar oportunidade"
+    },
+    "fields": {
+      "title": "Título da Oportunidade *",
+      "titlePlaceholder": "Ex: Venda de Produto X",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Detalhes sobre a oportunidade...",
+      "value": "Valor",
+      "valuePlaceholder": "0,00",
+      "currencyIso": "Moeda (ISO 4217)",
+      "currencyLocked": "(não pode ser alterada)",
+      "probability": "Probabilidade (%)",
+      "expectedClose": "Data Prevista de Fechamento",
+      "owner": "Responsável",
+      "noOwner": "Sem responsável",
+      "you": "Você",
+      "source": "Origem",
+      "sourcePlaceholder": "Ex: WhatsApp, Site, Indicação"
+    },
+    "creating": "Criando...",
+    "createSubmit": "Criar Oportunidade"
+  },
+  "closeOpportunity": {
+    "confirmWon": "Confirmar Ganho",
+    "confirmLost": "Confirmar Perda",
+    "closeDateTime": "Data e hora do fechamento",
+    "saleValue": "Valor da venda ({{code}})",
+    "saleValueHint": "Será salvo como valor final desta oportunidade.",
+    "lossReason": "Motivo da perda",
+    "optional": "(opcional)",
+    "lossReasonPlaceholder": "Ex: preço, concorrência, projeto cancelado...",
+    "errorGeneric": "Erro ao fechar oportunidade",
+    "confirmWonBtn": "Confirmar Ganho",
+    "confirmLostBtn": "Confirmar Perda"
+  },
+  "reopenOpportunity": {
+    "title": "Reabrir Oportunidade",
+    "statusWon": "Ganha",
+    "statusLost": "Perdida",
+    "dateUnknown": "data não registrada",
+    "introPrefix": "Esta oportunidade está marcada como",
+    "introDate": " em {{date}}",
+    "willOpen": "Ao confirmar, ela voltará ao status",
+    "statusOpen": "Em Aberto",
+    "changesHeading": "O que será alterado",
+    "change1": "Status volta para",
+    "change1b": "Em Aberto",
+    "change2": "Data de fechamento será removida",
+    "change3": "Motivo de perda será removido (se houver)",
+    "preservedHeading": "O que será preservado",
+    "preserve1": "Histórico de fechamento anterior (para relatórios)",
+    "preserve2": "Valor da oportunidade",
+    "preserve3": "Todos os dados e contato do lead",
+    "errorGeneric": "Erro ao reabrir oportunidade",
+    "confirmReopen": "Confirmar Reabertura"
+  },
+  "editStage": {
+    "titleNew": "Nova Etapa",
+    "titleEdit": "Editar Etapa",
+    "name": "Nome da Etapa *",
+    "namePlaceholder": "Ex: Proposta Enviada",
+    "systemNameLocked": "Etapas do sistema não podem ter o nome alterado",
+    "description": "Descrição",
+    "descriptionPlaceholder": "Descreva esta etapa...",
+    "color": "Cor da Etapa *",
+    "stageType": "Tipo de Etapa *",
+    "stageTypeActive": "Ativa (em andamento)",
+    "stageTypeWon": "Ganhou (fechado com sucesso)",
+    "stageTypeLost": "Perdeu (fechado sem sucesso)",
+    "hintActive": "Leads nesta etapa estão em processo de venda",
+    "hintWon": "Leads nesta etapa foram convertidos em clientes",
+    "hintLost": "Leads nesta etapa não foram convertidos",
+    "delete": "Deletar",
+    "deleteConfirm": "Tem certeza que deseja deletar esta etapa? Todos os leads serão movidos para a primeira etapa do funil.",
+    "deleteYes": "Sim, deletar",
+    "errorSave": "Erro ao salvar etapa",
+    "errorDelete": "Erro ao deletar etapa",
+    "createSubmit": "Criar Etapa"
+  },
+  "opportunityDetail": {
+    "tabs": {
+      "details": "Detalhes",
+      "journey": "Jornada",
+      "status": "Status"
+    },
+    "badge": {
+      "open": "Em Aberto",
+      "won": "Ganha",
+      "lost": "Perdida"
+    },
+    "sectionEditing": "Editando oportunidade",
+    "sectionInfo": "Informações da oportunidade",
+    "fields": {
+      "title": "Título",
+      "titlePlaceholder": "Título da oportunidade",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Descrição da oportunidade",
+      "value": "Valor ({{currency}})",
+      "probability": "Probabilidade",
+      "owner": "Responsável",
+      "noOwner": "Sem responsável",
+      "expectedClose": "Previsão de fechamento",
+      "lossReason": "Motivo da Perda",
+      "lossReasonPlaceholder": "Informe o motivo da perda",
+      "source": "Origem",
+      "closedAt": "Fechada em",
+      "createdAt": "Criada em",
+      "updatedAt": "Atualizada em"
+    },
+    "statusTab": {
+      "title": "Histórico de Status",
+      "empty": "Nenhum registro de transição de status."
+    },
+    "errors": {
+      "saveFailed": "Erro ao salvar. Tente novamente."
+    },
+    "timeline": {
+      "lossReason": "Motivo: {{reason}}",
+      "valueLabel": "Valor:",
+      "statusPrefix": "Status:"
+    }
   }
 }
