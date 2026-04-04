@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { TrendingUp, TrendingDown, Building2, Crown, BarChart3 } from 'lucide-react';
 import { AnalyticsData } from '../types/analytics';
 import { Card } from './ui/Card';
@@ -9,6 +10,8 @@ interface AnalyticsCardsProps {
 }
 
 export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = false }) => {
+  const { t } = useTranslation('dashboard');
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -55,9 +58,11 @@ export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = 
             <h3 className="text-2xl font-bold text-gray-900">
               {data.newCompaniesCount}
             </h3>
-            <p className="text-sm text-gray-600">Novas Empresas</p>
+            <p className="text-sm text-gray-600">{t('analyticsCards.newCompanies')}</p>
             <p className="text-xs text-gray-500">
-              {periodComparison.growth > 0 ? '+' : ''}{periodComparison.growth} vs período anterior
+              {t('analyticsCards.vsPreviousPeriod', {
+                growth: `${periodComparison.growth > 0 ? '+' : ''}${periodComparison.growth}`,
+              })}
             </p>
           </div>
         </div>
@@ -71,16 +76,16 @@ export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = 
               <TrendingUp className="w-5 h-5 text-white" />
             </div>
             <div className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-              Média
+              {t('analyticsCards.avgLabel')}
             </div>
           </div>
           <div className="space-y-1">
             <h3 className="text-2xl font-bold text-gray-900">
               {averageDailyGrowth}
             </h3>
-            <p className="text-sm text-gray-600">Empresas/Dia</p>
+            <p className="text-sm text-gray-600">{t('analyticsCards.companiesPerDay')}</p>
             <p className="text-xs text-gray-500">
-              Crescimento médio diário
+              {t('analyticsCards.avgDailyGrowth')}
             </p>
           </div>
         </div>
@@ -94,16 +99,19 @@ export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = 
               <Crown className="w-5 h-5 text-white" />
             </div>
             <div className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-              Top Plan
+              {t('analyticsCards.topPlanBadge')}
             </div>
           </div>
           <div className="space-y-1">
             <h3 className="text-2xl font-bold text-gray-900 capitalize">
-              {topPlan?.plan || 'N/A'}
+              {topPlan?.plan || t('analyticsCards.notAvailable')}
             </h3>
-            <p className="text-sm text-gray-600">Plano Mais Popular</p>
+            <p className="text-sm text-gray-600">{t('analyticsCards.mostPopularPlan')}</p>
             <p className="text-xs text-gray-500">
-              {topPlan?.count || 0} empresas ({topPlan?.percentage || 0}%)
+              {t('analyticsCards.companiesPercent', {
+                count: topPlan?.count ?? 0,
+                percent: topPlan?.percentage ?? 0,
+              })}
             </p>
           </div>
         </div>
@@ -117,16 +125,16 @@ export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = 
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
             <div className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-              Planos
+              {t('analyticsCards.plansBadge')}
             </div>
           </div>
           <div className="space-y-1">
             <h3 className="text-2xl font-bold text-gray-900">
               {companiesByPlan.length}
             </h3>
-            <p className="text-sm text-gray-600">Tipos de Plano</p>
+            <p className="text-sm text-gray-600">{t('analyticsCards.planTypes')}</p>
             <p className="text-xs text-gray-500">
-              Distribuição ativa
+              {t('analyticsCards.activeDistribution')}
             </p>
           </div>
         </div>
@@ -137,6 +145,7 @@ export const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ data, loading = 
 
 // Mini chart component for plan distribution
 export const PlanDistributionMini: React.FC<{ data: AnalyticsData }> = ({ data }) => {
+  const { t } = useTranslation('dashboard');
   const { companiesByPlan } = data;
   const total = companiesByPlan.reduce((sum, plan) => sum + plan.count, 0);
 
@@ -144,7 +153,7 @@ export const PlanDistributionMini: React.FC<{ data: AnalyticsData }> = ({ data }
     return (
       <div className="text-center py-8 text-gray-500">
         <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p className="text-sm">Nenhum dado disponível</p>
+        <p className="text-sm">{t('planDistributionMini.noData')}</p>
       </div>
     );
   }
@@ -175,7 +184,7 @@ export const PlanDistributionMini: React.FC<{ data: AnalyticsData }> = ({ data }
       
       {companiesByPlan.length > 5 && (
         <div className="text-xs text-gray-500 text-center pt-2 border-t">
-          +{companiesByPlan.length - 5} outros planos
+          {t('planDistributionMini.morePlans', { count: companiesByPlan.length - 5 })}
         </div>
       )}
     </div>

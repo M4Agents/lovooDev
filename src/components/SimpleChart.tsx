@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CompanyGrowth, PlanDistribution } from '../types/analytics';
 
 interface SimpleBarChartProps {
@@ -12,6 +13,8 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
   title, 
   height = 200 
 }) => {
+  const { t } = useTranslation('dashboard');
+
   if (!data || data.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -21,7 +24,7 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
             <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-lg flex items-center justify-center">
               📊
             </div>
-            <p className="text-sm">Nenhum dado disponível para o período</p>
+            <p className="text-sm">{t('charts.barEmpty')}</p>
           </div>
         </div>
       </div>
@@ -72,7 +75,7 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
 
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                  <div>{item.count} empresas</div>
+                  <div>{t('charts.tooltipCompanies', { count: item.count })}</div>
                   <div>{date.toLocaleDateString('pt-BR')}</div>
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                 </div>
@@ -91,6 +94,8 @@ interface SimplePieChartProps {
 }
 
 export const SimplePieChart: React.FC<SimplePieChartProps> = ({ data, title }) => {
+  const { t } = useTranslation('dashboard');
+
   if (!data || data.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -100,7 +105,7 @@ export const SimplePieChart: React.FC<SimplePieChartProps> = ({ data, title }) =
             <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-lg flex items-center justify-center">
               🥧
             </div>
-            <p className="text-sm">Nenhum plano encontrado</p>
+            <p className="text-sm">{t('charts.pieEmpty')}</p>
           </div>
         </div>
       </div>
@@ -154,7 +159,7 @@ export const SimplePieChart: React.FC<SimplePieChartProps> = ({ data, title }) =
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{total}</div>
-              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-xs text-gray-500">{t('charts.pieTotal')}</div>
             </div>
           </div>
         </div>

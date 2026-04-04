@@ -1,0 +1,121 @@
+{
+  "impersonation": {
+    "pageTitle": "Dashboard - {{name}}",
+    "subtitleViewingChild": "Visualizando dados da empresa filha",
+    "childDashboardCard": {
+      "title": "Dashboard da Empresa Filha",
+      "descriptionPrefix": "Você está visualizando o dashboard de",
+      "note": "Este é um ambiente isolado com dados específicos desta empresa."
+    },
+    "actions": {
+      "reloadCompany": "Recarregar Empresa",
+      "reloadPage": "Recarregar Página"
+    },
+    "fallbackCompanyName": "Empresa Impersonada"
+  },
+  "loadingCompany": {
+    "title": "Carregando empresa...",
+    "description": "Aguarde enquanto carregamos os dados da sua empresa."
+  },
+  "errorNoCompany": {
+    "title": "Empresa não encontrada",
+    "description": "Não foi possível carregar os dados da sua empresa.",
+    "debugUserId": "User ID: {{id}}",
+    "debugImpersonating": "Impersonating: {{value}}",
+    "debugCompanyId": "Company ID: {{value}}",
+    "reloadPage": "Recarregar Página",
+    "reloadCompany": "Recarregar Empresa",
+    "clearAndReturnSuperAdmin": "Limpar e Voltar ao Super Admin"
+  },
+  "header": {
+    "titlePlatform": "Dashboard da Plataforma",
+    "titleDefault": "Dashboard",
+    "subtitlePlatform": "Visão geral de toda a plataforma M4 Track",
+    "subtitleTenant": "Visão geral das suas métricas",
+    "fullReportLink": "Ver Relatório Completo"
+  },
+  "metrics": {
+    "landingPages": "Landing Pages",
+    "activePages": "Páginas ativas",
+    "pagesOfCompany": "Páginas desta empresa",
+    "totalVisitors": "Total de Visitantes",
+    "uniqueVisitors": "Visitantes únicos",
+    "conversions": "Conversões",
+    "conversionRate": "Taxa: {{rate}}%",
+    "avgEngagement": "Engagement Médio",
+    "engagementScale": "de 10.0",
+    "clientCompanies": "Empresas Clientes",
+    "platformTotal": "Total da plataforma",
+    "totalUsers": "Total de Usuários",
+    "registeredUsers": "Usuários cadastrados",
+    "activeInstances": "Instâncias Ativas",
+    "whatsappConnected": "WhatsApp conectados"
+  },
+  "analyticsAdvanced": {
+    "sectionTitle": "Analytics Avançados",
+    "growthChartTitle": "Crescimento de Empresas no Período",
+    "planDistributionChartTitle": "Distribuição por Planos",
+    "planDetailsTitle": "Detalhes dos Planos",
+    "loadErrorTitle": "⚠️ Erro ao carregar analytics",
+    "retry": "Tentar Novamente"
+  },
+  "companyInfo": {
+    "title": "Informações da Empresa",
+    "fieldName": "Nome",
+    "fieldPlan": "Plano",
+    "badgePremium": "Premium",
+    "fieldStatus": "Status",
+    "statusActive": "Ativo",
+    "statusInactive": "Inativo",
+    "fieldDomain": "Domínio"
+  },
+  "quickActions": {
+    "title": "Ações Rápidas",
+    "newLanding": {
+      "title": "Nova Landing Page",
+      "subtitle": "Criar página para tracking"
+    },
+    "manageCompanies": {
+      "title": "Gerenciar Empresas",
+      "subtitle": "Adicionar nova empresa"
+    },
+    "settings": {
+      "title": "Configurações",
+      "subtitle": "Webhooks e API keys"
+    },
+    "documentation": {
+      "title": "Documentação",
+      "subtitle": "Guias e API docs"
+    }
+  },
+  "recentActivity": {
+    "title": "Atividade Recente",
+    "viewAll": "Ver Todas",
+    "emptyTitle": "Nenhuma atividade recente",
+    "emptyDescription": "Quando houver visitantes e conversões, elas aparecerão aqui."
+  },
+  "analyticsCards": {
+    "newCompanies": "Novas Empresas",
+    "vsPreviousPeriod": "{{growth}} vs período anterior",
+    "avgLabel": "Média",
+    "companiesPerDay": "Empresas/Dia",
+    "avgDailyGrowth": "Crescimento médio diário",
+    "topPlanBadge": "Top Plan",
+    "mostPopularPlan": "Plano Mais Popular",
+    "companiesPercent": "{{count}} empresas ({{percent}}%)",
+    "plansBadge": "Planos",
+    "planTypes": "Tipos de Plano",
+    "activeDistribution": "Distribuição ativa",
+    "notAvailable": "N/A"
+  },
+  "planDistributionMini": {
+    "noData": "Nenhum dado disponível",
+    "morePlans": "+{{count}} outros planos"
+  },
+  "charts": {
+    "barEmpty": "Nenhum dado disponível para o período",
+    "tooltipCompanies": "{{count}} empresas",
+    "pieEmpty": "Nenhum plano encontrado",
+    "pieTotal": "Total"
+  }
+}

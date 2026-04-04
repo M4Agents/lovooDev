@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { MetricCard, Card } from '../components/ui/Card';
@@ -21,6 +22,7 @@ type DashboardStats = {
 };
 
 export const ModernDashboard: React.FC = () => {
+  const { t } = useTranslation('dashboard');
   const { user, company, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,48 +81,50 @@ export const ModernDashboard: React.FC = () => {
     const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
     const companyName = impersonatedCompanyId === 'b41a807e-6694-46c2-9f78-1246131c7220' ? 'Vox2you Tatuapé' : 
                        impersonatedCompanyId === 'c4f8d5e7-7c46-4836-aa86-f699f0a9139a' ? 'Instituto da Construção - Campo Limpo' : 
-                       'Empresa Impersonada';
+                       t('impersonation.fallbackCompanyName');
     
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Dashboard - {companyName}</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {t('impersonation.pageTitle', { name: companyName })}
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Visualizando dados da empresa filha
+              {t('impersonation.subtitleViewingChild')}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <MetricCard
-            title="Landing Pages"
+            title={t('metrics.landingPages')}
             value={0}
-            subtitle="Páginas desta empresa"
+            subtitle={t('metrics.pagesOfCompany')}
             icon={<TrendingUp className="w-6 h-6" />}
             color="blue"
           />
 
           <MetricCard
-            title="Total de Visitantes"
+            title={t('metrics.totalVisitors')}
             value={0}
-            subtitle="Visitantes únicos"
+            subtitle={t('metrics.uniqueVisitors')}
             icon={<Users className="w-6 h-6" />}
             color="green"
           />
 
           <MetricCard
-            title="Conversões"
+            title={t('metrics.conversions')}
             value={0}
-            subtitle="Taxa: 0%"
+            subtitle={t('metrics.conversionRate', { rate: '0' })}
             icon={<Target className="w-6 h-6" />}
             color="purple"
           />
 
           <MetricCard
-            title="Engagement Médio"
+            title={t('metrics.avgEngagement')}
             value={0}
-            subtitle="de 10.0"
+            subtitle={t('metrics.engagementScale')}
             icon={<Activity className="w-6 h-6" />}
             color="orange"
           />
@@ -129,12 +133,15 @@ export const ModernDashboard: React.FC = () => {
         <Card>
           <div className="text-center py-12">
             <Building2 className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Dashboard da Empresa Filha</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {t('impersonation.childDashboardCard.title')}
+            </h3>
             <p className="text-gray-600 mb-4">
-              Você está visualizando o dashboard de <strong>{companyName}</strong>
+              {t('impersonation.childDashboardCard.descriptionPrefix')}{' '}
+              <strong>{companyName}</strong>
             </p>
             <p className="text-sm text-gray-500 mb-4">
-              Este é um ambiente isolado com dados específicos desta empresa.
+              {t('impersonation.childDashboardCard.note')}
             </p>
             
             <div className="flex gap-2 justify-center">
@@ -142,10 +149,10 @@ export const ModernDashboard: React.FC = () => {
                 variant="secondary"
                 onClick={async () => await refreshCompany()}
               >
-                Recarregar Empresa
+                {t('impersonation.actions.reloadCompany')}
               </Button>
               <Button onClick={() => window.location.reload()}>
-                Recarregar Página
+                {t('impersonation.actions.reloadPage')}
               </Button>
             </div>
           </div>
@@ -160,8 +167,8 @@ export const ModernDashboard: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <Card className="text-center max-w-md">
           <div className="text-blue-600 mb-4 text-4xl">⏳</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando empresa...</h3>
-          <p className="text-gray-600 mb-4">Aguarde enquanto carregamos os dados da sua empresa.</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('loadingCompany.title')}</h3>
+          <p className="text-gray-600 mb-4">{t('loadingCompany.description')}</p>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         </Card>
       </div>
@@ -174,25 +181,25 @@ export const ModernDashboard: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <Card className="text-center max-w-md">
           <div className="text-red-600 mb-4 text-4xl">⚠️</div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Empresa não encontrada</h3>
-          <p className="text-gray-600 mb-4">Não foi possível carregar os dados da sua empresa.</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('errorNoCompany.title')}</h3>
+          <p className="text-gray-600 mb-4">{t('errorNoCompany.description')}</p>
           <div className="space-y-3">
-            <p className="text-sm text-gray-500">User ID: {user?.id}</p>
+            <p className="text-sm text-gray-500">{t('errorNoCompany.debugUserId', { id: user?.id ?? '' })}</p>
             <p className="text-sm text-gray-500">
-              Impersonating: {localStorage.getItem('lovoo_crm_impersonating')}
+              {t('errorNoCompany.debugImpersonating', { value: localStorage.getItem('lovoo_crm_impersonating') ?? '' })}
             </p>
             <p className="text-sm text-gray-500">
-              Company ID: {localStorage.getItem('lovoo_crm_impersonated_company_id')}
+              {t('errorNoCompany.debugCompanyId', { value: localStorage.getItem('lovoo_crm_impersonated_company_id') ?? '' })}
             </p>
             <div className="flex gap-2 justify-center">
               <Button onClick={() => window.location.reload()}>
-                Recarregar Página
+                {t('errorNoCompany.reloadPage')}
               </Button>
               <Button 
                 variant="secondary"
                 onClick={async () => await refreshCompany()}
               >
-                Recarregar Empresa
+                {t('errorNoCompany.reloadCompany')}
               </Button>
               <Button 
                 variant="danger"
@@ -204,7 +211,7 @@ export const ModernDashboard: React.FC = () => {
                   window.location.reload();
                 }}
               >
-                Limpar e Voltar ao Super Admin
+                {t('errorNoCompany.clearAndReturnSuperAdmin')}
               </Button>
             </div>
           </div>
@@ -223,12 +230,12 @@ export const ModernDashboard: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {company?.is_super_admin ? 'Dashboard da Plataforma' : 'Dashboard'}
+            {company?.is_super_admin ? t('header.titlePlatform') : t('header.titleDefault')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             {company?.is_super_admin 
-              ? 'Visão geral de toda a plataforma M4 Track' 
-              : 'Visão geral das suas métricas'
+              ? t('header.subtitlePlatform')
+              : t('header.subtitleTenant')
             }
           </p>
         </div>
@@ -237,7 +244,7 @@ export const ModernDashboard: React.FC = () => {
           icon={<Eye className="w-4 h-4" />}
           onClick={() => window.open('/analytics', '_blank')}
         >
-          Ver Relatório Completo
+          {t('header.fullReportLink')}
         </Button>
       </div>
 
@@ -247,17 +254,17 @@ export const ModernDashboard: React.FC = () => {
         {!company?.is_super_admin && (
           <>
             <MetricCard
-              title="Landing Pages"
+              title={t('metrics.landingPages')}
               value={stats?.totalPages || 0}
-              subtitle="Páginas ativas"
+              subtitle={t('metrics.activePages')}
               icon={<TrendingUp className="w-6 h-6" />}
               color="blue"
             />
 
             <MetricCard
-              title="Total de Visitantes"
+              title={t('metrics.totalVisitors')}
               value={stats?.totalVisitors || 0}
-              subtitle="Visitantes únicos"
+              subtitle={t('metrics.uniqueVisitors')}
               icon={<Users className="w-6 h-6" />}
               color="green"
               trend={{
@@ -267,9 +274,9 @@ export const ModernDashboard: React.FC = () => {
             />
 
             <MetricCard
-              title="Conversões"
+              title={t('metrics.conversions')}
               value={stats?.totalConversions || 0}
-              subtitle={`Taxa: ${conversionRate}%`}
+              subtitle={t('metrics.conversionRate', { rate: conversionRate })}
               icon={<Target className="w-6 h-6" />}
               color="purple"
               trend={{
@@ -279,9 +286,9 @@ export const ModernDashboard: React.FC = () => {
             />
 
             <MetricCard
-              title="Engagement Médio"
+              title={t('metrics.avgEngagement')}
               value={stats?.avgEngagementScore || 0}
-              subtitle="de 10.0"
+              subtitle={t('metrics.engagementScale')}
               icon={<Activity className="w-6 h-6" />}
               color="orange"
             />
@@ -292,25 +299,25 @@ export const ModernDashboard: React.FC = () => {
         {company?.is_super_admin && (
           <>
             <MetricCard
-              title="Empresas Clientes"
+              title={t('metrics.clientCompanies')}
               value={stats?.totalCompanies || 0}
-              subtitle="Total da plataforma"
+              subtitle={t('metrics.platformTotal')}
               icon={<Building2 className="w-6 h-6" />}
               color="purple"
             />
             
             <MetricCard
-              title="Total de Usuários"
+              title={t('metrics.totalUsers')}
               value={stats?.totalUsers || 0}
-              subtitle="Usuários cadastrados"
+              subtitle={t('metrics.registeredUsers')}
               icon={<Users className="w-6 h-6" />}
               color="green"
             />
             
             <MetricCard
-              title="Instâncias Ativas"
+              title={t('metrics.activeInstances')}
               value={stats?.activeInstances || 0}
-              subtitle="WhatsApp conectados"
+              subtitle={t('metrics.whatsappConnected')}
               icon={<MessageSquare className="w-6 h-6" />}
               color="blue"
             />
@@ -323,7 +330,7 @@ export const ModernDashboard: React.FC = () => {
         <div className="space-y-6">
           {/* Period Filter */}
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Analytics Avançados</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{t('analyticsAdvanced.sectionTitle')}</h2>
             <PeriodFilter
               selectedPeriod={selectedPeriod}
               onPeriodChange={setSelectedPeriod}
@@ -343,7 +350,7 @@ export const ModernDashboard: React.FC = () => {
             {analyticsData && (
               <SimpleBarChart
                 data={analyticsData.growthData}
-                title="Crescimento de Empresas no Período"
+                title={t('analyticsAdvanced.growthChartTitle')}
                 height={250}
               />
             )}
@@ -352,7 +359,7 @@ export const ModernDashboard: React.FC = () => {
             {analyticsData && (
               <SimplePieChart
                 data={analyticsData.companiesByPlan}
-                title="Distribuição por Planos"
+                title={t('analyticsAdvanced.planDistributionChartTitle')}
               />
             )}
           </div>
@@ -362,7 +369,7 @@ export const ModernDashboard: React.FC = () => {
             <Card>
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Detalhes dos Planos
+                  {t('analyticsAdvanced.planDetailsTitle')}
                 </h3>
                 <PlanDistributionMini data={analyticsData} />
               </div>
@@ -373,14 +380,14 @@ export const ModernDashboard: React.FC = () => {
           {analyticsError && (
             <Card className="border-red-200 bg-red-50">
               <div className="p-6 text-center">
-                <div className="text-red-600 mb-2">⚠️ Erro ao carregar analytics</div>
+                <div className="text-red-600 mb-2">{t('analyticsAdvanced.loadErrorTitle')}</div>
                 <p className="text-sm text-red-700 mb-4">{analyticsError}</p>
                 <Button 
                   variant="outline" 
                   onClick={refreshAnalytics}
                   className="border-red-300 text-red-700 hover:bg-red-100"
                 >
-                  Tentar Novamente
+                  {t('analyticsAdvanced.retry')}
                 </Button>
               </div>
             </Card>
@@ -393,28 +400,28 @@ export const ModernDashboard: React.FC = () => {
         {/* Company Info */}
         <Card className="xl:col-span-1">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Informações da Empresa</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('companyInfo.title')}</h3>
             <div className={`w-3 h-3 rounded-full ${company?.status === 'active' ? 'bg-green-400' : 'bg-red-400'}`} />
           </div>
           
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-500">Nome</p>
+              <p className="text-sm text-gray-500">{t('companyInfo.fieldName')}</p>
               <p className="text-base font-medium text-gray-900">{company?.name}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Plano</p>
+              <p className="text-sm text-gray-500">{t('companyInfo.fieldPlan')}</p>
               <div className="flex items-center gap-2">
                 <span className="text-base font-medium text-gray-900 capitalize">{company?.plan}</span>
                 {company?.plan === 'enterprise' && (
                   <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-                    Premium
+                    {t('companyInfo.badgePremium')}
                   </span>
                 )}
               </div>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Status</p>
+              <p className="text-sm text-gray-500">{t('companyInfo.fieldStatus')}</p>
               <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
                 company?.status === 'active' 
                   ? 'bg-green-100 text-green-700' 
@@ -423,12 +430,12 @@ export const ModernDashboard: React.FC = () => {
                 <div className={`w-2 h-2 rounded-full ${
                   company?.status === 'active' ? 'bg-green-400' : 'bg-red-400'
                 }`} />
-                {company?.status === 'active' ? 'Ativo' : 'Inativo'}
+                {company?.status === 'active' ? t('companyInfo.statusActive') : t('companyInfo.statusInactive')}
               </span>
             </div>
             {company?.domain && (
               <div>
-                <p className="text-sm text-gray-500">Domínio</p>
+                <p className="text-sm text-gray-500">{t('companyInfo.fieldDomain')}</p>
                 <p className="text-base font-medium text-gray-900">{company.domain}</p>
               </div>
             )}
@@ -438,7 +445,7 @@ export const ModernDashboard: React.FC = () => {
         {/* Quick Actions */}
         <Card className="xl:col-span-2">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Ações Rápidas</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('quickActions.title')}</h3>
             <ArrowUpRight className="w-5 h-5 text-gray-400" />
           </div>
           
@@ -449,8 +456,8 @@ export const ModernDashboard: React.FC = () => {
               onClick={() => window.location.href = '/landing-pages'}
             >
               <div className="text-left">
-                <div className="font-medium">Nova Landing Page</div>
-                <div className="text-sm text-gray-500">Criar página para tracking</div>
+                <div className="font-medium">{t('quickActions.newLanding.title')}</div>
+                <div className="text-sm text-gray-500">{t('quickActions.newLanding.subtitle')}</div>
               </div>
             </Button>
 
@@ -461,8 +468,8 @@ export const ModernDashboard: React.FC = () => {
                 onClick={() => window.location.href = '/companies'}
               >
                 <div className="text-left">
-                  <div className="font-medium">Gerenciar Empresas</div>
-                  <div className="text-sm text-gray-500">Adicionar nova empresa</div>
+                  <div className="font-medium">{t('quickActions.manageCompanies.title')}</div>
+                  <div className="text-sm text-gray-500">{t('quickActions.manageCompanies.subtitle')}</div>
                 </div>
               </Button>
             )}
@@ -473,8 +480,8 @@ export const ModernDashboard: React.FC = () => {
               onClick={() => window.location.href = '/settings'}
             >
               <div className="text-left">
-                <div className="font-medium">Configurações</div>
-                <div className="text-sm text-gray-500">Webhooks e API keys</div>
+                <div className="font-medium">{t('quickActions.settings.title')}</div>
+                <div className="text-sm text-gray-500">{t('quickActions.settings.subtitle')}</div>
               </div>
             </Button>
 
@@ -484,8 +491,8 @@ export const ModernDashboard: React.FC = () => {
               onClick={() => window.open('https://docs.m4track.com', '_blank')}
             >
               <div className="text-left">
-                <div className="font-medium">Documentação</div>
-                <div className="text-sm text-gray-500">Guias e API docs</div>
+                <div className="font-medium">{t('quickActions.documentation.title')}</div>
+                <div className="text-sm text-gray-500">{t('quickActions.documentation.subtitle')}</div>
               </div>
             </Button>
           </div>
@@ -495,15 +502,15 @@ export const ModernDashboard: React.FC = () => {
       {/* Recent Activity Placeholder */}
       <Card>
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Atividade Recente</h3>
-          <Button variant="ghost" size="sm">Ver Todas</Button>
+          <h3 className="text-lg font-semibold text-gray-900">{t('recentActivity.title')}</h3>
+          <Button variant="ghost" size="sm">{t('recentActivity.viewAll')}</Button>
         </div>
         
         <div className="text-center py-12">
           <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma atividade recente</h4>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">{t('recentActivity.emptyTitle')}</h4>
           <p className="text-gray-500">
-            Quando houver visitantes e conversões, elas aparecerão aqui.
+            {t('recentActivity.emptyDescription')}
           </p>
         </div>
       </Card>
