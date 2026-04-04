@@ -22,6 +22,81 @@
     "webhookAdvanced": "Webhook Avançado",
     "salesFunnel": "Funil de Vendas"
   },
+  "integrations": {
+    "cards": {
+      "whatsapp": {
+        "badge": "3 funcionalidades",
+        "description": "Automações e integrações WhatsApp"
+      },
+      "api": {
+        "badge": "Ativo",
+        "description": "Receba dados de formulários"
+      },
+      "webhookAdvanced": {
+        "badge": "Configurável",
+        "description": "Envie dados automaticamente"
+      },
+      "salesFunnel": {
+        "badge": "API REST",
+        "description": "Mover leads entre etapas via API"
+      }
+    },
+    "whatsappNav": {
+      "life": {
+        "title": "WhatsApp Life",
+        "subtitle": "Conexão local"
+      },
+      "cloudApi": {
+        "title": "Cloud API",
+        "subtitle": "API oficial"
+      },
+      "templates": {
+        "title": "Modelos",
+        "subtitle": "Templates"
+      }
+    },
+    "tabs": {
+      "whatsappLife": "WhatsApp Life",
+      "cloudApi": "Cloud API",
+      "templates": "Modelos"
+    },
+    "placeholders": {
+      "cloudApi": {
+        "title": "🚧 Cloud API WhatsApp - Em Desenvolvimento",
+        "subtitle": "API oficial do WhatsApp Business Cloud",
+        "body": "Funcionalidade em desenvolvimento. Em breve você poderá usar a API oficial do WhatsApp Business para envios em massa e automações."
+      },
+      "messageTemplates": {
+        "title": "🚧 Modelos de Mensagens - Em Desenvolvimento",
+        "subtitle": "Cadastro e gerenciamento de modelos de mensagens do WhatsApp",
+        "body": "Funcionalidade em desenvolvimento. Em breve você poderá criar e gerenciar modelos de mensagens para automações do WhatsApp."
+      }
+    },
+    "apiLeads": {
+      "title": "API para Leads",
+      "subtitle": "Crie leads automaticamente a partir de qualquer formulário"
+    },
+    "apiDoc": {
+      "title": "📖 Documentação da API",
+      "subtitle": "Acesse o guia completo para desenvolvedores com exemplos de código e configurações técnicas",
+      "actions": {
+        "openDocs": "Ver Documentação Completa"
+      }
+    },
+    "webhookAdvancedIntro": {
+      "title": "Webhook Avançado - Disparos Automáticos",
+      "subtitle": "Configure webhooks que são disparados automaticamente quando eventos específicos acontecem",
+      "calloutTitle": "🚀 Sistema Completo",
+      "calloutBody": "Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex.: lead convertido). Diferente do webhook simples, aqui o sistema envia dados para você automaticamente."
+    },
+    "funnelApi": {
+      "title": "API de Funil de Vendas",
+      "subtitle": "Mova leads entre etapas do funil via webhook"
+    },
+    "states": {
+      "inDevelopment": "Em desenvolvimento"
+    }
+  },
   "company": {
     "sections": {
       "mainData": "Dados Principais",

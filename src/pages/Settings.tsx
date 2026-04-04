@@ -1089,10 +1089,10 @@ export const Settings: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.whatsapp')}</h3>
                       <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                        3 funcionalidades
+                        {t('integrations.cards.whatsapp.badge')}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600">Automações e integrações WhatsApp</p>
+                    <p className="text-xs text-slate-600">{t('integrations.cards.whatsapp.description')}</p>
                   </div>
                 </div>
               </div>
@@ -1118,10 +1118,10 @@ export const Settings: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.api')}</h3>
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                        Ativo
+                        {t('integrations.cards.api.badge')}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600">Receba dados de formulários</p>
+                    <p className="text-xs text-slate-600">{t('integrations.cards.api.description')}</p>
                   </div>
                 </div>
               </div>
@@ -1147,10 +1147,10 @@ export const Settings: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.webhookAdvanced')}</h3>
                       <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                        Configurável
+                        {t('integrations.cards.webhookAdvanced.badge')}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600">Envie dados automaticamente</p>
+                    <p className="text-xs text-slate-600">{t('integrations.cards.webhookAdvanced.description')}</p>
                   </div>
                 </div>
               </div>
@@ -1176,10 +1176,10 @@ export const Settings: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.salesFunnel')}</h3>
                       <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                        API REST
+                        {t('integrations.cards.salesFunnel.badge')}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600">Mover leads entre etapas via API</p>
+                    <p className="text-xs text-slate-600">{t('integrations.cards.salesFunnel.description')}</p>
                   </div>
                 </div>
               </div>
@@ -1208,10 +1208,10 @@ export const Settings: React.FC = () => {
                         <Smartphone className="w-5 h-5 text-green-600" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium text-slate-900">WhatsApp Life</h4>
-                        <p className="text-xs text-slate-500">Conexão local</p>
+                        <h4 className="font-medium text-slate-900">{t('integrations.whatsappNav.life.title')}</h4>
+                        <p className="text-xs text-slate-500">{t('integrations.whatsappNav.life.subtitle')}</p>
                       </div>
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title={t('integrations.states.inDevelopment')}></div>
                     </div>
                   </div>
                 </div>
@@ -1231,10 +1231,10 @@ export const Settings: React.FC = () => {
                         <Cloud className="w-5 h-5 text-green-600" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium text-slate-900">Cloud API</h4>
-                        <p className="text-xs text-slate-500">API oficial</p>
+                        <h4 className="font-medium text-slate-900">{t('integrations.whatsappNav.cloudApi.title')}</h4>
+                        <p className="text-xs text-slate-500">{t('integrations.whatsappNav.cloudApi.subtitle')}</p>
                       </div>
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title={t('integrations.states.inDevelopment')}></div>
                     </div>
                   </div>
                 </div>
@@ -1254,10 +1254,10 @@ export const Settings: React.FC = () => {
                         <FileText className="w-5 h-5 text-green-600" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-medium text-slate-900">Modelos</h4>
-                        <p className="text-xs text-slate-500">Templates</p>
+                        <h4 className="font-medium text-slate-900">{t('integrations.whatsappNav.templates.title')}</h4>
+                        <p className="text-xs text-slate-500">{t('integrations.whatsappNav.templates.subtitle')}</p>
                       </div>
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Em desenvolvimento"></div>
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full" title={t('integrations.states.inDevelopment')}></div>
                     </div>
                   </div>
                 </div>
@@ -1277,14 +1277,14 @@ export const Settings: React.FC = () => {
                     <Cloud className="w-8 h-8 text-green-600 mx-auto mt-2" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    🚧 Cloud API WhatsApp - Em Desenvolvimento
+                    {t('integrations.placeholders.cloudApi.title')}
                   </h3>
                   <p className="text-slate-600 mb-4">
-                    API oficial do WhatsApp Business Cloud
+                    {t('integrations.placeholders.cloudApi.subtitle')}
                   </p>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
                     <p className="text-sm text-green-800">
-                      Funcionalidade em desenvolvimento. Em breve você poderá usar a API oficial do WhatsApp Business para envios em massa e automações.
+                      {t('integrations.placeholders.cloudApi.body')}
                     </p>
                   </div>
                 </div>
@@ -1297,14 +1297,14 @@ export const Settings: React.FC = () => {
                     <FileText className="w-8 h-8 text-green-600 mx-auto mt-2" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    🚧 Modelos de Mensagens - Em Desenvolvimento
+                    {t('integrations.placeholders.messageTemplates.title')}
                   </h3>
                   <p className="text-slate-600 mb-4">
-                    Cadastro e gerenciamento de modelos de mensagens do WhatsApp
+                    {t('integrations.placeholders.messageTemplates.subtitle')}
                   </p>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
                     <p className="text-sm text-green-800">
-                      Funcionalidade em desenvolvimento. Em breve você poderá criar e gerenciar modelos de mensagens para automações do WhatsApp.
+                      {t('integrations.placeholders.messageTemplates.body')}
                     </p>
                   </div>
                 </div>
@@ -1320,8 +1320,8 @@ export const Settings: React.FC = () => {
                 <Webhook className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">API para Leads</h2>
-                <p className="text-sm text-slate-600">Crie leads automaticamente a partir de qualquer formulário</p>
+                <h2 className="text-lg font-semibold text-slate-900">{t('integrations.apiLeads.title')}</h2>
+                <p className="text-sm text-slate-600">{t('integrations.apiLeads.subtitle')}</p>
               </div>
             </div>
 
@@ -1489,16 +1489,15 @@ export const Settings: React.FC = () => {
                   <Zap className="w-5 h-5 text-orange-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Webhook Avançado - Disparos Automáticos</h2>
-                  <p className="text-sm text-slate-600">Configure webhooks que são disparados automaticamente quando eventos específicos acontecem</p>
+                  <h2 className="text-xl font-semibold text-slate-900">{t('integrations.webhookAdvancedIntro.title')}</h2>
+                  <p className="text-sm text-slate-600">{t('integrations.webhookAdvancedIntro.subtitle')}</p>
                 </div>
               </div>
               
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="font-medium text-blue-900 mb-2">🚀 Sistema Completo</h3>
+                <h3 className="font-medium text-blue-900 mb-2">{t('integrations.webhookAdvancedIntro.calloutTitle')}</h3>
                 <p className="text-blue-800 text-sm">
-                  Configure webhooks que são disparados automaticamente quando eventos específicos acontecem no sistema (ex: lead convertido).
-                  Diferente do webhook simples, aqui o <strong>sistema envia dados para você</strong> automaticamente.
+                  {t('integrations.webhookAdvancedIntro.calloutBody')}
                 </p>
               </div>
               
@@ -2042,16 +2041,16 @@ export const Settings: React.FC = () => {
                 {/* Botão para Documentação da API */}
                 <div className="bg-white border border-slate-200 rounded-lg p-6">
                   <div className="text-center">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">📖 Documentação da API</h3>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('integrations.apiDoc.title')}</h3>
                     <p className="text-sm text-slate-600 mb-4">
-                      Acesse o guia completo para desenvolvedores com exemplos de código e configurações técnicas
+                      {t('integrations.apiDoc.subtitle')}
                     </p>
                     <button
                       onClick={() => setShowDocumentationModal(true)}
                       className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mx-auto"
                     >
                       <SettingsIcon className="w-4 h-4" />
-                      Ver Documentação Completa
+                      {t('integrations.apiDoc.actions.openDocs')}
                     </button>
                   </div>
                 </div>
@@ -2068,8 +2067,8 @@ export const Settings: React.FC = () => {
                   <GitBranch className="w-5 h-5 text-orange-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">API de Funil de Vendas</h2>
-                  <p className="text-sm text-slate-600">Mova leads entre etapas do funil via webhook</p>
+                  <h2 className="text-lg font-semibold text-slate-900">{t('integrations.funnelApi.title')}</h2>
+                  <p className="text-sm text-slate-600">{t('integrations.funnelApi.subtitle')}</p>
                 </div>
               </div>
 
