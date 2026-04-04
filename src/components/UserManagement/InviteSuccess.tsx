@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, Copy, ExternalLink, X, Mail } from 'lucide-react';
 
 interface InviteSuccessProps {
@@ -17,6 +18,7 @@ interface InviteSuccessProps {
 }
 
 export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, inviteData }) => {
+  const { t } = useTranslation('settings.app');
   const [copied, setCopied] = useState(false);
 
   const handleCopyLink = async () => {
@@ -50,10 +52,10 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {inviteData.mode === 'real' ? 'Convite Enviado!' : 'Convite Criado!'}
+                {inviteData.mode === 'real' ? t('users.inviteSuccess.titleReal') : t('users.inviteSuccess.titleSimulated')}
               </h2>
               <p className="text-sm text-slate-600">
-                {inviteData.mode === 'real' ? 'Email enviado com sucesso' : 'Link de convite gerado'}
+                {inviteData.mode === 'real' ? t('users.inviteSuccess.subtitleReal') : t('users.inviteSuccess.subtitleSimulated')}
               </p>
             </div>
           </div>
@@ -72,7 +74,7 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             <div className="flex items-center gap-3">
               <Mail className="w-5 h-5 text-slate-600" />
               <div>
-                <p className="text-sm font-medium text-slate-900">Email do usuário</p>
+                <p className="text-sm font-medium text-slate-900">{t('users.inviteSuccess.userEmailLabel')}</p>
                 <p className="text-sm text-slate-600">{inviteData.email}</p>
               </div>
             </div>
@@ -84,9 +86,9 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-green-900 mb-1">Convite Real Enviado</h4>
+                  <h4 className="text-sm font-medium text-green-900 mb-1">{t('users.inviteSuccess.realSentTitle')}</h4>
                   <p className="text-sm text-green-700">
-                    O usuário receberá um email com instruções para ativar a conta.
+                    {t('users.inviteSuccess.realSentBody')}
                   </p>
                 </div>
               </div>
@@ -96,15 +98,15 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-blue-900 mb-1">Convite Simulado</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-1">{t('users.inviteSuccess.simulatedTitle')}</h4>
                   <p className="text-sm text-blue-700 mb-3">
-                    {inviteData.message || 'Configure Admin API para envio real de emails.'}
+                    {inviteData.message || t('users.inviteSuccess.simulatedDefaultMessage')}
                   </p>
                   
                   {/* Link de convite para teste */}
                   {inviteData.inviteUrl && (
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-blue-900">Link de teste:</p>
+                      <p className="text-xs font-medium text-blue-900">{t('users.inviteSuccess.testLinkLabel')}</p>
                       <div className="bg-white border border-blue-200 rounded p-2">
                         <div className="flex items-center gap-2">
                           <code className="text-xs text-blue-800 flex-1 break-all">
@@ -114,14 +116,14 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
                             <button
                               onClick={handleCopyLink}
                               className="p-1 hover:bg-blue-100 rounded transition-colors"
-                              title="Copiar link"
+                              title={t('users.inviteSuccess.copyTitle')}
                             >
                               <Copy className="w-4 h-4 text-blue-600" />
                             </button>
                             <button
                               onClick={handleOpenLink}
                               className="p-1 hover:bg-blue-100 rounded transition-colors"
-                              title="Abrir link"
+                              title={t('users.inviteSuccess.openTitle')}
                             >
                               <ExternalLink className="w-4 h-4 text-blue-600" />
                             </button>
@@ -129,7 +131,7 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
                         </div>
                       </div>
                       {copied && (
-                        <p className="text-xs text-green-600">Link copiado!</p>
+                        <p className="text-xs text-green-600">{t('users.inviteSuccess.linkCopiedShort')}</p>
                       )}
                     </div>
                   )}
@@ -140,19 +142,19 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
 
           {/* Próximos passos */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-slate-900 mb-2">Próximos passos:</h4>
+            <h4 className="text-sm font-medium text-slate-900 mb-2">{t('users.inviteSuccess.nextSteps')}</h4>
             <ul className="text-sm text-slate-600 space-y-1">
               {inviteData.mode === 'real' ? (
                 <>
-                  <li>• O usuário receberá o email de convite</li>
-                  <li>• Ele deve clicar no link para ativar a conta</li>
-                  <li>• Após ativar, poderá fazer login normalmente</li>
+                  <li>{t('users.inviteSuccess.nextReal1')}</li>
+                  <li>{t('users.inviteSuccess.nextReal2')}</li>
+                  <li>{t('users.inviteSuccess.nextReal3')}</li>
                 </>
               ) : (
                 <>
-                  <li>• Use o link acima para testar a página de aceite</li>
-                  <li>• Configure Admin API para envio real de emails</li>
-                  <li>• O usuário foi criado no sistema</li>
+                  <li>{t('users.inviteSuccess.nextSim1')}</li>
+                  <li>{t('users.inviteSuccess.nextSim2')}</li>
+                  <li>{t('users.inviteSuccess.nextSim3')}</li>
                 </>
               )}
             </ul>
@@ -165,7 +167,7 @@ export const InviteSuccess: React.FC<InviteSuccessProps> = ({ isOpen, onClose, i
             onClick={onClose}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            Entendi
+            {t('users.inviteSuccess.understood')}
           </button>
         </div>
       </div>

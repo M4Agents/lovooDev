@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Save, Crown, Shield, Briefcase, UserCheck, User, Tag } from 'lucide-react';
 import { UserTemplate, UserRole, CreateTemplateRequest, UpdateTemplateRequest, UserPermissions } from '../../types/user';
 import { createUserTemplate, updateUserTemplate } from '../../services/userTemplates';
@@ -23,6 +24,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   onSave, 
   template 
 }) => {
+  const { t } = useTranslation('settings.app');
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,20 +77,20 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       return [
         { 
           value: 'super_admin', 
-          label: 'Super Admin', 
-          description: 'Acesso total ao sistema',
+          label: t('users.roles.super_admin'), 
+          description: t('users.roleDescriptions.parent.super_admin'),
           icon: <Crown className="w-4 h-4 text-purple-600" />
         },
         { 
           value: 'admin', 
-          label: 'Administrador', 
-          description: 'Gerencia empresas filhas',
+          label: t('users.roles.admin'), 
+          description: t('users.roleDescriptions.parent.admin'),
           icon: <Shield className="w-4 h-4 text-blue-600" />
         },
         { 
           value: 'partner', 
-          label: 'Parceiro', 
-          description: 'Gerencia próprias contas',
+          label: t('users.roles.partner'), 
+          description: t('users.roleDescriptions.parent.partner'),
           icon: <Briefcase className="w-4 h-4 text-green-600" />
         }
       ];
@@ -96,20 +98,20 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       return [
         { 
           value: 'admin', 
-          label: 'Administrador', 
-          description: 'Configurações da empresa',
+          label: t('users.roles.admin'), 
+          description: t('users.roleDescriptions.client.admin'),
           icon: <Shield className="w-4 h-4 text-blue-600" />
         },
         { 
           value: 'manager', 
-          label: 'Gerente', 
-          description: 'Gestão de leads e vendas',
+          label: t('users.roles.manager'), 
+          description: t('users.roleDescriptions.client.manager'),
           icon: <UserCheck className="w-4 h-4 text-orange-600" />
         },
         { 
           value: 'seller', 
-          label: 'Vendedor', 
-          description: 'Leads próprios e chat',
+          label: t('users.roles.seller'), 
+          description: t('users.roleDescriptions.client.seller'),
           icon: <User className="w-4 h-4 text-gray-600" />
         }
       ];
@@ -149,17 +151,17 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
       // Validações
       if (!formData.name.trim()) {
-        setError('Nome é obrigatório');
+        setError(t('users.templateModal.validationName'));
         return;
       }
 
       if (!formData.description.trim()) {
-        setError('Descrição é obrigatória');
+        setError(t('users.templateModal.validationDescription'));
         return;
       }
 
       if (!company?.id) {
-        setError('Empresa não identificada');
+        setError(t('users.templateModal.companyUnknown'));
         return;
       }
 
@@ -193,7 +195,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       
     } catch (err) {
       console.error('TemplateModal: Error saving template:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao salvar template');
+      setError(err instanceof Error ? err.message : t('users.templateModal.saveError'));
     } finally {
       setLoading(false);
     }
@@ -208,10 +210,10 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">
-              {isEditing ? 'Editar Template' : 'Novo Template'}
+              {isEditing ? t('users.templateModal.editTitle') : t('users.templateModal.createTitle')}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
-              {isEditing ? 'Modifique as configurações do template' : 'Crie um template personalizado para usuários'}
+              {isEditing ? t('users.templateModal.editSubtitle') : t('users.templateModal.createSubtitle')}
             </p>
           </div>
           <button
@@ -235,20 +237,20 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
             {/* Informações Básicas */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-slate-900">Informações Básicas</h3>
+              <h3 className="text-lg font-medium text-slate-900">{t('users.templateModal.basicInfo')}</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Nome */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Nome do Template *
+                    {t('users.templateModal.nameLabel')}
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Ex: Vendedor Experiente"
+                    placeholder={t('users.templateModal.namePlaceholder')}
                     disabled={loading}
                   />
                 </div>
@@ -256,7 +258,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 {/* Role Base */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Role Base *
+                    {t('users.templateModal.baseRoleLabel')}
                   </label>
                   <select
                     value={formData.baseRole}
@@ -272,7 +274,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                   </select>
                   {isEditing && (
                     <p className="text-xs text-slate-500 mt-1">
-                      Role base não pode ser alterado após criação
+                      {t('users.templateModal.baseRoleLockedHint')}
                     </p>
                   )}
                 </div>
@@ -281,14 +283,14 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               {/* Descrição */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Descrição *
+                  {t('users.templateModal.descriptionLabel')}
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Descreva o propósito e características deste template..."
+                  placeholder={t('users.templateModal.descriptionPlaceholder')}
                   disabled={loading}
                 />
               </div>
@@ -296,7 +298,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
               {/* Tags */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Tags (opcional)
+                  {t('users.templateModal.tagsLabel')}
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {formData.tags.map((tag, index) => (
@@ -324,7 +326,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                     onChange={(e) => setNewTag(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Digite uma tag e pressione Enter"
+                    placeholder={t('users.templateModal.tagInputPlaceholder')}
                     disabled={loading}
                   />
                   <button
@@ -333,7 +335,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                     className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
                     disabled={loading || !newTag.trim()}
                   >
-                    Adicionar
+                    {t('users.templateModal.addTag')}
                   </button>
                 </div>
               </div>
@@ -358,7 +360,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             className="px-4 py-2 text-slate-700 hover:text-slate-900 transition-colors"
             disabled={loading}
           >
-            Cancelar
+            {t('users.actions.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -370,7 +372,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {isEditing ? 'Salvar Alterações' : 'Criar Template'}
+            {isEditing ? t('users.templateModal.editButton') : t('users.templateModal.createButton')}
           </button>
         </div>
       </div>

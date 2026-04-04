@@ -3,6 +3,7 @@
 // =====================================================
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Eye, Shield, Check, X as XIcon, Crown, Briefcase, UserCheck, User, Settings } from 'lucide-react';
 import { UserProfile, UserTemplate, UserPermissions, UserRole } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,6 +21,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
   profile 
 }) => {
   const { company } = useAuth();
+  const { t } = useTranslation('settings.app');
   
   if (!isOpen || !profile) return null;
 
@@ -125,10 +127,10 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                Visualizar Permissões
+                {t('users.permissionsView.title')}
               </h2>
               <p className="text-sm text-slate-500">
-                Detalhes completos do perfil de acesso
+                {t('users.permissionsView.subtitle')}
               </p>
             </div>
           </div>
@@ -154,13 +156,15 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
             
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="font-medium text-slate-700">Tipo:</span>
+                <span className="font-medium text-slate-700">{t('users.permissionsView.typeLabel')}</span>
                 <span className="ml-2 text-slate-600">
-                  {'isSystem' in profile && profile.isSystem ? 'Sistema' : 'Personalizado'}
+                  {'isSystem' in profile && profile.isSystem
+                    ? t('users.permissionsView.typeSystem')
+                    : t('users.permissionsView.typeCustom')}
                 </span>
               </div>
               <div>
-                <span className="font-medium text-slate-700">Role Base:</span>
+                <span className="font-medium text-slate-700">{t('users.permissionsView.baseRoleLabel')}</span>
                 <span className="ml-2 text-slate-600 capitalize">{role}</span>
               </div>
             </div>
@@ -168,7 +172,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
             {/* Tags */}
             {'tags' in profile && profile.tags && profile.tags.length > 0 && (
               <div className="mt-3">
-                <span className="font-medium text-slate-700 text-sm">Tags:</span>
+                <span className="font-medium text-slate-700 text-sm">{t('users.permissionsView.tagsLabel')}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {profile.tags.map((tag, index) => (
                     <span
@@ -187,17 +191,17 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
           <div className="mb-6">
             <h4 className="flex items-center space-x-2 text-base font-semibold text-slate-900 mb-3">
               <Settings className="w-4 h-4" />
-              <span>Módulos Principais</span>
+              <span>{t('users.permissionsView.sections.mainModules')}</span>
             </h4>
             <div className="space-y-1 bg-white border border-slate-200 rounded-lg">
-              <PermissionItem label="Dashboard" value={permissions.dashboard} description="Painel principal" />
-              <PermissionItem label="Leads" value={permissions.leads} description="Gestão de leads" />
-              <PermissionItem label="Chat" value={permissions.chat} description="Sistema de chat" />
-              <PermissionItem label="Analytics" value={permissions.analytics} description="Relatórios e métricas" />
-              <PermissionItem label="Configurações" value={permissions.settings} description="Configurações gerais" />
-              <PermissionItem label="Empresas" value={permissions.companies} description="Gestão de empresas" />
-              <PermissionItem label="Usuários" value={permissions.users} description="Gestão de usuários" />
-              <PermissionItem label="Financeiro" value={permissions.financial} description="Módulo financeiro" />
+              <PermissionItem label={t('users.permissionsView.modules.dashboard')} value={permissions.dashboard} description={t('users.permissionsView.modules.dashboardDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.leads')} value={permissions.leads} description={t('users.permissionsView.modules.leadsDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.chat')} value={permissions.chat} description={t('users.permissionsView.modules.chatDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.analytics')} value={permissions.analytics} description={t('users.permissionsView.modules.analyticsDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.settings')} value={permissions.settings} description={t('users.permissionsView.modules.settingsDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.companies')} value={permissions.companies} description={t('users.permissionsView.modules.companiesDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.users')} value={permissions.users} description={t('users.permissionsView.modules.usersDesc')} />
+              <PermissionItem label={t('users.permissionsView.modules.financial')} value={permissions.financial} description={t('users.permissionsView.modules.financialDesc')} />
             </div>
           </div>
 
@@ -205,17 +209,17 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
           <div className="mb-6">
             <h4 className="flex items-center space-x-2 text-base font-semibold text-slate-900 mb-3">
               <Shield className="w-4 h-4" />
-              <span>Ações Específicas</span>
+              <span>{t('users.permissionsView.sections.specificActions')}</span>
             </h4>
             <div className="space-y-1 bg-white border border-slate-200 rounded-lg">
-              <PermissionItem label="Criar usuários" value={permissions.create_users} />
-              <PermissionItem label="Editar usuários" value={permissions.edit_users} />
-              <PermissionItem label="Deletar usuários" value={permissions.delete_users} />
-              <PermissionItem label="Impersonar empresas" value={permissions.impersonate} />
-              <PermissionItem label="Ver todos os leads" value={permissions.view_all_leads} />
-              <PermissionItem label="Editar todos os leads" value={permissions.edit_all_leads} />
-              <PermissionItem label="Ver dados financeiros" value={permissions.view_financial} />
-              <PermissionItem label="Editar dados financeiros" value={permissions.edit_financial} />
+              <PermissionItem label={t('users.permissionsView.actions.createUsers')} value={permissions.create_users} />
+              <PermissionItem label={t('users.permissionsView.actions.editUsers')} value={permissions.edit_users} />
+              <PermissionItem label={t('users.permissionsView.actions.deleteUsers')} value={permissions.delete_users} />
+              <PermissionItem label={t('users.permissionsView.actions.impersonate')} value={permissions.impersonate} />
+              <PermissionItem label={t('users.permissionsView.actions.viewAllLeads')} value={permissions.view_all_leads} />
+              <PermissionItem label={t('users.permissionsView.actions.editAllLeads')} value={permissions.edit_all_leads} />
+              <PermissionItem label={t('users.permissionsView.actions.viewFinancial')} value={permissions.view_financial} />
+              <PermissionItem label={t('users.permissionsView.actions.editFinancial')} value={permissions.edit_financial} />
             </div>
           </div>
 
@@ -223,26 +227,26 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
           <div>
             <h4 className="flex items-center space-x-2 text-base font-semibold text-slate-900 mb-3">
               <Shield className="w-4 h-4" />
-              <span>Limitações</span>
+              <span>{t('users.permissionsView.sections.limitations')}</span>
             </h4>
             <div className="space-y-3 bg-white border border-slate-200 rounded-lg p-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-slate-700">Máximo de empresas:</span>
+                <span className="text-sm font-medium text-slate-700">{t('users.permissionsView.limitations.maxCompanies')}</span>
                 <span className="text-sm text-slate-600">
-                  {permissions.max_companies || 'Ilimitado'}
+                  {permissions.max_companies || t('users.permissionsView.limitations.unlimited')}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-slate-700">Máximo de usuários:</span>
+                <span className="text-sm font-medium text-slate-700">{t('users.permissionsView.limitations.maxUsers')}</span>
                 <span className="text-sm text-slate-600">
-                  {permissions.max_users || 'Ilimitado'}
+                  {permissions.max_users || t('users.permissionsView.limitations.unlimited')}
                 </span>
               </div>
               {permissions.restricted_companies && permissions.restricted_companies.length > 0 && (
                 <div>
-                  <span className="text-sm font-medium text-slate-700">Empresas restritas:</span>
+                  <span className="text-sm font-medium text-slate-700">{t('users.permissionsView.limitations.restrictedCompanies')}</span>
                   <div className="mt-1 text-sm text-slate-600">
-                    {permissions.restricted_companies.length} empresa(s) com acesso restrito
+                    {t('users.permissionsView.limitations.restrictedCount', { count: permissions.restricted_companies.length })}
                   </div>
                 </div>
               )}
@@ -256,7 +260,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
           >
-            Fechar
+            {t('users.permissionsView.close')}
           </button>
         </div>
       </div>

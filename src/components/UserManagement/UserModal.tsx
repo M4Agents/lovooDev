@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
@@ -25,6 +26,7 @@ interface UserModalProps {
 }
 
 export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, preSelectedProfileId }) => {
+  const { t } = useTranslation('settings.app');
   const { company } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       });
 
       if (!authUser) {
-        throw new Error('Usuário não autenticado para upload');
+        throw new Error(t('users.userModal.messages.unauthenticatedUpload'));
       }
 
       // Gerar nome único para o arquivo
@@ -269,15 +271,15 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     
     if (companyType === 'parent') {
       return [
-        { value: 'super_admin', label: 'Super Admin', description: 'Acesso total ao sistema' },
-        { value: 'admin', label: 'Administrador', description: 'Gerencia empresas filhas' },
-        { value: 'partner', label: 'Parceiro', description: 'Gerencia próprias contas' }
+        { value: 'super_admin', label: t('users.roles.super_admin'), description: t('users.roleDescriptions.parent.super_admin') },
+        { value: 'admin', label: t('users.roles.admin'), description: t('users.roleDescriptions.parent.admin') },
+        { value: 'partner', label: t('users.roles.partner'), description: t('users.roleDescriptions.parent.partner') }
       ];
     } else {
       return [
-        { value: 'admin', label: 'Administrador', description: 'Configurações da empresa' },
-        { value: 'manager', label: 'Gerente', description: 'Gestão de leads e vendas' },
-        { value: 'seller', label: 'Vendedor', description: 'Leads próprios e chat' }
+        { value: 'admin', label: t('users.roles.admin'), description: t('users.roleDescriptions.client.admin') },
+        { value: 'manager', label: t('users.roles.manager'), description: t('users.roleDescriptions.client.manager') },
+        { value: 'seller', label: t('users.roles.seller'), description: t('users.roleDescriptions.client.seller') }
       ];
     }
   };
@@ -290,18 +292,18 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
       // Validações
       if (!isEditing && !formData.email.trim()) {
-        setError('Email é obrigatório');
+        setError(t('users.userModal.messages.emailRequired'));
         return;
       }
 
       if (!company?.id) {
-        setError('Empresa não identificada');
+        setError(t('users.userModal.messages.companyUnknown'));
         return;
       }
 
       // Validar role para tipo de empresa
       if (!validateRoleForCompany(formData.role, company.company_type)) {
-        setError(`Role ${formData.role} não é válido para este tipo de empresa`);
+        setError(t('users.userModal.messages.invalidRole', { role: formData.role }));
         return;
       }
 
@@ -422,7 +424,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
           // Se não gerou link, avisar o admin — não exibir link inválido
           if (!inviteUrl) {
-            setError('Usuário criado, mas não foi possível gerar o link de acesso. Acesse o painel de usuários e use "Gerar novo link" para este usuário.');
+            setError(t('users.userModal.messages.inviteLinkFailed'));
             onSave();
             return;
           }
@@ -431,7 +433,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             email: formData.email,
             inviteUrl: inviteUrl,
             mode: 'real',
-            message: 'Link de acesso gerado — compartilhe com o usuário'
+            message: t('users.userModal.messages.inviteMessage')
           });
           
           setShowInviteSuccess(true);
@@ -447,7 +449,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       console.error('UserModal: Error saving user:', err);
       
       // TRATAMENTO INTELIGENTE: Verificar se é erro real ou modo compatibilidade
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar usuário';
+      const errorMessage = err instanceof Error ? err.message : t('users.userModal.messages.saveError');
       
       // Se contém indicações de modo compatibilidade, tratar como sucesso
       if (errorMessage.includes('modo compatibilidade') || 
@@ -457,7 +459,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         
         // Modo compatibilidade: usuário criado sem link real — avisar o admin
         if (formData.sendInvite) {
-          setError('Usuário criado em modo compatibilidade. Acesse o painel de usuários e use "Gerar novo link" para enviar o acesso ao usuário.');
+          setError(t('users.userModal.messages.compatMode'));
         }
         
         // Tratar como sucesso
@@ -489,10 +491,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         throw error;
       }
 
-      setPasswordSuccess(`Email de recuperação enviado para ${user.email}`);
+      setPasswordSuccess(t('users.userModal.messages.resetEmailSent', { email: user.email }));
     } catch (err) {
       console.error('Error sending reset email:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao enviar email de recuperação');
+      setError(err instanceof Error ? err.message : t('users.userModal.messages.resetEmailError'));
     } finally {
       setPasswordLoading(false);
     }
@@ -518,11 +520,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         throw error;
       }
 
-      setPasswordSuccess('Nome atualizado com sucesso');
+      setPasswordSuccess(t('users.userModal.messages.displayNameSuccess'));
       onSave(); // Recarregar lista
     } catch (err) {
       console.error('Error updating display name:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar nome');
+      setError(err instanceof Error ? err.message : t('users.userModal.messages.displayNameError'));
     } finally {
       setLoading(false);
     }
@@ -547,10 +549,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         throw error;
       }
 
-      setPasswordSuccess(`Novo convite enviado para ${user.email}`);
+      setPasswordSuccess(t('users.userModal.messages.resendSuccess', { email: user.email }));
     } catch (err) {
       console.error('Error resending invite:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao reenviar convite');
+      setError(err instanceof Error ? err.message : t('users.userModal.messages.resendError'));
     } finally {
       setPasswordLoading(false);
     }
@@ -559,12 +561,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   // Função para alterar senha diretamente
   const handleDirectPasswordChange = async () => {
     if (!user || !newPassword || newPassword !== confirmPassword) {
-      setError('Verifique se as senhas coincidem');
+      setError(t('users.userModal.messages.passwordMismatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+      setError(t('users.userModal.messages.passwordMinLength'));
       return;
     }
 
@@ -595,9 +597,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
 
       // Feedback de sucesso
+      const displayName = user.display_name || user.email || '';
       const successMessage = forcePasswordChange
-        ? `Senha temporária definida. ${user.display_name || user.email} deve alterar no próximo acesso.`
-        : `Senha alterada com sucesso para ${user.display_name || user.email}.`;
+        ? t('users.userModal.messages.passwordTempSuccess', { name: displayName })
+        : t('users.userModal.messages.passwordChangedSuccess', { name: displayName });
 
       setPasswordSuccess(successMessage);
       
@@ -610,7 +613,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
     } catch (err) {
       console.error('Error changing password directly:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao alterar senha');
+      setError(err instanceof Error ? err.message : t('users.userModal.messages.passwordChangeError'));
     } finally {
       setDirectPasswordLoading(false);
     }
@@ -644,10 +647,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {isEditing ? 'Editar Usuário' : 'Novo Usuário'}
+                {isEditing ? t('users.userModal.titleEdit') : t('users.userModal.titleCreate')}
               </h2>
               <p className="text-sm text-slate-600">
-                {isEditing ? 'Altere as informações do usuário' : 'Adicione um novo usuário à empresa'}
+                {isEditing ? t('users.userModal.subtitleEdit') : t('users.userModal.subtitleCreate')}
               </p>
             </div>
           </div>
@@ -673,7 +676,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 }`}
               >
                 <User className="w-4 h-4 inline mr-2" />
-                Informações
+                {t('users.userModal.tabs.info')}
               </button>
               <button
                 onClick={() => setActiveTab('password')}
@@ -684,7 +687,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 }`}
               >
                 <Lock className="w-4 h-4 inline mr-2" />
-                Senha & Acesso
+                {t('users.userModal.tabs.password')}
               </button>
             </div>
           </div>
@@ -698,7 +701,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-red-900 mb-1">Erro</h4>
+                  <h4 className="text-sm font-medium text-red-900 mb-1">{t('users.userModal.errorLabel')}</h4>
                   <p className="text-sm text-red-700">{error}</p>
                 </div>
               </div>
@@ -711,7 +714,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-medium text-green-900 mb-1">Sucesso</h4>
+                  <h4 className="text-sm font-medium text-green-900 mb-1">{t('users.userModal.successLabel')}</h4>
                   <p className="text-sm text-green-700">{passwordSuccess}</p>
                 </div>
               </div>
@@ -727,18 +730,18 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Mail className="w-4 h-4 inline mr-2" />
-                Email do Usuário
+                {t('users.userModal.emailLabel')}
               </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="usuario@empresa.com"
+                placeholder={t('users.userModal.emailPlaceholder')}
                 disabled={loading}
               />
               <p className="text-xs text-slate-500 mt-1">
-                O usuário receberá um convite por email para acessar o sistema
+                {t('users.userModal.emailHint')}
               </p>
             </div>
           )}
@@ -747,13 +750,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               <Camera className="w-4 h-4 inline mr-2" />
-              Foto de Perfil
+              {t('users.userModal.profilePhoto')}
             </label>
             <div className="flex items-center gap-4">
               {/* Preview da foto */}
               <Avatar 
                 src={formData.profilePicture ? URL.createObjectURL(formData.profilePicture) : (user?.profile_picture_url || null)}
-                alt={formData.displayName || formData.email || 'Usuário'}
+                alt={formData.displayName || formData.email || t('users.userModal.avatarAlt')}
                 size="lg"
                 fallbackText={formData.displayName?.charAt(0) || formData.email?.charAt(0)}
               />
@@ -769,12 +772,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     if (file) {
                       // Validar tamanho (máx 2MB)
                       if (file.size > 2 * 1024 * 1024) {
-                        setError('A imagem deve ter no máximo 2MB');
+                        setError(t('users.userModal.imageMaxSize'));
                         return;
                       }
                       // Validar formato
                       if (!file.type.startsWith('image/')) {
-                        setError('Apenas arquivos de imagem são permitidos');
+                        setError(t('users.userModal.imageTypeOnly'));
                         return;
                       }
                       setFormData(prev => ({ ...prev, profilePicture: file }));
@@ -789,7 +792,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors"
                 >
                   <Upload className="w-4 h-4" />
-                  {formData.profilePicture ? 'Alterar Foto' : 'Escolher Foto'}
+                  {formData.profilePicture ? t('users.userModal.changePhoto') : t('users.userModal.choosePhoto')}
                 </label>
                 {formData.profilePicture && (
                   <button
@@ -797,11 +800,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     onClick={() => setFormData(prev => ({ ...prev, profilePicture: null }))}
                     className="ml-2 text-sm text-red-600 hover:text-red-700"
                   >
-                    Remover
+                    {t('users.userModal.removePhoto')}
                   </button>
                 )}
                 <p className="text-xs text-slate-500 mt-1">
-                  Formatos aceitos: JPG, PNG, GIF. Máximo 2MB.
+                  {t('users.userModal.photoFormatsHint')}
                 </p>
               </div>
             </div>
@@ -811,7 +814,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               <Shield className="w-4 h-4 inline mr-2" />
-              {availableProfiles.length > 0 ? 'Perfil de Acesso' : 'Nível de Acesso (Role)'}
+              {availableProfiles.length > 0 ? t('users.userModal.accessProfile') : t('users.userModal.accessLevelRole')}
             </label>
             
             {/* SISTEMA NOVO: Seletor de Perfis (quando disponível) */}
@@ -831,11 +834,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={loading}
                 >
-                  <option value="">Selecione um perfil...</option>
+                  <option value="">{t('users.userModal.selectProfile')}</option>
                   
                   {/* Perfis do Sistema */}
                   {availableProfiles.filter(p => p.isSystem).length > 0 && (
-                    <optgroup label="Perfis do Sistema">
+                    <optgroup label={t('users.userModal.optgroupSystem')}>
                       {availableProfiles
                         .filter(p => p.isSystem)
                         .map((profile) => (
@@ -849,7 +852,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   
                   {/* Perfis Personalizados */}
                   {availableProfiles.filter(p => !p.isSystem).length > 0 && (
-                    <optgroup label="Perfis Personalizados">
+                    <optgroup label={t('users.userModal.optgroupCustom')}>
                       {availableProfiles
                         .filter(p => !p.isSystem)
                         .map((profile) => (
@@ -915,7 +918,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 {/* Aviso de fallback */}
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-xs text-yellow-700">
-                    ⚠️ Usando sistema básico de roles. Perfis personalizados temporariamente indisponíveis.
+                    {t('users.userModal.fallbackRolesWarning')}
                   </p>
                 </div>
               </>
@@ -935,10 +938,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 />
                 <div>
                   <span className="text-sm font-medium text-slate-700">
-                    Enviar convite por email
+                    {t('users.userModal.sendInvite')}
                   </span>
                   <p className="text-xs text-slate-500">
-                    O usuário receberá instruções para acessar o sistema
+                    {t('users.userModal.sendInviteHint')}
                   </p>
                 </div>
               </label>
@@ -947,10 +950,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
           {/* Informações da empresa */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-slate-700 mb-2">Empresa</h4>
+            <h4 className="text-sm font-medium text-slate-700 mb-2">{t('users.userModal.companySection')}</h4>
             <div className="text-sm text-slate-600">
-              <p><strong>Nome:</strong> {company?.name || 'N/A'}</p>
-              <p><strong>Tipo:</strong> {company?.company_type === 'parent' ? 'Empresa Pai' : 'Cliente'}</p>
+              <p><strong>{t('users.userModal.companyName')}</strong> {company?.name || t('users.notAvailable')}</p>
+              <p><strong>{t('users.userModal.companyType')}</strong> {company?.company_type === 'parent' ? t('users.userModal.companyTypeParent') : t('users.userModal.companyTypeClient')}</p>
             </div>
           </div>
 
@@ -978,7 +981,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                         systemStatus.mode === 'development' ? 'text-yellow-900' :
                         'text-blue-900'
                       }`}>
-                        Status do Sistema
+                        {t('users.userModal.systemStatus')}
                       </h4>
                       <p className={`text-sm ${
                         systemStatus.mode === 'production' ? 'text-green-700' :
@@ -998,15 +1001,15 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   <AlertCircle className="w-5 h-5 text-slate-600 mt-0.5" />
                   <div>
                     <h4 className="text-sm font-medium text-slate-900 mb-1">
-                      {formData.sendInvite ? 'Convite por Email' : 'Usuário Interno'}
+                      {formData.sendInvite ? t('users.userModal.inviteByEmailTitle') : t('users.userModal.internalUserTitle')}
                     </h4>
                     <p className="text-sm text-slate-700">
                       {formData.sendInvite ? 
                         (systemStatus?.features.emailInvites ? 
-                          'O usuário receberá um email com instruções para ativar a conta e definir sua senha.' :
-                          'Será criado um usuário que poderá ser convidado quando o email estiver configurado.'
+                          t('users.userModal.inviteByEmailBody') :
+                          t('users.userModal.inviteByEmailBodyNoFeature')
                         ) :
-                        'Será criado um registro interno. Para acesso completo, marque "Enviar convite por email".'
+                        t('users.userModal.internalUserBody')
                       }
                     </p>
                   </div>
@@ -1024,7 +1027,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   <User className="w-4 h-4 inline mr-2" />
-                  Nome de Exibição
+                  {t('users.userModal.displayName')}
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -1032,7 +1035,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     value={formData.displayName}
                     onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Nome do usuário"
+                    placeholder={t('users.userModal.displayNamePlaceholder')}
                     disabled={loading}
                   />
                   <button
@@ -1041,11 +1044,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
                   >
                     <UserCheck className="w-4 h-4" />
-                    Salvar
+                    {t('users.actions.save')}
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Nome que aparecerá na interface do sistema
+                  {t('users.userModal.displayNameHint')}
                 </p>
               </div>
 
@@ -1053,7 +1056,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-slate-900 flex items-center gap-2">
                   <Lock className="w-4 h-4" />
-                  Gerenciar Senha
+                  {t('users.userModal.managePassword')}
                 </h4>
 
                 {/* Resetar Senha */}
@@ -1061,10 +1064,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h5 className="text-sm font-medium text-blue-900 mb-1">
-                        Resetar Senha
+                        {t('users.userModal.resetPasswordTitle')}
                       </h5>
                       <p className="text-sm text-blue-700 mb-3">
-                        Enviar email para o usuário redefinir a senha
+                        {t('users.userModal.resetPasswordDesc')}
                       </p>
                     </div>
                   </div>
@@ -1078,7 +1081,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     ) : (
                       <RefreshCw className="w-4 h-4" />
                     )}
-                    {passwordLoading ? 'Enviando...' : 'Enviar Email de Reset'}
+                    {passwordLoading ? t('users.userModal.sending') : t('users.userModal.sendResetEmail')}
                   </button>
                 </div>
 
@@ -1089,17 +1092,17 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     <div className="flex items-center justify-between">
                       <div>
                         <h5 className="text-sm font-medium text-orange-900 mb-1">
-                          Alterar Senha Diretamente
+                          {t('users.userModal.directPasswordTitle')}
                         </h5>
                         <p className="text-sm text-orange-700">
-                          Definir nova senha sem enviar email
+                          {t('users.userModal.directPasswordDesc')}
                         </p>
                       </div>
                       <button
                         onClick={() => setShowDirectPasswordForm(true)}
                         className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-md transition-colors"
                       >
-                        Definir Senha
+                        {t('users.userModal.setPasswordButton')}
                       </button>
                     </div>
                   ) : (
@@ -1107,7 +1110,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h5 className="text-sm font-medium text-orange-900">
-                          Definir Nova Senha
+                          {t('users.userModal.newPasswordFormTitle')}
                         </h5>
                         <button
                           onClick={handleCancelDirectPassword}
@@ -1124,7 +1127,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                             type={showNewPassword ? 'text' : 'password'}
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder="Nova senha (mín. 6 caracteres)"
+                            placeholder={t('users.userModal.newPasswordPlaceholder')}
                             className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                             disabled={directPasswordLoading}
                           />
@@ -1146,7 +1149,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                             type={showConfirmPassword ? 'text' : 'password'}
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="Confirmar nova senha"
+                            placeholder={t('users.userModal.confirmPasswordPlaceholder')}
                             className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                             disabled={directPasswordLoading}
                           />
@@ -1168,11 +1171,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                         {(newPassword || confirmPassword) && (
                           <div className="text-xs space-y-1">
                             <div className={`${isPasswordValid ? 'text-green-600' : 'text-red-600'}`}>
-                              {isPasswordValid ? '✓' : '×'} Mínimo 6 caracteres
+                              {isPasswordValid ? '✓' : '×'} {t('users.userModal.minLengthOk')}
                             </div>
                             {confirmPassword && (
                               <div className={`${doPasswordsMatch ? 'text-green-600' : 'text-red-600'}`}>
-                                {doPasswordsMatch ? '✓' : '×'} Senhas coincidem
+                                {doPasswordsMatch ? '✓' : '×'} {t('users.userModal.passwordsMatch')}
                               </div>
                             )}
                           </div>
@@ -1183,12 +1186,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                           <div className="flex items-center justify-between">
                             <div>
                               <h6 className="text-sm font-medium text-gray-900 mb-1">
-                                Forçar alteração no próximo acesso
+                                {t('users.userModal.forceChangeTitle')}
                               </h6>
                               <p className="text-xs text-gray-600">
                                 {forcePasswordChange 
-                                  ? 'Usuário será obrigado a alterar a senha no próximo login'
-                                  : 'Senha definida será permanente até próxima alteração'
+                                  ? t('users.userModal.forceChangeOn')
+                                  : t('users.userModal.forceChangeOff')
                                 }
                               </p>
                             </div>
@@ -1207,7 +1210,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                             disabled={directPasswordLoading}
                             className="flex-1 px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-md transition-colors disabled:opacity-50"
                           >
-                            Cancelar
+                            {t('users.actions.cancel')}
                           </button>
                           <button
                             onClick={handleDirectPasswordChange}
@@ -1217,12 +1220,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                             {directPasswordLoading ? (
                               <>
                                 <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                                Alterando...
+                                {t('users.userModal.changing')}
                               </>
                             ) : (
                               <>
                                 <Lock className="w-3 h-3" />
-                                {forcePasswordChange ? 'Definir Temporária' : 'Alterar Senha'}
+                                {forcePasswordChange ? t('users.userModal.setTemporary') : t('users.userModal.changePassword')}
                               </>
                             )}
                           </button>
@@ -1237,10 +1240,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h5 className="text-sm font-medium text-green-900 mb-1">
-                        Reenviar Convite
+                        {t('users.userModal.resendInviteTitle')}
                       </h5>
                       <p className="text-sm text-green-700 mb-3">
-                        Gerar novo link de convite para o usuário
+                        {t('users.userModal.resendInviteDesc')}
                       </p>
                     </div>
                   </div>
@@ -1254,7 +1257,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     ) : (
                       <Mail className="w-4 h-4" />
                     )}
-                    {passwordLoading ? 'Enviando...' : 'Reenviar Convite'}
+                    {passwordLoading ? t('users.userModal.sending') : t('users.userModal.resendInvite')}
                   </button>
                 </div>
 
@@ -1262,12 +1265,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 {user && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                     <h5 className="text-sm font-medium text-slate-900 mb-2">
-                      Informações da Conta
+                      {t('users.userModal.accountInfo')}
                     </h5>
                     <div className="space-y-2 text-sm text-slate-600">
-                      <div><strong>Email:</strong> {user.email || user.user_id}</div>
-                      <div><strong>Status:</strong> {user.is_active ? '🟢 Ativo' : '⚪ Inativo'}</div>
-                      <div><strong>Role:</strong> {user.role}</div>
+                      <div><strong>{t('users.userModal.accountEmail')}</strong> {user.email || user.user_id}</div>
+                      <div><strong>{t('users.userModal.accountStatus')}</strong> {user.is_active ? t('users.userModal.statusActive') : t('users.userModal.statusInactive')}</div>
+                      <div><strong>{t('users.userModal.accountRole')}</strong> {user.role}</div>
                     </div>
                   </div>
                 )}
@@ -1283,7 +1286,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium transition-colors"
             disabled={loading}
           >
-            Cancelar
+            {t('users.actions.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -1295,7 +1298,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {loading ? 'Salvando...' : (isEditing ? 'Salvar Alterações' : 'Criar Usuário')}
+            {loading ? t('users.actions.saving') : (isEditing ? t('users.actions.saveChanges') : t('users.userModal.footerCreate'))}
           </button>
         </div>
       </div>

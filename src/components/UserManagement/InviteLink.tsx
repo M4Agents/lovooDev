@@ -5,6 +5,7 @@
 // Substitui o token fake btoa() que não criava sessão
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Copy, ExternalLink, Mail, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { CompanyUser } from '../../types/user';
 import { supabase } from '../../lib/supabase';
@@ -16,6 +17,7 @@ interface InviteLinkProps {
 }
 
 export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user }) => {
+  const { t } = useTranslation('settings.app');
   const [copied, setCopied] = useState(false);
   const [realEmail, setRealEmail] = useState<string>('');
   const [magicLink, setMagicLink] = useState<string>('');
@@ -68,13 +70,13 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
       const result = await response.json();
 
       if (!response.ok || result.error) {
-        setLinkError(result.error || 'Não foi possível gerar o link. Tente novamente.');
+        setLinkError(result.error || t('users.invite.fallbackGenerateError'));
         return;
       }
 
       setMagicLink(result.magicLink);
     } catch {
-      setLinkError('Erro de conexão ao gerar o link. Tente novamente.');
+      setLinkError(t('users.invite.connectionError'));
     } finally {
       setLoadingLink(false);
     }
@@ -116,10 +118,10 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                Link de Acesso
+                {t('users.invite.title')}
               </h2>
               <p className="text-sm text-slate-600">
-                Compartilhe com o usuário para ativar a conta
+                {t('users.invite.subtitle')}
               </p>
             </div>
           </div>
@@ -139,7 +141,7 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
               <div>
                 <p className="text-sm font-medium text-slate-900">{displayEmail}</p>
                 <p className="text-xs text-slate-600">
-                  Role: {user.role} • ID: {user.id.slice(0, 8)}...
+                  {t('users.invite.roleIdLine', { role: user.role, id: user.id.slice(0, 8) })}
                 </p>
               </div>
             </div>
@@ -149,7 +151,7 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-slate-700">
-                Link de Acesso:
+                {t('users.invite.linkLabel')}
               </label>
               <button
                 onClick={handleRefresh}
@@ -157,14 +159,14 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
                 className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 ${loadingLink ? 'animate-spin' : ''}`} />
-                Gerar novo
+                {t('users.invite.regenerate')}
               </button>
             </div>
 
             {loadingLink && (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mx-auto mb-2" />
-                <p className="text-sm text-slate-600">Gerando link seguro...</p>
+                <p className="text-sm text-slate-600">{t('users.invite.generating')}</p>
               </div>
             )}
 
@@ -185,14 +187,14 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
                     <button
                       onClick={handleCopyLink}
                       className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Copiar link"
+                      title={t('users.invite.copyTitle')}
                     >
                       <Copy className="w-4 h-4 text-slate-600" />
                     </button>
                     <button
                       onClick={handleOpenLink}
                       className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Abrir link"
+                      title={t('users.invite.openTitle')}
                     >
                       <ExternalLink className="w-4 h-4 text-slate-600" />
                     </button>
@@ -204,21 +206,21 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
             {copied && (
               <p className="text-xs text-green-600 flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />
-                Link copiado para a área de transferência!
+                {t('users.messages.linkCopied')}
               </p>
             )}
           </div>
 
           {/* Instruções */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">Como usar:</h4>
+            <h4 className="text-sm font-medium text-blue-900 mb-2">{t('users.invite.howToTitle')}</h4>
             <ul className="text-sm text-blue-800 space-y-1">
-              <li>1. Copie o link acima</li>
-              <li>2. Envie para o usuário via WhatsApp, email ou outro meio</li>
-              <li>3. O usuário clica no link e define uma senha</li>
-              <li>4. Após ativar, poderá fazer login normalmente</li>
+              <li>{t('users.invite.howToStep1')}</li>
+              <li>{t('users.invite.howToStep2')}</li>
+              <li>{t('users.invite.howToStep3')}</li>
+              <li>{t('users.invite.howToStep4')}</li>
             </ul>
-            <p className="text-xs text-blue-700 mt-2">⚠️ O link expira em 1 hora.</p>
+            <p className="text-xs text-blue-700 mt-2">{t('users.invite.linkExpires')}</p>
           </div>
         </div>
 
@@ -230,13 +232,13 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             <Copy className="w-4 h-4" />
-            {copied ? 'Copiado!' : 'Copiar Link'}
+            {copied ? t('users.invite.footerCopied') : t('users.invite.footerCopy')}
           </button>
           <button
             onClick={onClose}
             className="text-slate-600 hover:text-slate-800 px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            Fechar
+            {t('users.actions.close')}
           </button>
         </div>
       </div>

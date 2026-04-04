@@ -3,8 +3,11 @@
 // =====================================================
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Trash2, X, Loader2 } from 'lucide-react';
 import { CompanyUser } from '../../types/user';
+
+const CONFIRM_DELETE_WORD = 'EXCLUIR';
 
 interface DeleteUserModalProps {
   isOpen: boolean;
@@ -19,10 +22,12 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
   onConfirm,
   user
 }) => {
+  const { t } = useTranslation('settings.app');
   const [step, setStep] = useState<'confirm' | 'type-confirm'>('confirm');
   const [confirmText, setConfirmText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [protectionGuidance, setProtectionGuidance] = useState(false);
 
   // Reset modal state when opening/closing
   React.useEffect(() => {
@@ -31,6 +36,7 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
       setConfirmText('');
       setError(null);
       setLoading(false);
+      setProtectionGuidance(false);
     }
   }, [isOpen]);
 
@@ -39,8 +45,8 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
   };
 
   const handleFinalConfirm = async () => {
-    if (confirmText !== 'EXCLUIR') {
-      setError('Texto de confirmação incorreto. Digite exatamente: EXCLUIR');
+    if (confirmText !== CONFIRM_DELETE_WORD) {
+      setError(t('users.deleteModal.wrongConfirm'));
       return;
     }
 
@@ -49,26 +55,17 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
     try {
       setLoading(true);
       setError(null);
+      setProtectionGuidance(false);
       await onConfirm(user);
       onClose();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao excluir usuário';
+      const errorMessage = err instanceof Error ? err.message : t('users.deleteModal.deleteFailed');
       
-      // Detectar erro de proteção e fornecer orientação clara
       if (errorMessage.includes('PROTEÇÃO ATIVADA') || errorMessage.includes('ativo em')) {
-        setError(`🛡️ Usuário Protegido Contra Exclusão
-
-Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente.
-
-📋 Para excluir com segurança, siga estes passos:
-
-1️⃣ Primeiro: Clique no botão LARANJA (👤❌) para DESATIVAR o usuário
-2️⃣ Depois: Clique no botão VERMELHO (🗑️) para EXCLUIR permanentemente
-
-🔒 Esta proteção evita exclusões acidentais de usuários ativos.
-
-💡 Dica: Usuários desativados podem ser reativados, mas usuários excluídos não podem ser recuperados.`);
+        setProtectionGuidance(true);
+        setError(null);
       } else {
+        setProtectionGuidance(false);
         setError(errorMessage);
       }
     } finally {
@@ -94,7 +91,7 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900">
-              Exclusão Permanente
+              {t('users.deleteModal.title')}
             </h3>
           </div>
           <button
@@ -116,10 +113,12 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
                   <Trash2 className="w-10 h-10 text-red-600 mx-auto mt-1" />
                 </div>
                 <h4 className="text-lg font-medium text-gray-900 mb-2">
-                  Tem certeza absoluta?
+                  {t('users.deleteModal.step1Heading')}
                 </h4>
                 <p className="text-gray-600 text-sm leading-relaxed">
-                  Você está prestes a <strong>excluir permanentemente</strong> o usuário:
+                  {t('users.deleteModal.step1Before')}{' '}
+                  <strong>{t('users.deleteModal.step1Emphasis')}</strong>{' '}
+                  {t('users.deleteModal.step1After')}
                 </p>
               </div>
 
@@ -144,11 +143,11 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
 
               {/* Warning */}
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <h5 className="font-medium text-red-800 mb-2">⚠️ ATENÇÃO: Esta ação NÃO pode ser desfeita!</h5>
+                <h5 className="font-medium text-red-800 mb-2">{t('users.deleteModal.warningTitle')}</h5>
                 <ul className="text-sm text-red-700 space-y-1">
-                  <li>• O usuário será removido completamente do sistema</li>
-                  <li>• Todos os dados e histórico serão perdidos</li>
-                  <li>• Não será possível recuperar as informações</li>
+                  <li>{t('users.deleteModal.warningBullet1')}</li>
+                  <li>{t('users.deleteModal.warningBullet2')}</li>
+                  <li>{t('users.deleteModal.warningBullet3')}</li>
                 </ul>
               </div>
             </div>
@@ -160,15 +159,15 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
                   <AlertTriangle className="w-10 h-10 text-red-600 mx-auto mt-1" />
                 </div>
                 <h4 className="text-lg font-medium text-gray-900 mb-2">
-                  Confirmação Final
+                  {t('users.deleteModal.step2Heading')}
                 </h4>
                 <p className="text-gray-600 text-sm">
-                  Para confirmar a exclusão permanente, digite exatamente:
+                  {t('users.deleteModal.step2Instruction')}
                 </p>
               </div>
 
               <div className="bg-gray-100 rounded-lg p-3 text-center">
-                <code className="text-lg font-mono font-bold text-red-600">EXCLUIR</code>
+                <code className="text-lg font-mono font-bold text-red-600">{CONFIRM_DELETE_WORD}</code>
               </div>
 
               <div>
@@ -178,25 +177,32 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
                   onChange={(e) => {
                     setConfirmText(e.target.value);
                     setError(null);
+                    setProtectionGuidance(false);
                   }}
-                  placeholder="Digite: EXCLUIR"
+                  placeholder={t('users.deleteModal.placeholder')}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-center font-mono"
                   disabled={loading}
                   autoFocus
                 />
               </div>
 
-              {error && (
-                <div className={`border rounded-lg p-4 ${
-                  error.includes('🛡️ Usuário Protegido') 
-                    ? 'bg-amber-50 border-amber-200' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div className={`text-sm ${
-                    error.includes('🛡️ Usuário Protegido')
-                      ? 'text-amber-800'
-                      : 'text-red-600'
-                  }`}>
+              {protectionGuidance && (
+                <div className="border rounded-lg p-4 bg-amber-50 border-amber-200">
+                  <div className="text-sm text-amber-800 space-y-2">
+                    <p className="font-semibold">{t('users.deleteModal.protectionIntro')}</p>
+                    <p>{t('users.deleteModal.protectionP1')}</p>
+                    <p className="font-medium">{t('users.deleteModal.protectionStepsTitle')}</p>
+                    <p>{t('users.deleteModal.protectionStep1')}</p>
+                    <p>{t('users.deleteModal.protectionStep2')}</p>
+                    <p>{t('users.deleteModal.protectionFooter')}</p>
+                    <p>{t('users.deleteModal.protectionTip')}</p>
+                  </div>
+                </div>
+              )}
+
+              {error && !protectionGuidance && (
+                <div className="border rounded-lg p-4 bg-red-50 border-red-200">
+                  <div className="text-sm text-red-600">
                     {error.split('\n').map((line, index) => (
                       <div key={index} className={index === 0 ? 'font-semibold mb-2' : 'mb-1'}>
                         {line}
@@ -218,14 +224,14 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
                 disabled={loading}
                 className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
-                Cancelar
+                {t('users.actions.cancel')}
               </button>
               <button
                 onClick={handleFirstConfirm}
                 disabled={loading}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
               >
-                Continuar
+                {t('users.actions.continue')}
               </button>
             </>
           ) : (
@@ -235,20 +241,20 @@ Este usuário ainda está ATIVO no sistema e não pode ser excluído diretamente
                 disabled={loading}
                 className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
-                Voltar
+                {t('users.actions.back')}
               </button>
               <button
                 onClick={handleFinalConfirm}
-                disabled={loading || confirmText !== 'EXCLUIR'}
+                disabled={loading || confirmText !== CONFIRM_DELETE_WORD}
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Excluindo...
+                    {t('users.deleteModal.deleting')}
                   </>
                 ) : (
-                  'Excluir Permanentemente'
+                  t('users.deleteModal.deletePermanent')
                 )}
               </button>
             </>
