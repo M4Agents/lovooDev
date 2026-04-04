@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertCircle, Settings, ArrowRight } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 
@@ -23,6 +24,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
   userId,
   onMigrationComplete
 }) => {
+  const { t } = useTranslation('chat')
   const [showMigrationModal, setShowMigrationModal] = useState(false)
   const [availableInstances, setAvailableInstances] = useState<any[]>([])
   const [selectedInstance, setSelectedInstance] = useState<string>('')
@@ -53,7 +55,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
       setAvailableInstances(data || [])
       setShowMigrationModal(true)
     } catch (err: any) {
-      setError(err.message || 'Erro ao buscar instâncias')
+      setError(err.message || t('instanceAlert.errors.fetchInstances'))
     } finally {
       setLoading(false)
     }
@@ -61,7 +63,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
 
   const handleMigrate = async () => {
     if (!selectedInstance) {
-      setError('Selecione uma instância')
+      setError(t('instanceAlert.errors.selectInstance'))
       return
     }
 
@@ -83,10 +85,10 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
         setShowMigrationModal(false)
         onMigrationComplete?.()
       } else {
-        throw new Error(data?.error || 'Erro ao migrar conversa')
+        throw new Error(data?.error || t('instanceAlert.errors.migrateFailed'))
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao migrar conversa')
+      setError(err.message || t('instanceAlert.errors.migrateFailed'))
     } finally {
       setLoading(false)
     }
@@ -99,23 +101,25 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
           <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="text-sm font-medium text-yellow-800 mb-1">
-              {instanceDeleted ? 'Instância Deletada' : 'Instância Desconectada'}
+              {instanceDeleted ? t('instanceAlert.titleDeleted') : t('instanceAlert.titleDisconnected')}
             </h3>
             <p className="text-sm text-yellow-700 mb-3">
-              Esta conversa foi iniciada pela instância <strong>"{instanceName}"</strong> que está {instanceDeleted ? 'deletada' : 'desconectada'}.
+              {instanceDeleted
+                ? t('instanceAlert.bodyDeleted', { name: instanceName ?? '' })
+                : t('instanceAlert.bodyDisconnected', { name: instanceName ?? '' })}
             </p>
             
             <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                📋 Como Resolver:
+                📋 {t('instanceAlert.howToTitle')}
               </h4>
               <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
-                <li>Vá em <strong>Configurações → Integrações</strong></li>
-                <li>Clique em <strong>"Nova Instância"</strong></li>
-                <li>Use o <strong>mesmo número</strong> de WhatsApp</li>
-                <li>Escaneie o QR Code</li>
-                <li>Suas conversas serão <strong>migradas automaticamente</strong> ✅</li>
-                <li>Depois, exclua a instância antiga em Configurações</li>
+                <li>{t('instanceAlert.step1')}</li>
+                <li>{t('instanceAlert.step2')}</li>
+                <li>{t('instanceAlert.step3')}</li>
+                <li>{t('instanceAlert.step4')}</li>
+                <li>{t('instanceAlert.step5')}</li>
+                <li>{t('instanceAlert.step6')}</li>
               </ol>
             </div>
             
@@ -125,7 +129,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Settings className="w-4 h-4" />
-                Ir para Configurações
+                {t('instanceAlert.goSettings')}
               </button>
               <button
                 onClick={handleOpenMigration}
@@ -133,7 +137,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-yellow-800 text-sm font-medium rounded-lg border border-yellow-300 hover:bg-yellow-50 transition-colors disabled:opacity-50"
               >
                 <ArrowRight className="w-4 h-4" />
-                {loading ? 'Carregando...' : 'Migrar para Outra Instância'}
+                {loading ? t('instanceAlert.migrateLoading') : t('instanceAlert.migrateButton')}
               </button>
             </div>
           </div>
@@ -145,7 +149,7 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Migrar Conversa
+              {t('instanceAlert.modalTitle')}
             </h3>
             
             {error && (
@@ -156,23 +160,23 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Selecione a nova instância:
+                {t('instanceAlert.selectLabel')}
               </label>
               <select
                 value={selectedInstance}
                 onChange={(e) => setSelectedInstance(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">Selecione...</option>
+                <option value="">{t('instanceAlert.selectPlaceholder')}</option>
                 {availableInstances.map(inst => (
                   <option key={inst.id} value={inst.id}>
-                    {inst.instance_name} ({inst.phone_number || 'Sem telefone'})
+                    {inst.instance_name} ({inst.phone_number || t('instanceAlert.noPhone')})
                   </option>
                 ))}
               </select>
               {availableInstances.length === 0 && (
                 <p className="mt-2 text-sm text-gray-500">
-                  Nenhuma instância conectada disponível
+                  {t('instanceAlert.noInstancesAvailable')}
                 </p>
               )}
             </div>
@@ -182,14 +186,14 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
                 onClick={() => setShowMigrationModal(false)}
                 className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancelar
+                {t('instanceAlert.cancel')}
               </button>
               <button
                 onClick={handleMigrate}
                 disabled={loading || !selectedInstance}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {loading ? 'Migrando...' : 'Migrar'}
+                {loading ? t('instanceAlert.migrating') : t('instanceAlert.migrate')}
               </button>
             </div>
           </div>

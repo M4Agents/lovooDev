@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface Activity {
   id: string
@@ -26,6 +27,7 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
   companyId,
   onViewDetails
 }) => {
+  const { t } = useTranslation('chat')
   const [urgentActivity, setUrgentActivity] = useState<Activity | null>(null)
   const [loading, setLoading] = useState(true)
   const [dismissed, setDismissed] = useState(false)
@@ -92,7 +94,7 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
               text-xs font-bold uppercase tracking-wide
               ${isOverdue ? 'text-red-700' : 'text-yellow-700'}
             `}>
-              {isOverdue ? 'Atividade Atrasada' : 'Atividade Hoje'}
+              {isOverdue ? t('activityBanner.overdue') : t('activityBanner.today')}
             </span>
             {isOverdue && (
               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -129,14 +131,15 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
               }
             `}
           >
-            Ver Detalhes
+            {t('activityBanner.viewDetails')}
           </button>
         )}
         
         <button
           onClick={() => setDismissed(true)}
           className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
-          title="Dispensar"
+          title={t('activityBanner.dismiss')}
+          aria-label={t('activityBanner.dismiss')}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

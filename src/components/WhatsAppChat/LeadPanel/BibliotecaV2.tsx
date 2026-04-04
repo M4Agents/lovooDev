@@ -6,6 +6,7 @@
 // Mesma abordagem que funciona perfeitamente no chat
 
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Folder, File, Image, Video, Music, FileText, ChevronLeft, Upload, Plus } from 'lucide-react'
 import { DirectS3Upload } from '../../MediaLibrary/DirectS3Upload'
 import { supabase } from '../../../lib/supabase' // Usar mesmo cliente que o chat usa
@@ -61,6 +62,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   companyId,
   leadId
 }) => {
+  const { t } = useTranslation('chat')
   console.log('🔥🔥🔥 BIBLIOTECA V2 - COMPONENTE CARREGADO - 2026-02-20 22:22 🔥🔥🔥')
   console.log('📊 Props:', { conversationId, companyId, leadId })
   
@@ -503,12 +505,12 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       console.log('✅ Upload concluído:', uploadResult.id)
       console.log('📁 Arquivo salvo em:', uploadResult.s3_key)
       console.log('📂 Pasta:', uploadResult.folder_name)
-      alert('Arquivo enviado com sucesso!')
+      alert(t('biblioteca.uploadSuccess'))
       // Recarregar arquivos da pasta
       await fetchData()
     } catch (error) {
       console.error('❌ Erro no upload:', error)
-      alert('Erro ao fazer upload')
+      alert(t('biblioteca.uploadError'))
     } finally {
       setUploading(false)
     }
@@ -523,7 +525,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
           <div className="text-4xl mb-2">⏳</div>
-          <p className="text-gray-600">Carregando biblioteca...</p>
+          <p className="text-gray-600">{t('biblioteca.loading')}</p>
         </div>
       </div>
     )
@@ -533,8 +535,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
       <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
-        <h2 className="text-xl font-bold text-gray-800 mb-2">📚 Biblioteca de Mídia</h2>
-        <p className="text-sm text-gray-600">Gerencie arquivos e pastas da empresa</p>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">📚 {t('biblioteca.title')}</h2>
+        <p className="text-sm text-gray-600">{t('biblioteca.subtitle')}</p>
       </div>
       
       {/* Tabs */}
@@ -549,7 +551,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         >
           <div className="flex items-center justify-center space-x-2">
             <span>💬</span>
-            <span>Chat</span>
+            <span>{t('biblioteca.tabChat')}</span>
             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
               {chatStats.total}
             </span>
@@ -566,7 +568,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         >
           <div className="flex items-center justify-center space-x-2">
             <span>📁</span>
-            <span>Pastas</span>
+            <span>{t('biblioteca.tabFolders')}</span>
             <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
               {folders.length}
             </span>
@@ -581,7 +583,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
           <div>
             {/* Filtros elegantes como botões */}
             <div className="mb-4">
-              <h3 className="font-semibold text-gray-800 mb-3 text-sm">Filtrar por tipo:</h3>
+              <h3 className="font-semibold text-gray-800 mb-3 text-sm">{t('biblioteca.filterByType')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 {/* Botão Todos */}
                 <button
@@ -596,7 +598,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xl">📊</span>
                       <span className={`text-sm font-medium ${selectedFilter === 'all' ? 'text-purple-700' : 'text-gray-700'}`}>
-                        Todos
+                        {t('biblioteca.filterAll')}
                       </span>
                     </div>
                     <span className={`text-sm font-bold ${selectedFilter === 'all' ? 'text-purple-600' : 'text-gray-600'}`}>
@@ -618,7 +620,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🖼️</span>
                       <span className={`text-sm font-medium ${selectedFilter === 'image' ? 'text-blue-700' : 'text-gray-700'}`}>
-                        Imagens
+                        {t('biblioteca.filterImages')}
                       </span>
                     </div>
                     <span className={`text-sm font-bold ${selectedFilter === 'image' ? 'text-blue-600' : 'text-gray-600'}`}>
@@ -640,7 +642,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🎥</span>
                       <span className={`text-sm font-medium ${selectedFilter === 'video' ? 'text-red-700' : 'text-gray-700'}`}>
-                        Vídeos
+                        {t('biblioteca.filterVideos')}
                       </span>
                     </div>
                     <span className={`text-sm font-bold ${selectedFilter === 'video' ? 'text-red-600' : 'text-gray-600'}`}>
@@ -662,7 +664,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xl">📄</span>
                       <span className={`text-sm font-medium ${selectedFilter === 'document' ? 'text-green-700' : 'text-gray-700'}`}>
-                        Documentos
+                        {t('biblioteca.filterDocuments')}
                       </span>
                     </div>
                     <span className={`text-sm font-bold ${selectedFilter === 'document' ? 'text-green-600' : 'text-gray-600'}`}>
@@ -676,7 +678,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
             {chatFiles.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <p className="text-4xl mb-2">📭</p>
-                <p>Nenhum arquivo recebido no chat ainda</p>
+                <p>{t('biblioteca.emptyChat')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -762,12 +764,12 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                   className="flex items-center space-x-2 px-4 py-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                 >
                   <span>←</span>
-                  <span>Voltar para Pastas</span>
+                  <span>{t('biblioteca.backToFolders')}</span>
                 </button>
                 <div className="mt-3 flex items-center space-x-2">
                   <span className="text-2xl">📂</span>
                   <h3 className="font-semibold text-gray-800">{currentFolderName}</h3>
-                  <span className="text-sm text-gray-500">({folderFiles.length} arquivos)</span>
+                  <span className="text-sm text-gray-500">{t('biblioteca.filesCount', { count: folderFiles.length })}</span>
                 </div>
               </div>
             )}
@@ -775,12 +777,12 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
             {/* Lista de Pastas (quando no modo 'list') */}
             {folderViewMode === 'list' && (
               <div className="mb-4 flex justify-between items-center">
-                <h3 className="font-semibold text-gray-800">Suas Pastas</h3>
+                <h3 className="font-semibold text-gray-800">{t('biblioteca.yourFolders')}</h3>
                 <button
                   onClick={() => setShowNewFolderModal(true)}
                   className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
                 >
-                  + Nova Pasta
+                  {t('biblioteca.newFolder')}
                 </button>
               </div>
             )}
@@ -790,12 +792,12 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
               folders.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <p className="text-4xl mb-2">📁</p>
-                  <p>Nenhuma pasta criada ainda</p>
+                  <p>{t('biblioteca.emptyFolders')}</p>
                   <button
                     onClick={() => setShowNewFolderModal(true)}
                     className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
                   >
-                    Criar Primeira Pasta
+                    {t('biblioteca.createFirstFolder')}
                   </button>
                 </div>
               ) : (
@@ -829,8 +831,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
               {!currentFolderId && (
                 <div className="text-center py-8 px-4 bg-purple-50 rounded-lg border border-purple-200 mt-4">
                   <p className="text-2xl mb-2">👆</p>
-                  <p className="text-purple-700 font-medium">Selecione uma pasta acima</p>
-                  <p className="text-sm text-purple-600 mt-1">para fazer upload de arquivos</p>
+                  <p className="text-purple-700 font-medium">{t('biblioteca.selectFolderHint')}</p>
+                  <p className="text-sm text-purple-600 mt-1">{t('biblioteca.selectFolderSub')}</p>
                 </div>
               )}
               </>
@@ -842,7 +844,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                 {/* Lista de arquivos da pasta */}
                 {currentFolderId && folderFiles.length > 0 && (
                   <div className="mt-4">
-                    <h3 className="font-medium text-gray-800 mb-2">📄 Arquivos ({folderFiles.length})</h3>
+                    <h3 className="font-medium text-gray-800 mb-2">📄 {t('biblioteca.filesInFolder', { count: folderFiles.length })}</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {folderFiles.map(file => (
                         <div
@@ -932,18 +934,18 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       {showNewFolderModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full mx-4">
-            <h3 className="text-lg font-bold mb-4">📁 Nova Pasta</h3>
+            <h3 className="text-lg font-bold mb-4">{t('biblioteca.newFolderModal')}</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome da Pasta *
+                  {t('biblioteca.folderName')}
                 </label>
                 <input
                   type="text"
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
-                  placeholder="Ex: Marketing, Produtos..."
+                  placeholder={t('biblioteca.folderNamePlaceholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   autoFocus
                 />
@@ -951,7 +953,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ícone
+                  {t('biblioteca.icon')}
                 </label>
                 <div className="flex space-x-2">
                   {['📁', '📂', '📢', '📦', '📄', '📋', '🎨', '🎬', '📷', '💰'].map(icon => (
@@ -972,13 +974,13 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descrição (opcional)
+                  {t('biblioteca.descriptionOptional')}
                 </label>
                 <input
                   type="text"
                   value={newFolderDescription}
                   onChange={(e) => setNewFolderDescription(e.target.value)}
-                  placeholder="Descrição da pasta..."
+                  placeholder={t('biblioteca.descriptionPlaceholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
@@ -994,14 +996,14 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Cancelar
+                {t('biblioteca.cancel')}
               </button>
               <button
                 onClick={handleCreateFolder}
                 disabled={!newFolderName.trim()}
                 className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Criar Pasta
+                {t('biblioteca.createFolder')}
               </button>
             </div>
           </div>
@@ -1024,7 +1026,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                   handleDownload(previewFile)
                 }}
                 className="w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center text-white shadow-lg transition-colors"
-                title="Baixar arquivo"
+                title={t('biblioteca.downloadFile')}
+                aria-label={t('biblioteca.downloadFile')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1038,7 +1041,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                   handleDeleteClick(previewFile)
                 }}
                 className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg transition-colors"
-                title="Excluir mídia"
+                title={t('biblioteca.deleteMedia')}
+                aria-label={t('biblioteca.deleteMedia')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1049,7 +1053,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
               <button
                 onClick={closePreviewModal}
                 className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-800 text-2xl transition-colors shadow-lg"
-                title="Fechar"
+                title={t('biblioteca.close')}
+                aria-label={t('biblioteca.close')}
               >
                 ×
               </button>
@@ -1072,7 +1077,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                   autoPlay
                   className="max-w-full max-h-[80vh]"
                 >
-                  Seu navegador não suporta vídeos.
+                  {t('biblioteca.videoNotSupported')}
                 </video>
               )}
               
@@ -1084,7 +1089,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     onClick={() => handleDownload(previewFile)}
                     className="inline-block px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
                   >
-                    Baixar Documento
+                    {t('biblioteca.downloadDocument')}
                   </button>
                 </div>
               )}
@@ -1119,32 +1124,32 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">ATENÇÃO - Exclusão Permanente</h3>
-                <p className="text-sm text-gray-600">Esta ação não pode ser desfeita</p>
+                <h3 className="text-lg font-bold text-gray-900">{t('biblioteca.deleteTitle')}</h3>
+                <p className="text-sm text-gray-600">{t('biblioteca.deleteSubtitle')}</p>
               </div>
             </div>
             
             {/* Conteúdo */}
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
               <p className="text-sm text-gray-800 mb-3">
-                Você está prestes a excluir:
+                {t('biblioteca.deleteIntro')}
               </p>
               <p className="font-medium text-gray-900 mb-4">
                 📄 {fileToDelete.original_filename}
               </p>
               
               <div className="space-y-2 text-sm text-gray-700">
-                <p className="font-semibold text-red-700">⚠️ A mídia será removida:</p>
+                <p className="font-semibold text-red-700">⚠️ {t('biblioteca.deleteWillRemove')}</p>
                 <ul className="space-y-1 ml-4">
-                  <li>• ❌ Da Biblioteca</li>
-                  <li>• ❌ Do histórico do Chat</li>
-                  <li>• ❌ Permanentemente do sistema</li>
+                  <li>• ❌ {t('biblioteca.deleteFromLibrary')}</li>
+                  <li>• ❌ {t('biblioteca.deleteFromChat')}</li>
+                  <li>• ❌ {t('biblioteca.deletePermanent')}</li>
                 </ul>
               </div>
             </div>
             
             <p className="text-sm text-gray-700 mb-6">
-              Tem certeza que deseja continuar?
+              {t('biblioteca.deleteConfirm')}
             </p>
             
             {/* Botões */}
@@ -1153,7 +1158,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                 onClick={handleCancelDelete}
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
-                Cancelar
+                {t('biblioteca.cancel')}
               </button>
               <button
                 onClick={handleConfirmDelete}
@@ -1162,7 +1167,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                Sim, Excluir
+                {t('biblioteca.deleteYes')}
               </button>
             </div>
           </div>

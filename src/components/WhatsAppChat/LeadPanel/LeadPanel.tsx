@@ -5,6 +5,7 @@
 // NÃO MODIFICA componentes existentes
 
 import React, { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
 import { BibliotecaV2 } from './BibliotecaV2'
@@ -155,6 +156,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   companyId,
   userId
 }) => {
+  const { t } = useTranslation('chat')
   console.log('🔥🔥🔥 LEADPANEL - VERSÃO COM BIBLIOTECA V2 - 2026-02-20 22:31 🔥🔥🔥')
   
   const [contact, setContact] = useState<ChatContact | null>(null)
@@ -302,7 +304,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-sm text-gray-600">Carregando...</p>
+          <p className="text-sm text-gray-600">{t('leadPanel.loading')}</p>
         </div>
       </div>
     )
@@ -325,7 +327,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            Informações
+            {t('leadPanel.tabs.info')}
           </button>
           <button
             onClick={() => setActiveTab('schedule')}
@@ -335,7 +337,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            Agendar
+            {t('leadPanel.tabs.schedule')}
           </button>
           <button
             onClick={() => setActiveTab('biblioteca')}
@@ -345,7 +347,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            📚 Biblioteca
+            {t('leadPanel.tabs.library')}
           </button>
         </div>
       </div>
@@ -385,7 +387,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               </div>
-              <p className="text-sm text-gray-600">Carregando informações da conversa...</p>
+              <p className="text-sm text-gray-600">{t('leadPanel.loadingConversation')}</p>
             </div>
           )
         ) : activeTab === 'biblioteca' ? (
@@ -441,6 +443,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   averageResponseTime,
   associatedLeadId
 }) => {
+  const { t } = useTranslation('chat')
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<ContactInfoForm>({
     name: '',
@@ -612,7 +615,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     
     // Confirmar mudança
     const confirmed = window.confirm(
-      `Deseja trocar para a instância "${newInstance.instance_name}"?\n\nPróximas mensagens serão enviadas por esta instância.`
+      t('leadPanel.contact.confirmChangeInstance', { name: newInstance.instance_name })
     )
     
     if (!confirmed) {
@@ -633,16 +636,20 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       
       if (data?.success) {
         setSelectedInstanceId(newInstanceId)
-        alert('✅ Instância alterada com sucesso!')
+        alert(t('leadPanel.contact.instanceChangedSuccess'))
         
         // Recarregar dados
         await onUpdate()
       } else {
-        throw new Error(data?.error || 'Erro ao trocar instância')
+        throw new Error(data?.error || t('leadPanel.contact.instanceChangeFailedShort'))
       }
     } catch (error: any) {
       console.error('Error changing instance:', error)
-      alert('❌ Erro ao trocar instância: ' + (error.message || 'Erro desconhecido'))
+      alert(
+        t('leadPanel.contact.instanceChangeError', {
+          error: error.message || t('leadPanel.contact.unknownError')
+        })
+      )
       
       // Reverter seleção
       if (conversation?.instance_id) {
@@ -678,7 +685,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         
         const leadData: any = {
           company_id: companyId,
-          name: contact?.name || conversation?.contact_name || 'Lead sem nome',
+          name: contact?.name || conversation?.contact_name || t('conversationItem.leadNoName'),
           phone: conversation.contact_phone,
           origin: 'whatsapp',
           status: 'novo',
@@ -722,7 +729,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         
         if (!canEditLead(leadData)) {
           console.warn('❌ Sem permissão para editar')
-          alert('Você não tem permissão para alterar o responsável deste lead')
+          alert(t('leadPanel.contact.permissionDenied'))
           return
         }
         
@@ -752,7 +759,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         data: error?.response?.data,
         error: error
       })
-      alert('Erro ao atualizar responsável. Tente novamente.')
+      alert(t('leadPanel.contact.responsibleUpdateError'))
       
       // Reverter seleção
       setCurrentResponsibleId(originalResponsibleId || '')
@@ -770,7 +777,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           <OpportunitiesSection
             leadId={conversation.lead_id}
             phoneNumber={conversation.contact_phone}
-            leadName={contact?.name || conversation?.contact_name || 'Lead'}
+            leadName={contact?.name || conversation?.contact_name || t('leadPanel.contact.leadDefaultName')}
             companyId={companyId}
             conversationId={conversation.id}
           />
@@ -790,7 +797,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
             </svg>
-            Tags
+            {t('leadPanel.contact.tags')}
           </label>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -804,7 +811,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                   </span>
                 ))
               : (
-                <span className="text-xs text-gray-400 italic">Nenhuma tag</span>
+                <span className="text-xs text-gray-400 italic">{t('leadPanel.contact.noTags')}</span>
               )
             }
 
@@ -813,10 +820,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               type="button"
               disabled={!associatedLeadId}
               onClick={() => associatedLeadId && setTagPopoverOpen(true)}
-              title={associatedLeadId ? 'Gerenciar tags' : 'Associe um lead para gerenciar tags'}
+              title={associatedLeadId ? t('leadPanel.contact.tagManageTitle') : t('leadPanel.contact.tagManageDisabledTitle')}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              + Tag
+              {t('leadPanel.contact.addTag')}
             </button>
           </div>
 
@@ -837,13 +844,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
             <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
-            Instância de Envio
+            {t('leadPanel.contact.sendingInstance')}
           </label>
           
           {loadingInstances ? (
-            <div className="text-sm text-gray-500">Carregando...</div>
+            <div className="text-sm text-gray-500">{t('leadPanel.loading')}</div>
           ) : availableInstances.length === 0 ? (
-            <div className="text-sm text-gray-500">Nenhuma instância disponível</div>
+            <div className="text-sm text-gray-500">{t('leadPanel.contact.noInstances')}</div>
           ) : (
             <>
               <InstanceSelector
@@ -861,7 +868,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               {selectedInstanceId && selectedInstanceId !== conversation?.instance_id && (
                 <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
                   <span>⚠️</span>
-                  <p>Instância alterada</p>
+                  <p>{t('leadPanel.contact.instanceChanged')}</p>
                 </div>
               )}
             </>
@@ -871,11 +878,11 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         {/* Seletor de Responsável pelo Lead - MODERNIZADO */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            Responsável pelo Lead
+            {t('leadPanel.contact.responsible')}
           </label>
           
           {loadingUsers ? (
-            <div className="text-sm text-gray-500">Carregando...</div>
+            <div className="text-sm text-gray-500">{t('leadPanel.loading')}</div>
           ) : (
             <>
               <UserSelector
@@ -891,7 +898,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (
                 <div className="flex items-start gap-2 text-xs text-amber-600 bg-amber-50/50 px-2 py-1.5 rounded">
                   <span>⚠️</span>
-                  <p>Responsável alterado</p>
+                  <p>{t('leadPanel.contact.responsibleChanged')}</p>
                 </div>
               )}
               
@@ -899,7 +906,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
               {responsibleChangeSuccess && (
                 <div className="flex items-start gap-2 text-xs text-green-600 bg-green-50/50 px-2 py-1.5 rounded">
                   <span>✓</span>
-                  <p>Responsável atualizado com sucesso</p>
+                  <p>{t('leadPanel.contact.responsibleSuccess')}</p>
                 </div>
               )}
             </>
@@ -920,7 +927,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
-            Editar Lead Completo
+            {t('leadPanel.contact.editLeadFull')}
           </button>
         </div>
 
@@ -930,7 +937,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            Estatísticas do Lead
+            {t('leadPanel.contact.statsTitle')}
           </label>
           
           <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-slate-200/60 shadow-sm">
@@ -943,8 +950,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                     : 0
                   }
                 </div>
-                <div className="text-xs text-gray-600 mt-1 font-medium">Dias</div>
-                <div className="text-[10px] text-gray-400">no sistema</div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">{t('leadPanel.contact.daysLabel')}</div>
+                <div className="text-[10px] text-gray-400">{t('leadPanel.contact.daysSub')}</div>
               </div>
               
               {/* Mensagens Trocadas */}
@@ -952,8 +959,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                 <div className="text-xl font-bold text-green-600">
                   {contact?.total_messages || 0}
                 </div>
-                <div className="text-xs text-gray-600 mt-1 font-medium">Mensagens</div>
-                <div className="text-[10px] text-gray-400">trocadas</div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">{t('leadPanel.contact.messagesLabel')}</div>
+                <div className="text-[10px] text-gray-400">{t('leadPanel.contact.messagesSub')}</div>
               </div>
               
               {/* Tempo Médio de Resposta */}
@@ -961,8 +968,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                 <div className="text-xl font-bold text-purple-600">
                   {averageResponseTime}
                 </div>
-                <div className="text-xs text-gray-600 mt-1 font-medium">Tempo</div>
-                <div className="text-[10px] text-gray-400">médio resp.</div>
+                <div className="text-xs text-gray-600 mt-1 font-medium">{t('leadPanel.contact.timeLabel')}</div>
+                <div className="text-[10px] text-gray-400">{t('leadPanel.contact.timeSub')}</div>
               </div>
             </div>
           </div>
@@ -997,6 +1004,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   contact,
   associatedLead
 }) => {
+  const { t } = useTranslation('chat')
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState<ScheduleMessageForm>({
     content: '',
@@ -1108,7 +1116,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     const hasMedia = selectedFile || formData.media_url
     
     if (!selectedInstanceId || (!hasContent && !hasMedia) || !formData.scheduled_date || !formData.scheduled_time) {
-      alert('Por favor, preencha todos os campos obrigatórios e selecione uma instância')
+      alert(t('leadPanel.schedule.errors.requiredFields'))
       return
     }
 
@@ -1151,7 +1159,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       onUpdate()
     } catch (error) {
       console.error('Error scheduling message:', error)
-      alert('Erro ao agendar mensagem')
+      alert(t('leadPanel.schedule.errors.scheduleFailed'))
     } finally {
       setIsScheduling(false)
       setUploadProgress(0)
@@ -1231,7 +1239,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       onUpdate()
     } catch (error) {
       console.error('Error updating message:', error)
-      alert('Erro ao atualizar mensagem')
+      alert(t('leadPanel.schedule.errors.updateFailed'))
     }
   }
   
@@ -1254,7 +1262,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     
     const limit = FILE_LIMITS[messageType]
     if (file.size > limit) {
-      alert(`Arquivo muito grande! Máximo: ${limit / (1024 * 1024)}MB`)
+      alert(t('leadPanel.schedule.errors.fileTooLarge', { maxMb: limit / (1024 * 1024) }))
       return
     }
     
@@ -1338,7 +1346,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           onClick={() => setShowForm(!showForm)}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
         >
-          📅 {showForm ? 'Cancelar' : 'Agendar Mensagem'}
+          {showForm ? t('leadPanel.schedule.scheduleMessageClose') : t('leadPanel.schedule.scheduleMessageOpen')}
         </button>
         
         <button
@@ -1348,7 +1356,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           }}
           className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
         >
-          ✅ Atividades
+          {t('leadPanel.schedule.activities')}
         </button>
       </div>
 
@@ -1356,20 +1364,20 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       {showForm && (
         <div className="space-y-4 p-4 border border-gray-200 rounded-lg">
           <h4 className="text-sm font-medium text-gray-700">
-            {editingMessage ? '✏️ Editar Mensagem Agendada' : '📅 Agendar Nova Mensagem'}
+            {editingMessage ? t('leadPanel.schedule.editTitle') : t('leadPanel.schedule.newTitle')}
           </h4>
           
           {/* Seleção de Instância WhatsApp */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
               <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
-              Instância WhatsApp
+              {t('leadPanel.schedule.whatsappInstance')}
             </label>
             {loadingInstances ? (
-              <div className="px-3 py-2 text-sm text-gray-500">Carregando instâncias...</div>
+              <div className="px-3 py-2 text-sm text-gray-500">{t('leadPanel.schedule.loadingInstances')}</div>
             ) : availableInstances.length === 0 ? (
               <div className="px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg">
-                ⚠️ Nenhuma instância conectada disponível
+                ⚠️ {t('leadPanel.schedule.noInstanceConnected')}
               </div>
             ) : (
               <>
@@ -1386,10 +1394,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                     <div className="flex items-start gap-2">
                       <span className="text-yellow-600 text-lg">⚠️</span>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-yellow-800">Atenção: Instância diferente selecionada</p>
+                        <p className="text-xs font-medium text-yellow-800">{t('leadPanel.schedule.differentInstanceTitle')}</p>
                         <p className="text-xs text-yellow-700 mt-1">
-                          A mensagem será enviada de um número diferente do usado nesta conversa. 
-                          O cliente pode não reconhecer o remetente.
+                          {t('leadPanel.schedule.differentInstanceBody')}
                         </p>
                       </div>
                     </div>
@@ -1400,7 +1407,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('leadPanel.schedule.messageLabel')}</label>
             <div className="relative">
               <textarea
                 ref={textareaRef}
@@ -1408,7 +1415,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                 rows={3}
                 className="w-full px-3 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Digite a mensagem..."
+                placeholder={t('leadPanel.schedule.messagePlaceholder')}
               />
               
               {/* Botão Emoji */}
@@ -1416,9 +1423,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 type="button"
                 onClick={() => setIsEmojiOpen((prev) => !prev)}
                 className="absolute right-2 top-2 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-                title="Adicionar emoji"
+                title={t('leadPanel.schedule.addEmojiTitle')}
               >
-                <span role="img" aria-label="Emoji" className="text-xl">
+                <span role="img" aria-label={t('leadPanel.schedule.addEmojiAria')} className="text-xl">
                   😊
                 </span>
               </button>
@@ -1442,28 +1449,28 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           
           {/* Tipo de Mídia */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Adicionar Mídia</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('leadPanel.schedule.addMedia')}</label>
             <div className="flex gap-2 mb-3">
               <button
                 type="button"
                 onClick={() => setMediaSource('none')}
                 className={`px-3 py-1 text-xs rounded ${mediaSource === 'none' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
               >
-                Apenas Texto
+                {t('leadPanel.schedule.textOnly')}
               </button>
               <button
                 type="button"
                 onClick={() => setMediaSource('upload')}
                 className={`px-3 py-1 text-xs rounded ${mediaSource === 'upload' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}
               >
-                📤 Upload
+                {t('leadPanel.schedule.upload')}
               </button>
             </div>
             
             {mediaSource === 'upload' && (
               <div className="space-y-2">
                 <div className="text-xs text-gray-500 mb-2">
-                  ℹ️ O tipo de arquivo será detectado automaticamente
+                  ℹ️ {t('leadPanel.schedule.mediaHint')}
                 </div>
                 
                 <input
@@ -1486,21 +1493,21 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           
           {/* Recorrência */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Recorrência</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('leadPanel.schedule.recurrence')}</label>
             <select
               value={formData.recurring_type}
               onChange={(e) => setFormData(prev => ({ ...prev, recurring_type: e.target.value as any }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="none">Não repetir</option>
-              <option value="daily">Diariamente</option>
-              <option value="weekly">Semanalmente</option>
-              <option value="monthly">Mensalmente</option>
+              <option value="none">{t('leadPanel.schedule.recurrenceNone')}</option>
+              <option value="daily">{t('leadPanel.schedule.recurrenceDaily')}</option>
+              <option value="weekly">{t('leadPanel.schedule.recurrenceWeekly')}</option>
+              <option value="monthly">{t('leadPanel.schedule.recurrenceMonthly')}</option>
             </select>
             
             {formData.recurring_type === 'weekly' && (
               <div className="mt-2">
-                <label className="block text-xs text-gray-600 mb-1">Dias da Semana</label>
+                <label className="block text-xs text-gray-600 mb-1">{t('leadPanel.schedule.weekdays')}</label>
                 <div className="grid grid-cols-7 gap-1">
                   {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, index) => (
                     <button
@@ -1522,7 +1529,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             
             {formData.recurring_type === 'monthly' && (
               <div className="mt-2">
-                <label className="block text-xs text-gray-600 mb-1">Dia do Mês</label>
+                <label className="block text-xs text-gray-600 mb-1">{t('leadPanel.schedule.dayOfMonth')}</label>
                 <input
                   type="number"
                   min="1"
@@ -1533,14 +1540,14 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                     recurring_config: { ...prev.recurring_config, day_of_month: parseInt(e.target.value) }
                   }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  placeholder="Ex: 15"
+                  placeholder={t('leadPanel.schedule.dayOfMonthPlaceholder')}
                 />
               </div>
             )}
             
             {formData.recurring_type !== 'none' && (
               <div className="mt-2">
-                <label className="block text-xs text-gray-600 mb-1">Repetir até (opcional)</label>
+                <label className="block text-xs text-gray-600 mb-1">{t('leadPanel.schedule.repeatUntil')}</label>
                 <input
                   type="date"
                   value={formData.recurring_config?.end_date || ''}
@@ -1568,7 +1575,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
               />
               <span className="text-sm font-medium text-gray-700">
-                🔔 Cancelar automaticamente se o lead responder
+                🔔 {t('leadPanel.schedule.cancelIfLeadReplies')}
               </span>
             </label>
 
@@ -1584,7 +1591,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                     }))}
                     className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">Cancelar apenas a próxima mensagem agendada</span>
+                  <span className="text-sm text-gray-700">{t('leadPanel.schedule.cancelNextOnly')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1596,7 +1603,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                     }))}
                     className="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500"
                   />
-                  <span className="text-sm text-gray-700">Cancelar TODAS as mensagens futuras agendadas</span>
+                  <span className="text-sm text-gray-700">{t('leadPanel.schedule.cancelAllFuture')}</span>
                 </label>
               </div>
             )}
@@ -1604,7 +1611,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('leadPanel.schedule.date')}</label>
               <input
                 type="date"
                 value={formData.scheduled_date}
@@ -1615,7 +1622,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('leadPanel.schedule.time')}</label>
               <input
                 type="time"
                 value={formData.scheduled_time}
@@ -1629,7 +1636,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           {isScheduling && uploadProgress > 0 && uploadProgress < 100 && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Enviando arquivo...</span>
+                <span className="text-sm text-gray-600">{t('leadPanel.schedule.uploadingFile')}</span>
                 <span className="text-sm font-medium text-blue-600">{uploadProgress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -1654,9 +1661,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           >
             {isScheduling 
               ? uploadProgress > 0 && uploadProgress < 100 
-                ? `⏳ Enviando ${uploadProgress}%...` 
-                : '⏳ Processando...'
-              : (editingMessage ? 'Atualizar Mensagem' : 'Confirmar Agendamento')
+                ? t('leadPanel.schedule.sendingPercent', { percent: uploadProgress })
+                : `⏳ ${t('leadPanel.schedule.processing')}`
+              : (editingMessage ? t('leadPanel.schedule.updateMessage') : t('leadPanel.schedule.confirmSchedule'))
             }
           </button>
         </div>
@@ -1665,7 +1672,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       {/* Lista de Mensagens Agendadas */}
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-3">
-          Mensagens Agendadas ({scheduledMessages.length})
+          {t('leadPanel.schedule.scheduledList', { count: scheduledMessages.length })}
         </h4>
         
         {/* Filtros de Status */}
@@ -1676,7 +1683,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               statusFilter === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'
             }`}
           >
-            Todas ({scheduledMessages.length})
+            {t('leadPanel.schedule.filterAll', { count: scheduledMessages.length })}
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
@@ -1684,7 +1691,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               statusFilter === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100'
             }`}
           >
-            🟡 Pendentes ({scheduledMessages.filter(m => m.status === 'pending').length})
+            {t('leadPanel.schedule.filterPending', { count: scheduledMessages.filter(m => m.status === 'pending').length })}
           </button>
           <button
             onClick={() => setStatusFilter('sent')}
@@ -1692,7 +1699,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               statusFilter === 'sent' ? 'bg-green-100 text-green-700' : 'bg-gray-100'
             }`}
           >
-            🟢 Enviadas ({scheduledMessages.filter(m => m.status === 'sent').length})
+            {t('leadPanel.schedule.filterSent', { count: scheduledMessages.filter(m => m.status === 'sent').length })}
           </button>
           <button
             onClick={() => setStatusFilter('failed')}
@@ -1700,7 +1707,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               statusFilter === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100'
             }`}
           >
-            🔴 Falhadas ({scheduledMessages.filter(m => m.status === 'failed').length})
+            {t('leadPanel.schedule.filterFailed', { count: scheduledMessages.filter(m => m.status === 'failed').length })}
           </button>
           <button
             onClick={() => setStatusFilter('cancelled')}
@@ -1708,7 +1715,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
               statusFilter === 'cancelled' ? 'bg-gray-200 text-gray-700' : 'bg-gray-100'
             }`}
           >
-            ⚪ Canceladas ({scheduledMessages.filter(m => m.status === 'cancelled').length})
+            {t('leadPanel.schedule.filterCancelled', { count: scheduledMessages.filter(m => m.status === 'cancelled').length })}
           </button>
         </div>
 
@@ -1717,7 +1724,11 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             <svg className="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm">Nenhuma mensagem {statusFilter !== 'all' ? statusFilter : 'agendada'}</p>
+            <p className="text-sm">
+              {statusFilter === 'all'
+                ? t('leadPanel.schedule.emptyAll')
+                : t('leadPanel.schedule.emptyFiltered')}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1726,9 +1737,9 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex gap-2">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(message.status)}`}>
-                      {message.status === 'pending' ? 'Pendente' : 
-                       message.status === 'sent' ? 'Enviada' :
-                       message.status === 'failed' ? 'Falhou' : 'Cancelada'}
+                      {message.status === 'pending' ? t('leadPanel.schedule.statusPending') : 
+                       message.status === 'sent' ? t('leadPanel.schedule.statusSent') :
+                       message.status === 'failed' ? t('leadPanel.schedule.statusFailed') : t('leadPanel.schedule.statusCancelled')}
                     </span>
                     {message.instance_name && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800">
@@ -1737,25 +1748,25 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                     )}
                     {message.recurring_type !== 'none' && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
-                        🔄 {message.recurring_type === 'daily' ? 'Diário' : 
-                            message.recurring_type === 'weekly' ? 'Semanal' : 'Mensal'}
+                        🔄 {message.recurring_type === 'daily' ? t('leadPanel.schedule.recurringDaily') : 
+                            message.recurring_type === 'weekly' ? t('leadPanel.schedule.recurringWeekly') : t('leadPanel.schedule.recurringMonthly')}
                       </span>
                     )}
                     {message.cancel_if_lead_replies && (
                       <>
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800">
-                          🔔 Auto-Cancel
+                          🔔 {t('leadPanel.schedule.badgeAutoCancel')}
                         </span>
                         {message.cancel_scope === 'all_future' && (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
-                            🚫 Todas futuras
+                            🚫 {t('leadPanel.schedule.badgeAllFuture')}
                           </span>
                         )}
                       </>
                     )}
                     {message.media_url && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                        📎 Mídia
+                        📎 {t('leadPanel.schedule.badgeMedia')}
                       </span>
                     )}
                   </div>
@@ -1766,13 +1777,13 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
                         onClick={() => handleEdit(message)}
                         className="text-blue-600 hover:text-blue-800 text-xs"
                       >
-                        ✏️ Editar
+                        ✏️ {t('leadPanel.schedule.edit')}
                       </button>
                       <button
                         onClick={() => handleCancelClick(message)}
                         className="text-red-600 hover:text-red-800 text-xs"
                       >
-                        ✕ Cancelar
+                        ✕ {t('leadPanel.schedule.cancelShort')}
                       </button>
                     </div>
                   )}
@@ -1802,32 +1813,32 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md mx-4">
             <h3 className="text-lg font-bold text-gray-900 mb-2">
-              ⚠️ Cancelar Mensagem Agendada?
+              {t('leadPanel.schedule.modalCancelTitle')}
             </h3>
             <p className="text-gray-600 mb-4">
-              Você está prestes a cancelar a seguinte mensagem:
+              {t('leadPanel.schedule.modalCancelIntro')}
             </p>
             <div className="p-3 bg-gray-50 rounded-lg mb-4">
               <p className="text-sm text-gray-900 mb-2">{messageToCancel.content}</p>
               <p className="text-xs text-gray-600">
-                Agendada para: {formatDateTime(messageToCancel.scheduled_for)}
+                {t('leadPanel.schedule.modalCancelScheduledFor')} {formatDateTime(messageToCancel.scheduled_for)}
               </p>
             </div>
             <p className="text-sm text-red-600 mb-6">
-              Esta ação não pode ser desfeita.
+              {t('leadPanel.schedule.modalCancelIrreversible')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelModal(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                Voltar
+                {t('leadPanel.schedule.modalBack')}
               </button>
               <button
                 onClick={handleConfirmCancel}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
-                Sim, Cancelar
+                {t('leadPanel.schedule.modalConfirmCancel')}
               </button>
             </div>
           </div>
