@@ -80,6 +80,8 @@ export interface OpportunityStatusHistory {
   from_status?: 'open' | 'won' | 'lost'
   to_status: 'open' | 'won' | 'lost'
   value_snapshot?: number
+  /** ISO 4217 no momento do snapshot; legado sem valor */
+  currency_code?: string | null
   loss_reason?: string
   closed_at?: string
   changed_at: string
