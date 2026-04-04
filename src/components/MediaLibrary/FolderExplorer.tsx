@@ -4,6 +4,7 @@
 // Componente para navegação hierárquica de pastas
 
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MediaFolder } from '../../services/mediaManagement'
 import {
   Folder,
@@ -56,6 +57,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
   onEditFolder,
   onDeleteFolder
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const hasChildren = children.length > 0
 
   return (
@@ -119,7 +121,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
                   onEditFolder(folder)
                 }}
                 className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                title="Editar pasta"
+                title={t('actions.editFolder')}
               >
                 <Edit3 className="w-3 h-3" />
               </button>
@@ -132,7 +134,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
                   onDeleteFolder(folder)
                 }}
                 className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                title="Excluir pasta"
+                title={t('actions.deleteFolder')}
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -222,6 +224,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   onEditFolder,
   onDeleteFolder
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const [expandedFolders, setExpandedFolders] = useState<string[]>([])
 
   // Obter pastas raiz (sem parent_id)
@@ -246,7 +249,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
       {/* Header */}
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
         <Folder className="w-5 h-5 text-gray-600" />
-        <h3 className="font-semibold text-gray-900">Pastas</h3>
+        <h3 className="font-semibold text-gray-900">{t('folderExplorer.title')}</h3>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
       </div>
 
@@ -260,7 +263,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         onClick={() => handleSelect(undefined)}
       >
         <Home className="w-4 h-4" />
-        <span className="text-sm font-medium">Biblioteca</span>
+        <span className="text-sm font-medium">{t('folderExplorer.libraryRoot')}</span>
       </div>
 
       {/* Loading state */}
@@ -268,7 +271,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">Carregando pastas...</p>
+            <p className="text-sm text-gray-500">{t('folderExplorer.loading')}</p>
           </div>
         </div>
       )}
@@ -277,9 +280,9 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
       {!loading && folders.length === 0 && (
         <div className="text-center py-8">
           <Folder className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 mb-2">Nenhuma pasta criada</p>
+          <p className="text-sm text-gray-500 mb-2">{t('folderExplorer.emptyTitle')}</p>
           <p className="text-xs text-gray-400">
-            Clique em "Nova Pasta" para começar
+            {t('folderExplorer.emptyHint')}
           </p>
         </div>
       )}
@@ -309,11 +312,11 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         <div className="mt-4 pt-3 border-t border-gray-200">
           <div className="text-xs text-gray-500 space-y-1">
             <div className="flex justify-between">
-              <span>Total de pastas:</span>
+              <span>{t('folderExplorer.statsTotalFolders')}</span>
               <span className="font-medium">{folders.length}</span>
             </div>
             <div className="flex justify-between">
-              <span>Arquivos totais:</span>
+              <span>{t('folderExplorer.statsTotalFiles')}</span>
               <span className="font-medium">
                 {folders.reduce((sum, f) => sum + (f.file_count || 0), 0)}
               </span>

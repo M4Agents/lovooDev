@@ -4,6 +4,7 @@
 // Página principal para gestão de mídias da empresa
 
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { FolderExplorer } from '../components/MediaLibrary/FolderExplorer'
 import { FileGrid } from '../components/MediaLibrary/FileGrid'
@@ -46,6 +47,7 @@ interface MediaLibraryState {
 // =====================================================
 
 export const MediaLibrary: React.FC = () => {
+  const { t } = useTranslation('mediaLibrary')
   const { company } = useAuth()
   const [state, setState] = useState<MediaLibraryState>({
     folders: [],
@@ -256,7 +258,7 @@ export const MediaLibrary: React.FC = () => {
       console.log('✅ Pasta editada com sucesso')
     } catch (error) {
       console.error('❌ Erro ao editar pasta:', error)
-      alert('Erro ao editar pasta: ' + (error as Error).message)
+      alert(t('editFolderModal.alertError', { message: (error as Error).message }))
     }
   }
 
@@ -285,7 +287,7 @@ export const MediaLibrary: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Erro ao excluir pasta:', error)
-      setDeleteError('Erro de conexão ao excluir pasta')
+      setDeleteError(t('deleteFolderModal.connectionError'))
     }
   }
 
@@ -297,7 +299,7 @@ export const MediaLibrary: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <p className="text-gray-500">Carregando informações da empresa...</p>
+          <p className="text-gray-500">{t('states.loadingCompany')}</p>
         </div>
       </div>
     )
@@ -308,28 +310,33 @@ export const MediaLibrary: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Biblioteca de Mídias</h1>
-            <p className="text-gray-600">Gerencie todos os arquivos da sua empresa</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('header.title')}</h1>
+            <p className="text-gray-600">{t('header.subtitle')}</p>
           </div>
           
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={handleRefresh}
               disabled={state.loading}
+              title={t('actions.refresh')}
+              aria-label={t('actions.refresh')}
               className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${state.loading ? 'animate-spin' : ''}`} />
             </button>
             
             <button
+              type="button"
               onClick={() => setShowFolderModal(true)}
               className="px-4 py-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
             >
               <FolderPlus className="w-5 h-5" />
-              Nova Pasta
+              {t('actions.newFolder')}
             </button>
             
             <button
+              type="button"
               onClick={() => setShowUploadModal(true)}
               disabled={!state.currentFolder}
               className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
@@ -337,10 +344,10 @@ export const MediaLibrary: React.FC = () => {
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
-              title={!state.currentFolder ? 'Selecione uma pasta para fazer upload' : 'Fazer upload de arquivos'}
+              title={!state.currentFolder ? t('actions.uploadDisabledTitle') : t('actions.uploadEnabledTitle')}
             >
               <Upload className="w-5 h-5" />
-              Upload
+              {t('actions.upload')}
             </button>
           </div>
           
@@ -348,7 +355,7 @@ export const MediaLibrary: React.FC = () => {
           {!state.currentFolder && (
             <div className="mt-2 text-sm text-gray-500 flex items-center gap-1">
               <span>📁</span>
-              <span>Selecione uma pasta para fazer upload de arquivos</span>
+              <span>{t('hints.selectFolderForUpload')}</span>
             </div>
           )}
         </div>
@@ -360,7 +367,7 @@ export const MediaLibrary: React.FC = () => {
               onClick={() => handleBreadcrumbClick()}
               className="hover:text-blue-600 transition-colors"
             >
-              Início
+              {t('breadcrumb.home')}
             </button>
             {breadcrumb.map((item, index) => (
               <React.Fragment key={item.id}>
@@ -386,7 +393,7 @@ export const MediaLibrary: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Buscar arquivos..."
+                placeholder={t('filters.searchPlaceholder')}
                 value={state.searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
@@ -399,11 +406,11 @@ export const MediaLibrary: React.FC = () => {
               onChange={(e) => handleFilterChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="all">Todos os tipos</option>
-              <option value="image">Imagens</option>
-              <option value="video">Vídeos</option>
-              <option value="audio">Áudios</option>
-              <option value="document">Documentos</option>
+              <option value="all">{t('filters.allTypes')}</option>
+              <option value="image">{t('filters.images')}</option>
+              <option value="video">{t('filters.videos')}</option>
+              <option value="audio">{t('filters.audio')}</option>
+              <option value="document">{t('filters.documents')}</option>
             </select>
           </div>
 
@@ -417,7 +424,7 @@ export const MediaLibrary: React.FC = () => {
                   state.sortBy === 'name' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Nome
+                {t('sort.name')}
               </button>
               <button
                 onClick={() => handleSortChange('date')}
@@ -425,7 +432,7 @@ export const MediaLibrary: React.FC = () => {
                   state.sortBy === 'date' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Data
+                {t('sort.date')}
               </button>
               <button
                 onClick={() => handleSortChange('size')}
@@ -433,7 +440,7 @@ export const MediaLibrary: React.FC = () => {
                   state.sortBy === 'size' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Tamanho
+                {t('sort.size')}
               </button>
               
               <button
@@ -471,20 +478,21 @@ export const MediaLibrary: React.FC = () => {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <span className="text-blue-700 font-medium">
-                {state.selectedFiles.length} arquivo(s) selecionado(s)
+                {t('bulk.selectedCount', { count: state.selectedFiles.length })}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleSelectAll(false)}
                   className="px-3 py-1 text-blue-600 hover:text-blue-700 text-sm"
                 >
-                  Desmarcar todos
+                  {t('actions.deselectAll')}
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowActionsModal(true)}
                   className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm"
                 >
-                  Ações em lote
+                  {t('actions.bulkActions')}
                 </button>
               </div>
             </div>
@@ -523,7 +531,7 @@ export const MediaLibrary: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-96 max-w-full mx-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold">📤 Upload de Arquivo</h3>
+                <h3 className="text-lg font-bold">{t('uploadModal.title')}</h3>
                 <button
                   onClick={() => setShowUploadModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -536,19 +544,20 @@ export const MediaLibrary: React.FC = () => {
                 <div className="text-center py-8">
                   <div className="text-6xl mb-4">📁</div>
                   <h4 className="text-lg font-medium text-gray-900 mb-2">
-                    Nenhuma pasta selecionada
+                    {t('uploadModal.noFolderTitle')}
                   </h4>
                   <p className="text-gray-600 mb-6">
-                    Para manter a organização, você precisa selecionar uma pasta antes de fazer upload.
+                    {t('uploadModal.noFolderDescription')}
                   </p>
                   <button
+                    type="button"
                     onClick={() => {
                       setShowUploadModal(false)
                       setShowFolderModal(true)
                     }}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    Criar Nova Pasta
+                    {t('uploadModal.createFolderCta')}
                   </button>
                 </div>
               ) : (
@@ -591,7 +600,7 @@ export const MediaLibrary: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">✏️ Editar Pasta</h3>
+                <h3 className="text-lg font-medium text-gray-900">{t('editFolderModal.title')}</h3>
                 <button
                   onClick={() => setShowEditFolderModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -606,21 +615,21 @@ export const MediaLibrary: React.FC = () => {
                 {/* Nome da pasta */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome da pasta *
+                    {t('editFolderModal.nameLabel')}
                   </label>
                   <input
                     type="text"
                     value={editFolderName}
                     onChange={(e) => setEditFolderName(e.target.value)}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Digite o nome da pasta"
+                    placeholder={t('editFolderModal.namePlaceholder')}
                   />
                 </div>
 
                 {/* Ícone da pasta */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Ícone
+                    {t('editFolderModal.iconLabel')}
                   </label>
                   <div className="grid grid-cols-5 gap-2">
                     {['📁', '📂', '📢', '📦', '📄', '📋', '🎨', '🎬', '📷', '💰'].map(icon => (
@@ -640,14 +649,14 @@ export const MediaLibrary: React.FC = () => {
                 {/* Descrição */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descrição
+                    {t('editFolderModal.descriptionLabel')}
                   </label>
                   <textarea
                     value={editFolderDescription}
                     onChange={(e) => setEditFolderDescription(e.target.value)}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     rows={2}
-                    placeholder="Descrição opcional da pasta"
+                    placeholder={t('editFolderModal.descriptionPlaceholder')}
                   />
                 </div>
               </div>
@@ -657,14 +666,15 @@ export const MediaLibrary: React.FC = () => {
                   onClick={() => setShowEditFolderModal(false)}
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
-                  Cancelar
+                  {t('editFolderModal.cancel')}
                 </button>
                 <button
+                  type="button"
                   onClick={handleSaveEditFolder}
                   disabled={!editFolderName.trim()}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Salvar Alterações
+                  {t('editFolderModal.save')}
                 </button>
               </div>
             </div>
@@ -676,7 +686,7 @@ export const MediaLibrary: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">🗑️ Excluir Pasta</h3>
+                <h3 className="text-lg font-medium text-gray-900">{t('deleteFolderModal.title')}</h3>
                 <button
                   onClick={() => setShowDeleteFolderModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -703,7 +713,7 @@ export const MediaLibrary: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div>
-                        <div className="text-sm font-medium text-red-800">Não é possível excluir</div>
+                        <div className="text-sm font-medium text-red-800">{t('deleteFolderModal.cannotDeleteTitle')}</div>
                         <div className="text-sm text-red-700 mt-1">{deleteError}</div>
                       </div>
                     </div>
@@ -715,9 +725,9 @@ export const MediaLibrary: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                       <div>
-                        <div className="text-sm font-medium text-yellow-800">Atenção</div>
+                        <div className="text-sm font-medium text-yellow-800">{t('deleteFolderModal.warningTitle')}</div>
                         <div className="text-sm text-yellow-700 mt-1">
-                          Esta ação não pode ser desfeita. A pasta será excluída permanentemente.
+                          {t('deleteFolderModal.warningBody')}
                         </div>
                       </div>
                     </div>
@@ -730,14 +740,15 @@ export const MediaLibrary: React.FC = () => {
                   onClick={() => setShowDeleteFolderModal(false)}
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
-                  Cancelar
+                  {t('deleteFolderModal.cancel')}
                 </button>
                 {!deleteError && (
                   <button
+                    type="button"
                     onClick={handleConfirmDeleteFolder}
                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                   >
-                    Excluir Pasta
+                    {t('deleteFolderModal.confirm')}
                   </button>
                 )}
               </div>

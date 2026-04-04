@@ -1,0 +1,153 @@
+{
+  "states": {
+    "loadingCompany": "Carregando informações da empresa...",
+    "loadingFolders": "Carregando pastas...",
+    "loadingFiles": "Carregando arquivos...",
+    "processing": "Processando..."
+  },
+  "header": {
+    "title": "Biblioteca de Mídias",
+    "subtitle": "Gerencie todos os arquivos da sua empresa"
+  },
+  "actions": {
+    "refresh": "Atualizar lista",
+    "newFolder": "Nova Pasta",
+    "upload": "Upload",
+    "uploadDisabledTitle": "Selecione uma pasta para fazer upload",
+    "uploadEnabledTitle": "Fazer upload de arquivos",
+    "deselectAll": "Desmarcar todos",
+    "bulkActions": "Ações em lote",
+    "preview": "Ver",
+    "download": "Baixar",
+    "editFolder": "Editar pasta",
+    "deleteFolder": "Excluir pasta"
+  },
+  "hints": {
+    "selectFolderForUpload": "Selecione uma pasta para fazer upload de arquivos"
+  },
+  "breadcrumb": {
+    "home": "Início"
+  },
+  "filters": {
+    "searchPlaceholder": "Buscar arquivos...",
+    "allTypes": "Todos os tipos",
+    "images": "Imagens",
+    "videos": "Vídeos",
+    "audio": "Áudios",
+    "documents": "Documentos"
+  },
+  "sort": {
+    "name": "Nome",
+    "date": "Data",
+    "size": "Tamanho"
+  },
+  "bulk": {
+    "selectedCount": "{{count}} arquivo(s) selecionado(s)"
+  },
+  "uploadModal": {
+    "title": "📤 Upload de Arquivo",
+    "noFolderTitle": "Nenhuma pasta selecionada",
+    "noFolderDescription": "Para manter a organização, você precisa selecionar uma pasta antes de fazer upload.",
+    "createFolderCta": "Criar Nova Pasta"
+  },
+  "folderExplorer": {
+    "title": "Pastas",
+    "libraryRoot": "Biblioteca",
+    "loading": "Carregando pastas...",
+    "emptyTitle": "Nenhuma pasta criada",
+    "emptyHint": "Clique em \"Nova Pasta\" para começar",
+    "statsTotalFolders": "Total de pastas:",
+    "statsTotalFiles": "Arquivos totais:"
+  },
+  "fileGrid": {
+    "loading": "Carregando arquivos...",
+    "emptyTitle": "Nenhum arquivo encontrado",
+    "emptyDescription": "Esta pasta está vazia ou não há arquivos que correspondam aos filtros aplicados.",
+    "uploadCta": "Fazer Upload",
+    "selectAll": "Selecionar todos",
+    "selectedOfTotal": "{{selected}} de {{total}} selecionados",
+    "filesCount_one": "{{count}} arquivo",
+    "filesCount_other": "{{count}} arquivos",
+    "previewUnavailable": "Preview não disponível para este tipo de arquivo"
+  },
+  "folderManager": {
+    "titleNew": "Nova Pasta",
+    "titleEdit": "Editar Pasta",
+    "nameLabel": "Nome da pasta *",
+    "namePlaceholder": "Digite o nome da pasta...",
+    "iconLabel": "Ícone",
+    "descriptionLabel": "Descrição (opcional)",
+    "descriptionPlaceholder": "Descreva o conteúdo desta pasta...",
+    "previewLabel": "Preview:",
+    "previewFallbackName": "Nome da pasta",
+    "delete": "Excluir",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "create": "Criar Pasta",
+    "saving": "Salvando...",
+    "creating": "Criando...",
+    "validationNameRequired": "Nome da pasta é obrigatório",
+    "validationInvalid": "Dados inválidos",
+    "errorSave": "Erro ao salvar pasta",
+    "errorDelete": "Erro ao excluir pasta",
+    "confirmDelete": "Tem certeza que deseja excluir a pasta \"{{name}}\"?\n\nEsta ação não pode ser desfeita."
+  },
+  "mediaActions": {
+    "header": "Ações em Lote",
+    "selectionTitle": "Ações em Lote",
+    "selectionSubtitle": "{{count}} arquivo(s) selecionado(s)",
+    "moveTitle": "Mover arquivos",
+    "moveDescription": "Mover para outra pasta",
+    "downloadTitle": "Baixar arquivos",
+    "downloadDescription": "Baixar como arquivo ZIP",
+    "deleteTitle": "Excluir arquivos",
+    "deleteDescription": "Excluir permanentemente",
+    "moveHeading": "Mover {{count}} arquivo(s)",
+    "destinationLabel": "Pasta de destino",
+    "destinationPlaceholder": "Selecione uma pasta...",
+    "destinationRoot": "📁 Biblioteca (raiz)",
+    "confirmTitle": "Confirmar ação",
+    "confirmIntro": "Você está prestes a {{verb}} {{count}} arquivo(s).",
+    "verbMove": "mover",
+    "verbDelete": "excluir",
+    "verbDownload": "baixar",
+    "destinationLine": "Destino: {{name}}",
+    "rootLibrary": "Biblioteca (raiz)",
+    "deleteWarning": "⚠️ Esta ação não pode ser desfeita!",
+    "errorSelectDestination": "Selecione uma pasta de destino",
+    "errorMove": "Erro ao mover arquivos",
+    "errorDelete": "Erro ao excluir arquivos",
+    "errorDownload": "Erro ao baixar arquivos",
+    "confirmDeleteMany": "Tem certeza que deseja excluir {{count}} arquivo(s)?\n\nEsta ação não pode ser desfeita.",
+    "resultSuccess": "Ação concluída!",
+    "resultPartial": "Ação parcialmente concluída",
+    "processed": "Processados: {{count}}",
+    "failed": "Falharam: {{count}}",
+    "errorsHeading": "Erros:",
+    "back": "Voltar",
+    "cancel": "Cancelar",
+    "executeMove": "Mover",
+    "executeDelete": "Excluir",
+    "executeDownload": "Baixar"
+  },
+  "editFolderModal": {
+    "title": "✏️ Editar Pasta",
+    "nameLabel": "Nome da pasta *",
+    "namePlaceholder": "Digite o nome da pasta",
+    "iconLabel": "Ícone",
+    "descriptionLabel": "Descrição",
+    "descriptionPlaceholder": "Descrição opcional da pasta",
+    "cancel": "Cancelar",
+    "save": "Salvar Alterações",
+    "alertError": "Erro ao editar pasta: {{message}}"
+  },
+  "deleteFolderModal": {
+    "title": "🗑️ Excluir Pasta",
+    "cannotDeleteTitle": "Não é possível excluir",
+    "warningTitle": "Atenção",
+    "warningBody": "Esta ação não pode ser desfeita. A pasta será excluída permanentemente.",
+    "cancel": "Cancelar",
+    "confirm": "Excluir Pasta",
+    "connectionError": "Erro de conexão ao excluir pasta"
+  }
+}

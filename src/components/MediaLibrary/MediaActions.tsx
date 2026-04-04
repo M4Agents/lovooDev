@@ -4,6 +4,7 @@
 // Componente para ações em lote em arquivos selecionados
 
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { mediaManagement, MediaFolder } from '../../services/mediaManagement'
 import {
   Move,
@@ -41,6 +42,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
   onClose,
   onComplete
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null)
   const [selectedFolderId, setSelectedFolderId] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -55,7 +57,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
 
   const handleMove = async () => {
     if (!selectedFolderId) {
-      setError('Selecione uma pasta de destino')
+      setError(t('mediaActions.errorSelectDestination'))
       return
     }
 
@@ -78,7 +80,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
       }
     } catch (error) {
       console.error('Erro ao mover arquivos:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao mover arquivos')
+      setError(error instanceof Error ? error.message : t('mediaActions.errorMove'))
     } finally {
       setLoading(false)
     }
@@ -86,7 +88,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
 
   const handleDelete = async () => {
     const confirmed = window.confirm(
-      `Tem certeza que deseja excluir ${fileCount} arquivo(s)?\n\nEsta ação não pode ser desfeita.`
+      t('mediaActions.confirmDeleteMany', { count: fileCount })
     )
 
     if (!confirmed) return
@@ -105,7 +107,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
       }
     } catch (error) {
       console.error('Erro ao excluir arquivos:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao excluir arquivos')
+      setError(error instanceof Error ? error.message : t('mediaActions.errorDelete'))
     } finally {
       setLoading(false)
     }
@@ -132,7 +134,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
       }, 1500)
     } catch (error) {
       console.error('Erro ao baixar arquivos:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao baixar arquivos')
+      setError(error instanceof Error ? error.message : t('mediaActions.errorDownload'))
     } finally {
       setLoading(false)
     }
@@ -160,10 +162,10 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
     <div className="p-6 space-y-4">
       <div className="text-center mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Ações em Lote
+          {t('mediaActions.selectionTitle')}
         </h3>
         <p className="text-gray-600">
-          {fileCount} arquivo(s) selecionado(s)
+          {t('mediaActions.selectionSubtitle', { count: fileCount })}
         </p>
       </div>
 
@@ -175,9 +177,9 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         >
           <Move className="w-6 h-6 text-blue-600" />
           <div className="text-left">
-            <div className="font-medium text-gray-900">Mover arquivos</div>
+            <div className="font-medium text-gray-900">{t('mediaActions.moveTitle')}</div>
             <div className="text-sm text-gray-600">
-              Mover para outra pasta
+              {t('mediaActions.moveDescription')}
             </div>
           </div>
         </button>
@@ -189,9 +191,9 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         >
           <Download className="w-6 h-6 text-green-600" />
           <div className="text-left">
-            <div className="font-medium text-gray-900">Baixar arquivos</div>
+            <div className="font-medium text-gray-900">{t('mediaActions.downloadTitle')}</div>
             <div className="text-sm text-gray-600">
-              Baixar como arquivo ZIP
+              {t('mediaActions.downloadDescription')}
             </div>
           </div>
         </button>
@@ -203,9 +205,9 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         >
           <Trash2 className="w-6 h-6 text-red-600" />
           <div className="text-left">
-            <div className="font-medium text-gray-900">Excluir arquivos</div>
+            <div className="font-medium text-gray-900">{t('mediaActions.deleteTitle')}</div>
             <div className="text-sm text-gray-600">
-              Excluir permanentemente
+              {t('mediaActions.deleteDescription')}
             </div>
           </div>
         </button>
@@ -218,21 +220,21 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
       <div className="flex items-center gap-3 mb-4">
         <Move className="w-6 h-6 text-blue-600" />
         <h3 className="text-lg font-semibold text-gray-900">
-          Mover {fileCount} arquivo(s)
+          {t('mediaActions.moveHeading', { count: fileCount })}
         </h3>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Pasta de destino
+          {t('mediaActions.destinationLabel')}
         </label>
         <select
           value={selectedFolderId}
           onChange={(e) => setSelectedFolderId(e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
-          <option value="">Selecione uma pasta...</option>
-          <option value="root">📁 Biblioteca (raiz)</option>
+          <option value="">{t('mediaActions.destinationPlaceholder')}</option>
+          <option value="root">{t('mediaActions.destinationRoot')}</option>
           {folders.map(folder => (
             <option key={folder.id} value={folder.id}>
               {folder.icon} {folder.name}
@@ -251,12 +253,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
   )
 
   const renderConfirmAction = () => {
-    const actionLabels = {
-      move: 'mover',
-      delete: 'excluir',
-      download: 'baixar'
-    }
-
     const actionIcons = {
       move: <Move className="w-6 h-6 text-blue-600" />,
       delete: <Trash2 className="w-6 h-6 text-red-600" />,
@@ -268,24 +264,38 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         <div className="flex items-center gap-3 mb-4">
           {selectedAction && actionIcons[selectedAction]}
           <h3 className="text-lg font-semibold text-gray-900">
-            Confirmar ação
+            {t('mediaActions.confirmTitle')}
           </h3>
         </div>
 
         <div className="bg-gray-50 p-4 rounded-lg">
           <p className="text-gray-900">
-            Você está prestes a <strong>{selectedAction && actionLabels[selectedAction]}</strong> {fileCount} arquivo(s).
+            {selectedAction &&
+              t('mediaActions.confirmIntro', {
+                verb:
+                  selectedAction === 'move'
+                    ? t('mediaActions.verbMove')
+                    : selectedAction === 'delete'
+                      ? t('mediaActions.verbDelete')
+                      : t('mediaActions.verbDownload'),
+                count: fileCount
+              })}
           </p>
           
           {selectedAction === 'move' && selectedFolderId && (
             <p className="text-gray-600 mt-2">
-              Destino: {selectedFolderId === 'root' ? 'Biblioteca (raiz)' : folders.find(f => f.id === selectedFolderId)?.name}
+              {t('mediaActions.destinationLine', {
+                name:
+                  selectedFolderId === 'root'
+                    ? t('mediaActions.rootLibrary')
+                    : folders.find(f => f.id === selectedFolderId)?.name ?? ''
+              })}
             </p>
           )}
           
           {selectedAction === 'delete' && (
             <p className="text-red-600 mt-2 font-medium">
-              ⚠️ Esta ação não pode ser desfeita!
+              {t('mediaActions.deleteWarning')}
             </p>
           )}
         </div>
@@ -315,18 +325,18 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
           )}
           
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {isSuccess ? 'Ação concluída!' : 'Ação parcialmente concluída'}
+            {isSuccess ? t('mediaActions.resultSuccess') : t('mediaActions.resultPartial')}
           </h3>
           
           <div className="text-gray-600 space-y-1">
-            <p>Processados: {result.processed}</p>
-            {result.failed > 0 && <p>Falharam: {result.failed}</p>}
+            <p>{t('mediaActions.processed', { count: result.processed })}</p>
+            {result.failed > 0 && <p>{t('mediaActions.failed', { count: result.failed })}</p>}
           </div>
         </div>
 
         {result.errors && result.errors.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h4 className="font-medium text-red-900 mb-2">Erros:</h4>
+            <h4 className="font-medium text-red-900 mb-2">{t('mediaActions.errorsHeading')}</h4>
             <ul className="text-sm text-red-700 space-y-1">
               {result.errors.map((error: string, index: number) => (
                 <li key={index}>• {error}</li>
@@ -348,7 +358,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            Ações em Lote
+            {t('mediaActions.header')}
           </h2>
           <button
             onClick={onClose}
@@ -364,7 +374,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
         ) : loading ? (
           <div className="p-6 text-center">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Processando...</p>
+            <p className="text-gray-600">{t('states.processing')}</p>
           </div>
         ) : selectedAction === 'move' ? (
           renderMoveAction()
@@ -383,9 +393,10 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                   onClick={() => setSelectedAction(null)}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
-                  Voltar
+                  {t('mediaActions.back')}
                 </button>
                 <button
+                  type="button"
                   onClick={executeAction}
                   disabled={selectedAction === 'move' && !selectedFolderId}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -396,8 +407,11 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                       : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
                 >
-                  {selectedAction === 'delete' ? 'Excluir' : 
-                   selectedAction === 'move' ? 'Mover' : 'Baixar'}
+                  {selectedAction === 'delete'
+                    ? t('mediaActions.executeDelete')
+                    : selectedAction === 'move'
+                      ? t('mediaActions.executeMove')
+                      : t('mediaActions.executeDownload')}
                 </button>
               </>
             ) : (
@@ -405,7 +419,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
-                Cancelar
+                {t('mediaActions.cancel')}
               </button>
             )}
           </div>

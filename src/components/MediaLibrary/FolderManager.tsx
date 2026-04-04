@@ -4,6 +4,7 @@
 // Componente para criar, renomear e excluir pastas
 
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { mediaManagement, MediaFolder } from '../../services/mediaManagement'
 import {
   Folder,
@@ -38,6 +39,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
   onClose,
   onComplete
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const [folderName, setFolderName] = useState(editFolder?.name || '')
   const [folderIcon, setFolderIcon] = useState(editFolder?.icon || '📁')
   const [folderDescription, setFolderDescription] = useState(editFolder?.description || '')
@@ -45,7 +47,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
   const [error, setError] = useState<string | null>(null)
 
   const isEditing = !!editFolder
-  const title = isEditing ? 'Editar Pasta' : 'Nova Pasta'
+  const title = isEditing ? t('folderManager.titleEdit') : t('folderManager.titleNew')
 
   // =====================================================
   // VALIDAÇÃO
@@ -53,7 +55,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
 
   const validateForm = (): { valid: boolean; error?: string } => {
     if (!folderName.trim()) {
-      return { valid: false, error: 'Nome da pasta é obrigatório' }
+      return { valid: false, error: t('folderManager.validationNameRequired') }
     }
 
     const validation = mediaManagement.validateName(folderName.trim())
@@ -74,7 +76,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
 
     const validation = validateForm()
     if (!validation.valid) {
-      setError(validation.error || 'Dados inválidos')
+      setError(validation.error || t('folderManager.validationInvalid'))
       return
     }
 
@@ -97,7 +99,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
       onComplete()
     } catch (error) {
       console.error('Erro ao salvar pasta:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao salvar pasta')
+      setError(error instanceof Error ? error.message : t('folderManager.errorSave'))
     } finally {
       setLoading(false)
     }
@@ -107,7 +109,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
     if (!editFolder) return
 
     const confirmed = window.confirm(
-      `Tem certeza que deseja excluir a pasta "${editFolder.name}"?\n\nEsta ação não pode ser desfeita.`
+      t('folderManager.confirmDelete', { name: editFolder.name })
     )
 
     if (!confirmed) return
@@ -120,7 +122,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
       onComplete()
     } catch (error) {
       console.error('Erro ao excluir pasta:', error)
-      setError(error instanceof Error ? error.message : 'Erro ao excluir pasta')
+      setError(error instanceof Error ? error.message : t('folderManager.errorDelete'))
     } finally {
       setLoading(false)
     }
@@ -161,13 +163,13 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
           {/* Nome da pasta */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nome da pasta *
+              {t('folderManager.nameLabel')}
             </label>
             <input
               type="text"
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
-              placeholder="Digite o nome da pasta..."
+              placeholder={t('folderManager.namePlaceholder')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               autoFocus
               disabled={loading}
@@ -177,7 +179,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
           {/* Ícone da pasta */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ícone
+              {t('folderManager.iconLabel')}
             </label>
             <div className="grid grid-cols-10 gap-2">
               {availableIcons.map(icon => (
@@ -201,12 +203,12 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
           {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Descrição (opcional)
+              {t('folderManager.descriptionLabel')}
             </label>
             <textarea
               value={folderDescription}
               onChange={(e) => setFolderDescription(e.target.value)}
-              placeholder="Descreva o conteúdo desta pasta..."
+              placeholder={t('folderManager.descriptionPlaceholder')}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
               disabled={loading}
@@ -223,11 +225,11 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
 
           {/* Preview */}
           <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Preview:</p>
+            <p className="text-sm text-gray-600 mb-2">{t('folderManager.previewLabel')}</p>
             <div className="flex items-center gap-2">
               <span className="text-lg">{folderIcon}</span>
               <span className="font-medium text-gray-900">
-                {folderName.trim() || 'Nome da pasta'}
+                {folderName.trim() || t('folderManager.previewFallbackName')}
               </span>
             </div>
             {folderDescription.trim() && (
@@ -250,7 +252,7 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
                 className="flex items-center gap-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4" />
-                Excluir
+                {t('folderManager.delete')}
               </button>
             )}
           </div>
@@ -263,10 +265,11 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
               disabled={loading}
               className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
             >
-              Cancelar
+              {t('folderManager.cancel')}
             </button>
             
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={loading || !folderName.trim()}
               className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -278,19 +281,19 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {isEditing ? 'Salvando...' : 'Criando...'}
+                  {isEditing ? t('folderManager.saving') : t('folderManager.creating')}
                 </>
               ) : (
                 <>
                   {isEditing ? (
                     <>
                       <Edit2 className="w-4 h-4" />
-                      Salvar
+                      {t('folderManager.save')}
                     </>
                   ) : (
                     <>
                       <Plus className="w-4 h-4" />
-                      Criar Pasta
+                      {t('folderManager.create')}
                     </>
                   )}
                 </>

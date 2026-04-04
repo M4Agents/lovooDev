@@ -8,6 +8,7 @@ import analytics from '../locales/pt-BR/analytics.json'
 import dashboard from '../locales/pt-BR/dashboard.json'
 import notifications from '../locales/pt-BR/notifications.json'
 import plans from '../locales/pt-BR/plans.json'
+import mediaLibrary from '../locales/pt-BR/mediaLibrary.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -22,9 +23,10 @@ void i18n.use(initReactI18next).init({
       dashboard,
       notifications,
       plans,
+      mediaLibrary,
     },
   },
-  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans'],
+  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,

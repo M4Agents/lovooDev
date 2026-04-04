@@ -4,6 +4,7 @@
 // Componente para exibir arquivos em grid ou lista
 
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MediaFileExtended } from '../../services/mediaManagement'
 import { mediaLibraryApi } from '../../services/mediaLibraryApi'
 import {
@@ -57,6 +58,7 @@ const FileItem: React.FC<FileItemProps> = ({
   onDownload,
   onAction
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const [imageError, setImageError] = useState(false)
 
   // Obter ícone do arquivo
@@ -178,7 +180,7 @@ const FileItem: React.FC<FileItemProps> = ({
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"
           >
             <Eye className="w-3 h-3" />
-            Ver
+            {t('actions.preview')}
           </button>
           
           <button
@@ -189,7 +191,7 @@ const FileItem: React.FC<FileItemProps> = ({
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
           >
             <Download className="w-3 h-3" />
-            Baixar
+            {t('actions.download')}
           </button>
         </div>
       </div>
@@ -300,6 +302,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
   onFileSelect,
   onSelectAll
 }) => {
+  const { t } = useTranslation('mediaLibrary')
   const [previewFile, setPreviewFile] = useState<MediaFileExtended | null>(null)
 
   // Handlers
@@ -335,7 +338,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
         <div className="flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500">Carregando arquivos...</p>
+            <p className="text-gray-500">{t('fileGrid.loading')}</p>
           </div>
         </div>
       </div>
@@ -349,13 +352,13 @@ export const FileGrid: React.FC<FileGridProps> = ({
         <div className="text-center">
           <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Nenhum arquivo encontrado
+            {t('fileGrid.emptyTitle')}
           </h3>
           <p className="text-gray-500 mb-4">
-            Esta pasta está vazia ou não há arquivos que correspondam aos filtros aplicados.
+            {t('fileGrid.emptyDescription')}
           </p>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            Fazer Upload
+          <button type="button" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            {t('fileGrid.uploadCta')}
           </button>
         </div>
       </div>
@@ -377,18 +380,20 @@ export const FileGrid: React.FC<FileGridProps> = ({
               ) : (
                 <Square className="w-4 h-4" />
               )}
-              Selecionar todos
+              {t('fileGrid.selectAll')}
             </button>
             
             {selectedFiles.length > 0 && (
               <span className="text-sm text-gray-500">
-                {selectedFiles.length} de {files.length} selecionados
+                {t('fileGrid.selectedOfTotal', { selected: selectedFiles.length, total: files.length })}
               </span>
             )}
           </div>
 
           <div className="text-sm text-gray-500">
-            {files.length} arquivo{files.length !== 1 ? 's' : ''}
+            {files.length === 1
+              ? t('fileGrid.filesCount_one', { count: files.length })
+              : t('fileGrid.filesCount_other', { count: files.length })}
           </div>
         </div>
       </div>
@@ -463,7 +468,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                   <div className="text-center">
                     {getFileIcon()}
                     <p className="mt-4 text-gray-500">
-                      Preview não disponível para este tipo de arquivo
+                      {t('fileGrid.previewUnavailable')}
                     </p>
                   </div>
                 </div>
@@ -479,7 +484,7 @@ export const FileGrid: React.FC<FileGridProps> = ({
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Baixar
+                {t('actions.download')}
               </button>
             </div>
           </div>
