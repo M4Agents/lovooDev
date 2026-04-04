@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Bell, Check, Calendar, Clock, User, ChevronDown, Filter, Search } from 'lucide-react'
@@ -35,7 +36,10 @@ interface ActivityNotification {
   }
 }
 
+type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'older'
+
 export const Notifications: React.FC = () => {
+  const { t } = useTranslation('notifications')
   const { user, company, currentRole } = useAuth()
   const [selectedUserId, setSelectedUserId] = useState(user?.id || '')
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
@@ -206,14 +210,14 @@ const loadNotifications = async (userId: string) => {
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
 
-    if (diffMins < 1) return 'Agora'
-    if (diffMins < 60) return `${diffMins}m atrás`
+    if (diffMins < 1) return t('timeRelative.now')
+    if (diffMins < 60) return t('timeRelative.minutesAgo', { count: diffMins })
     
     const diffHours = Math.floor(diffMins / 60)
-    if (diffHours < 24) return `${diffHours}h atrás`
+    if (diffHours < 24) return t('timeRelative.hoursAgo', { count: diffHours })
     
     const diffDays = Math.floor(diffHours / 24)
-    if (diffDays < 7) return `${diffDays}d atrás`
+    if (diffDays < 7) return t('timeRelative.daysAgo', { count: diffDays })
     
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
   }
@@ -233,10 +237,10 @@ const loadNotifications = async (userId: string) => {
 
   const getSelectedUserName = () => {
     if (selectedUserId === user?.id) {
-      return 'Minhas Notificações'
+      return t('master.myNotifications')
     }
     const selectedUser = companyUsers.find(u => u.user_id === selectedUserId)
-    return selectedUser?.display_name || selectedUser?.email || 'Usuário'
+    return selectedUser?.display_name || selectedUser?.email || t('userFallback')
   }
 
   // Filtrar notificações
@@ -264,15 +268,13 @@ const loadNotifications = async (userId: string) => {
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
     
-    let groupKey = ''
+    let groupKey: DateGroupKey = 'older'
     if (date.toDateString() === today.toDateString()) {
-      groupKey = 'Hoje'
+      groupKey = 'today'
     } else if (date.toDateString() === yesterday.toDateString()) {
-      groupKey = 'Ontem'
+      groupKey = 'yesterday'
     } else if (date > new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)) {
-      groupKey = 'Esta semana'
-    } else {
-      groupKey = 'Mais antigas'
+      groupKey = 'thisWeek'
     }
     
     if (!groups[groupKey]) {
@@ -280,7 +282,7 @@ const loadNotifications = async (userId: string) => {
     }
     groups[groupKey].push(notification)
     return groups
-  }, {} as Record<string, ActivityNotification[]>)
+  }, {} as Record<DateGroupKey, ActivityNotification[]>)
 
   const unreadCount = notifications.filter(n => n.status === 'sent').length
   const isViewingOwnNotifications = selectedUserId === user?.id
@@ -294,9 +296,13 @@ const loadNotifications = async (userId: string) => {
             <div className="flex items-center gap-3">
               <Bell className="w-8 h-8 text-indigo-600" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Notificações</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{t('header.title')}</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                  {unreadCount > 0 ? `${unreadCount} não lida${unreadCount !== 1 ? 's' : ''}` : 'Todas as notificações lidas'}
+                  {unreadCount > 0
+                    ? unreadCount === 1
+                      ? t('header.unreadOne', { count: unreadCount })
+                      : t('header.unreadOther', { count: unreadCount })
+                    : t('header.subtitleAllRead')}
                 </p>
               </div>
             </div>
@@ -306,7 +312,7 @@ const loadNotifications = async (userId: string) => {
           {isMaster && (
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Visualizar notificações de:
+                {t('master.viewNotificationsOf')}
               </label>
               <div className="relative max-w-md">
                 <button
@@ -340,7 +346,7 @@ const loadNotifications = async (userId: string) => {
                         }`}
                       >
                         <span className="text-sm font-medium text-gray-900">
-                          Minhas Notificações
+                          {t('master.myNotifications')}
                         </span>
                         {selectedUserId === user?.id && unreadCount > 0 && (
                           <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
@@ -387,7 +393,7 @@ const loadNotifications = async (userId: string) => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar notificações..."
+                placeholder={t('search.placeholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -402,9 +408,9 @@ const loadNotifications = async (userId: string) => {
                 onChange={(e) => setFilterStatus(e.target.value as any)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
-                <option value="all">Todas</option>
-                <option value="sent">Não lidas</option>
-                <option value="read">Lidas</option>
+                <option value="all">{t('filters.all')}</option>
+                <option value="sent">{t('filters.unread')}</option>
+                <option value="read">{t('filters.read')}</option>
               </select>
             </div>
 
@@ -414,7 +420,7 @@ const loadNotifications = async (userId: string) => {
                 onClick={markAllAsRead}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
               >
-                Marcar todas como lidas
+                {t('actions.markAllAsRead')}
               </button>
             )}
           </div>
@@ -426,32 +432,35 @@ const loadNotifications = async (userId: string) => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-            <p className="text-sm text-gray-500">Carregando notificações...</p>
+            <p className="text-sm text-gray-500">{t('loading')}</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <Check className="w-16 h-16 text-green-500 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchTerm || filterStatus !== 'all' 
-                ? 'Nenhuma notificação encontrada'
-                : 'Nenhuma notificação'
+                ? t('empty.filteredTitle')
+                : t('empty.noNotificationsTitle')
               }
             </h3>
             <p className="text-sm text-gray-500">
               {searchTerm || filterStatus !== 'all'
-                ? 'Tente ajustar os filtros de busca'
+                ? t('empty.adjustFilters')
                 : isViewingOwnNotifications 
-                  ? 'Você não tem notificações no momento'
-                  : 'Este usuário não tem notificações'
+                  ? t('empty.ownNoNotifications')
+                  : t('empty.otherUserNoNotifications')
               }
             </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(groupedNotifications).map(([group, groupNotifications]) => (
-              <div key={group}>
+            {(Object.entries(groupedNotifications) as [DateGroupKey, ActivityNotification[]][]).map(([groupKey, groupNotifications]) => (
+              <div key={groupKey}>
                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  {group} ({groupNotifications.length})
+                  {t('groups.line', {
+                    group: t(`groups.${groupKey}`),
+                    count: groupNotifications.length,
+                  })}
                 </h2>
                 <div className="space-y-3">
                   {groupNotifications.map((notification) => (
@@ -560,7 +569,7 @@ const loadNotifications = async (userId: string) => {
         {!isViewingOwnNotifications && filteredNotifications.length > 0 && (
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800 text-center">
-              ℹ️ Você está visualizando notificações de outro usuário. Não é possível marcar como lida.
+              {t('footer.viewingOtherUser')}
             </p>
           </div>
         )}

@@ -6,6 +6,7 @@ import auth from '../locales/pt-BR/auth.json'
 import deletedInstances from '../locales/pt-BR/deletedInstances.json'
 import analytics from '../locales/pt-BR/analytics.json'
 import dashboard from '../locales/pt-BR/dashboard.json'
+import notifications from '../locales/pt-BR/notifications.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -18,9 +19,10 @@ void i18n.use(initReactI18next).init({
       deletedInstances,
       analytics,
       dashboard,
+      notifications,
     },
   },
-  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard'],
+  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,
