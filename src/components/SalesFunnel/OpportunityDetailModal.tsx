@@ -164,9 +164,15 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   initialTab = 'details',
   onUpdate
 }) => {
-  const { currentRole, company } = useAuth()
-  // Legacy Super Admin tem currentRole=null mas company.is_super_admin=true
-  const isManager = (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) || company?.is_super_admin === true
+  const { currentRole, company, userRoles } = useAuth()
+  // Legacy: company.is_super_admin. Em empresa filha, currentRole pode ser null — usar userRoles (super_admin/support).
+  const hasPlatformElevatedRole = userRoles.some(
+    r => r.role === 'super_admin' || r.role === 'support'
+  )
+  const isManager =
+    (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) ||
+    company?.is_super_admin === true ||
+    hasPlatformElevatedRole
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])

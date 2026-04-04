@@ -4,13 +4,22 @@
 // Objetivo: Seção de oportunidades dentro da aba Informações
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
+import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
+import { ReopenOpportunityModal } from '../../SalesFunnel/ReopenOpportunityModal'
 import { formatCurrency } from '../../../types/sales-funnel'
-import type { SalesFunnel, FunnelStage, OpportunityFunnelPosition, Opportunity } from '../../../types/sales-funnel'
+import type {
+  SalesFunnel,
+  FunnelStage,
+  OpportunityFunnelPosition,
+  Opportunity,
+  CloseOpportunityParams,
+  ReopenOpportunityParams
+} from '../../../types/sales-funnel'
 import { supabase } from '../../../lib/supabase'
 import { funnelApi } from '../../../services/funnelApi'
 import { triggerManager } from '../../../services/automation/TriggerManager'
@@ -22,6 +31,24 @@ interface OpportunitiesSectionProps {
   leadName: string
   companyId: string
   conversationId?: string  // ID da conversa para passar ao trigger
+}
+
+/** Fechar/reabrir oportunidade: modal + RPC (paridade com FunnelBoard). */
+interface PendingStageTransition {
+  opportunityId: string
+  opportunityTitle: string
+  opportunityValue: number
+  opportunityClosed?: string
+  opportunityStatus: 'open' | 'won' | 'lost'
+  fromStageType: 'active' | 'won' | 'lost'
+  toStageType: 'active' | 'won' | 'lost'
+  toStageId: string
+  funnelId: string
+  fromStageId: string
+  positionInStage: number
+  modalKind: 'close' | 'reopen'
+  oldFunnelId?: string
+  isFirstAdd?: boolean
 }
 
 export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
@@ -117,6 +144,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [detailOpportunity, setDetailOpportunity] = useState<Opportunity | null>(null)
 
+  const [pendingStageTransition, setPendingStageTransition] = useState<PendingStageTransition | null>(null)
+
   // Buscar funis e posições das oportunidades
   useEffect(() => {
     const fetchFunnelsAndPositions = async () => {
@@ -210,110 +239,302 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     }
   }
 
-  // Função para atualizar posição da oportunidade
+  const fireAutomationAfterStageChange = async (
+    opportunityId: string,
+    oldStageId: string,
+    newStageId: string,
+    newFunnelId: string
+  ) => {
+    if (!oldStageId || oldStageId === newStageId) return
+    try {
+      const { data: opportunity } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('id', opportunityId)
+        .single()
+
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('phone, name, email, company, city, state')
+        .eq('id', leadId)
+        .single()
+
+      let leadData: Record<string, unknown>
+      if (leadError || !lead) {
+        leadData = {
+          phone: phoneNumber,
+          name: leadName,
+          email: null,
+          company: null,
+          city: null,
+          state: null
+        }
+      } else {
+        leadData = lead as Record<string, unknown>
+      }
+
+      await triggerManager.onOpportunityStageChanged(
+        companyId,
+        opportunityId,
+        oldStageId,
+        newStageId,
+        {
+          ...opportunity,
+          funnel_id: newFunnelId,
+          lead_id: leadId,
+          lead: leadData,
+          conversation_id: conversationId
+        }
+      )
+    } catch (automationError) {
+      console.error('❌ Erro ao disparar automação:', automationError)
+    }
+  }
+
+  /** Só move_opportunity / add / remove — sem modal de fechamento. */
+  const executePlainPositionUpdate = async (
+    opportunityId: string,
+    newFunnelId: string,
+    newStageId: string
+  ) => {
+    const currentPosition = positions[opportunityId]
+    const oldStageId = currentPosition?.stage_id
+
+    if (currentPosition && currentPosition.funnel_id !== newFunnelId) {
+      await funnelApi.removeOpportunityFromFunnel(opportunityId, currentPosition.funnel_id)
+      await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
+    } else if (currentPosition) {
+      await funnelApi.moveOpportunityToStage({
+        opportunity_id: opportunityId,
+        funnel_id: newFunnelId,
+        from_stage_id: currentPosition.stage_id,
+        to_stage_id: newStageId,
+        position_in_stage: 0
+      })
+      if (oldStageId && oldStageId !== newStageId) {
+        await fireAutomationAfterStageChange(opportunityId, oldStageId, newStageId, newFunnelId)
+      }
+    } else {
+      await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
+    }
+
+    const { data } = await supabase
+      .from('opportunity_funnel_positions')
+      .select('*')
+      .eq('opportunity_id', opportunityId)
+      .single()
+
+    if (data) {
+      setPositions(prev => ({ ...prev, [opportunityId]: data }))
+    }
+  }
+
+  const handleConfirmCloseOpportunity = useCallback(
+    async (params: CloseOpportunityParams) => {
+      const pt = pendingStageTransition
+      if (!pt || pt.modalKind !== 'close') return
+
+      setUpdatingPosition(pt.opportunityId)
+      try {
+        if (pt.isFirstAdd) {
+          await funnelApi.addOpportunityToFunnel(pt.opportunityId, pt.funnelId, pt.toStageId, leadId || undefined)
+        } else if (pt.oldFunnelId && pt.oldFunnelId !== pt.funnelId) {
+          await funnelApi.removeOpportunityFromFunnel(pt.opportunityId, pt.oldFunnelId)
+          await funnelApi.addOpportunityToFunnel(pt.opportunityId, pt.funnelId, pt.toStageId, leadId || undefined)
+        }
+
+        const { error } = await supabase.rpc('close_opportunity', {
+          p_opportunity_id: params.opportunity_id,
+          p_funnel_id: params.funnel_id,
+          p_to_stage_id: params.to_stage_id,
+          p_position_in_stage: params.position_in_stage,
+          p_to_status: params.to_status,
+          p_value: params.value,
+          p_loss_reason: params.loss_reason ?? null,
+          p_closed_at: params.closed_at,
+          p_company_id: params.company_id
+        })
+        if (error) throw new Error(error.message)
+
+        if (pt.fromStageId && pt.fromStageId !== pt.toStageId) {
+          await fireAutomationAfterStageChange(pt.opportunityId, pt.fromStageId, pt.toStageId, pt.funnelId)
+        }
+
+        const { data } = await supabase
+          .from('opportunity_funnel_positions')
+          .select('*')
+          .eq('opportunity_id', pt.opportunityId)
+          .single()
+
+        if (data) {
+          setPositions(prev => ({ ...prev, [pt.opportunityId]: data }))
+        }
+        refreshOpportunities()
+        setPendingStageTransition(null)
+      } catch (e) {
+        console.error('Erro ao fechar oportunidade:', e)
+        alert(e instanceof Error ? e.message : 'Erro ao fechar oportunidade')
+      } finally {
+        setUpdatingPosition(null)
+      }
+    },
+    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId]
+  )
+
+  const handleConfirmReopenOpportunity = useCallback(
+    async (params: ReopenOpportunityParams) => {
+      const pt = pendingStageTransition
+      if (!pt || pt.modalKind !== 'reopen') return
+
+      setUpdatingPosition(pt.opportunityId)
+      try {
+        if (pt.oldFunnelId && pt.oldFunnelId !== pt.funnelId) {
+          await funnelApi.removeOpportunityFromFunnel(pt.opportunityId, pt.oldFunnelId)
+          await funnelApi.addOpportunityToFunnel(pt.opportunityId, pt.funnelId, pt.toStageId, leadId || undefined)
+        }
+
+        const { error } = await supabase.rpc('reopen_opportunity', {
+          p_opportunity_id: params.opportunity_id,
+          p_funnel_id: params.funnel_id,
+          p_to_stage_id: params.to_stage_id,
+          p_position_in_stage: params.position_in_stage,
+          p_company_id: params.company_id
+        })
+        if (error) throw new Error(error.message)
+
+        if (pt.fromStageId && pt.fromStageId !== pt.toStageId) {
+          await fireAutomationAfterStageChange(pt.opportunityId, pt.fromStageId, pt.toStageId, pt.funnelId)
+        }
+
+        const { data } = await supabase
+          .from('opportunity_funnel_positions')
+          .select('*')
+          .eq('opportunity_id', pt.opportunityId)
+          .single()
+
+        if (data) {
+          setPositions(prev => ({ ...prev, [pt.opportunityId]: data }))
+        }
+        refreshOpportunities()
+        setPendingStageTransition(null)
+      } catch (e) {
+        console.error('Erro ao reabrir oportunidade:', e)
+        alert(e instanceof Error ? e.message : 'Erro ao reabrir oportunidade')
+      } finally {
+        setUpdatingPosition(null)
+      }
+    },
+    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId]
+  )
+
+  const handleCancelStageTransition = useCallback(() => {
+    setPendingStageTransition(null)
+  }, [])
+
   const handleUpdatePosition = async (
     opportunityId: string,
     newFunnelId: string,
     newStageId: string
   ) => {
+    const toStage = stagesByFunnel[newFunnelId]?.find(s => s.id === newStageId)
+    if (!toStage) {
+      try {
+        setUpdatingPosition(opportunityId)
+        await executePlainPositionUpdate(opportunityId, newFunnelId, newStageId)
+        refreshOpportunities()
+      } catch (error) {
+        console.error('Erro ao atualizar posição:', error)
+        alert('Erro ao atualizar posição da oportunidade')
+      } finally {
+        setUpdatingPosition(null)
+      }
+      return
+    }
+
+    const currentPosition = positions[opportunityId]
+    const opp = opportunities.find(o => o.id === opportunityId)
+
+    if (!currentPosition) {
+      const isClosingFirst = toStage.stage_type === 'won' || toStage.stage_type === 'lost'
+      if (isClosingFirst) {
+        setPendingStageTransition({
+          opportunityId,
+          opportunityTitle: opp?.title ?? '',
+          opportunityValue: opp?.value ?? 0,
+          opportunityClosed: opp?.closed_at,
+          opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
+          fromStageType: 'active',
+          toStageType: toStage.stage_type,
+          toStageId: newStageId,
+          funnelId: newFunnelId,
+          fromStageId: '',
+          positionInStage: 0,
+          modalKind: 'close',
+          isFirstAdd: true
+        })
+        return
+      }
+      try {
+        setUpdatingPosition(opportunityId)
+        await executePlainPositionUpdate(opportunityId, newFunnelId, newStageId)
+        refreshOpportunities()
+      } catch (error) {
+        console.error('Erro ao atualizar posição:', error)
+        alert('Erro ao atualizar posição da oportunidade')
+      } finally {
+        setUpdatingPosition(null)
+      }
+      return
+    }
+
+    const fromStage = stagesByFunnel[currentPosition.funnel_id]?.find(s => s.id === currentPosition.stage_id)
+    if (!fromStage) {
+      try {
+        setUpdatingPosition(opportunityId)
+        await executePlainPositionUpdate(opportunityId, newFunnelId, newStageId)
+        refreshOpportunities()
+      } catch (error) {
+        console.error('Erro ao atualizar posição:', error)
+        alert('Erro ao atualizar posição da oportunidade')
+      } finally {
+        setUpdatingPosition(null)
+      }
+      return
+    }
+
+    const fromType = fromStage.stage_type
+    const toType = toStage.stage_type
+
+    const isClosing = fromType === 'active' && (toType === 'won' || toType === 'lost')
+    const isReopening = (fromType === 'won' || fromType === 'lost') && toType === 'active'
+    const isCrossClose =
+      (fromType === 'won' && toType === 'lost') || (fromType === 'lost' && toType === 'won')
+    const needsModal = isClosing || isReopening || isCrossClose
+
+    if (needsModal) {
+      setPendingStageTransition({
+        opportunityId,
+        opportunityTitle: opp?.title ?? '',
+        opportunityValue: opp?.value ?? 0,
+        opportunityClosed: opp?.closed_at,
+        opportunityStatus: (opp?.status ?? 'open') as 'open' | 'won' | 'lost',
+        fromStageType: fromType,
+        toStageType: toType,
+        toStageId: newStageId,
+        funnelId: newFunnelId,
+        fromStageId: currentPosition.stage_id,
+        positionInStage: 0,
+        modalKind: isReopening ? 'reopen' : 'close',
+        oldFunnelId:
+          currentPosition.funnel_id !== newFunnelId ? currentPosition.funnel_id : undefined
+      })
+      return
+    }
+
     try {
       setUpdatingPosition(opportunityId)
-      
-      const currentPosition = positions[opportunityId]
-      const oldStageId = currentPosition?.stage_id
-      
-      // Se mudou de funil, precisa remover do antigo e adicionar no novo
-      if (currentPosition && currentPosition.funnel_id !== newFunnelId) {
-        // Remover do funil antigo
-        await funnelApi.removeOpportunityFromFunnel(opportunityId, currentPosition.funnel_id)
-        
-        // Adicionar no novo funil
-        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
-      } else if (currentPosition) {
-        // Apenas mudou de etapa no mesmo funil
-        await funnelApi.moveOpportunityToStage({
-          opportunity_id: opportunityId,
-          funnel_id: newFunnelId,
-          from_stage_id: currentPosition.stage_id,
-          to_stage_id: newStageId,
-          position_in_stage: 0
-        })
-        
-        // Disparar trigger de automação se mudou de etapa
-        if (oldStageId && oldStageId !== newStageId) {
-          try {
-            // Buscar dados completos da oportunidade
-            const { data: opportunity } = await supabase
-              .from('opportunities')
-              .select('*')
-              .eq('id', opportunityId)
-              .single()
-            
-            // Tentar buscar dados do lead (pode falhar por RLS)
-            const { data: lead, error: leadError } = await supabase
-              .from('leads')
-              .select('phone, name, email, company, city, state')
-              .eq('id', leadId)
-              .single()
-            
-            let leadData: any = null
-            if (leadError || !lead) {
-              console.warn('⚠️ Não foi possível buscar dados do lead, usando dados disponíveis do componente:', leadError?.message)
-              // Usar dados disponíveis do componente
-              leadData = {
-                phone: phoneNumber,
-                name: leadName,
-                email: null,
-                company: null,
-                city: null,
-                state: null
-              }
-            } else {
-              leadData = lead
-            }
-            
-            console.log('🔔 Disparando trigger de automação:', {
-              opportunityId,
-              oldStage: oldStageId,
-              newStage: newStageId,
-              funnel: newFunnelId
-            })
-            
-            // Disparar trigger de automação
-            await triggerManager.onOpportunityStageChanged(
-              companyId,
-              opportunityId,
-              oldStageId,
-              newStageId,
-              {
-                ...opportunity,
-                funnel_id: newFunnelId,
-                lead_id: leadId,
-                lead: leadData,  // Incluir dados do lead no triggerData
-                conversation_id: conversationId  // Incluir conversationId para envio eficiente
-              }
-            )
-          } catch (automationError) {
-            console.error('❌ Erro ao disparar automação:', automationError)
-            // Não bloquear movimentação se automação falhar
-          }
-        }
-      } else {
-        // Primeira vez adicionando ao funil
-        await funnelApi.addOpportunityToFunnel(opportunityId, newFunnelId, newStageId, leadId || undefined)
-      }
-      
-      // Atualizar estado local
-      const { data } = await supabase
-        .from('opportunity_funnel_positions')
-        .select('*')
-        .eq('opportunity_id', opportunityId)
-        .single()
-      
-      if (data) {
-        setPositions(prev => ({ ...prev, [opportunityId]: data }))
-      }
-      
+      await executePlainPositionUpdate(opportunityId, newFunnelId, newStageId)
+      refreshOpportunities()
     } catch (error) {
       console.error('Erro ao atualizar posição:', error)
       alert('Erro ao atualizar posição da oportunidade')
@@ -645,6 +866,45 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           companyId={companyId}
           initialTab="journey"
           onUpdate={() => refreshOpportunities()}
+        />
+      )}
+
+      {pendingStageTransition?.modalKind === 'close' &&
+        (pendingStageTransition.toStageType === 'won' ||
+          pendingStageTransition.toStageType === 'lost') && (
+          <CloseOpportunityModal
+            isOpen
+            stageType={pendingStageTransition.toStageType}
+            opportunityTitle={pendingStageTransition.opportunityTitle}
+            currentValue={pendingStageTransition.opportunityValue}
+            opportunityId={pendingStageTransition.opportunityId}
+            funnelId={pendingStageTransition.funnelId}
+            toStageId={pendingStageTransition.toStageId}
+            positionInStage={pendingStageTransition.positionInStage}
+            companyId={companyId}
+            onConfirm={handleConfirmCloseOpportunity}
+            onCancel={handleCancelStageTransition}
+          />
+        )}
+
+      {pendingStageTransition?.modalKind === 'reopen' && (
+        <ReopenOpportunityModal
+          isOpen
+          opportunityTitle={pendingStageTransition.opportunityTitle}
+          currentStatus={
+            pendingStageTransition.fromStageType === 'won' ||
+            pendingStageTransition.fromStageType === 'lost'
+              ? pendingStageTransition.fromStageType
+              : 'won'
+          }
+          closedAt={pendingStageTransition.opportunityClosed}
+          opportunityId={pendingStageTransition.opportunityId}
+          funnelId={pendingStageTransition.funnelId}
+          toStageId={pendingStageTransition.toStageId}
+          positionInStage={pendingStageTransition.positionInStage}
+          companyId={companyId}
+          onConfirm={handleConfirmReopenOpportunity}
+          onCancel={handleCancelStageTransition}
         />
       )}
     </div>
