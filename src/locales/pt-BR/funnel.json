@@ -1,0 +1,88 @@
+{
+  "header": {
+    "title": "Funil de Vendas"
+  },
+  "actions": {
+    "filters": "Filtros",
+    "moreOptions": "Mais opções",
+    "customize": "Personalizar",
+    "export": "Exportar",
+    "editFunnel": "Editar Funil",
+    "newLead": "Novo Lead"
+  },
+  "filters": {
+    "searchLabel": "Buscar",
+    "searchPlaceholder": "Nome, email, telefone...",
+    "tagsLabel": "Tags",
+    "tagsComingSoon": "(em breve)",
+    "tagsAll": "Todas as tags",
+    "tagsDisabledTitle": "Filtro por tag estará disponível em breve",
+    "originLabel": "Origem",
+    "originAll": "Todas as origens",
+    "originWhatsapp": "WhatsApp",
+    "originSite": "Site",
+    "originReferral": "Indicação",
+    "periodLabel": "Período",
+    "periodAll": "Todo período",
+    "periodToday": "Hoje",
+    "periodWeek": "Esta semana",
+    "periodMonth": "Este mês"
+  },
+  "states": {
+    "companyNotFound": "Empresa não encontrada",
+    "loadingFunnels": "Carregando funis...",
+    "retry": "Tentar novamente",
+    "selectFunnelTitle": "Selecione um funil",
+    "selectFunnelDescription": "Escolha um funil de vendas para visualizar os leads",
+    "createFirstFunnel": "Criar primeiro funil"
+  },
+  "board": {
+    "loading": "Carregando funil...",
+    "errorTitle": "Erro ao carregar funil",
+    "emptyStagesTitle": "Nenhuma etapa encontrada",
+    "emptyStagesDescription": "Este funil não possui etapas configuradas.",
+    "column": {
+      "addOpportunityTitle": "Adicionar oportunidade",
+      "editStageTitle": "Editar etapa",
+      "partialTotalTooltip": "Total parcial: apenas oportunidades já carregadas na coluna.",
+      "opportunityCount_one": "{{count}} oportunidade",
+      "opportunityCount_other": "{{count}} oportunidades",
+      "emptyTitle": "Nenhuma oportunidade nesta etapa",
+      "emptyHint": "Arraste oportunidades para cá",
+      "stageFooterWon": "✅ Ganhos",
+      "stageFooterLost": "❌ Perdidos",
+      "showingLoaded": "Mostrando {{loaded}} de {{total}} oportunidades",
+      "loadMoreLoading": "Carregando...",
+      "loadMoreRemaining_one": "Carregar {{count}} restante",
+      "loadMoreRemaining_other": "Carregar {{count}} restantes",
+      "loadMoreNext": "Carregar mais {{count}}"
+    }
+  },
+  "selector": {
+    "placeholder": "Selecione um funil",
+    "hint": "Selecione um funil de vendas",
+    "defaultBadge": "Padrão",
+    "noFunnels": "Nenhum funil disponível",
+    "createFirstFunnel": "Criar primeiro funil",
+    "createNew": "Criar novo funil"
+  },
+  "alerts": {
+    "savePreferencesError": "Erro ao salvar preferências. Tente novamente.",
+    "exportSelectFunnel": "Selecione um funil para exportar",
+    "exportNoLeads": "Nenhum lead encontrado neste funil",
+    "exportError": "Erro ao exportar dados. Tente novamente."
+  },
+  "export": {
+    "csvHeaders": {
+      "name": "Nome",
+      "email": "Email",
+      "phone": "Telefone",
+      "company": "Empresa",
+      "stage": "Etapa Atual",
+      "dealValue": "Valor do Negócio",
+      "origin": "Origem",
+      "entryDate": "Data de Entrada",
+      "daysInStage": "Dias na Etapa"
+    }
+  }
+}

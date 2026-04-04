@@ -5,6 +5,7 @@
 // =====================================================
 
 import { Droppable } from '@hello-pangea/dnd'
+import { useTranslation } from 'react-i18next'
 import { Plus, MoreVertical, Users } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
@@ -69,6 +70,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onDetailClick,
   companyUsers
 }) => {
+  const { t } = useTranslation('funnel')
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
   }, 0)
@@ -112,12 +114,14 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </h3>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">
-                {displayCount} {displayCount === 1 ? 'oportunidade' : 'oportunidades'}
+                {displayCount === 1
+                  ? t('board.column.opportunityCount_one', { count: displayCount })
+                  : t('board.column.opportunityCount_other', { count: displayCount })}
               </p>
               {(totalLabelFromLoaded || displayTotalValue > 0) && (
                 <>
                   <span className="text-xs text-gray-300">•</span>
-                  <p className="text-xs text-green-600 font-semibold" title={hasMore ? 'Total parcial: apenas oportunidades já carregadas na coluna.' : undefined}>
+                  <p className="text-xs text-green-600 font-semibold" title={hasMore ? t('board.column.partialTotalTooltip') : undefined}>
                     {totalLabelFromLoaded
                       ? totalLabelFromLoaded
                       : formatCurrency(displayTotalValue, leads[0]?.opportunity?.currency || 'BRL')}
@@ -133,7 +137,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             <button
               onClick={() => onAddLead(stage.id)}
               className="p-1.5 hover:bg-white rounded-md transition-colors"
-              title="Adicionar oportunidade"
+              title={t('board.column.addOpportunityTitle')}
             >
               <Plus className="w-4 h-4 text-gray-600" />
             </button>
@@ -143,7 +147,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             <button
               onClick={() => onEditStage(stage.id)}
               className="p-1.5 hover:bg-white rounded-md transition-colors"
-              title="Editar etapa"
+              title={t('board.column.editStageTitle')}
             >
               <MoreVertical className="w-4 h-4 text-gray-600" />
             </button>
@@ -173,10 +177,10 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   <Users className="w-8 h-8 text-gray-400" />
                 </div>
                 <p className="text-sm text-gray-500 mb-1">
-                  Nenhuma oportunidade nesta etapa
+                  {t('board.column.emptyTitle')}
                 </p>
                 <p className="text-xs text-gray-400">
-                  Arraste oportunidades para cá
+                  {t('board.column.emptyHint')}
                 </p>
               </div>
             ) : (
@@ -203,10 +207,12 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
         <div className="px-4 py-3 border-t bg-gray-50 rounded-b-lg">
           <div className="flex items-center justify-between text-xs">
             <span className="text-gray-600">
-              {stage.stage_type === 'won' ? '✅ Ganhos' : '❌ Perdidos'}
+              {stage.stage_type === 'won' ? t('board.column.stageFooterWon') : t('board.column.stageFooterLost')}
             </span>
             <span className="font-semibold text-gray-700">
-              {displayCount} {displayCount === 1 ? 'oportunidade' : 'oportunidades'}
+              {displayCount === 1
+                ? t('board.column.opportunityCount_one', { count: displayCount })
+                : t('board.column.opportunityCount_other', { count: displayCount })}
             </span>
           </div>
         </div>
@@ -216,7 +222,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
       {hasMore && onLoadMore && (
         <div className="px-4 py-3 border-t bg-gray-50 rounded-b-lg">
           <p className="text-xs text-gray-400 text-center mb-2">
-            Mostrando {loadedCount} de {displayCount} oportunidades
+            {t('board.column.showingLoaded', { loaded: loadedCount, total: displayCount })}
           </p>
           <button
             onClick={onLoadMore}
@@ -224,10 +230,12 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             className="w-full text-xs font-medium text-center py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-blue-600 hover:text-blue-700 hover:bg-blue-50"
           >
             {loading
-              ? 'Carregando...'
+              ? t('board.column.loadMoreLoading')
               : isLastPage
-                ? `Carregar ${nextLoadCount} restante${nextLoadCount === 1 ? '' : 's'}`
-                : `Carregar mais ${nextLoadCount}`
+                ? (nextLoadCount === 1
+                    ? t('board.column.loadMoreRemaining_one', { count: nextLoadCount })
+                    : t('board.column.loadMoreRemaining_other', { count: nextLoadCount }))
+                : t('board.column.loadMoreNext', { count: nextLoadCount })
             }
           </button>
         </div>

@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate } from 'react-router-dom'
 import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
@@ -21,6 +22,7 @@ import type { CreateFunnelForm, FunnelStage } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 
 export default function SalesFunnel() {
+  const { t } = useTranslation('funnel')
   const navigate = useNavigate()
   const { company, user } = useAuth()
   const companyId = company?.id
@@ -130,13 +132,13 @@ export default function SalesFunnel() {
       await funnelApi.updateCardPreferences(companyId, fields)
     } catch (error) {
       console.error('Error saving preferences:', error)
-      alert('Erro ao salvar preferências. Tente novamente.')
+      alert(t('alerts.savePreferencesError'))
     }
   }
 
   const handleExport = async () => {
     if (!selectedFunnel || !companyId) {
-      alert('Selecione um funil para exportar')
+      alert(t('alerts.exportSelectFunnel'))
       return
     }
 
@@ -145,7 +147,7 @@ export default function SalesFunnel() {
       const positions = await funnelApi.getLeadPositions(selectedFunnel.id)
       
       if (!positions || positions.length === 0) {
-        alert('Nenhum lead encontrado neste funil')
+        alert(t('alerts.exportNoLeads'))
         return
       }
 
@@ -155,15 +157,15 @@ export default function SalesFunnel() {
 
       // Preparar dados CSV
       const csvHeaders = [
-        'Nome',
-        'Email',
-        'Telefone',
-        'Empresa',
-        'Etapa Atual',
-        'Valor do Negócio',
-        'Origem',
-        'Data de Entrada',
-        'Dias na Etapa'
+        t('export.csvHeaders.name'),
+        t('export.csvHeaders.email'),
+        t('export.csvHeaders.phone'),
+        t('export.csvHeaders.company'),
+        t('export.csvHeaders.stage'),
+        t('export.csvHeaders.dealValue'),
+        t('export.csvHeaders.origin'),
+        t('export.csvHeaders.entryDate'),
+        t('export.csvHeaders.daysInStage')
       ]
 
       const csvRows = positions.map(pos => {
@@ -205,7 +207,7 @@ export default function SalesFunnel() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error exporting data:', error)
-      alert('Erro ao exportar dados. Tente novamente.')
+      alert(t('alerts.exportError'))
     }
   }
 
@@ -215,7 +217,7 @@ export default function SalesFunnel() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <p className="text-gray-600">Empresa não encontrada</p>
+          <p className="text-gray-600">{t('states.companyNotFound')}</p>
         </div>
       </div>
     )
@@ -226,7 +228,7 @@ export default function SalesFunnel() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-600">Carregando funis...</p>
+          <p className="text-gray-600">{t('states.loadingFunnels')}</p>
         </div>
       </div>
     )
@@ -241,7 +243,7 @@ export default function SalesFunnel() {
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            Tentar novamente
+            {t('states.retry')}
           </button>
         </div>
       </div>
@@ -255,7 +257,7 @@ export default function SalesFunnel() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">
-              Funil de Vendas
+              {t('header.title')}
             </h1>
             
             <FunnelSelector
@@ -279,7 +281,7 @@ export default function SalesFunnel() {
               `}
             >
               <Filter className="w-4 h-4" />
-              <span className="text-sm font-medium">Filtros</span>
+              <span className="text-sm font-medium">{t('actions.filters')}</span>
             </button>
 
             {/* Menu de Opções (...) */}
@@ -287,7 +289,7 @@ export default function SalesFunnel() {
               <button
                 onClick={() => setShowOptionsMenu(!showOptionsMenu)}
                 className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                title="Mais opções"
+                title={t('actions.moreOptions')}
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
@@ -302,7 +304,7 @@ export default function SalesFunnel() {
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
                   >
                     <Sliders className="w-4 h-4" />
-                    <span>Personalizar</span>
+                    <span>{t('actions.customize')}</span>
                   </button>
 
                   <button
@@ -313,7 +315,7 @@ export default function SalesFunnel() {
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Exportar</span>
+                    <span>{t('actions.export')}</span>
                   </button>
 
                   <div className="border-t border-gray-200 my-1" />
@@ -327,7 +329,7 @@ export default function SalesFunnel() {
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Edit2 className="w-4 h-4" />
-                    <span>Editar Funil</span>
+                    <span>{t('actions.editFunnel')}</span>
                   </button>
                 </div>
               )}
@@ -338,7 +340,7 @@ export default function SalesFunnel() {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-sm font-medium">Novo Lead</span>
+              <span className="text-sm font-medium">{t('actions.newLead')}</span>
             </button>
           </div>
         </div>
@@ -349,61 +351,61 @@ export default function SalesFunnel() {
             <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Buscar
+                  {t('filters.searchLabel')}
                 </label>
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Nome, email, telefone..."
+                  placeholder={t('filters.searchPlaceholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tags
-                  <span className="ml-1.5 text-xs font-normal text-gray-400">(em breve)</span>
+                  {t('filters.tagsLabel')}
+                  <span className="ml-1.5 text-xs font-normal text-gray-400">{t('filters.tagsComingSoon')}</span>
                 </label>
                 <select
                   value={selectedTag}
                   disabled
-                  title="Filtro por tag estará disponível em breve"
+                  title={t('filters.tagsDisabledTitle')}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
                 >
-                  <option value="">Todas as tags</option>
+                  <option value="">{t('filters.tagsAll')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Origem
+                  {t('filters.originLabel')}
                 </label>
                 <select 
                   value={selectedOrigin}
                   onChange={(e) => setSelectedOrigin(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Todas as origens</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="site">Site</option>
-                  <option value="indicacao">Indicação</option>
+                  <option value="">{t('filters.originAll')}</option>
+                  <option value="whatsapp">{t('filters.originWhatsapp')}</option>
+                  <option value="site">{t('filters.originSite')}</option>
+                  <option value="indicacao">{t('filters.originReferral')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Período
+                  {t('filters.periodLabel')}
                 </label>
                 <select 
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Todo período</option>
-                  <option value="today">Hoje</option>
-                  <option value="week">Esta semana</option>
-                  <option value="month">Este mês</option>
+                  <option value="">{t('filters.periodAll')}</option>
+                  <option value="today">{t('filters.periodToday')}</option>
+                  <option value="week">{t('filters.periodWeek')}</option>
+                  <option value="month">{t('filters.periodMonth')}</option>
                 </select>
               </div>
             </div>
@@ -429,17 +431,17 @@ export default function SalesFunnel() {
                 <Filter className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Selecione um funil
+                {t('states.selectFunnelTitle')}
               </h3>
               <p className="text-gray-600 mb-4">
-                Escolha um funil de vendas para visualizar os leads
+                {t('states.selectFunnelDescription')}
               </p>
               {funnels.length === 0 && (
                 <button
                   onClick={handleCreateFunnel}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Criar primeiro funil
+                  {t('states.createFirstFunnel')}
                 </button>
               )}
             </div>

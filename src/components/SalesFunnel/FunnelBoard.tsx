@@ -9,6 +9,7 @@
 // =====================================================
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
@@ -63,6 +64,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedOrigin = '',
   selectedPeriod = ''
 }) => {
+  const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
   const companyId = company?.id
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
@@ -523,7 +525,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-gray-600">Carregando funil...</p>
+          <p className="text-gray-600">{t('board.loading')}</p>
         </div>
       </div>
     )
@@ -536,7 +538,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         <div className="text-center max-w-md">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Erro ao carregar funil
+            {t('board.errorTitle')}
           </h3>
           <p className="text-gray-600 mb-4">
             {stagesError}
@@ -545,7 +547,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Tentar novamente
+            {t('states.retry')}
           </button>
         </div>
       </div>
@@ -560,10 +562,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             <AlertCircle className="w-8 h-8 text-gray-400" />
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Nenhuma etapa encontrada
+            {t('board.emptyStagesTitle')}
           </h3>
           <p className="text-gray-600">
-            Este funil não possui etapas configuradas.
+            {t('board.emptyStagesDescription')}
           </p>
         </div>
       </div>

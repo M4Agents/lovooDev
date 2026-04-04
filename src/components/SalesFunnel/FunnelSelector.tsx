@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, Plus, Check, GripVertical } from 'lucide-react'
 import type { SalesFunnel } from '../../types/sales-funnel'
 
@@ -23,6 +24,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
   onCreateFunnel,
   onReorderFunnels
 }) => {
+  const { t } = useTranslation('funnel')
   const [isOpen, setIsOpen] = useState(false)
   const [draggedFunnel, setDraggedFunnel] = useState<SalesFunnel | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -104,11 +106,11 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
         <div className="flex items-center gap-2 flex-1">
           <div className="w-2 h-2 rounded-full bg-blue-500" />
           <span className="font-medium text-gray-900">
-            {selectedFunnel?.name || 'Selecione um funil'}
+            {selectedFunnel?.name || t('selector.placeholder')}
           </span>
           {selectedFunnel?.is_default && (
             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-              Padrão
+              {t('selector.defaultBadge')}
             </span>
           )}
         </div>
@@ -119,7 +121,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
         <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
           <div className="p-2 border-b border-gray-100">
             <p className="text-xs text-gray-500 px-2 py-1">
-              Selecione um funil de vendas
+              {t('selector.hint')}
             </p>
           </div>
 
@@ -127,7 +129,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
             {activeFunnels.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-gray-500 mb-4">
-                  Nenhum funil disponível
+                  {t('selector.noFunnels')}
                 </p>
                 {onCreateFunnel && (
                   <button
@@ -137,7 +139,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                     }}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                   >
-                    Criar primeiro funil
+                    {t('selector.createFirstFunnel')}
                   </button>
                 )}
               </div>
@@ -178,7 +180,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                       <div className="flex items-center gap-2 mt-1">
                         {funnel.is_default && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                            Padrão
+                            {t('selector.defaultBadge')}
                           </span>
                         )}
                         <span className="text-xs text-gray-400">
@@ -205,7 +207,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                 className="w-full flex items-center gap-2 p-3 rounded-lg hover:bg-gray-50 transition-colors text-blue-600"
               >
                 <Plus className="w-4 h-4" />
-                <span className="font-medium text-sm">Criar novo funil</span>
+                <span className="font-medium text-sm">{t('selector.createNew')}</span>
               </button>
             </div>
           )}
