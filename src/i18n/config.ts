@@ -12,6 +12,7 @@ import mediaLibrary from '../locales/pt-BR/mediaLibrary.json'
 import companies from '../locales/pt-BR/companies.json'
 import reports from '../locales/pt-BR/reports.json'
 import periodFilter from '../locales/pt-BR/periodFilter.json'
+import settingsApp from '../locales/pt-BR/settings.app.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -30,9 +31,10 @@ void i18n.use(initReactI18next).init({
       companies,
       reports,
       periodFilter,
+      'settings.app': settingsApp,
     },
   },
-  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies', 'reports', 'periodFilter'],
+  ns: ['settings.system', 'settings.app', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies', 'reports', 'periodFilter'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,

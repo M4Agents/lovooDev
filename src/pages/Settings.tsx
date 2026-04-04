@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
@@ -20,6 +21,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 export const Settings: React.FC = () => {
+  const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission } = useAuth();
   const [searchParams] = useSearchParams();
   const [logs, setLogs] = useState<any[]>([]);
@@ -986,8 +988,8 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Configurações</h1>
-        <p className="text-slate-600 mt-1">Gerencie as configurações da sua conta</p>
+        <h1 className="text-3xl font-bold text-slate-900">{t('header.title')}</h1>
+        <p className="text-slate-600 mt-1">{t('header.subtitle')}</p>
         
         {/* Navegação Principal - ABAS SIMPLES */}
         <div className="border-b border-gray-200 mt-8">
@@ -1002,7 +1004,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <SettingsIcon className="w-4 h-4" />
-              Integrações
+              {t('tabs.integrations')}
             </button>
             
             {/* Aba Usuários */}
@@ -1015,7 +1017,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <Users className="w-4 h-4" />
-              Usuários
+              {t('tabs.users')}
             </button>
             
             {/* Aba Tracking Site */}
@@ -1028,7 +1030,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <FileText className="w-4 h-4" />
-              Tracking Site
+              {t('tabs.trackingSite')}
             </button>
             
             {/* Aba Dados da Empresa */}
@@ -1041,7 +1043,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <Building className="w-4 h-4" />
-              Dados da Empresa
+              {t('tabs.companyData')}
             </button>
             
             {/* Aba Sistema */}
@@ -1054,7 +1056,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <SettingsIcon className="w-4 h-4" />
-              Sistema
+              {t('tabs.system')}
             </button>
           </nav>
         </div>
@@ -1084,7 +1086,7 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">WhatsApp</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.whatsapp')}</h3>
                       <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
                         3 funcionalidades
                       </span>
@@ -1113,7 +1115,7 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">API</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.api')}</h3>
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
                         Ativo
                       </span>
@@ -1142,7 +1144,7 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">Webhook Avançado</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.webhookAdvanced')}</h3>
                       <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
                         Configurável
                       </span>
@@ -1171,7 +1173,7 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-base font-semibold text-slate-900">Funil de Vendas</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.salesFunnel')}</h3>
                       <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
                         API REST
                       </span>
@@ -2319,7 +2321,7 @@ export const Settings: React.FC = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Gestão de Usuários
+                {t('tabs.usersManagement')}
               </button>
               <button
                 onClick={() => setUsuariosSubTab('templates')}
@@ -2329,7 +2331,7 @@ export const Settings: React.FC = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Perfis de Usuário
+                {t('tabs.userProfiles')}
               </button>
             </nav>
           </div>
@@ -2376,7 +2378,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <Building className="w-4 h-4" />
-              Dados Principais
+              {t('tabs.companyMain')}
             </button>
             <button
               onClick={() => setEmpresasTab('endereco')}
@@ -2387,7 +2389,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <MapPin className="w-4 h-4" />
-              Endereço
+              {t('tabs.companyAddress')}
             </button>
             <button
               onClick={() => setEmpresasTab('contatos')}
@@ -2398,7 +2400,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <Phone className="w-4 h-4" />
-              Contatos
+              {t('tabs.companyContacts')}
             </button>
             <button
               onClick={() => setEmpresasTab('dominios')}
@@ -2409,7 +2411,7 @@ export const Settings: React.FC = () => {
               }`}
             >
               <Globe className="w-4 h-4" />
-              Domínios & URLs
+              {t('tabs.companyDomains')}
             </button>
           </div>
 

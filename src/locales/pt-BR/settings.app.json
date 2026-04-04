@@ -1,0 +1,25 @@
+{
+  "header": {
+    "title": "Configurações",
+    "subtitle": "Gerencie as configurações da sua conta"
+  },
+  "tabs": {
+    "integrations": "Integrações",
+    "users": "Usuários",
+    "trackingSite": "Tracking Site",
+    "companyData": "Dados da Empresa",
+    "system": "Sistema",
+    "usersManagement": "Gestão de Usuários",
+    "userProfiles": "Perfis de Usuário",
+    "companyMain": "Dados Principais",
+    "companyAddress": "Endereço",
+    "companyContacts": "Contatos",
+    "companyDomains": "Domínios & URLs"
+  },
+  "integrationsNav": {
+    "whatsapp": "WhatsApp",
+    "api": "API",
+    "webhookAdvanced": "Webhook Avançado",
+    "salesFunnel": "Funil de Vendas"
+  }
+}
