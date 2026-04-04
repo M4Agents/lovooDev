@@ -3,6 +3,7 @@
 // =====================================================
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
 import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
@@ -24,6 +25,7 @@ export interface UsersListRef {
 }
 
 export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUser, onEditUser }, ref) => {
+  const { t } = useTranslation('settings.app');
   const { company, hasPermission } = useAuth();
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       setUsers(userData);
     } catch (err) {
       console.error('UsersList: Error loading users:', err);
-      setError('Erro ao carregar usuários');
+      setError(t('users.states.loadError'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +71,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
 
   // Desativar usuário (soft delete)
   const handleDeactivateUser = async (user: CompanyUser) => {
-    if (!confirm(`🔒 DESATIVAR USUÁRIO\n\nTem certeza que deseja desativar o usuário ${user.user_id}?\n\n• O usuário será desativado mas permanecerá no sistema\n• Pode ser reativado posteriormente\n• Não perderá dados ou histórico`)) {
+    if (!confirm(t('users.confirm.deactivate', { id: user.user_id }))) {
       return;
     }
 
@@ -78,7 +80,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       await loadUsers(); // Recarregar lista
     } catch (error) {
       console.error('Error deactivating user:', error);
-      setError('Erro ao desativar usuário');
+      setError(t('users.states.deactivateError'));
     }
   };
 
@@ -102,7 +104,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       await loadUsers(); // Recarregar lista
     } catch (error) {
       console.error('Error reactivating user:', error);
-      setError('Erro ao reativar usuário');
+      setError(t('users.states.reactivateError'));
     }
   };
 
@@ -170,25 +172,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     }
   };
 
-  // Nome do role em português
-  const getRoleName = (role: UserRole): string => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Administrador';
-      case 'support':
-        return 'Suporte';
-      case 'admin':
-        return 'Administrador';
-      case 'partner':
-        return 'Parceiro';
-      case 'manager':
-        return 'Gerente';
-      case 'seller':
-        return 'Vendedor';
-      default:
-        return role;
-    }
-  };
+  const getRoleName = (role: UserRole): string => t(`users.roles.${role}`);
 
   // Cor do badge do role
   const getRoleColor = (role: UserRole): string => {
@@ -215,7 +199,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Carregando usuários...</p>
+          <p className="text-slate-600">{t('users.states.loading')}</p>
         </div>
       </div>
     );
@@ -228,13 +212,13 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
           <div className="p-4 bg-red-100 rounded-full w-16 h-16 mx-auto mb-4">
             <Users className="w-8 h-8 text-red-600 mx-auto mt-1" />
           </div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">Erro ao Carregar</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('users.states.loadErrorTitle')}</h3>
           <p className="text-slate-600 mb-4">{error}</p>
           <button
             onClick={loadUsers}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            Tentar Novamente
+            {t('users.actions.retry')}
           </button>
         </div>
       </div>
@@ -246,9 +230,9 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Gestão de Usuários</h2>
+          <h2 className="text-2xl font-bold text-slate-900">{t('users.sections.management')}</h2>
           <p className="text-slate-600 mt-1">
-            Gerencie usuários, roles e permissões da empresa
+            {t('users.subtitles.management')}
           </p>
         </div>
         
@@ -258,7 +242,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Novo Usuário
+            {t('users.actions.create')}
           </button>
         )}
       </div>
@@ -270,11 +254,11 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
             <div className="p-4 bg-slate-100 rounded-full w-16 h-16 mx-auto mb-4">
               <Users className="w-8 h-8 text-slate-400 mx-auto mt-1" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Nenhum usuário encontrado</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('users.states.empty')}</h3>
             <p className="text-slate-600 mb-6">
               {company?.name ? 
-                `Não há usuários cadastrados para a empresa ${company.name}` :
-                'Não há usuários para exibir'
+                t('users.states.emptyWithCompany', { name: company.name }) :
+                t('users.states.emptyGeneric')
               }
             </p>
             {hasPermission('create_users') && (
@@ -282,7 +266,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                 onClick={onCreateUser}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                Criar Primeiro Usuário
+                {t('users.actions.createFirst')}
               </button>
             )}
           </div>
@@ -292,19 +276,19 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Usuário
+                    {t('users.table.columns.user')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Role
+                    {t('users.table.columns.role')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Empresa
+                    {t('users.table.columns.company')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Criado em
+                    {t('users.table.columns.createdAt')}
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Ações
+                    {t('users.table.columns.actions')}
                   </th>
                 </tr>
               </thead>
@@ -316,7 +300,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                         <div className="flex-shrink-0 h-10 w-10">
                           <Avatar 
                             src={user.profile_picture_url}
-                            alt={user.display_name || user.email || 'Usuário'}
+                            alt={user.display_name || user.email || t('users.avatarAlt')}
                             size="md"
                             fallbackText={user.display_name?.charAt(0) || user.email?.charAt(0)}
                           />
@@ -325,7 +309,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                           <div className="flex items-center gap-2">
                             <div className="text-sm font-medium text-slate-900">
                               {user.user_id.startsWith('mock_') ? 
-                                `Usuário Mock ${user.user_id.slice(-4)}` : 
+                                t('users.mockUser', { suffix: user.user_id.slice(-4) }) : 
                                 user.display_name || user.user_id
                               }
                             </div>
@@ -335,7 +319,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                                 ? 'bg-green-100 text-green-800 border border-green-200' 
                                 : 'bg-gray-100 text-gray-600 border border-gray-200'
                             }`}>
-                              {user.is_active ? '🟢 Ativo' : '⚪ Inativo'}
+                              {user.is_active ? `🟢 ${t('users.status.active')}` : `⚪ ${t('users.status.inactive')}`}
                             </span>
                           </div>
                           <div className="text-sm text-slate-500">
@@ -354,10 +338,10 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-slate-900">
-                        {user.companies?.name || 'N/A'}
+                        {user.companies?.name || t('users.notAvailable')}
                       </div>
                       <div className="text-sm text-slate-500">
-                        {user.companies?.company_type === 'parent' ? 'Empresa Pai' : 'Cliente'}
+                        {user.companies?.company_type === 'parent' ? t('users.companyType.parent') : t('users.companyType.client')}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
@@ -369,7 +353,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                           <button
                             onClick={() => handleShowInviteLink(user)}
                             className="text-green-600 hover:text-green-900 p-1 rounded transition-colors"
-                            title="Reenviar convite"
+                            title={t('users.actions.resendInvite')}
                           >
                             <Mail className="w-4 h-4" />
                           </button>
@@ -378,7 +362,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                           <button
                             onClick={() => onEditUser(user)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded transition-colors"
-                            title="Editar usuário"
+                            title={t('users.actions.edit')}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -390,7 +374,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                               <button
                                 onClick={() => handleDeactivateUser(user)}
                                 className="text-orange-600 hover:text-orange-900 p-1 rounded transition-colors"
-                                title="🔒 PASSO 1: Desativar usuário (reversível) - Necessário antes de excluir usuários ativos"
+                                title={t('users.actions.deactivate')}
                               >
                                 <UserX className="w-4 h-4" />
                               </button>
@@ -398,7 +382,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                               <button
                                 onClick={() => handleReactivateUser(user)}
                                 className="text-green-600 hover:text-green-900 p-1 rounded transition-colors"
-                                title="✅ Reativar usuário (tornar ativo novamente)"
+                                title={t('users.actions.reactivate')}
                               >
                                 <UserCheck className="w-4 h-4" />
                               </button>
@@ -408,7 +392,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
-                              title="🗑️ EXCLUIR PERMANENTEMENTE (irreversível) - Funciona com usuários ativos (desativa primeiro) ou inativos"
+                              title={t('users.actions.delete')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -431,11 +415,10 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
             <Users className="w-5 h-5 text-blue-600 mt-0.5" />
             <div>
               <h4 className="text-sm font-medium text-blue-900 mb-1">
-                Sistema de Usuários Ativo
+                {t('users.summary.activeUsersTitle')}
               </h4>
               <p className="text-sm text-blue-700">
-                Total de {users.length} usuário{users.length !== 1 ? 's' : ''} encontrado{users.length !== 1 ? 's' : ''}. 
-                O sistema está utilizando a nova estrutura de múltiplos usuários por empresa.
+                {t('users.summary.activeUsersBody', { count: users.length })}
               </p>
             </div>
           </div>

@@ -188,5 +188,124 @@
       "saveError": "Erro ao salvar dados da empresa: {{message}}",
       "saveErrorGeneric": "Erro ao salvar dados da empresa"
     }
+  },
+  "users": {
+    "sections": {
+      "management": "Gestão de Usuários",
+      "templates": "Templates de Usuário",
+      "systemTemplates": "Templates do Sistema",
+      "customTemplates": "Templates Personalizados"
+    },
+    "subtitles": {
+      "management": "Gerencie usuários, roles e permissões da empresa",
+      "templates": "Gerencie templates de perfil para criação rápida de usuários"
+    },
+    "roles": {
+      "super_admin": "Super Administrador",
+      "support": "Suporte",
+      "admin": "Administrador",
+      "partner": "Parceiro",
+      "manager": "Gerente",
+      "seller": "Vendedor",
+      "user": "Usuário"
+    },
+    "fields": {
+      "name": "Nome",
+      "email": "Email",
+      "role": "Função"
+    },
+    "table": {
+      "columns": {
+        "user": "Usuário",
+        "role": "Função",
+        "company": "Empresa",
+        "createdAt": "Criado em",
+        "actions": "Ações"
+      }
+    },
+    "companyType": {
+      "parent": "Empresa Pai",
+      "client": "Cliente"
+    },
+    "status": {
+      "active": "Ativo",
+      "inactive": "Inativo"
+    },
+    "notAvailable": "N/A",
+    "mockUser": "Usuário Mock {{suffix}}",
+    "avatarAlt": "Usuário",
+    "actions": {
+      "create": "Novo Usuário",
+      "createFirst": "Criar Primeiro Usuário",
+      "retry": "Tentar Novamente",
+      "edit": "Editar usuário",
+      "resendInvite": "Reenviar convite",
+      "deactivate": "Desativar usuário",
+      "reactivate": "Reativar usuário",
+      "delete": "Excluir permanentemente",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "cancel": "Cancelar",
+      "discard": "Descartar",
+      "saveChanges": "Salvar Alterações",
+      "newTemplate": "Novo Template",
+      "useTemplate": "Usar Template",
+      "createFirstTemplate": "Criar Primeiro Template",
+      "viewPermissions": "Visualizar permissões",
+      "duplicateTemplate": "Duplicar template",
+      "editTemplate": "Editar template",
+      "deactivateTemplate": "Desativar template"
+    },
+    "states": {
+      "loading": "Carregando usuários...",
+      "loadError": "Erro ao carregar usuários",
+      "loadErrorTitle": "Erro ao Carregar",
+      "deactivateError": "Erro ao desativar usuário",
+      "reactivateError": "Erro ao reativar usuário",
+      "empty": "Nenhum usuário encontrado",
+      "emptyGeneric": "Não há usuários para exibir",
+      "emptyWithCompany": "Não há usuários cadastrados para a empresa {{name}}",
+      "templatesLoadError": "Erro ao carregar templates",
+      "duplicateError": "Erro ao duplicar template",
+      "deactivateTemplateError": "Erro ao desativar template",
+      "templatesEmpty": "Nenhum template personalizado",
+      "templatesEmptyHint": "Crie templates personalizados para agilizar a criação de usuários"
+    },
+    "confirm": {
+      "deactivate": "🔒 DESATIVAR USUÁRIO\n\nTem certeza que deseja desativar o usuário {{id}}?\n\n• O usuário será desativado mas permanecerá no sistema\n• Pode ser reativado posteriormente\n• Não perderá dados ou histórico",
+      "reactivate": "✅ REATIVAR USUÁRIO\n\nTem certeza que deseja reativar o usuário {{id}}?\n\n• O usuário voltará a estar ativo no sistema\n• Poderá acessar normalmente\n• Todas as permissões serão restauradas",
+      "deactivateTemplate": "Tem certeza que deseja desativar este template?"
+    },
+    "summary": {
+      "activeUsersTitle": "Sistema de Usuários Ativo",
+      "activeUsersBody": "Total de {{count}} usuário(s) encontrado(s). O sistema está utilizando a nova estrutura de múltiplos usuários por empresa."
+    },
+    "templates": {
+      "badgePredefined": "Predefinidos",
+      "badgeSystem": "Sistema",
+      "badgeCustom": "Personalizado",
+      "badgeChanged": "Alterado",
+      "baseLabel": "Base: {{role}}",
+      "usageCount": "{{count}} usos",
+      "customCount": "{{count}} templates",
+      "visibilityForChildren": "Visível para empresas filhas",
+      "visibilityOn": "Visível para empresas filhas",
+      "visibilityOff": "Apenas empresa pai",
+      "visibilityHintOn": "Empresas filhas podem usar este perfil",
+      "visibilityHintOff": "Disponível apenas para empresa pai",
+      "aboutTitle": "Sobre Templates:",
+      "aboutBullet1": "• Templates do sistema não podem ser editados, apenas duplicados",
+      "aboutBullet2": "• Templates personalizados podem ser editados e desativados",
+      "aboutBullet3": "• Ao usar um template, as permissões são aplicadas sobre o role base",
+      "aboutBullet4": "• Templates facilitam a criação consistente de usuários",
+      "copySuffix": "Cópia",
+      "copyDescriptionPrefix": "Cópia de:",
+      "copyTag": "cópia",
+      "messages": {
+        "savedCount": "{{count}} alteração(ões) salva(s) com sucesso!",
+        "discarded": "Alterações descartadas",
+        "saveVisibilityError": "Erro ao salvar configurações"
+      }
+    }
   }
 }

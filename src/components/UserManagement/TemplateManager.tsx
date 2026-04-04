@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Eye, EyeOff, Settings, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 import { UserTemplate, UserRole, CreateTemplateRequest } from '../../types/user';
 import { getCompanyTemplates, createUserTemplate, deactivateTemplate } from '../../services/userTemplates';
@@ -15,6 +16,7 @@ interface TemplateManagerProps {
 }
 
 export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }) => {
+  const { t } = useTranslation('settings.app');
   const { company } = useAuth();
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       
     } catch (err) {
       console.error('TemplateManager: Error loading templates:', err);
-      setError('Erro ao carregar templates');
+      setError(t('users.states.templatesLoadError'));
     } finally {
       setLoading(false);
     }
@@ -92,7 +94,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       const changesCount = Object.keys(pendingChanges).length;
       setMessage({ 
         type: 'success', 
-        text: `${changesCount} configuração(ões) salva(s) com sucesso!` 
+        text: t('users.templates.messages.savedCount', { count: changesCount }) 
       });
 
       // Limpar mensagem após 3 segundos
@@ -100,7 +102,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
 
     } catch (error) {
       console.error('TemplateManager: Error saving visibility changes:', error);
-      setMessage({ type: 'error', text: 'Erro ao salvar configurações' });
+      setMessage({ type: 'error', text: t('users.templates.messages.saveVisibilityError') });
     } finally {
       setSavingChanges(false);
     }
@@ -109,7 +111,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   // NOVO: Descartar alterações
   const discardChanges = () => {
     setPendingChanges({});
-    setMessage({ type: 'success', text: 'Alterações descartadas' });
+    setMessage({ type: 'success', text: t('users.templates.messages.discarded') });
     setTimeout(() => setMessage(null), 2000);
   };
 
@@ -134,23 +136,8 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
     }
   };
 
-  // Nome do role
-  const getRoleName = (role: UserRole): string => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Admin';
-      case 'admin':
-        return 'Administrador';
-      case 'partner':
-        return 'Parceiro';
-      case 'manager':
-        return 'Gerente';
-      case 'seller':
-        return 'Vendedor';
-      default:
-        return 'Usuário';
-    }
-  };
+  const getRoleName = (role: UserRole | undefined): string =>
+    role ? t(`users.roles.${role}`) : t('users.roles.user');
 
   // Criar usuário com template
   const handleCreateUserWithTemplate = (templateId: string) => {
@@ -163,12 +150,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   const handleDuplicateTemplate = async (template: UserTemplate) => {
     try {
       const duplicateRequest: CreateTemplateRequest = {
-        name: `${template.name} (Cópia)`,
-        description: `Cópia de: ${template.description}`,
+        name: `${template.name} (${t('users.templates.copySuffix')})`,
+        description: `${t('users.templates.copyDescriptionPrefix')} ${template.description}`,
         baseRole: template.baseRole,
         customPermissions: template.customPermissions,
         companyId: company!.id,
-        tags: [...(template.tags || []), 'cópia']
+        tags: [...(template.tags || []), t('users.templates.copyTag')]
       };
 
       await createUserTemplate(duplicateRequest);
@@ -176,20 +163,20 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       
     } catch (error) {
       console.error('Error duplicating template:', error);
-      setError('Erro ao duplicar template');
+      setError(t('users.states.duplicateError'));
     }
   };
 
   // Desativar template
   const handleDeactivateTemplate = async (templateId: string) => {
-    if (!confirm('Tem certeza que deseja desativar este template?')) return;
+    if (!confirm(t('users.confirm.deactivateTemplate'))) return;
     
     try {
       await deactivateTemplate(templateId);
       await loadTemplates();
     } catch (error) {
       console.error('Error deactivating template:', error);
-      setError('Erro ao desativar template');
+      setError(t('users.states.deactivateTemplateError'));
     }
   };
 
@@ -201,7 +188,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Templates de Usuário</h2>
+          <h2 className="text-2xl font-bold text-slate-900">{t('users.sections.templates')}</h2>
         </div>
         <div className="animate-pulse space-y-4">
           {[1, 2, 3].map(i => (
@@ -217,9 +204,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Templates de Usuário</h2>
+          <h2 className="text-2xl font-bold text-slate-900">{t('users.sections.templates')}</h2>
           <p className="text-slate-600 mt-1">
-            Gerencie templates de perfil para criação rápida de usuários
+            {t('users.subtitles.templates')}
           </p>
         </div>
         
@@ -231,7 +218,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                 onClick={discardChanges}
                 className="flex items-center space-x-2 px-3 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <span>Descartar</span>
+                <span>{t('users.actions.discard')}</span>
               </button>
               <button
                 onClick={saveVisibilityChanges}
@@ -239,7 +226,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                 className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                <span>{savingChanges ? 'Salvando...' : 'Salvar Alterações'}</span>
+                <span>{savingChanges ? t('users.actions.saving') : t('users.actions.saveChanges')}</span>
               </button>
             </>
           )}
@@ -249,7 +236,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Novo Template
+            {t('users.actions.newTemplate')}
           </button>
         </div>
       </div>
@@ -280,9 +267,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       {/* Templates do Sistema */}
       <div className="space-y-4">
         <div className="flex items-center space-x-2">
-          <h3 className="text-lg font-semibold text-slate-900">Templates do Sistema</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('users.sections.systemTemplates')}</h3>
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-            Predefinidos
+            {t('users.templates.badgePredefined')}
           </span>
         </div>
         
@@ -295,7 +282,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                   <h4 className="font-medium text-slate-900">{template.name}</h4>
                 </div>
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                  Sistema
+                  {t('users.templates.badgeSystem')}
                 </span>
               </div>
               
@@ -304,12 +291,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
               <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
                 <span className="flex items-center space-x-1">
                   <Tag className="w-3 h-3" />
-                  <span>Base: {getRoleName(template.baseRole)}</span>
+                  <span>{t('users.templates.baseLabel', { role: getRoleName(template.baseRole) })}</span>
                 </span>
                 {template.usage_count && (
                   <span className="flex items-center space-x-1">
                     <Users className="w-3 h-3" />
-                    <span>{template.usage_count} usos</span>
+                    <span>{t('users.templates.usageCount', { count: template.usage_count })}</span>
                   </span>
                 )}
               </div>
@@ -338,11 +325,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                     <div className="flex items-center space-x-2">
                       <Settings className="w-4 h-4 text-slate-500" />
                       <span className="text-sm font-medium text-slate-700">
-                        Visível para empresas filhas
+                        {t('users.templates.visibilityForChildren')}
                       </span>
                       {pendingChanges.hasOwnProperty(template.id) && (
                         <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded">
-                          Alterado
+                          {t('users.templates.badgeChanged')}
                         </span>
                       )}
                     </div>
@@ -358,10 +345,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                           : template.visibleToChildCompanies ?? false)
                           ? 'bg-blue-600' : 'bg-slate-200'
                       }`}
-                      title={`${(pendingChanges.hasOwnProperty(template.id) 
+                      title={(pendingChanges.hasOwnProperty(template.id) 
                         ? pendingChanges[template.id] 
                         : template.visibleToChildCompanies ?? false) 
-                        ? 'Visível para empresas filhas' : 'Apenas empresa pai'}`}
+                        ? t('users.templates.visibilityOn') 
+                        : t('users.templates.visibilityOff')}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -379,12 +367,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                       : template.visibleToChildCompanies ?? false) ? (
                       <span className="flex items-center space-x-1 text-green-600">
                         <Eye className="w-3 h-3" />
-                        <span>Empresas filhas podem usar este perfil</span>
+                        <span>{t('users.templates.visibilityHintOn')}</span>
                       </span>
                     ) : (
                       <span className="flex items-center space-x-1 text-slate-500">
                         <EyeOff className="w-3 h-3" />
-                        <span>Disponível apenas para empresa pai</span>
+                        <span>{t('users.templates.visibilityHintOff')}</span>
                       </span>
                     )}
                   </div>
@@ -397,19 +385,19 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                   onClick={() => handleCreateUserWithTemplate(template.id)}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
                 >
-                  Usar Template
+                  {t('users.actions.useTemplate')}
                 </button>
                 <button
                   onClick={() => setViewingTemplate(template)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                  title="Visualizar permissões"
+                  title={t('users.actions.viewPermissions')}
                 >
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDuplicateTemplate(template)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                  title="Duplicar template"
+                  title={t('users.actions.duplicateTemplate')}
                 >
                   <Copy className="w-4 h-4" />
                 </button>
@@ -423,9 +411,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <h3 className="text-lg font-semibold text-slate-900">Templates Personalizados</h3>
+            <h3 className="text-lg font-semibold text-slate-900">{t('users.sections.customTemplates')}</h3>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-              {customTemplates.length} templates
+              {t('users.templates.customCount', { count: customTemplates.length })}
             </span>
           </div>
         </div>
@@ -433,15 +421,15 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
         {customTemplates.length === 0 ? (
           <div className="text-center py-12 bg-slate-50 rounded-lg border-2 border-dashed border-slate-300">
             <Users className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-            <h3 className="text-lg font-medium text-slate-900 mb-2">Nenhum template personalizado</h3>
+            <h3 className="text-lg font-medium text-slate-900 mb-2">{t('users.states.templatesEmpty')}</h3>
             <p className="text-slate-600 mb-4">
-              Crie templates personalizados para agilizar a criação de usuários
+              {t('users.states.templatesEmptyHint')}
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
             >
-              Criar Primeiro Template
+              {t('users.actions.createFirstTemplate')}
             </button>
           </div>
         ) : (
@@ -454,7 +442,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                     <h4 className="font-medium text-slate-900">{template.name}</h4>
                   </div>
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                    Personalizado
+                    {t('users.templates.badgeCustom')}
                   </span>
                 </div>
                 
@@ -463,7 +451,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                 <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
                   <span className="flex items-center space-x-1">
                     <Tag className="w-3 h-3" />
-                    <span>Base: {getRoleName(template.baseRole)}</span>
+                    <span>{t('users.templates.baseLabel', { role: getRoleName(template.baseRole) })}</span>
                   </span>
                   <span className="flex items-center space-x-1">
                     <Clock className="w-3 h-3" />
@@ -495,11 +483,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                       <div className="flex items-center space-x-2">
                         <Settings className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-medium text-slate-700">
-                          Visível para empresas filhas
+                          {t('users.templates.visibilityForChildren')}
                         </span>
                         {pendingChanges.hasOwnProperty(template.id) && (
                           <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded">
-                            Alterado
+                            {t('users.templates.badgeChanged')}
                           </span>
                         )}
                       </div>
@@ -515,10 +503,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                             : template.visibleToChildCompanies ?? false)
                             ? 'bg-blue-600' : 'bg-slate-200'
                         }`}
-                        title={`${(pendingChanges.hasOwnProperty(template.id) 
+                        title={(pendingChanges.hasOwnProperty(template.id) 
                           ? pendingChanges[template.id] 
                           : template.visibleToChildCompanies ?? false) 
-                          ? 'Visível para empresas filhas' : 'Apenas empresa pai'}`}
+                          ? t('users.templates.visibilityOn') 
+                          : t('users.templates.visibilityOff')}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -536,12 +525,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                         : template.visibleToChildCompanies ?? false) ? (
                         <span className="flex items-center space-x-1 text-green-600">
                           <Eye className="w-3 h-3" />
-                          <span>Empresas filhas podem usar este perfil</span>
+                          <span>{t('users.templates.visibilityHintOn')}</span>
                         </span>
                       ) : (
                         <span className="flex items-center space-x-1 text-slate-500">
                           <EyeOff className="w-3 h-3" />
-                          <span>Disponível apenas para empresa pai</span>
+                          <span>{t('users.templates.visibilityHintOff')}</span>
                         </span>
                       )}
                     </div>
@@ -554,33 +543,33 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                     onClick={() => handleCreateUserWithTemplate(template.id)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
                   >
-                    Usar Template
+                    {t('users.actions.useTemplate')}
                   </button>
                   <button
                     onClick={() => setViewingTemplate(template)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title="Visualizar permissões"
+                    title={t('users.actions.viewPermissions')}
                   >
                     <Eye className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setEditingTemplate(template)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title="Editar template"
+                    title={t('users.actions.editTemplate')}
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDuplicateTemplate(template)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title="Duplicar template"
+                    title={t('users.actions.duplicateTemplate')}
                   >
                     <Copy className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDeactivateTemplate(template.id)}
                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                    title="Desativar template"
+                    title={t('users.actions.deactivateTemplate')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -600,12 +589,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
             </div>
           </div>
           <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">Sobre Templates:</p>
+            <p className="font-medium mb-1">{t('users.templates.aboutTitle')}</p>
             <ul className="space-y-1 text-xs">
-              <li>• Templates do sistema não podem ser editados, apenas duplicados</li>
-              <li>• Templates personalizados podem ser editados e desativados</li>
-              <li>• Ao usar um template, as permissões são aplicadas sobre o role base</li>
-              <li>• Templates facilitam a criação consistente de usuários</li>
+              <li>{t('users.templates.aboutBullet1')}</li>
+              <li>{t('users.templates.aboutBullet2')}</li>
+              <li>{t('users.templates.aboutBullet3')}</li>
+              <li>{t('users.templates.aboutBullet4')}</li>
             </ul>
           </div>
         </div>
