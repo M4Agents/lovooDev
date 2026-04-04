@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Bell } from 'lucide-react'
 
@@ -15,6 +16,7 @@ export const ActivityNotificationButton: React.FC<ActivityNotificationButtonProp
   companyId,
   collapsed = false
 }) => {
+  const { t } = useTranslation('layout')
   const navigate = useNavigate()
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -57,12 +59,12 @@ export const ActivityNotificationButton: React.FC<ActivityNotificationButtonProp
         hover:bg-slate-700/50 transition-colors
         ${collapsed ? 'justify-center' : ''}
       `}
-      title={collapsed ? 'Notificações' : undefined}
+      title={collapsed ? t('notifications.sidebarLink') : undefined}
     >
       <div className="flex items-center gap-2">
         <Bell className="w-4 h-4 text-slate-300" />
         {!collapsed && (
-          <span className="text-sm text-slate-300">Notificações</span>
+          <span className="text-sm text-slate-300">{t('notifications.sidebarLink')}</span>
         )}
       </div>
       {unreadCount > 0 && (

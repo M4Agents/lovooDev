@@ -1,0 +1,40 @@
+{
+  "brand": {
+    "logoAlt": "Lovoo CRM Logo",
+    "tagline": "Leads Otimizados. Vendas Voando."
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "chat": "Chat",
+    "salesFunnel": "Funil de Vendas",
+    "leads": "Leads",
+    "calendar": "Calendário",
+    "automations": "Automações",
+    "companies": "Empresas",
+    "mediaLibrary": "Biblioteca",
+    "reports": "Relatórios",
+    "plans": "Planos",
+    "settings": "Configurações"
+  },
+  "impersonation": {
+    "viewingPrefix": "Você está visualizando como:",
+    "originalUser": "(Original: {{email}})",
+    "backToOriginal": "Voltar ao Original"
+  },
+  "profile": {
+    "avatarFallbackName": "Usuário"
+  },
+  "actions": {
+    "signOut": "Sair"
+  },
+  "mobile": {
+    "openMenuAriaLabel": "Abrir menu"
+  },
+  "realtime": {
+    "activeVisitors_one": "{{count}} visitante ativo",
+    "activeVisitors_other": "{{count}} visitantes ativos"
+  },
+  "notifications": {
+    "sidebarLink": "Notificações"
+  }
+}

@@ -1,6 +1,7 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import settingsSystem from '../locales/pt-BR/settings.system.json'
+import layout from '../locales/pt-BR/layout.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -8,9 +9,10 @@ void i18n.use(initReactI18next).init({
   resources: {
     'pt-BR': {
       'settings.system': settingsSystem,
+      layout,
     },
   },
-  ns: ['settings.system'],
+  ns: ['settings.system', 'layout'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeAnalytics';
@@ -31,6 +32,7 @@ type ModernLayoutProps = {
 };
 
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
+  const { t } = useTranslation('layout');
   const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles, currentRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,19 +84,24 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
     navigate('/');
   };
 
-  const navItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/chat', icon: MessageCircle, label: 'Chat' },
-    { path: '/sales-funnel', icon: TrendingUp, label: 'Funil de Vendas' },
-    { path: '/leads', icon: Users, label: 'Leads' },
-    { path: '/calendar', icon: Calendar, label: 'Calendário' },
-    { path: '/automations', icon: Zap, label: 'Automações' },
-    ...(company?.is_super_admin ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
-    { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
-    { path: '/reports', icon: BarChart2, label: 'Relatórios' },
-    ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: 'Planos' }] : []),
-    { path: '/settings', icon: Settings, label: 'Configurações' },
-  ];
+  const navItems = useMemo(
+    () => [
+      { path: '/dashboard', icon: LayoutDashboard, label: t('navigation.dashboard') },
+      { path: '/chat', icon: MessageCircle, label: t('navigation.chat') },
+      { path: '/sales-funnel', icon: TrendingUp, label: t('navigation.salesFunnel') },
+      { path: '/leads', icon: Users, label: t('navigation.leads') },
+      { path: '/calendar', icon: Calendar, label: t('navigation.calendar') },
+      { path: '/automations', icon: Zap, label: t('navigation.automations') },
+      ...(company?.is_super_admin
+        ? [{ path: '/companies', icon: Building2, label: t('navigation.companies') }]
+        : []),
+      { path: '/media-library', icon: FolderOpen, label: t('navigation.mediaLibrary') },
+      { path: '/reports', icon: BarChart2, label: t('navigation.reports') },
+      ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: t('navigation.plans') }] : []),
+      { path: '/settings', icon: Settings, label: t('navigation.settings') },
+    ],
+    [t, company?.is_super_admin]
+  );
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
@@ -108,10 +115,11 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           <div className="flex items-center justify-center gap-2">
             <User className="w-4 h-4" />
             <span>
-              Você está visualizando como: <strong>{company?.name}</strong>
+              {t('impersonation.viewingPrefix')}{' '}
+              <strong>{company?.name}</strong>
               {originalUser && (
                 <span className="ml-2">
-                  (Original: {originalUser.email})
+                  {t('impersonation.originalUser', { email: originalUser.email })}
                 </span>
               )}
             </span>
@@ -119,7 +127,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               onClick={stopImpersonation}
               className="ml-4 px-3 py-1 bg-orange-600 hover:bg-orange-700 rounded text-xs transition-colors"
             >
-              Voltar ao Original
+              {t('impersonation.backToOriginal')}
             </button>
           </div>
         </div>
@@ -146,12 +154,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               <div className="flex items-center justify-center mb-1" style={{ width: '94px', height: '40px' }}>
                 <img 
                   src="https://app.lovoocrm.com/images/emails/LOVOO-PNG-para-fundo-preto-scaled.png" 
-                  alt="Lovoo CRM Logo" 
+                  alt={t('brand.logoAlt')} 
                   className="w-full h-full object-contain"
                 />
               </div>
               <p className="text-xs text-slate-400 text-center font-light tracking-wide opacity-80">
-                Leads Otimizados. Vendas Voando.
+                {t('brand.tagline')}
               </p>
             </div>
           )}
@@ -212,7 +220,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               <div className="flex items-center gap-3">
                 <Avatar 
                   src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || currentUserData?.display_name || user?.email || 'Usuário'}
+                  alt={userDisplayName || currentUserData?.display_name || user?.email || t('profile.avatarFallbackName')}
                   size="lg"
                   fallbackText={(userDisplayName || currentUserData?.display_name || user?.email)?.charAt(0)}
                 />
@@ -253,7 +261,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               <div className="relative">
                 <Avatar 
                   src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || user?.email || 'Usuário'}
+                  alt={userDisplayName || user?.email || t('profile.avatarFallbackName')}
                   size="md"
                   fallbackText={(userDisplayName || user?.email)?.charAt(0)}
                 />
@@ -274,10 +282,10 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               transition-all duration-200 ease-in-out
               ${sidebarCollapsed ? 'justify-center' : ''}
             `}
-            title={sidebarCollapsed ? 'Sair' : undefined}
+            title={sidebarCollapsed ? t('actions.signOut') : undefined}
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            {!sidebarCollapsed && <span className="font-medium">Sair</span>}
+            {!sidebarCollapsed && <span className="font-medium">{t('actions.signOut')}</span>}
           </button>
         </div>
       </div>
@@ -300,7 +308,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         <button 
           onClick={() => setMobileMenuOpen(true)}
           className="lg:hidden fixed top-4 left-4 z-40 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-200"
-          aria-label="Abrir menu"
+          aria-label={t('mobile.openMenuAriaLabel')}
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -312,7 +320,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4" />
             <span className="text-sm font-medium">
-              {realtimeStats.activeVisitors} visitante{realtimeStats.activeVisitors > 1 ? 's' : ''} ativo{realtimeStats.activeVisitors > 1 ? 's' : ''}
+              {t('realtime.activeVisitors', { count: realtimeStats.activeVisitors })}
             </span>
           </div>
         </div>
