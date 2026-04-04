@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   TrendingUp, TrendingDown, DollarSign, Target,
   Clock, AlertTriangle, BarChart2, Users, Timer,
@@ -17,36 +18,30 @@ import type { CycleTimeMetric } from '../types/reports'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney } from '../lib/formatMoney'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function fmtCycle(seconds: number | null): string {
-  if (seconds == null || seconds <= 0) return '—'
-  const d = Math.round(Number(seconds) / 86400)
-  if (d < 1) return `${Math.round(Number(seconds) / 3600)}h`
-  if (d < 30) return `${d}d`
-  return `${Math.round(d / 30)}m`
+function useFmtCycleSeconds() {
+  const { t } = useTranslation('reports')
+  return useCallback((seconds: number | null) => {
+    if (seconds == null || seconds <= 0) return t('duration.empty')
+    const d = Math.round(Number(seconds) / 86400)
+    if (d < 1) return t('duration.hours', { count: Math.round(Number(seconds) / 3600) })
+    if (d < 30) return t('duration.days', { count: d })
+    return t('duration.monthsApprox', { count: Math.round(d / 30) })
+  }, [t])
 }
 
-const TABS: { key: ReportTab; label: string }[] = [
-  { key: 'overview', label: 'Visão Geral' },
-  { key: 'by-stage', label: 'Por Etapa' },
-  { key: 'by-seller', label: 'Por Vendedor' },
-  { key: 'cycle-time', label: 'Tempo de Ciclo' },
-]
-
-// ─── Aba Visão Geral ────────────────────────────────────────────────────────
-
 function OverviewTab({
-  data, stageData, stalledDays, setStalledDays, loading, fmtCurrency,
+  data, stageData, stalledDays, setStalledDays, loading, fmtCurrency, fmtCycle,
 }: {
   data: ReturnType<typeof useFunnelMetrics>['metrics']['overview']
   stageData: ReturnType<typeof useFunnelMetrics>['metrics']['stageMetrics']
   stalledDays: number
   setStalledDays: (v: number) => void
   loading: boolean
-  /** Agregados podem misturar moedas; formatação usa moeda padrão da empresa. */
   fmtCurrency: (v: number) => string
+  fmtCycle: (seconds: number | null) => string
 }) {
+  const { t } = useTranslation('reports')
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -61,90 +56,91 @@ function OverviewTab({
   const o = data
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
-          label="Oportunidades abertas"
-          value={o ? Number(o.open_count) : '—'}
+          label={t('kpi.openOpportunities')}
+          value={o ? Number(o.open_count) : t('duration.empty')}
           icon={Target}
           iconColor="text-blue-500"
         />
         <KpiCard
-          label="Ganhas no período"
-          value={o ? Number(o.won_count) : '—'}
+          label={t('kpi.wonInPeriod')}
+          value={o ? Number(o.won_count) : t('duration.empty')}
           icon={TrendingUp}
           highlight
         />
         <KpiCard
-          label="Perdidas no período"
-          value={o ? Number(o.lost_count) : '—'}
+          label={t('kpi.lostInPeriod')}
+          value={o ? Number(o.lost_count) : t('duration.empty')}
           icon={TrendingDown}
           iconColor="text-red-400"
         />
         <KpiCard
-          label="Taxa de conversão"
-          value={o?.conversion_rate != null ? `${Number(o.conversion_rate).toFixed(1)}%` : '—'}
+          label={t('kpi.conversionRate')}
+          value={
+            o?.conversion_rate != null
+              ? t('kpi.conversionPercent', { value: Number(o.conversion_rate).toFixed(1) })
+              : t('duration.empty')
+          }
           icon={BarChart2}
           iconColor="text-indigo-500"
-          subLabel="Apenas fechadas no período"
+          subLabel={t('kpi.conversionClosedOnly')}
         />
         <KpiCard
-          label="Valor ganho"
-          value={o ? fmtCurrency(Number(o.won_value)) : '—'}
+          label={t('kpi.wonValue')}
+          value={o ? fmtCurrency(Number(o.won_value)) : t('duration.empty')}
           icon={DollarSign}
           highlight={!!o && Number(o.won_value) > 0}
         />
         <KpiCard
-          label={`Paradas há +${stalledDays}d`}
-          value={o ? Number(o.stalled_count) : '—'}
+          label={t('kpi.stalled', { days: stalledDays })}
+          value={o ? Number(o.stalled_count) : t('duration.empty')}
           icon={AlertTriangle}
           alert={!!o && Number(o.stalled_count) > 0}
           subLabel={
             <span className="flex items-center gap-1">
-              Limite:
+              {t('kpi.limitPrefix')}
               <input
                 type="number"
                 min={1}
                 max={365}
                 value={stalledDays}
-                onChange={(e) => setStalledDays(Math.max(1, parseInt(e.target.value) || 15))}
+                onChange={(e) => setStalledDays(Math.max(1, parseInt(e.target.value, 10) || 15))}
                 onClick={(e) => e.stopPropagation()}
                 className="w-12 text-center bg-transparent border-b border-current focus:outline-none"
               />
-              dias
+              {t('kpi.daysUnit')}
             </span>
           }
         />
       </div>
 
-      {/* Gráfico de oportunidades por etapa */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          Oportunidades abertas por etapa
+          {t('charts.openByStageTitle')}
         </h3>
         {stageData.length > 0 ? (
           <FunnelBarChart data={stageData} />
         ) : (
-          <ReportEmptyState description="Nenhuma oportunidade aberta no funil selecionado." />
+          <ReportEmptyState description={t('charts.noOpenInSelectedFunnel')} />
         )}
       </div>
 
-      {/* Tempo médio de ciclo resumido */}
       {o && (o.avg_cycle_won_seconds != null || o.avg_cycle_lost_seconds != null) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <KpiCard
-            label="Ciclo médio — Ganhas"
+            label={t('kpi.avgCycleWon')}
             value={fmtCycle(o.avg_cycle_won_seconds)}
             icon={Clock}
             iconColor="text-emerald-500"
-            subLabel="Desde abertura até ganho"
+            subLabel={t('kpi.sinceOpenToWon')}
           />
           <KpiCard
-            label="Ciclo médio — Perdidas"
+            label={t('kpi.avgCycleLost')}
             value={fmtCycle(o.avg_cycle_lost_seconds)}
             icon={Clock}
             iconColor="text-red-400"
-            subLabel="Desde abertura até perda"
+            subLabel={t('kpi.sinceOpenToLost')}
           />
         </div>
       )}
@@ -152,9 +148,17 @@ function OverviewTab({
   )
 }
 
-// ─── Aba Tempo de Ciclo ─────────────────────────────────────────────────────
+function CycleTimeTab({
+  data,
+  loading,
+  fmtCycle,
+}: {
+  data: CycleTimeMetric[]
+  loading: boolean
+  fmtCycle: (seconds: number | null) => string
+}) {
+  const { t } = useTranslation('reports')
 
-function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boolean }) {
   if (loading) return <TableSkeleton rows={6} />
 
   const totalRow = data.find((d) => d.dimension === 'total')
@@ -162,7 +166,7 @@ function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boo
   const sellerRows = data.filter((d) => d.dimension === 'seller')
 
   if (!totalRow && funnelRows.length === 0 && sellerRows.length === 0) {
-    return <ReportEmptyState description="Nenhuma oportunidade fechada no período selecionado." />
+    return <ReportEmptyState description={t('cycleTable.noClosedInPeriod')} />
   }
 
   const CycleTable = ({ rows, label }: { rows: CycleTimeMetric[]; label: string }) => {
@@ -176,13 +180,13 @@ function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boo
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Nome</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Ganhas</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Perdidas</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Ciclo médio (G)</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">Mediana (G)</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">Máx (G)</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">Ciclo médio (P)</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t('cycleTable.columnName')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t('cycleTable.columnWon')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t('cycleTable.columnLost')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t('cycleTable.columnAvgCycleWon')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">{t('cycleTable.columnMedianWon')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">{t('cycleTable.columnMaxWon')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">{t('cycleTable.columnAvgCycleLost')}</th>
               </tr>
             </thead>
             <tbody>
@@ -206,27 +210,37 @@ function CycleTimeTab({ data, loading }: { data: CycleTimeMetric[]; loading: boo
 
   return (
     <div className="space-y-5">
-      {/* Resumo global */}
       {totalRow && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Ciclo médio — Ganhas" value={fmtCycle(totalRow.won_avg_seconds)} icon={Timer} iconColor="text-emerald-500" />
-          <KpiCard label="Mediana — Ganhas" value={fmtCycle(totalRow.won_median_seconds)} icon={Timer} iconColor="text-blue-500" />
-          <KpiCard label="Máximo — Ganhas" value={fmtCycle(totalRow.won_max_seconds)} icon={Timer} iconColor="text-gray-500" />
-          <KpiCard label="Ciclo médio — Perdidas" value={fmtCycle(totalRow.lost_avg_seconds)} icon={Timer} iconColor="text-red-400" />
+          <KpiCard label={t('kpi.cycleWonShort')} value={fmtCycle(totalRow.won_avg_seconds)} icon={Timer} iconColor="text-emerald-500" />
+          <KpiCard label={t('kpi.medianWonShort')} value={fmtCycle(totalRow.won_median_seconds)} icon={Timer} iconColor="text-blue-500" />
+          <KpiCard label={t('kpi.maxWonShort')} value={fmtCycle(totalRow.won_max_seconds)} icon={Timer} iconColor="text-gray-500" />
+          <KpiCard label={t('kpi.cycleLostShort')} value={fmtCycle(totalRow.lost_avg_seconds)} icon={Timer} iconColor="text-red-400" />
         </div>
       )}
-      <CycleTable rows={funnelRows} label="Por Funil" />
-      <CycleTable rows={sellerRows} label="Por Vendedor" />
+      <CycleTable rows={funnelRows} label={t('cycleTable.byFunnel')} />
+      <CycleTable rows={sellerRows} label={t('cycleTable.bySeller')} />
     </div>
   )
 }
 
-// ─── Página Principal ───────────────────────────────────────────────────────
-
 export default function Reports() {
+  const { t } = useTranslation('reports')
   const { company } = useAuth()
   const displayCurrency = company?.default_currency ?? 'BRL'
   const fmtCurrency = (v: number) => formatMoney(v, displayCurrency)
+  const fmtCycle = useFmtCycleSeconds()
+
+  const tabs = useMemo(
+    () =>
+      [
+        { key: 'overview' as const, label: t('tabs.overview') },
+        { key: 'by-stage' as const, label: t('tabs.byStage') },
+        { key: 'by-seller' as const, label: t('tabs.bySeller') },
+        { key: 'cycle-time' as const, label: t('tabs.cycleTime') },
+      ],
+    [t]
+  )
 
   const {
     activeTab, setActiveTab,
@@ -241,14 +255,12 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BarChart2 className="w-5 h-5 text-indigo-600" />
-            <h1 className="text-lg font-semibold text-gray-900">Relatórios</h1>
+            <h1 className="text-lg font-semibold text-gray-900">{t('header.title')}</h1>
           </div>
-          {/* Filtros globais */}
           <div className="flex flex-wrap items-center gap-2">
             <PeriodFilter
               selectedPeriod={period}
@@ -264,11 +276,11 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* Abas */}
         <div className="flex gap-1 mt-4 border-b border-transparent -mb-px">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.key
@@ -282,11 +294,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Conteúdo */}
       <div className="px-6 py-6">
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-            Erro ao carregar relatórios: {error}
+            {t('messages.loadError', { error })}
           </div>
         )}
 
@@ -298,6 +309,7 @@ export default function Reports() {
             setStalledDays={setStalledDays}
             loading={loading}
             fmtCurrency={fmtCurrency}
+            fmtCycle={fmtCycle}
           />
         )}
 
@@ -306,7 +318,7 @@ export default function Reports() {
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-gray-500" />
               <h2 className="text-sm font-semibold text-gray-700">
-                Tempo por etapa — oportunidades abertas e movimentações históricas no período
+                {t('sections.byStage')}
               </h2>
             </div>
             {loading ? <TableSkeleton rows={6} /> : (
@@ -320,7 +332,7 @@ export default function Reports() {
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-gray-500" />
               <h2 className="text-sm font-semibold text-gray-700">
-                Performance por vendedor — ganhos e perdidos no período selecionado
+                {t('sections.bySeller')}
               </h2>
             </div>
             {loading ? <TableSkeleton rows={6} /> : (
@@ -334,10 +346,10 @@ export default function Reports() {
             <div className="flex items-center gap-2 mb-1">
               <Timer className="w-4 h-4 text-gray-500" />
               <h2 className="text-sm font-semibold text-gray-700">
-                Ciclo de vendas — tempo entre abertura e fechamento (ganhas e perdidas no período)
+                {t('sections.cycleTime')}
               </h2>
             </div>
-            <CycleTimeTab data={metrics.cycleMetrics} loading={loading} />
+            <CycleTimeTab data={metrics.cycleMetrics} loading={loading} fmtCycle={fmtCycle} />
           </div>
         )}
       </div>

@@ -1,0 +1,96 @@
+{
+  "header": {
+    "title": "Relatórios"
+  },
+  "tabs": {
+    "overview": "Visão Geral",
+    "byStage": "Por Etapa",
+    "bySeller": "Por Vendedor",
+    "cycleTime": "Tempo de Ciclo"
+  },
+  "sections": {
+    "byStage": "Tempo por etapa — oportunidades abertas e movimentações históricas no período",
+    "bySeller": "Performance por vendedor — ganhos e perdidos no período selecionado",
+    "cycleTime": "Ciclo de vendas — tempo entre abertura e fechamento (ganhas e perdidas no período)"
+  },
+  "duration": {
+    "empty": "—",
+    "hours": "{{count}}h",
+    "days": "{{count}}d",
+    "monthsApprox": "{{count}}m",
+    "minutes": "{{count}}min",
+    "hoursDecimal": "{{value}}h"
+  },
+  "kpi": {
+    "openOpportunities": "Oportunidades abertas",
+    "wonInPeriod": "Ganhas no período",
+    "lostInPeriod": "Perdidas no período",
+    "conversionRate": "Taxa de conversão",
+    "conversionClosedOnly": "Apenas fechadas no período",
+    "conversionPercent": "{{value}}%",
+    "wonValue": "Valor ganho",
+    "stalled": "Paradas há +{{days}}d",
+    "limitPrefix": "Limite:",
+    "daysUnit": "dias",
+    "avgCycleWon": "Ciclo médio — Ganhas",
+    "avgCycleLost": "Ciclo médio — Perdidas",
+    "sinceOpenToWon": "Desde abertura até ganho",
+    "sinceOpenToLost": "Desde abertura até perda",
+    "cycleWonShort": "Ciclo médio — Ganhas",
+    "medianWonShort": "Mediana — Ganhas",
+    "maxWonShort": "Máximo — Ganhas",
+    "cycleLostShort": "Ciclo médio — Perdidas"
+  },
+  "charts": {
+    "openByStageTitle": "Oportunidades abertas por etapa",
+    "noOpenInSelectedFunnel": "Nenhuma oportunidade aberta no funil selecionado."
+  },
+  "cycleTable": {
+    "noClosedInPeriod": "Nenhuma oportunidade fechada no período selecionado.",
+    "byFunnel": "Por Funil",
+    "bySeller": "Por Vendedor",
+    "columnName": "Nome",
+    "columnWon": "Ganhas",
+    "columnLost": "Perdidas",
+    "columnAvgCycleWon": "Ciclo médio (G)",
+    "columnMedianWon": "Mediana (G)",
+    "columnMaxWon": "Máx (G)",
+    "columnAvgCycleLost": "Ciclo médio (P)"
+  },
+  "messages": {
+    "loadError": "Erro ao carregar relatórios: {{error}}"
+  },
+  "empty": {
+    "defaultTitle": "Sem dados para este período",
+    "defaultDescription": "Tente ampliar o período ou verificar os filtros selecionados."
+  },
+  "funnel": {
+    "allFunnels": "Todos os funis",
+    "singleFallback": "1 funil",
+    "selectedCount": "{{count}} funis selecionados",
+    "noneFound": "Nenhum funil encontrado"
+  },
+  "stageTable": {
+    "searchPlaceholder": "Buscar etapa ou funil...",
+    "columnStage": "Etapa",
+    "columnOpen": "Abertas",
+    "columnAvgTime": "Tempo médio",
+    "columnMedian": "Mediana",
+    "columnMax": "Máximo",
+    "columnStatus": "Status",
+    "bottleneck": "Gargalo"
+  },
+  "sellerTable": {
+    "searchPlaceholder": "Buscar vendedor...",
+    "filterAll": "Todos",
+    "filterWithWon": "Com ganhos",
+    "filterWithLost": "Com perdas",
+    "columnSeller": "Vendedor",
+    "columnOpen": "Abertas",
+    "columnWon": "Ganhas",
+    "columnLost": "Perdidas",
+    "columnWonValue": "Valor ganho",
+    "columnConversion": "Conversão",
+    "columnAvgCycle": "Ciclo médio"
+  }
+}

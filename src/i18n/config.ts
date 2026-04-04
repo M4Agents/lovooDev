@@ -10,6 +10,7 @@ import notifications from '../locales/pt-BR/notifications.json'
 import plans from '../locales/pt-BR/plans.json'
 import mediaLibrary from '../locales/pt-BR/mediaLibrary.json'
 import companies from '../locales/pt-BR/companies.json'
+import reports from '../locales/pt-BR/reports.json'
 
 void i18n.use(initReactI18next).init({
   lng: 'pt-BR',
@@ -26,9 +27,10 @@ void i18n.use(initReactI18next).init({
       plans,
       mediaLibrary,
       companies,
+      reports,
     },
   },
-  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies'],
+  ns: ['settings.system', 'layout', 'auth', 'deletedInstances', 'analytics', 'dashboard', 'notifications', 'plans', 'mediaLibrary', 'companies', 'reports'],
   defaultNS: 'settings.system',
   interpolation: {
     escapeValue: true,
