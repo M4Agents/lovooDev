@@ -5,6 +5,7 @@
 // NÃO MODIFICA componentes existentes
 
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
@@ -21,6 +22,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   initialConversationId,
   hideConversationSidebar = false
 }) => {
+  const { t } = useTranslation('chat')
   const chatData = useChatData(companyId, userId, initialConversationId)
 
   // =====================================================
@@ -35,8 +37,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-slate-600 mx-auto mb-6"></div>
             <div className="absolute inset-0 rounded-full h-10 w-10 border-2 border-transparent border-t-blue-500 animate-pulse mx-auto"></div>
           </div>
-          <p className="text-slate-600 font-medium">Carregando instâncias...</p>
-          <p className="text-slate-400 text-sm mt-1">Preparando seu ambiente de chat</p>
+          <p className="text-slate-600 font-medium">{t('layout.loadingInstances')}</p>
+          <p className="text-slate-400 text-sm mt-1">{t('layout.loadingInstancesHint')}</p>
         </div>
       </div>
     )
@@ -58,10 +60,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             </div>
           </div>
           <h3 className="text-xl font-semibold text-slate-800 mb-3">
-            Bem-vindo ao Chat WhatsApp
+            {t('layout.noInstancesTitle')}
           </h3>
           <p className="text-slate-600 mb-6 leading-relaxed">
-            Para começar a usar o chat, você precisa conectar pelo menos uma instância WhatsApp Business.
+            {t('layout.noInstancesBody')}
           </p>
           <button
             onClick={() => window.location.href = '/settings/whatsapp-life'}
@@ -70,7 +72,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            Conectar WhatsApp
+            {t('layout.connectWhatsApp')}
           </button>
         </div>
       </div>
@@ -120,10 +122,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                 </div>
               </div>
               <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                Selecione uma conversa
+                {t('layout.selectConversationTitle')}
               </h3>
               <p className="text-slate-600 leading-relaxed">
-                Escolha uma conversa na sidebar para começar a trocar mensagens com seus clientes
+                {t('layout.selectConversationBody')}
               </p>
             </div>
           </div>
@@ -149,10 +151,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
                 </div>
               </div>
               <h4 className="text-lg font-semibold text-slate-800 mb-2">
-                Informações do Lead
+                {t('layout.leadPanelTitle')}
               </h4>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Selecione uma conversa para visualizar e editar as informações do contato
+                {t('layout.leadPanelBody')}
               </p>
             </div>
           </div>
@@ -170,6 +172,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
   companyId,
   userId
 }) => {
+  const { t } = useTranslation('chat')
   const chatData = useChatData(companyId, userId)
   const [activeView, setActiveView] = React.useState<'conversations' | 'chat' | 'lead'>('conversations')
 
@@ -178,7 +181,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
       <div className="flex items-center justify-center h-full bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-gray-600">{t('mobile.loading')}</p>
         </div>
       </div>
     )
@@ -196,7 +199,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
               : 'text-gray-600'
           }`}
         >
-          Conversas
+          {t('mobile.conversations')}
         </button>
         {chatData.selectedConversation && (
           <>
@@ -208,7 +211,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
                   : 'text-gray-600'
               }`}
             >
-              Chat
+              {t('mobile.chat')}
             </button>
             <button
               onClick={() => setActiveView('lead')}
@@ -218,7 +221,7 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
                   : 'text-gray-600'
               }`}
             >
-              Lead
+              {t('mobile.lead')}
             </button>
           </>
         )}

@@ -5,6 +5,7 @@
 // NÃO MODIFICA componentes existentes
 
 import React, { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../../config/chatFeatures'
@@ -28,6 +29,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   companyId,
   userId
 }) => {
+  const { t } = useTranslation('chat')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -138,9 +140,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     yesterday.setDate(yesterday.getDate() - 1);
     
     if (date.toDateString() === today.toDateString()) {
-      return "Hoje";
+      return t('dates.today');
     } else if (date.toDateString() === yesterday.toDateString()) {
-      return "Ontem";
+      return t('dates.yesterday');
     } else {
       return date.toLocaleDateString('pt-BR'); // DD/MM/AAAA
     }
@@ -934,7 +936,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando mensagens...</p>
+          <p className="text-gray-600">{t('chatArea.loadingMessages')}</p>
         </div>
       </div>
     )
@@ -959,7 +961,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {contactPhotoUrl ? (
                 <img
                   src={contactPhotoUrl}
-                  alt={conversation?.contact_name || conversation?.contact_phone || 'Contato'}
+                  alt={conversation?.contact_name || conversation?.contact_phone || t('chatArea.contactFallback')}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -970,7 +972,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-medium text-gray-900 truncate">
-                {conversation?.contact_name || conversation?.contact_phone || 'Conversa'}
+                {conversation?.contact_name || conversation?.contact_phone || t('chatArea.conversationFallback')}
                 {/* NOVO: Empresa na mesma linha com tracinho */}
                 {conversation?.company_name && conversation.company_name.trim() !== '' && (
                   <span className="text-sm text-slate-500 font-normal"> - {conversation.company_name}</span>
@@ -995,7 +997,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
             {conversation?.assigned_to && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Atribuída
+                {t('chatArea.assignedBadge')}
               </span>
             )}
             
@@ -1004,7 +1006,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               onClick={fetchMessages}
               disabled={loading}
               className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
-              title="Recarregar mensagens"
+              title={t('chatArea.reloadMessagesTitle')}
             >
               <svg 
                 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} 
@@ -1055,10 +1057,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="absolute inset-0 bg-green-50 bg-opacity-95 border-4 border-dashed border-green-400 flex items-center justify-center z-[9999]">
           <div className="text-center bg-white p-8 rounded-xl shadow-lg border border-green-200">
             <div className="text-6xl mb-4">📎</div>
-            <div className="text-green-700 text-2xl font-semibold mb-2">Arraste arquivo aqui</div>
-            <div className="text-green-600 text-lg">Imagens, vídeos, documentos e áudios</div>
+            <div className="text-green-700 text-2xl font-semibold mb-2">{t('chatArea.dragTitle')}</div>
+            <div className="text-green-600 text-lg">{t('chatArea.dragSubtitle')}</div>
             <div className="text-green-500 text-sm mt-3">
-              Imagens até 5MB • Vídeos até 25MB • Documentos até 10MB
+              {t('chatArea.dragLimits')}
             </div>
           </div>
         </div>
@@ -1071,7 +1073,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             
             {/* Header com botão fechar */}
             <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-lg font-semibold">Enviar arquivo</h3>
+              <h3 className="text-lg font-semibold">{t('chatArea.previewSendFile')}</h3>
               <button 
                 onClick={closePreviewModal}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
@@ -1085,7 +1087,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {previewFile.type.startsWith('image/') ? (
                 <img 
                   src={previewFile.url} 
-                  alt="Preview" 
+                  alt={t('chatArea.previewAlt')} 
                   className="max-w-full max-h-96 object-contain rounded shadow-lg"
                 />
               ) : previewFile.type.startsWith('video/') ? (
@@ -1097,7 +1099,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     preload="metadata"
                     style={{ maxHeight: '400px' }}
                   >
-                    <p>Seu navegador não suporta reprodução de vídeo.</p>
+                    <p>{t('chatArea.videoNotSupported')}</p>
                   </video>
                   <div className="mt-3">
                     <p className="text-gray-700 font-medium">{previewFile.name}</p>
@@ -1120,7 +1122,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <textarea
                     value={captionMessage}
                     onChange={(e) => setCaptionMessage(e.target.value)}
-                    placeholder="Digite uma mensagem"
+                    placeholder={t('chatArea.captionPlaceholder')}
                     disabled={isUploading}
                     className={`w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
                       isUploading ? 'bg-gray-100 cursor-not-allowed' : ''
@@ -1171,8 +1173,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
             </svg>
-            <p className="text-gray-600">Nenhuma mensagem ainda</p>
-            <p className="text-sm text-gray-500 mt-1">Envie a primeira mensagem para começar a conversa</p>
+            <p className="text-gray-600">{t('chatArea.emptyMessages')}</p>
+            <p className="text-sm text-gray-500 mt-1">{t('chatArea.emptyMessagesHint')}</p>
           </div>
         ) : (
           <>
@@ -1187,14 +1189,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {loadingOlder ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                      Carregando mensagens...
+                      {t('chatArea.loadMoreLoading')}
                     </>
                   ) : (
                     <>
                       <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                       </svg>
-                      Carregar mensagens anteriores
+                      {t('chatArea.loadMore')}
                     </>
                   )}
                 </button>
@@ -1245,7 +1247,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onSendMessage={handleSendMessage}
           onPreviewFile={openPreviewModal}
           disabled={sending}
-          placeholder="Digite sua mensagem..."
+          placeholder={t('chatArea.messageInputPlaceholder')}
           companyId={companyId}
           conversationId={conversationId}
         />

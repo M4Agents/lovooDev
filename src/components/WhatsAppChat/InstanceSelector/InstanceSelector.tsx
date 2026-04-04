@@ -5,6 +5,7 @@
 // =====================================================
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, Check } from 'lucide-react'
 import { InstanceAvatar } from './InstanceAvatar'
 
@@ -34,6 +35,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
   conversationCount = 0,
   className = ''
 }) => {
+  const { t } = useTranslation('chat')
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -80,10 +82,10 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900 truncate">
-                  Todas as Instâncias
+                  {t('instanceSelector.allInstances')}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {conversationCount} conversas
+                  {t('instanceSelector.conversationsCount', { count: conversationCount })}
                 </p>
               </div>
             </>
@@ -105,7 +107,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
               </div>
             </>
           ) : (
-            <p className="text-gray-500">Selecione uma instância</p>
+            <p className="text-gray-500">{t('instanceSelector.selectPlaceholder')}</p>
           )}
         </div>
         <ChevronDown 
@@ -132,10 +134,10 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900">
-                  Todas as Instâncias
+                  {t('instanceSelector.allInstances')}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {conversationCount} conversas
+                  {t('instanceSelector.conversationsCount', { count: conversationCount })}
                 </p>
               </div>
               {selectedInstance === 'all' && (
@@ -152,7 +154,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
           {/* Lista de Instâncias */}
           {instances.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-500 text-sm">
-              Nenhuma instância disponível
+              {t('instanceSelector.empty')}
             </div>
           ) : (
             instances.map((instance) => (

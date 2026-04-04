@@ -4,7 +4,8 @@
 // Sidebar com lista de conversas e filtros
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
 import { InstanceSelector } from '../InstanceSelector'
 
@@ -41,30 +42,34 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onFilterChange,
   onRefresh
 }) => {
+  const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
 
   // =====================================================
   // FILTROS
   // =====================================================
 
-  const filterOptions = [
-    { key: 'all', label: 'Todas', count: conversations.length },
-    { 
-      key: 'unread', 
-      label: 'Não Lidas', 
-      count: conversations.filter(c => c.unread_count > 0).length 
-    },
-    { 
-      key: 'assigned', 
-      label: 'Atribuídas', 
-      count: conversations.filter(c => c.assigned_to).length 
-    },
-    { 
-      key: 'unassigned', 
-      label: 'Não Atrib.', 
-      count: conversations.filter(c => !c.assigned_to).length 
-    }
-  ]
+  const filterOptions = useMemo(
+    () => [
+      { key: 'all' as const, label: t('sidebar.filters.all'), count: conversations.length },
+      {
+        key: 'unread' as const,
+        label: t('sidebar.filters.unread'),
+        count: conversations.filter(c => c.unread_count > 0).length
+      },
+      {
+        key: 'assigned' as const,
+        label: t('sidebar.filters.assigned'),
+        count: conversations.filter(c => c.assigned_to).length
+      },
+      {
+        key: 'unassigned' as const,
+        label: t('sidebar.filters.unassigned'),
+        count: conversations.filter(c => !c.assigned_to).length
+      }
+    ],
+    [conversations, t]
+  )
 
   // =====================================================
   // CONVERSAS FILTRADAS
@@ -96,7 +101,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Conversas</h2>
+            <h2 className="text-xl font-bold text-slate-800">{t('sidebar.title')}</h2>
           </div>
           <button
             onClick={onRefresh}
@@ -114,7 +119,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2 mb-2">
               <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
-              Selecione a Instância
+              {t('sidebar.instanceLabel')}
             </label>
             <InstanceSelector
               instances={instances}
@@ -130,7 +135,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         <div className="relative">
           <input
             type="text"
-            placeholder="Buscar conversas..."
+            placeholder={t('sidebar.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-slate-400"
@@ -222,12 +227,12 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               </div>
             </div>
             <h4 className="text-lg font-semibold text-slate-700 mb-2">
-              {searchTerm ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
+              {searchTerm ? t('sidebar.emptyNoResults') : t('sidebar.emptyNoConversations')}
             </h4>
             <p className="text-slate-500 text-sm leading-relaxed">
-              {searchTerm 
-                ? 'Tente ajustar os termos da busca' 
-                : 'As conversas aparecerão aqui quando você receber mensagens'
+              {searchTerm
+                ? t('sidebar.emptyHintSearch')
+                : t('sidebar.emptyHintDefault')
               }
             </p>
           </div>
@@ -266,6 +271,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   onClick,
   photoUrl
 }) => {
+  const { t } = useTranslation('chat')
   const formatTime = (date?: Date) => {
     if (!date) return ''
     
@@ -275,7 +281,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)
     
-    if (minutes < 1) return 'Agora'
+    if (minutes < 1) return t('conversationItem.timeNow')
     if (minutes < 60) return `${minutes}m`
     if (hours < 24) return `${hours}h`
     if (days < 7) return `${days}d`
@@ -309,7 +315,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           {photoUrl ? (
             <img
               src={photoUrl}
-              alt={conversation.contact_name || conversation.contact_phone || 'Contato'}
+              alt={conversation.contact_name || conversation.contact_phone || t('conversationItem.contactAlt')}
               className="w-12 h-12 rounded-xl object-cover shadow-sm bg-slate-200"
             />
           ) : (
@@ -332,7 +338,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                 } ${
                   isSelected ? 'text-slate-800' : 'text-slate-700'
                 }`}>
-                  {conversation.contact_name || 'Lead sem nome'}
+                  {conversation.contact_name || t('conversationItem.leadNoName')}
                 </h4>
                 {/* Badge da Instância */}
                 {conversation.instance_name && (
@@ -346,7 +352,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    Desconectada
+                    {t('conversationItem.badgeDisconnected')}
                   </span>
                 )}
                 {(conversation as any).instance_deleted && (
@@ -354,7 +360,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                     </svg>
-                    Deletada
+                    {t('conversationItem.badgeDeleted')}
                   </span>
                 )}
               </div>
@@ -399,13 +405,13 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                 <span className="text-[#00a884] mr-1 font-medium">→</span>
               )}
               {conversation.last_message_content || (
-                <span className="italic">Sem mensagens</span>
+                <span className="italic">{t('conversationItem.noMessages')}</span>
               )}
             </p>
             
             {conversation.assigned_to && (
               <div className="flex-shrink-0 ml-2">
-                <div className="w-3 h-3 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full shadow-sm" title="Atribuída"></div>
+                <div className="w-3 h-3 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full shadow-sm" title={t('conversationItem.assignedTitle')}></div>
               </div>
             )}
           </div>

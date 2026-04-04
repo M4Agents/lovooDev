@@ -1,0 +1,85 @@
+{
+  "access": {
+    "restrictedTitle": "Acesso Restrito",
+    "restrictedBody": "Você precisa estar logado para acessar o chat."
+  },
+  "page": {
+    "loadingCompany": "Carregando empresa..."
+  },
+  "layout": {
+    "loadingInstances": "Carregando instâncias...",
+    "loadingInstancesHint": "Preparando seu ambiente de chat",
+    "noInstancesTitle": "Bem-vindo ao Chat WhatsApp",
+    "noInstancesBody": "Para começar a usar o chat, você precisa conectar pelo menos uma instância WhatsApp Business.",
+    "connectWhatsApp": "Conectar WhatsApp",
+    "selectConversationTitle": "Selecione uma conversa",
+    "selectConversationBody": "Escolha uma conversa na sidebar para começar a trocar mensagens com seus clientes",
+    "leadPanelTitle": "Informações do Lead",
+    "leadPanelBody": "Selecione uma conversa para visualizar e editar as informações do contato"
+  },
+  "mobile": {
+    "conversations": "Conversas",
+    "chat": "Chat",
+    "lead": "Lead",
+    "loading": "Carregando..."
+  },
+  "sidebar": {
+    "title": "Conversas",
+    "instanceLabel": "Selecione a Instância",
+    "searchPlaceholder": "Buscar conversas...",
+    "filters": {
+      "all": "Todas",
+      "unread": "Não Lidas",
+      "assigned": "Atribuídas",
+      "unassigned": "Não Atrib."
+    },
+    "emptyNoResults": "Nenhuma conversa encontrada",
+    "emptyNoConversations": "Nenhuma conversa ainda",
+    "emptyHintSearch": "Tente ajustar os termos da busca",
+    "emptyHintDefault": "As conversas aparecerão aqui quando você receber mensagens"
+  },
+  "conversationItem": {
+    "contactAlt": "Contato",
+    "leadNoName": "Lead sem nome",
+    "badgeDisconnected": "Desconectada",
+    "badgeDeleted": "Deletada",
+    "noMessages": "Sem mensagens",
+    "timeNow": "Agora",
+    "assignedTitle": "Atribuída"
+  },
+  "instanceSelector": {
+    "allInstances": "Todas as Instâncias",
+    "conversationsCount_one": "{{count}} conversa",
+    "conversationsCount_other": "{{count}} conversas",
+    "selectPlaceholder": "Selecione uma instância",
+    "empty": "Nenhuma instância disponível"
+  },
+  "notifications": {
+    "disconnectedTitle": "WhatsApp Desconectado",
+    "disconnectedBody": "A instância {{name}} foi desconectada.",
+    "reconnectHint": "Reconecte em Configurações → Integrações → WhatsApp Life"
+  },
+  "chatArea": {
+    "loadingMessages": "Carregando mensagens...",
+    "conversationFallback": "Conversa",
+    "contactFallback": "Contato",
+    "reloadMessagesTitle": "Recarregar mensagens",
+    "messageInputPlaceholder": "Digite sua mensagem...",
+    "assignedBadge": "Atribuída",
+    "dragTitle": "Arraste arquivo aqui",
+    "dragSubtitle": "Imagens, vídeos, documentos e áudios",
+    "dragLimits": "Imagens até 5MB • Vídeos até 25MB • Documentos até 10MB",
+    "previewSendFile": "Enviar arquivo",
+    "videoNotSupported": "Seu navegador não suporta reprodução de vídeo.",
+    "captionPlaceholder": "Digite uma mensagem",
+    "emptyMessages": "Nenhuma mensagem ainda",
+    "emptyMessagesHint": "Envie a primeira mensagem para começar a conversa",
+    "loadMoreLoading": "Carregando mensagens...",
+    "loadMore": "Carregar mensagens anteriores",
+    "previewAlt": "Preview"
+  },
+  "dates": {
+    "today": "Hoje",
+    "yesterday": "Ontem"
+  }
+}

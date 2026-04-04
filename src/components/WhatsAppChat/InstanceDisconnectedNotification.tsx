@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertCircle, X } from 'lucide-react'
 
 interface DisconnectedInstance {
@@ -8,6 +9,7 @@ interface DisconnectedInstance {
 }
 
 export const InstanceDisconnectedNotification: React.FC = () => {
+  const { t } = useTranslation('chat')
   const [notifications, setNotifications] = useState<DisconnectedInstance[]>([])
 
   useEffect(() => {
@@ -41,13 +43,13 @@ export const InstanceDisconnectedNotification: React.FC = () => {
             <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-red-800">
-                WhatsApp Desconectado
+                {t('notifications.disconnectedTitle')}
               </h3>
               <p className="mt-1 text-sm text-red-700">
-                A instância <strong>{notification.instanceName}</strong> foi desconectada.
+                {t('notifications.disconnectedBody', { name: notification.instanceName })}
               </p>
               <p className="mt-1 text-xs text-red-600">
-                Reconecte em Configurações → Integrações → WhatsApp Life
+                {t('notifications.reconnectHint')}
               </p>
             </div>
             <button

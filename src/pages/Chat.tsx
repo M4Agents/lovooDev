@@ -5,6 +5,7 @@
 // NÃO MODIFICA páginas existentes
 
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { AdaptiveChatLayout } from '../components/WhatsAppChat/ChatLayout'
 import { InstanceDisconnectedNotification } from '../components/WhatsAppChat/InstanceDisconnectedNotification'
@@ -14,6 +15,7 @@ import { InstanceDisconnectedNotification } from '../components/WhatsAppChat/Ins
 // =====================================================
 
 const ChatPage: React.FC = () => {
+  const { t } = useTranslation('chat')
   const { user, company } = useAuth()
 
   // =====================================================
@@ -25,10 +27,10 @@ const ChatPage: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Acesso Restrito
+            {t('access.restrictedTitle')}
           </h2>
           <p className="text-gray-600">
-            Você precisa estar logado para acessar o chat.
+            {t('access.restrictedBody')}
           </p>
         </div>
       </div>
@@ -40,7 +42,7 @@ const ChatPage: React.FC = () => {
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando empresa...</p>
+          <p className="text-gray-600">{t('page.loadingCompany')}</p>
         </div>
       </div>
     )
