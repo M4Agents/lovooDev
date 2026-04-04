@@ -5,6 +5,7 @@ export const SUPPORTED_CURRENCIES = [
   { code: 'EUR', label: 'Euro (EUR)' },
   { code: 'GBP', label: 'Libra esterlina (GBP)' },
   { code: 'ARS', label: 'Peso argentino (ARS)' },
+  { code: 'PYG', label: 'Guarani paraguaio (PYG)' },
   { code: 'CLP', label: 'Peso chileno (CLP)' },
   { code: 'MXN', label: 'Peso mexicano (MXN)' },
   { code: 'COP', label: 'Peso colombiano (COP)' },
