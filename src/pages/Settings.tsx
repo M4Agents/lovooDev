@@ -14,7 +14,7 @@ import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { CompanyUser } from '../types/user';
-import { canManageOpenAIIntegration } from '../utils/openaiIntegrationAccess';
+import { canManageOpenAIIntegration, PARENT_COMPANY_ID_OPENAI } from '../utils/openaiIntegrationAccess';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -118,6 +118,38 @@ export const Settings: React.FC = () => {
   }, [searchParams]);
 
   const canManageOpenAI = canManageOpenAIIntegration(company, currentRole);
+
+  // #region agent log
+  useEffect(() => {
+    const payload = {
+      hypothesisId: 'H-openai-visibility',
+      companyId: company?.id ?? null,
+      expectedParentId: PARENT_COMPANY_ID_OPENAI,
+      companyIdMatchesParent: company?.id === PARENT_COMPANY_ID_OPENAI,
+      currentRole: currentRole ?? null,
+      roleIsAdminOrSuperAdmin: currentRole === 'super_admin' || currentRole === 'admin',
+      authLoading,
+      isLoadingCompany,
+      canManageOpenAI,
+    };
+    console.info('[OpenAI Integration Debug]', payload);
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': 'f28051',
+      },
+      body: JSON.stringify({
+        sessionId: 'f28051',
+        location: 'Settings.tsx:openai-visibility',
+        message: 'OpenAI card visibility inputs',
+        data: payload,
+        timestamp: Date.now(),
+        hypothesisId: 'H-openai-visibility',
+      }),
+    }).catch(() => {});
+  }, [company?.id, currentRole, authLoading, isLoadingCompany, canManageOpenAI]);
+  // #endregion
 
   useEffect(() => {
     if (searchParams.get('integration') !== 'openai') return;
