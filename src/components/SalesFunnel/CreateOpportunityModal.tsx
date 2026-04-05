@@ -480,6 +480,76 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {!isEditMode && compositionEntitled && (
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Layers className="w-4 h-4 text-purple-600" />
+                {t('createOpportunity.compositionSectionTitle')}
+              </div>
+              <p className="text-xs text-slate-600">{t('createOpportunity.compositionSectionHelp')}</p>
+              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
+                <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg px-3 py-2">
+                  {t('createOpportunity.compositionEmptyCatalog')}
+                </p>
+              ) : (
+                <>
+                  <div className="w-full min-w-0">
+                    <OpportunityQuickAddRow
+                      busy={loading}
+                      products={catalogProducts}
+                      services={catalogServices}
+                      currency={companyCurrency}
+                      onAdd={appendDraftLine}
+                    />
+                  </div>
+                  {draftLines.length > 0 && (
+                    <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
+                      {draftLines.map((line) => (
+                        <li
+                          key={line.key}
+                          className="flex items-start justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm"
+                        >
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {draftLineLabel(line, catalogProducts, catalogServices)}
+                            </div>
+                            <div className="text-gray-500">
+                              Qtd {line.quantity} ·{' '}
+                              {line.discountType === 'percent'
+                                ? `Desc. ${line.discountValue}%`
+                                : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
+                            }
+                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
+                            aria-label={t('createOpportunity.removeDraftLine')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden">
+              <OpportunityItemsSection
+                companyId={company.id}
+                opportunity={fullOpportunity}
+                canEdit={fullOpportunity.status === 'open'}
+                onOpportunityUpdated={(o) => setFullOpportunity(o)}
+              />
+            </div>
+          )}
+
           {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -627,76 +697,6 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
           </div>
-
-          {!isEditMode && compositionEntitled && (
-            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Layers className="w-4 h-4 text-purple-600" />
-                {t('createOpportunity.compositionSectionTitle')}
-              </div>
-              <p className="text-xs text-slate-600">{t('createOpportunity.compositionSectionHelp')}</p>
-              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
-                <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg px-3 py-2">
-                  {t('createOpportunity.compositionEmptyCatalog')}
-                </p>
-              ) : (
-                <>
-                  <div className="w-full min-w-0">
-                    <OpportunityQuickAddRow
-                      busy={loading}
-                      products={catalogProducts}
-                      services={catalogServices}
-                      currency={companyCurrency}
-                      onAdd={appendDraftLine}
-                    />
-                  </div>
-                  {draftLines.length > 0 && (
-                    <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
-                      {draftLines.map((line) => (
-                        <li
-                          key={line.key}
-                          className="flex items-start justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm"
-                        >
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {draftLineLabel(line, catalogProducts, catalogServices)}
-                            </div>
-                            <div className="text-gray-500">
-                              Qtd {line.quantity} ·{' '}
-                              {line.discountType === 'percent'
-                                ? `Desc. ${line.discountValue}%`
-                                : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
-                            }
-                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
-                            aria-label={t('createOpportunity.removeDraftLine')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
-            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden">
-              <OpportunityItemsSection
-                companyId={company.id}
-                opportunity={fullOpportunity}
-                canEdit={fullOpportunity.status === 'open'}
-                onOpportunityUpdated={(o) => setFullOpportunity(o)}
-              />
-            </div>
-          )}
 
           {/* Error Message */}
           {error && (
