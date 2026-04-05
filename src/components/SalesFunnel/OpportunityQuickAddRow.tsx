@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import type { CatalogProduct, CatalogService, DiscountType } from '../../types/sales-funnel'
+import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 
 export type OpportunityQuickAddPayload = {
   productId?: string
@@ -18,6 +19,8 @@ type Props = {
   busy: boolean
   products: CatalogProduct[]
   services: CatalogService[]
+  /** Moeda da oportunidade/empresa (desconto fixo usa máscara alinhada ao campo valor principal). */
+  currency?: string
   onAdd: (p: OpportunityQuickAddPayload) => void
 }
 
@@ -25,6 +28,7 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
   busy,
   products,
   services,
+  currency = 'BRL',
   onAdd,
 }) => {
   const [kind, setKind] = useState<'product' | 'service'>('product')
@@ -32,16 +36,27 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
   const [sid, setSid] = useState('')
   const [qty, setQty] = useState(1)
   const [disc, setDisc] = useState<DiscountType>('fixed')
-  const [discV, setDiscV] = useState(0)
+  const [discFixedDisplay, setDiscFixedDisplay] = useState('0,00')
+  const [discPercent, setDiscPercent] = useState(0)
+
+  const discountNumeric =
+    disc === 'fixed' ? parsePtBrMoneyInput(discFixedDisplay).numeric : discPercent
 
   const submit = () => {
+    const payloadBase = {
+      quantity: qty,
+      discountType: disc,
+      discountValue: discountNumeric,
+    }
     if (kind === 'product' && pid) {
-      onAdd({ productId: pid, quantity: qty, discountType: disc, discountValue: discV })
+      onAdd({ productId: pid, ...payloadBase })
       setPid('')
     } else if (kind === 'service' && sid) {
-      onAdd({ serviceId: sid, quantity: qty, discountType: disc, discountValue: discV })
+      onAdd({ serviceId: sid, ...payloadBase })
       setSid('')
     }
+    setDiscFixedDisplay('0,00')
+    setDiscPercent(0)
   }
 
   return (
@@ -92,20 +107,41 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
         />
         <select
           value={disc}
-          onChange={(e) => setDisc(e.target.value as DiscountType)}
+          onChange={(e) => {
+            const v = e.target.value as DiscountType
+            setDisc(v)
+            if (v === 'fixed') {
+              setDiscFixedDisplay('0,00')
+            } else {
+              setDiscPercent(0)
+            }
+          }}
           className="border border-slate-200 rounded px-2 py-1"
         >
           <option value="fixed">Desc. fixo</option>
           <option value="percent">Desc. %</option>
         </select>
-        <input
-          type="number"
-          min={0}
-          step={0.01}
-          value={discV}
-          onChange={(e) => setDiscV(parseFloat(e.target.value) || 0)}
-          className="w-24 border border-slate-200 rounded px-2 py-1"
-        />
+        {disc === 'fixed' ? (
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={discFixedDisplay}
+            onChange={(e) => setDiscFixedDisplay(parsePtBrMoneyInput(e.target.value).display)}
+            title={currency}
+            className="w-28 border border-slate-200 rounded px-2 py-1 tabular-nums"
+          />
+        ) : (
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={discPercent}
+            onChange={(e) => setDiscPercent(parseFloat(e.target.value) || 0)}
+            className="w-24 border border-slate-200 rounded px-2 py-1"
+          />
+        )}
         <button
           type="button"
           disabled={busy}

@@ -9,6 +9,7 @@ import { OpportunityQuickAddRow } from './OpportunityQuickAddRow'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { resolveOpportunityCompositionErrorMessage } from '../../utils/opportunityCompositionErrors'
+import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { formatCurrency } from '../../types/sales-funnel'
 import type {
   Opportunity,
@@ -204,6 +205,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
           busy={busy}
           products={products}
           services={services}
+          currency={opportunity.currency}
           onAdd={addLine}
         />
       )}
@@ -261,6 +263,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
           {canEdit && (
             <GlobalDiscountMini
               busy={busy}
+              currency={opportunity.currency}
               onApply={applyGlobalDiscount}
             />
           )}
@@ -276,33 +279,57 @@ export const OpportunityItemsSection: React.FC<Props> = ({
 
 const GlobalDiscountMini: React.FC<{
   busy: boolean
+  currency: string
   onApply: (dt: DiscountType, dv: number) => void
-}> = ({ busy, onApply }) => {
+}> = ({ busy, currency, onApply }) => {
   const [dt, setDt] = useState<DiscountType>('fixed')
-  const [dv, setDv] = useState(0)
+  const [dvFixedDisplay, setDvFixedDisplay] = useState('0,00')
+  const [dvPercent, setDvPercent] = useState(0)
+
+  const applyValue =
+    dt === 'fixed' ? parsePtBrMoneyInput(dvFixedDisplay).numeric : dvPercent
+
   return (
     <div className="flex flex-wrap gap-2 items-center pt-1">
       <span className="text-slate-600">Ajustar desconto global:</span>
       <select
         value={dt}
-        onChange={(e) => setDt(e.target.value as DiscountType)}
+        onChange={(e) => {
+          const v = e.target.value as DiscountType
+          setDt(v)
+          if (v === 'fixed') setDvFixedDisplay('0,00')
+          else setDvPercent(0)
+        }}
         className="border border-slate-200 rounded px-2 py-0.5"
       >
         <option value="fixed">Fixo</option>
         <option value="percent">Percentual</option>
       </select>
-      <input
-        type="number"
-        min={0}
-        step={0.01}
-        value={dv}
-        onChange={(e) => setDv(parseFloat(e.target.value) || 0)}
-        className="w-24 border border-slate-200 rounded px-2 py-0.5"
-      />
+      {dt === 'fixed' ? (
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={dvFixedDisplay}
+          onChange={(e) => setDvFixedDisplay(parsePtBrMoneyInput(e.target.value).display)}
+          title={currency}
+          className="w-28 border border-slate-200 rounded px-2 py-0.5 tabular-nums"
+        />
+      ) : (
+        <input
+          type="number"
+          min={0}
+          max={100}
+          step={0.01}
+          value={dvPercent}
+          onChange={(e) => setDvPercent(parseFloat(e.target.value) || 0)}
+          className="w-24 border border-slate-200 rounded px-2 py-0.5"
+        />
+      )}
       <button
         type="button"
         disabled={busy}
-        onClick={() => onApply(dt, dv)}
+        onClick={() => onApply(dt, applyValue)}
         className="text-xs px-2 py-0.5 rounded border border-slate-300 hover:bg-white"
       >
         Aplicar

@@ -29,6 +29,7 @@ import {
   resolveOpportunityCompositionErrorMessage
 } from '../../utils/opportunityCompositionErrors'
 import { estimateDraftLinesTotal } from '../../utils/opportunityDraftPricing'
+import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { formatMoney } from '../../lib/formatMoney'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
@@ -261,28 +262,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (valueInputMode === 'fromItems') return
 
-    const input = e.target.value
-    
-    // Remover tudo exceto números
-    const numbersOnly = input.replace(/\D/g, '')
-    
-    if (!numbersOnly) {
-      setValueDisplay('0,00')
-      setFormData((prev) => ({ ...prev, value: 0, currency: companyCurrency }))
-      return
-    }
-    
-    // Converter para número (centavos)
-    const numericValue = parseInt(numbersOnly) / 100
-    
-    // Formatar para moeda brasileira
-    const formatted = numericValue.toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })
-    
-    setValueDisplay(formatted)
-    setFormData((prev) => ({ ...prev, value: numericValue, currency: companyCurrency }))
+    const { numeric, display } = parsePtBrMoneyInput(e.target.value)
+    setValueDisplay(display)
+    setFormData((prev) => ({ ...prev, value: numeric, currency: companyCurrency }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -480,62 +462,6 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {!isEditMode && compositionEntitled && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Layers className="w-4 h-4 text-purple-600" />
-                {t('createOpportunity.compositionSectionTitle')}
-              </div>
-              <p className="text-xs text-slate-600">{t('createOpportunity.compositionSectionHelp')}</p>
-              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
-                <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg px-3 py-2">
-                  {t('createOpportunity.compositionEmptyCatalog')}
-                </p>
-              ) : (
-                <>
-                  <OpportunityQuickAddRow
-                    busy={loading}
-                    products={catalogProducts}
-                    services={catalogServices}
-                    onAdd={appendDraftLine}
-                  />
-                  {draftLines.length > 0 && (
-                    <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
-                      {draftLines.map((line) => (
-                        <li
-                          key={line.key}
-                          className="flex items-start justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm"
-                        >
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {draftLineLabel(line, catalogProducts, catalogServices)}
-                            </div>
-                            <div className="text-gray-500">
-                              Qtd {line.quantity} ·{' '}
-                              {line.discountType === 'percent'
-                                ? `Desc. ${line.discountValue}%`
-                                : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
-                            }
-                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
-                            aria-label={t('createOpportunity.removeDraftLine')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
           {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -683,6 +609,63 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
           </div>
+
+          {!isEditMode && compositionEntitled && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Layers className="w-4 h-4 text-purple-600" />
+                {t('createOpportunity.compositionSectionTitle')}
+              </div>
+              <p className="text-xs text-slate-600">{t('createOpportunity.compositionSectionHelp')}</p>
+              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
+                <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg px-3 py-2">
+                  {t('createOpportunity.compositionEmptyCatalog')}
+                </p>
+              ) : (
+                <>
+                  <OpportunityQuickAddRow
+                    busy={loading}
+                    products={catalogProducts}
+                    services={catalogServices}
+                    currency={companyCurrency}
+                    onAdd={appendDraftLine}
+                  />
+                  {draftLines.length > 0 && (
+                    <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
+                      {draftLines.map((line) => (
+                        <li
+                          key={line.key}
+                          className="flex items-start justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm"
+                        >
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {draftLineLabel(line, catalogProducts, catalogServices)}
+                            </div>
+                            <div className="text-gray-500">
+                              Qtd {line.quantity} ·{' '}
+                              {line.discountType === 'percent'
+                                ? `Desc. ${line.discountValue}%`
+                                : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
+                            }
+                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
+                            aria-label={t('createOpportunity.removeDraftLine')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
             <div className="rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto">
