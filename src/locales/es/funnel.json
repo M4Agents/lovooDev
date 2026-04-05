@@ -122,7 +122,9 @@
       "titleRequired": "El título es obligatorio",
       "generic": "Error al crear la oportunidad"
     },
-    "compositionHintCreate": "Con el valor por ítems activado, después de crear la oportunidad abre el detalle en el embudo (icono de información en la tarjeta) para añadir productos, servicios y descuentos.",
+    "compositionSectionTitle": "Productos y servicios",
+    "compositionSectionHelp": "Elija ítems del catálogo y añada líneas. Al guardar, la oportunidad se crea en modo \"por ítems\" con esas líneas.",
+    "compositionEmptyCatalog": "No hay productos o servicios disponibles (activos y disponibles/bajo consulta). Regístrelos en Configuración → Catálogo.",
     "fields": {
       "title": "Título de la oportunidad *",
       "titlePlaceholder": "Ej.: Venta del producto X",

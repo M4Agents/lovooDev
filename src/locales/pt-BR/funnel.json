@@ -122,7 +122,9 @@
       "titleRequired": "Título é obrigatório",
       "generic": "Erro ao criar oportunidade"
     },
-    "compositionHintCreate": "Com a composição por itens ativa, após criar a oportunidade você pode abrir os detalhes no funil (ícone de informação no card) para adicionar produtos, serviços e descontos.",
+    "compositionSectionTitle": "Produtos e serviços",
+    "compositionSectionHelp": "Selecione itens do catálogo e adicione à lista. Ao salvar, a oportunidade será criada em modo \"por itens\" com essas linhas.",
+    "compositionEmptyCatalog": "Não há produtos ou serviços disponíveis (ativos e disponíveis/sob consulta). Cadastre-os em Configurações → Catálogo.",
     "fields": {
       "title": "Título da Oportunidade *",
       "titlePlaceholder": "Ex: Venda de Produto X",

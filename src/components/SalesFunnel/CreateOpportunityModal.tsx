@@ -7,14 +7,21 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User } from 'lucide-react'
+import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User, Trash2, Layers } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
 import { supabase } from '../../lib/supabase'
-import type { CreateOpportunityForm, Opportunity } from '../../types/sales-funnel'
+import {
+  formatCurrency,
+  type CreateOpportunityForm,
+  type Opportunity,
+  type CatalogProduct,
+  type CatalogService,
+} from '../../types/sales-funnel'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
+import { OpportunityQuickAddRow, type OpportunityQuickAddPayload } from './OpportunityQuickAddRow'
 import type { CompanyUser } from '../../types/user'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import {
@@ -24,6 +31,18 @@ import {
 } from '../../utils/opportunityCompositionErrors'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
+
+type DraftCompositionLine = OpportunityQuickAddPayload & { key: string }
+
+function draftLineLabel(
+  line: DraftCompositionLine,
+  products: CatalogProduct[],
+  services: CatalogService[]
+): string {
+  if (line.productId) return products.find((x) => x.id === line.productId)?.name ?? 'Produto'
+  if (line.serviceId) return services.find((x) => x.id === line.serviceId)?.name ?? 'Serviço'
+  return '—'
+}
 
 interface CreateOpportunityModalProps {
   isOpen: boolean
@@ -57,6 +76,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [compositionEntitled, setCompositionEntitled] = useState(false)
   const [fullOpportunity, setFullOpportunity] = useState<Opportunity | null>(null)
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([])
+  const [draftLines, setDraftLines] = useState<DraftCompositionLine[]>([])
   const isEditMode = !!opportunityData
 
   const [formData, setFormData] = useState<Partial<CreateOpportunityForm>>({
@@ -160,6 +182,25 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       .catch(() => setFullOpportunity(null))
   }, [isOpen, isEditMode, opportunityData?.id])
 
+  useEffect(() => {
+    if (!isOpen || !compositionEntitled || isEditMode || !company?.id) {
+      setCatalogProducts([])
+      setCatalogServices([])
+      return
+    }
+    Promise.all([catalogApi.getProducts(company.id), catalogApi.getServices(company.id)])
+      .then(([p, s]) => {
+        const ok = (x: { is_active: boolean; availability_status: string }) =>
+          x.is_active && ['available', 'on_demand'].includes(x.availability_status)
+        setCatalogProducts(p.filter(ok))
+        setCatalogServices(s.filter(ok))
+      })
+      .catch(() => {
+        setCatalogProducts([])
+        setCatalogServices([])
+      })
+  }, [isOpen, compositionEntitled, isEditMode, company?.id])
+
   // Resetar formulário quando modal fechar
   useEffect(() => {
     if (!isOpen) {
@@ -176,8 +217,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       setValueDisplay('0,00')
       setError(undefined)
       setCompanyUsers([])
+      setDraftLines([])
     }
   }, [isOpen, company?.default_currency])
+
+  const appendDraftLine = (p: OpportunityQuickAddPayload) => {
+    setDraftLines((lines) => [...lines, { ...p, key: crypto.randomUUID() }])
+  }
 
   // Atualizar display do valor com formatação brasileira
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -272,6 +318,24 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         
         result = await funnelApi.createOpportunity(newOpportunityData)
         console.log('✅ CreateOpportunityModal - Oportunidade criada com sucesso:', result)
+
+        if (draftLines.length > 0 && company.id) {
+          const ent = await catalogApi.getOpportunityItemsEntitlement(company.id)
+          if (ent.allowed) {
+            await funnelApi.opportunitySetValueMode(company.id, result.id, 'items')
+            for (const line of draftLines) {
+              await funnelApi.opportunityAddItem({
+                companyId: company.id,
+                opportunityId: result.id,
+                productId: line.productId ?? null,
+                serviceId: line.serviceId ?? null,
+                quantity: line.quantity,
+                discountType: line.discountType,
+                discountValue: line.discountValue,
+              })
+            }
+          }
+        }
       }
 
       // Adicionar automaticamente ao funil padrão (apenas ao criar)
@@ -356,7 +420,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
       <div
         className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto ${
-          isEditMode && compositionEntitled ? 'max-w-3xl' : 'max-w-2xl'
+          compositionEntitled ? 'max-w-3xl' : 'max-w-2xl'
         }`}
       >
         {/* Header */}
@@ -527,8 +591,58 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           </div>
 
           {!isEditMode && compositionEntitled && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              {t('createOpportunity.compositionHintCreate')}
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                {t('createOpportunity.compositionSectionTitle')}
+              </div>
+              <p className="text-xs text-gray-600">{t('createOpportunity.compositionSectionHelp')}</p>
+              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
+                <p className="text-sm text-amber-800 bg-amber-50 rounded px-3 py-2">
+                  {t('createOpportunity.compositionEmptyCatalog')}
+                </p>
+              ) : (
+                <>
+                  <OpportunityQuickAddRow
+                    busy={loading}
+                    products={catalogProducts}
+                    services={catalogServices}
+                    onAdd={appendDraftLine}
+                  />
+                  {draftLines.length > 0 && (
+                    <ul className="space-y-2 text-xs">
+                      {draftLines.map((line) => (
+                        <li
+                          key={line.key}
+                          className="flex items-start justify-between gap-2 bg-white border border-gray-100 rounded px-3 py-2"
+                        >
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {draftLineLabel(line, catalogProducts, catalogServices)}
+                            </div>
+                            <div className="text-gray-500">
+                              Qtd {line.quantity} ·{' '}
+                              {line.discountType === 'percent'
+                                ? `Desc. ${line.discountValue}%`
+                                : `Desc. ${formatCurrency(line.discountValue, formData.currency || 'BRL')}`}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
+                            }
+                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
+                            aria-label="Remover linha"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
           )}
 
