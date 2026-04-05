@@ -2,10 +2,19 @@
 // Configuração central OpenAI (server-side apenas)
 // OPENAI_API_KEY só em process.env
 // Modelo e timeout operacionais vêm de integration_settings (lib/openai/settingsDb.ts)
+//
+// Empresa Pai: PARENT_COMPANY_ID (Vercel) ou VITE_PARENT_COMPANY_ID (bundle cliente).
+// Fallback = companies.id da M4 Digital em produção.
 // =====================================================
 
-/** Empresa Pai (M4): única que pode gerenciar a integração na UI/API de gestão. */
-export const PARENT_COMPANY_ID = 'd4d46c98-17da-4d0b-9b1f-6d947c34f146'
+/** Manter alinhado a src/config/parentCompanyId.ts (bundle cliente). */
+const DEFAULT_PARENT_COMPANY_ID = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413'
+
+/** Servidor (Vercel API / Node): use env PARENT_COMPANY_ID; fallback = M4 Digital. */
+export const PARENT_COMPANY_ID =
+  (typeof process !== 'undefined' && typeof process.env?.PARENT_COMPANY_ID === 'string'
+    ? process.env.PARENT_COMPANY_ID.trim()
+    : '') || DEFAULT_PARENT_COMPANY_ID
 
 /**
  * Roles permitidos para gerenciar a integração OpenAI.
