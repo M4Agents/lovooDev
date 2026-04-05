@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -12,7 +12,9 @@ import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
+import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { CompanyUser } from '../types/user';
+import { canManageOpenAIIntegration } from '../utils/openaiIntegrationAccess';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -27,8 +29,9 @@ const BRAZIL_UF_CODES = [
 
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company, refreshCompany, hasPermission } = useAuth();
+  const { company, refreshCompany, hasPermission, currentRole, loading: authLoading, isLoadingCompany } = useAuth();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
@@ -102,6 +105,10 @@ export const Settings: React.FC = () => {
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
+  const [integracoesTab, setIntegracoesTab] = useState<
+    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai'
+  >('whatsapp');
+
   // Detectar parâmetro tab na URL para ativar aba correta
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -109,7 +116,27 @@ export const Settings: React.FC = () => {
       setActiveTab('tracking');
     }
   }, [searchParams]);
-  const [integracoesTab, setIntegracoesTab] = useState<'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'>('whatsapp');
+
+  const canManageOpenAI = canManageOpenAIIntegration(company, currentRole);
+
+  useEffect(() => {
+    if (searchParams.get('integration') !== 'openai') return;
+    if (authLoading || isLoadingCompany) return;
+    if (canManageOpenAI) {
+      setActiveTab('integracoes');
+      setIntegracoesTab('openai');
+    } else {
+      navigate('/settings', { replace: true });
+    }
+  }, [searchParams, authLoading, isLoadingCompany, canManageOpenAI, navigate]);
+
+  useEffect(() => {
+    if (authLoading || isLoadingCompany) return;
+    if (integracoesTab === 'openai' && !canManageOpenAI) {
+      setIntegracoesTab('whatsapp');
+    }
+  }, [integracoesTab, canManageOpenAI, authLoading, isLoadingCompany]);
+
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   
@@ -1082,7 +1109,11 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           
           {/* Sub-navegação das Integrações Moderna - OTIMIZADA */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
+              canManageOpenAI ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+            }`}
+          >
             {/* WhatsApp Card - COMPACTO */}
             <div 
               onClick={() => setIntegracoesTab('whatsapp')}
@@ -1198,6 +1229,40 @@ export const Settings: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {canManageOpenAI && (
+              <div
+                onClick={() => setIntegracoesTab('openai')}
+                className="group cursor-pointer"
+              >
+                <div
+                  className={`bg-gradient-to-br from-slate-50 to-violet-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+                    integracoesTab === 'openai'
+                      ? 'border-violet-400 shadow-md scale-[1.02]'
+                      : 'border-transparent hover:border-violet-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                        integracoesTab === 'openai' ? 'bg-violet-600' : 'bg-violet-500'
+                      }`}
+                    >
+                      <Sparkles className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.openai')}</h3>
+                        <span className="px-2 py-0.5 bg-violet-100 text-violet-800 rounded text-xs font-medium">
+                          {t('integrations.cards.openai.badge')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">{t('integrations.cards.openai.description')}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Conteúdo das Sub-abas */}
@@ -2293,6 +2358,8 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           )}
+
+          {integracoesTab === 'openai' && canManageOpenAI && <OpenAIIntegrationPanel />}
 
         </div>
       )}

@@ -20,7 +20,8 @@
     "whatsapp": "WhatsApp",
     "api": "API",
     "webhookAdvanced": "Webhook avanzado",
-    "salesFunnel": "Embudo de ventas"
+    "salesFunnel": "Embudo de ventas",
+    "openai": "OpenAI"
   },
   "integrations": {
     "cards": {
@@ -39,6 +40,10 @@
       "salesFunnel": {
         "badge": "API REST",
         "description": "Mueve leads entre etapas vía API"
+      },
+      "openai": {
+        "badge": "IA",
+        "description": "Modelos y conexión con la API OpenAI"
       }
     },
     "whatsappNav": {
@@ -87,6 +92,36 @@
     },
     "states": {
       "inDevelopment": "En desarrollo"
+    },
+    "openai": {
+      "title": "OpenAI",
+      "subtitle": "Configure modelo, tiempo límite y pruebe la conexión. La clave de API solo está en el servidor.",
+      "loading": "Cargando configuración…",
+      "status": {
+        "active": "Integración activa",
+        "inactive": "Integración inactiva"
+      },
+      "fields": {
+        "enabled": "Habilitar integración",
+        "enabledHint": "Si está desactivada, la app no usará OpenAI para funciones de IA.",
+        "model": "Modelo",
+        "modelHint": "Identificador del modelo guardado (sincronizado con la base de datos).",
+        "timeout": "Timeout (ms)",
+        "timeoutHint": "Entre {{min}} y {{max}} milisegundos."
+      },
+      "actions": {
+        "save": "Guardar",
+        "test": "Probar conexión"
+      },
+      "messages": {
+        "saved": "Configuración guardada.",
+        "testOk": "Conexión verificada correctamente."
+      },
+      "errors": {
+        "load": "No se pudo cargar la configuración.",
+        "save": "No se pudo guardar.",
+        "test": "Falló la prueba de conexión."
+      }
     },
     "actions": {
       "copy": "Copiar",

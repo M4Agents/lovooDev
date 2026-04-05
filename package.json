@@ -37,6 +37,7 @@
     "googleapis": "^140.0.0",
     "i18next": "^26.0.3",
     "lucide-react": "^0.344.0",
+    "openai": "^4.104.0",
     "react": "^18.3.1",
     "react-colorful": "^5.6.1",
     "react-dom": "^18.3.1",
