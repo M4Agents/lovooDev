@@ -27,9 +27,9 @@ interface LeadCardProps {
   position: OpportunityFunnelPosition
   index: number
   visibleFields?: string[]
-  /** Legado: se não houver `onDetailClick`, o clique no card chama isto (ex.: abrir chat). */
+  /** Clique no corpo do card (ex.: abrir chat). */
   onClick?: (leadId: number) => void
-  /** Abre o chat/histórico do lead (ícone separado; clique principal abre detalhes quando `onDetailClick` existe). */
+  /** Ícone de mensagem: abre o chat do lead. */
   onChatClick?: (leadId: number) => void
   /** Necessário para TagSelectorPopover (multi-tenant). */
   companyId?: string
@@ -67,10 +67,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const displayTags = localTagNames ?? lead.tags ?? []
 
   const handleClick = () => {
-    if (onDetailClick) {
-      onDetailClick(position.opportunity_id)
-      return
-    }
     if (onClick) onClick(lead.id)
   }
 
