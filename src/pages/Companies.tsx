@@ -240,6 +240,7 @@ export const Companies: React.FC = () => {
                 <span>
                   {t('card.createdAt', {
                     date: new Date(comp.created_at).toLocaleDateString('pt-BR'),
+                    interpolation: { escapeValue: false },
                   })}
                 </span>
               </div>

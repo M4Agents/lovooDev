@@ -208,7 +208,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 <span>
                   {t('leadCard.lastContact', {
-                    date: new Date(lead.last_contact_at).toLocaleDateString('pt-BR')
+                    date: new Date(lead.last_contact_at).toLocaleDateString('pt-BR'),
+                    interpolation: { escapeValue: false },
                   })}
                 </span>
               </div>

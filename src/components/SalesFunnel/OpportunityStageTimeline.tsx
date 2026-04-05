@@ -311,7 +311,10 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
             {/* Entrada */}
             {entry.move_type !== 'funnel_entry' && (
               <p className="text-xs text-gray-400 mt-0.5">
-                {t('timeline.labels.entryAt', { datetime: formatDateShort(entry.stage_entered_at) })}
+                {t('timeline.labels.entryAt', {
+                  datetime: formatDateShort(entry.stage_entered_at),
+                  interpolation: { escapeValue: false },
+                })}
               </p>
             )}
 
@@ -321,7 +324,8 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
                 <Timer className="w-3 h-3" />
                 <span>
                   {t('timeline.labels.inProgress', {
-                    duration: durationDisplay ?? ''
+                    duration: durationDisplay ?? '',
+                    interpolation: { escapeValue: false },
                   })}
                 </span>
               </div>
@@ -329,14 +333,20 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
               <>
                 {entry.move_type !== 'funnel_entry' && (
                   <p className="text-xs text-gray-400">
-                    {t('timeline.labels.exitAt', { datetime: formatDateShort(entry.stage_left_at) })}
+                    {t('timeline.labels.exitAt', {
+                      datetime: formatDateShort(entry.stage_left_at),
+                      interpolation: { escapeValue: false },
+                    })}
                   </p>
                 )}
                 {durationDisplay && (
                   <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
                     <Clock className="w-3 h-3" />
                     <span>
-                      {t('timeline.labels.durationInStage', { duration: durationDisplay })}
+                      {t('timeline.labels.durationInStage', {
+                        duration: durationDisplay,
+                        interpolation: { escapeValue: false },
+                      })}
                     </span>
                   </div>
                 )}

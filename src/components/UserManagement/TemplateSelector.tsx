@@ -190,7 +190,8 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                       <Clock className="w-3 h-3" />
                       <span>
                         {t('users.templateSelector.usedOn', {
-                          date: new Date(template.last_used).toLocaleDateString('pt-BR')
+                          date: new Date(template.last_used).toLocaleDateString('pt-BR'),
+                          interpolation: { escapeValue: false },
                         })}
                       </span>
                     </span>

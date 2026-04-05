@@ -142,7 +142,8 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
                     <p className="text-xs text-gray-600 mt-0.5">
                       {t('activityBadge.scheduledAt', {
                         date: new Date(activity.scheduled_date).toLocaleDateString('pt-BR'),
-                        time: activity.scheduled_time
+                        time: activity.scheduled_time,
+                        interpolation: { escapeValue: false },
                       })}
                     </p>
                     {activity.is_overdue && (

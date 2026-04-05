@@ -104,7 +104,14 @@ export const ReopenOpportunityModal: React.FC<ReopenOpportunityModalProps> = ({
               <p>
                 {t('reopenOpportunity.introPrefix')}{' '}
                 <span className="font-semibold">{statusLabel}</span>
-                {closedAt && <span>{t('reopenOpportunity.introDate', { date: formatClosedDate(closedAt) })}</span>}.
+                {closedAt && (
+                  <span>
+                    {t('reopenOpportunity.introDate', {
+                      date: formatClosedDate(closedAt),
+                      interpolation: { escapeValue: false },
+                    })}
+                  </span>
+                )}.
               </p>
               <p className="text-gray-500">
                 {t('reopenOpportunity.willOpen')}{' '}
