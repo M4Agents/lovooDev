@@ -328,26 +328,36 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     companyId
   )
 
-  // Sincronizar aba quando initialTab muda (ex: aberto pelo board sempre em 'journey')
+  // Reset de aba / modo edição: só ao abrir, mudar oportunidade (id) ou initialTab — não a cada atualização do objeto `opportunity` (mesmo id).
   useEffect(() => {
-    if (isOpen) {
-      opportunityDetailDebugLog(
-        'sync_effect_run',
-        {
-          initialTab,
-          opportunityId: opportunity.id,
-          setsActiveTabTo: initialTab,
-        },
-        'H1'
-      )
-      setActiveTab(initialTab)
-      setEditMode(false)
-      setSaveError(null)
-      setProbDraft(opportunity.probability)
-      setProbSaved(false)
-      setDetailOpportunity(opportunity)
-    }
-  }, [isOpen, initialTab, opportunity])
+    if (!isOpen) return
+    opportunityDetailDebugLog(
+      'sync_effect_run',
+      {
+        initialTab,
+        opportunityId: opportunity.id,
+        setsActiveTabTo: initialTab,
+        trigger: 'tab_reset',
+      },
+      'H1'
+    )
+    setActiveTab(initialTab)
+    setEditMode(false)
+    setSaveError(null)
+    setProbSaved(false)
+  }, [isOpen, initialTab, opportunity.id])
+
+  // Dados da oportunidade no estado local (mesma oportunidade pode receber novo objeto do pai sem resetar a aba ativa).
+  useEffect(() => {
+    if (!isOpen) return
+    opportunityDetailDebugLog(
+      'opportunity_data_sync',
+      { opportunityId: opportunity.id },
+      'H1'
+    )
+    setProbDraft(opportunity.probability)
+    setDetailOpportunity(opportunity)
+  }, [isOpen, opportunity])
 
   useEffect(() => {
     if (!isOpen) return
