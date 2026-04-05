@@ -5,12 +5,15 @@ import i18n from '../i18n/config'
 import {
   LOCALE_STORAGE_KEY,
   SUPPORTED_LOCALES,
+  getLocaleMeta,
   syncDocumentLang,
   type AppLocale,
 } from '../i18n/supportedLocales'
 
+export type LanguageSwitcherVariant = 'expanded' | 'collapsed'
+
 type LanguageSwitcherProps = {
-  collapsed: boolean
+  variant: LanguageSwitcherVariant
 }
 
 function normalizeToAppLocale(lng: string): AppLocale {
@@ -20,10 +23,11 @@ function normalizeToAppLocale(lng: string): AppLocale {
   return 'pt-BR'
 }
 
-export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ collapsed }) => {
+export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant }) => {
   const { t } = useTranslation('layout')
   const [menuOpen, setMenuOpen] = useState(false)
   const current = normalizeToAppLocale(i18n.language)
+  const currentMeta = getLocaleMeta(current) ?? SUPPORTED_LOCALES[0]
 
   useEffect(() => {
     const onChange = (next: string) => syncDocumentLang(next)
@@ -33,6 +37,15 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ collapsed })
       i18n.off('languageChanged', onChange)
     }
   }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   const selectLanguage = async (code: AppLocale) => {
     await i18n.changeLanguage(code)
@@ -79,13 +92,39 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ collapsed })
       )
     })
 
-  if (collapsed) {
+  const triggerAriaLabel = t('language.optionTitle', {
+    name: currentMeta.nativeName,
+    code: currentMeta.code,
+  })
+
+  const menuPanel = menuOpen ? (
+    <>
+      <div
+        className="fixed inset-0 z-[60] bg-black/40 lg:hidden"
+        onClick={() => setMenuOpen(false)}
+        aria-hidden
+      />
+      <div
+        role="menu"
+        aria-label={t('language.collapsedMenuAriaLabel')}
+        className={
+          variant === 'collapsed'
+            ? 'fixed bottom-20 left-4 right-4 z-[70] lg:absolute lg:left-0 lg:right-auto lg:bottom-full lg:mb-2 lg:w-56 bg-slate-800 border border-slate-600 rounded-xl p-2 shadow-xl'
+            : 'fixed bottom-20 left-4 right-4 z-[70] lg:absolute lg:top-full lg:bottom-auto lg:left-auto lg:right-0 lg:mt-1 lg:w-56 bg-slate-800 border border-slate-600 rounded-xl p-2 shadow-xl'
+        }
+      >
+        {renderOptions()}
+      </div>
+    </>
+  ) : null
+
+  if (variant === 'collapsed') {
     return (
       <div className="relative flex justify-center w-full">
         <button
           type="button"
           onClick={() => setMenuOpen(!menuOpen)}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`p-2 rounded-xl transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
             menuOpen ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
           }`}
           aria-expanded={menuOpen}
@@ -95,36 +134,31 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ collapsed })
         >
           <Globe className="w-5 h-5" aria-hidden />
         </button>
-        {menuOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-[60] bg-black/40 lg:hidden"
-              onClick={() => setMenuOpen(false)}
-              aria-hidden
-            />
-            <div
-              role="menu"
-              aria-label={t('language.collapsedMenuAriaLabel')}
-              className="fixed bottom-20 left-4 right-4 z-[70] lg:absolute lg:left-0 lg:right-auto lg:bottom-full lg:mb-2 lg:w-56 bg-slate-800 border border-slate-600 rounded-xl p-2 shadow-xl"
-            >
-              {renderOptions()}
-            </div>
-          </>
-        )}
+        {menuPanel}
       </div>
     )
   }
 
+  /* expanded: globo + código ao lado do plano */
   return (
-    <div
-      className="space-y-2 pt-2 border-t border-slate-700/50"
-      role="group"
-      aria-label={t('language.selectorAriaLabel')}
-    >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-        {t('language.sectionLabel')}
-      </p>
-      <div className="flex flex-col gap-1">{renderOptions()}</div>
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setMenuOpen(!menuOpen)}
+        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors min-h-[32px] ${
+          menuOpen
+            ? 'border-blue-500 bg-slate-700 text-white'
+            : 'border-slate-600/90 bg-slate-800/90 text-slate-200 hover:border-slate-500 hover:bg-slate-700/90'
+        }`}
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label={triggerAriaLabel}
+        title={triggerAriaLabel}
+      >
+        <Globe className="w-3.5 h-3.5 shrink-0 text-slate-300" aria-hidden />
+        <span className="font-mono tabular-nums text-[10px] sm:text-xs text-slate-200">{currentMeta.code}</span>
+      </button>
+      {menuPanel}
     </div>
   )
 }

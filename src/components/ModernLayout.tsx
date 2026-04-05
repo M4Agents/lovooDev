@@ -229,11 +229,14 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   <p className="text-sm font-semibold text-white truncate">
                     {userDisplayName || currentUserData?.display_name || user?.email?.split('@')[0]}
                   </p>
-                  <div className="flex items-center gap-1">
-                    <Crown className="w-3 h-3 text-yellow-400" />
-                    <p className="text-xs text-yellow-400 font-medium capitalize">
-                      {company?.plan || 'Free'}
-                    </p>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <Crown className="w-3 h-3 shrink-0 text-yellow-400" />
+                      <p className="text-xs text-yellow-400 font-medium capitalize truncate">
+                        {company?.plan || 'Free'}
+                      </p>
+                    </div>
+                    <LanguageSwitcher variant="expanded" />
                   </div>
                 </div>
               </div>
@@ -247,8 +250,6 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   {user?.email}
                 </p>
               </div>
-
-              <LanguageSwitcher collapsed={false} />
 
               {/* Notificações */}
               <ActivityNotificationButton
@@ -273,7 +274,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                 )}
               </div>
               <ActivityNotifications />
-              <LanguageSwitcher collapsed />
+              <LanguageSwitcher variant="collapsed" />
             </div>
           )}
           
