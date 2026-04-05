@@ -24,6 +24,9 @@ type Props = {
   onAdd: (p: OpportunityQuickAddPayload) => void
 }
 
+const selectBase =
+  'rounded border border-slate-200 bg-white px-2 py-2 text-xs text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400'
+
 export const OpportunityQuickAddRow: React.FC<Props> = ({
   busy,
   products,
@@ -60,12 +63,13 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
   }
 
   return (
-    <div className="flex flex-col gap-2 text-xs">
-      <div className="flex flex-wrap gap-2 items-center">
+    <div className="w-full flex flex-col gap-3 text-xs">
+      {/* Tipo + catálogo em largura total do modal */}
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as 'product' | 'service')}
-          className="border border-slate-200 rounded px-2 py-1"
+          className={`${selectBase} w-full shrink-0 sm:w-[9rem]`}
         >
           <option value="product">Produto</option>
           <option value="service">Serviço</option>
@@ -74,7 +78,7 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
           <select
             value={pid}
             onChange={(e) => setPid(e.target.value)}
-            className="border border-slate-200 rounded px-2 py-1 min-w-[140px]"
+            className={`${selectBase} min-w-0 w-full flex-1`}
           >
             <option value="">Selecione…</option>
             {products.map((p) => (
@@ -87,7 +91,7 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
           <select
             value={sid}
             onChange={(e) => setSid(e.target.value)}
-            className="border border-slate-200 rounded px-2 py-1 min-w-[140px]"
+            className={`${selectBase} min-w-0 w-full flex-1`}
           >
             <option value="">Selecione…</option>
             {services.map((s) => (
@@ -97,13 +101,17 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
             ))}
           </select>
         )}
+      </div>
+
+      {/* Qtd, desconto e ação — linha completa em telas maiores */}
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <input
           type="number"
           min={0.0001}
           step={0.0001}
           value={qty}
           onChange={(e) => setQty(parseFloat(e.target.value) || 1)}
-          className="w-20 border border-slate-200 rounded px-2 py-1"
+          className={`${selectBase} w-full sm:w-24`}
         />
         <select
           value={disc}
@@ -116,7 +124,7 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
               setDiscPercent(0)
             }
           }}
-          className="border border-slate-200 rounded px-2 py-1"
+          className={`${selectBase} w-full sm:w-[7.5rem]`}
         >
           <option value="fixed">Desc. fixo</option>
           <option value="percent">Desc. %</option>
@@ -129,7 +137,7 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
             value={discFixedDisplay}
             onChange={(e) => setDiscFixedDisplay(parsePtBrMoneyInput(e.target.value).display)}
             title={currency}
-            className="w-28 border border-slate-200 rounded px-2 py-1 tabular-nums"
+            className={`${selectBase} w-full tabular-nums sm:max-w-[8.5rem]`}
           />
         ) : (
           <input
@@ -139,16 +147,16 @@ export const OpportunityQuickAddRow: React.FC<Props> = ({
             step={0.01}
             value={discPercent}
             onChange={(e) => setDiscPercent(parseFloat(e.target.value) || 0)}
-            className="w-24 border border-slate-200 rounded px-2 py-1"
+            className={`${selectBase} w-full sm:max-w-[6.5rem]`}
           />
         )}
         <button
           type="button"
           disabled={busy}
           onClick={submit}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-50"
+          className="inline-flex w-full shrink-0 items-center justify-center gap-1 rounded bg-indigo-600 px-3 py-2 font-medium text-white shadow-sm disabled:opacity-50 sm:ml-auto sm:w-auto"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="h-3.5 w-3.5" />
           Adicionar
         </button>
       </div>

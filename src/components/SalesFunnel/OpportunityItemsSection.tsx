@@ -168,7 +168,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
   }
 
   return (
-    <div className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50/80">
+    <div className="w-full min-w-0 border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50/80">
       <div className="flex items-center gap-2 text-slate-800">
         <Layers className="w-4 h-4 text-indigo-600" />
         <span className="text-sm font-semibold">Composição de valor</span>
@@ -205,13 +205,15 @@ export const OpportunityItemsSection: React.FC<Props> = ({
       )}
 
       {canEdit && (
-        <OpportunityQuickAddRow
-          busy={busy}
-          products={products}
-          services={services}
-          currency={opportunity.currency}
-          onAdd={addLine}
-        />
+        <div className="w-full min-w-0">
+          <OpportunityQuickAddRow
+            busy={busy}
+            products={products}
+            services={services}
+            currency={opportunity.currency}
+            onAdd={addLine}
+          />
+        </div>
       )}
 
       {items.length > 0 && (

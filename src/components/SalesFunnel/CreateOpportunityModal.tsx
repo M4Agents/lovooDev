@@ -629,7 +629,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           </div>
 
           {!isEditMode && compositionEntitled && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Layers className="w-4 h-4 text-purple-600" />
                 {t('createOpportunity.compositionSectionTitle')}
@@ -641,13 +641,15 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 </p>
               ) : (
                 <>
-                  <OpportunityQuickAddRow
-                    busy={loading}
-                    products={catalogProducts}
-                    services={catalogServices}
-                    currency={companyCurrency}
-                    onAdd={appendDraftLine}
-                  />
+                  <div className="w-full min-w-0">
+                    <OpportunityQuickAddRow
+                      busy={loading}
+                      products={catalogProducts}
+                      services={catalogServices}
+                      currency={companyCurrency}
+                      onAdd={appendDraftLine}
+                    />
+                  </div>
                   {draftLines.length > 0 && (
                     <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
                       {draftLines.map((line) => (
@@ -686,7 +688,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           )}
 
           {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto">
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden">
               <OpportunityItemsSection
                 companyId={company.id}
                 opportunity={fullOpportunity}
