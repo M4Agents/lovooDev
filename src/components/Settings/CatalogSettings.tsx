@@ -57,6 +57,24 @@ export const CatalogSettings: React.FC<Props> = ({
     load()
   }, [load])
 
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f28051' },
+      body: JSON.stringify({
+        sessionId: 'f28051',
+        location: 'CatalogSettings.tsx:mount',
+        message: 'Catalog props — currency not in props until fix',
+        data: { companyId, companyPlan, receivesDefaultCurrency: false },
+        timestamp: Date.now(),
+        hypothesisId: 'H1',
+        runId: 'pre-fix',
+      }),
+    }).catch(() => {})
+  }, [companyId, companyPlan])
+  // #endregion
+
   const toggleFeature = async () => {
     if (!planOk) return
     setSavingFlag(true)
