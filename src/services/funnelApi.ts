@@ -19,14 +19,19 @@ import type {
   UpdateStageForm,
   CreateOpportunityForm,
   UpdateOpportunityForm,
+  UpdateOpportunityOptions,
   MoveOpportunityForm,
   MoveLeadForm,
   FunnelFilter,
   StageFilter,
   LeadPositionFilter,
   StageHistoryFilter,
-  StageCount
+  StageCount,
+  OpportunityItemRow,
+  DiscountType,
+  OpportunityValueMode
 } from '../types/sales-funnel'
+import { normalizeOpportunityManualValue } from '../utils/opportunityCompositionErrors'
 
 // =====================================================
 // SUPABASE CLIENT
@@ -688,6 +693,7 @@ class FunnelApiService {
    */
   async createOpportunity(data: CreateOpportunityForm): Promise<Opportunity> {
     try {
+      const value = normalizeOpportunityManualValue(data.value)
       const { data: opportunity, error } = await supabase
         .from('opportunities')
         .insert({
@@ -695,7 +701,9 @@ class FunnelApiService {
           company_id: data.company_id,
           title: data.title,
           description: data.description,
-          value: data.value || 0,
+          value,
+          /** Coerente com default do banco (`manual`); explícito evita ambiguidade com composição por itens. */
+          value_mode: 'manual' satisfies OpportunityValueMode,
           currency: data.currency || 'BRL',
           probability: data.probability || 50,
           expected_close_date: data.expected_close_date,
@@ -716,22 +724,68 @@ class FunnelApiService {
   }
   
   /**
-   * Atualizar oportunidade
+   * Atualizar oportunidade.
+   * Com feature de composição ativa e `useCompositionManualValueRpc`, o campo `value` em modo manual
+   * é persistido somente via RPC `opportunity_set_manual_value` (sem UPDATE direto de `value`).
    */
-  async updateOpportunity(id: string, data: UpdateOpportunityForm): Promise<Opportunity> {
+  async updateOpportunity(
+    id: string,
+    data: UpdateOpportunityForm,
+    options?: UpdateOpportunityOptions
+  ): Promise<Opportunity> {
     try {
       // Moeda é imutável após criação (trigger no banco); nunca enviar currency no update.
       const { currency: _c, ...payload } = data as UpdateOpportunityForm & { currency?: string }
       void _c
+
+      const isDev =
+        (typeof import.meta !== 'undefined' && import.meta.env?.DEV) ||
+        process.env.NODE_ENV === 'development'
+      if (
+        isDev &&
+        payload.value !== undefined &&
+        options?.useCompositionManualValueRpc === undefined
+      ) {
+        console.warn(
+          '[funnelApi.updateOpportunity] O payload inclui `value`, mas `useCompositionManualValueRpc` não foi informado. ' +
+            'Com composição por itens ativa e valor em modo manual, passe `{ companyId, useCompositionManualValueRpc: true }` ' +
+            'para persistir via RPC `opportunity_set_manual_value`.'
+        )
+      }
+
+      const useRpc =
+        options?.useCompositionManualValueRpc === true &&
+        options.companyId != null &&
+        payload.value !== undefined
+
+      if (useRpc) {
+        await this.opportunitySetManualValue(options.companyId!, id, payload.value as number)
+        const { value: _val, ...rest } = payload
+        void _val
+        if (Object.keys(rest).length === 0) {
+          const o = await this.getOpportunityById(id)
+          if (!o) throw new Error('Opportunity not found')
+          return o
+        }
+        const { data: opportunity, error } = await supabase
+          .from('opportunities')
+          .update(rest)
+          .eq('id', id)
+          .select()
+          .single()
+        if (error) throw error
+        return opportunity as Opportunity
+      }
+
       const { data: opportunity, error } = await supabase
         .from('opportunities')
         .update(payload)
         .eq('id', id)
         .select()
         .single()
-      
+
       if (error) throw error
-      
+
       return opportunity
     } catch (error) {
       console.error('Error updating opportunity:', error)
@@ -1026,6 +1080,135 @@ class FunnelApiService {
     const diffTime = Math.abs(now.getTime() - entered.getTime())
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     return diffDays
+  }
+
+  // ===================================================
+  // COMPOSIÇÃO DE VALOR (produtos/serviços) — RPCs
+  // ===================================================
+
+  async getOpportunityById(opportunityId: string): Promise<Opportunity | null> {
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('*')
+      .eq('id', opportunityId)
+      .maybeSingle()
+    if (error) throw error
+    return data as Opportunity | null
+  }
+
+  async listOpportunityItems(companyId: string, opportunityId: string): Promise<OpportunityItemRow[]> {
+    const { data, error } = await supabase
+      .from('opportunity_items')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('opportunity_id', opportunityId)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    return (data || []) as OpportunityItemRow[]
+  }
+
+  async opportunityAddItem(params: {
+    companyId: string
+    opportunityId: string
+    productId?: string | null
+    serviceId?: string | null
+    quantity: number
+    unitPrice?: number | null
+    discountType: DiscountType
+    discountValue: number
+    nameSnapshot?: string | null
+    descriptionSnapshot?: string | null
+  }): Promise<string> {
+    const { data, error } = await supabase.rpc('opportunity_add_item', {
+      p_company_id: params.companyId,
+      p_opportunity_id: params.opportunityId,
+      p_product_id: params.productId ?? null,
+      p_service_id: params.serviceId ?? null,
+      p_quantity: params.quantity,
+      p_unit_price: params.unitPrice ?? null,
+      p_discount_type: params.discountType,
+      p_discount_value: params.discountValue,
+      p_name_snapshot: params.nameSnapshot ?? null,
+      p_description_snapshot: params.descriptionSnapshot ?? null,
+    })
+    if (error) throw error
+    return data as string
+  }
+
+  async opportunityUpdateItem(params: {
+    companyId: string
+    itemId: string
+    unitPrice?: number | null
+    quantity?: number | null
+    discountType?: DiscountType | null
+    discountValue?: number | null
+  }): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_update_item', {
+      p_company_id: params.companyId,
+      p_item_id: params.itemId,
+      p_unit_price: params.unitPrice ?? null,
+      p_quantity: params.quantity ?? null,
+      p_discount_type: params.discountType ?? null,
+      p_discount_value: params.discountValue ?? null,
+    })
+    if (error) throw error
+  }
+
+  async opportunityRemoveItem(companyId: string, itemId: string): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_remove_item', {
+      p_company_id: companyId,
+      p_item_id: itemId,
+    })
+    if (error) throw error
+  }
+
+  async opportunitySetValueMode(
+    companyId: string,
+    opportunityId: string,
+    mode: OpportunityValueMode
+  ): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_set_value_mode', {
+      p_company_id: companyId,
+      p_opportunity_id: opportunityId,
+      p_mode: mode,
+    })
+    if (error) throw error
+  }
+
+  async opportunitySetGlobalDiscount(
+    companyId: string,
+    opportunityId: string,
+    discountType: DiscountType,
+    discountValue: number
+  ): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_set_global_discount', {
+      p_company_id: companyId,
+      p_opportunity_id: opportunityId,
+      p_discount_type: discountType,
+      p_discount_value: discountValue,
+    })
+    if (error) throw error
+  }
+
+  async opportunitySetManualValue(
+    companyId: string,
+    opportunityId: string,
+    value: number
+  ): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_set_manual_value', {
+      p_company_id: companyId,
+      p_opportunity_id: opportunityId,
+      p_value: value,
+    })
+    if (error) throw error
+  }
+
+  async opportunitySyncTotals(companyId: string, opportunityId: string): Promise<void> {
+    const { error } = await supabase.rpc('opportunity_sync_totals', {
+      p_company_id: companyId,
+      p_opportunity_id: opportunityId,
+    })
+    if (error) throw error
   }
 }
 

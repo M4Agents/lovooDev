@@ -9,7 +9,8 @@ import { funnelApi } from '../services/funnelApi'
 import type {
   Opportunity,
   CreateOpportunityForm,
-  UpdateOpportunityForm
+  UpdateOpportunityForm,
+  UpdateOpportunityOptions
 } from '../types/sales-funnel'
 
 export interface UseOpportunitiesReturn {
@@ -17,7 +18,11 @@ export interface UseOpportunitiesReturn {
   loading: boolean
   error?: string
   createOpportunity: (data: CreateOpportunityForm) => Promise<Opportunity>
-  updateOpportunity: (id: string, data: UpdateOpportunityForm) => Promise<Opportunity>
+  updateOpportunity: (
+    id: string,
+    data: UpdateOpportunityForm,
+    options?: UpdateOpportunityOptions
+  ) => Promise<Opportunity>
   refreshOpportunities: () => Promise<void>
 }
 
@@ -78,23 +83,30 @@ export const useOpportunities = (leadId: number): UseOpportunitiesReturn => {
   }, [])
 
   // Atualizar oportunidade
-  const updateOpportunity = useCallback(async (id: string, data: UpdateOpportunityForm): Promise<Opportunity> => {
-    try {
-      setError(undefined)
-      
-      const opportunity = await funnelApi.updateOpportunity(id, data)
-      
-      // Atualizar na lista local
-      setOpportunities(prev => prev.map(o => o.id === id ? opportunity : o))
-      
-      return opportunity
-    } catch (err) {
-      console.error('Error updating opportunity:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao atualizar oportunidade'
-      setError(errorMessage)
-      throw new Error(errorMessage)
-    }
-  }, [])
+  const updateOpportunity = useCallback(
+    async (
+      id: string,
+      data: UpdateOpportunityForm,
+      options?: UpdateOpportunityOptions
+    ): Promise<Opportunity> => {
+      try {
+        setError(undefined)
+
+        const opportunity = await funnelApi.updateOpportunity(id, data, options)
+
+        // Atualizar na lista local
+        setOpportunities(prev => prev.map(o => (o.id === id ? opportunity : o)))
+
+        return opportunity
+      } catch (err) {
+        console.error('Error updating opportunity:', err)
+        const errorMessage = err instanceof Error ? err.message : 'Erro ao atualizar oportunidade'
+        setError(errorMessage)
+        throw new Error(errorMessage)
+      }
+    },
+    []
+  )
 
   // Refresh
   const refreshOpportunities = useCallback(async () => {

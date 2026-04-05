@@ -10,11 +10,17 @@ import { createPortal } from 'react-dom'
 import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
+import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
 import { supabase } from '../../lib/supabase'
 import type { CreateOpportunityForm } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
+import {
+  normalizeOpportunityManualValue,
+  parseOpportunityCompositionError,
+  resolveOpportunityCompositionErrorMessage
+} from '../../utils/opportunityCompositionErrors'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
@@ -196,13 +202,22 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       if (isEditMode && opportunityData) {
         // Modo de edição - atualizar oportunidade existente
         console.log('✏️ CreateOpportunityModal - Atualizando oportunidade:', opportunityData.id)
-        result = await funnelApi.updateOpportunity(opportunityData.id, {
-          title: formData.title,
-          description: formData.description,
-          value: formData.value || 0,
-          probability: formData.probability || 50,
-          expected_close_date: formData.expected_close_date || undefined
-        })
+        const ent = await catalogApi.getOpportunityItemsEntitlement(company.id)
+        const manualMode = (opportunityData.value_mode ?? 'manual') === 'manual'
+        result = await funnelApi.updateOpportunity(
+          opportunityData.id,
+          {
+            title: formData.title,
+            description: formData.description,
+            value: normalizeOpportunityManualValue(formData.value ?? 0),
+            probability: formData.probability || 50,
+            expected_close_date: formData.expected_close_date || undefined
+          },
+          {
+            companyId: company.id,
+            useCompositionManualValueRpc: ent.allowed && manualMode,
+          }
+        )
         console.log('✅ CreateOpportunityModal - Oportunidade atualizada com sucesso:', result)
       } else {
         // Modo de criação - criar nova oportunidade
@@ -220,7 +235,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           company_id: company.id,
           title: formData.title,
           description: formData.description,
-          value: formData.value || 0,
+          value: normalizeOpportunityManualValue(formData.value),
           currency: formData.currency || company.default_currency || 'BRL',
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || undefined,
@@ -297,7 +312,14 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       onClose()
     } catch (err) {
       console.error('Erro ao criar oportunidade:', err)
-      setError(err instanceof Error ? err.message : t('createOpportunity.errors.generic'))
+      const parsed = parseOpportunityCompositionError(err)
+      if (parsed.code !== 'UNKNOWN' && /^OPP_/.test(parsed.code)) {
+        setError(
+          resolveOpportunityCompositionErrorMessage(err, t, 'createOpportunity.errors.generic')
+        )
+      } else {
+        setError(err instanceof Error ? err.message : t('createOpportunity.errors.generic'))
+      }
     } finally {
       setLoading(false)
     }

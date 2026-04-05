@@ -35,6 +35,8 @@ export type Company = {
   timezone: string;
   /** ISO 4217 — padrão para novos registros; default no banco BRL */
   default_currency?: string;
+  /** Feature: composição de oportunidade por itens (pro/enterprise + flag) */
+  opportunity_items_enabled?: boolean;
   /** ISO 3166-1 alpha-2 — opcional; contexto; não define moeda */
   country_code?: string | null;
   created_at: string;

@@ -18,11 +18,17 @@ import {
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
+import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
 import { useAuth } from '../../contexts/AuthContext'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
+import { OpportunityItemsSection } from './OpportunityItemsSection'
 import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm } from '../../types/sales-funnel'
+import {
+  parseOpportunityCompositionError,
+  resolveOpportunityCompositionErrorMessage
+} from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
@@ -193,6 +199,8 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])
   const [loadingStatus, setLoadingStatus] = useState(false)
+  const [detailOpportunity, setDetailOpportunity] = useState<Opportunity>(opportunity)
+  const [compositionEntitled, setCompositionEntitled] = useState(false)
 
   // Edição geral
   const [editMode, setEditMode]       = useState(false)
@@ -254,15 +262,29 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
         loss_reason:         form.loss_reason         || undefined,
         owner_user_id:       form.owner_user_id        || undefined,
       }
-      const updated = await funnelApi.updateOpportunity(opportunity.id, payload)
+      const useManualValueRpc =
+        compositionEntitled && (detailOpportunity.value_mode ?? 'manual') === 'manual'
+
+      const updated = await funnelApi.updateOpportunity(opportunity.id, payload, {
+        companyId,
+        useCompositionManualValueRpc: useManualValueRpc,
+      })
+      setDetailOpportunity(updated)
       onUpdate?.(updated)
       setEditMode(false)
-    } catch {
-      setSaveError(t('opportunityDetail.errors.saveFailed'))
+    } catch (err) {
+      const parsed = parseOpportunityCompositionError(err)
+      if (parsed.code !== 'UNKNOWN' && /^OPP_/.test(parsed.code)) {
+        setSaveError(
+          resolveOpportunityCompositionErrorMessage(err, t, 'opportunityDetail.errors.saveFailed')
+        )
+      } else {
+        setSaveError(err instanceof Error ? err.message : t('opportunityDetail.errors.saveFailed'))
+      }
     } finally {
       setSaving(false)
     }
-  }, [form, opportunity.id, onUpdate, t])
+  }, [form, opportunity.id, companyId, compositionEntitled, detailOpportunity.value_mode, onUpdate, t])
 
   // Hook de histórico de etapas (só carrega quando o modal está aberto)
   const {
@@ -284,13 +306,25 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       setSaveError(null)
       setProbDraft(opportunity.probability)
       setProbSaved(false)
+      setDetailOpportunity(opportunity)
     }
-  }, [isOpen, initialTab, opportunity.probability])
+  }, [isOpen, initialTab, opportunity])
 
   // Carregar usuários da empresa para o select de responsável
   useEffect(() => {
     if (!isOpen || !companyId) return
     getCompanyUsers(companyId).then(setCompanyUsers).catch(() => {})
+  }, [isOpen, companyId])
+
+  useEffect(() => {
+    if (!isOpen || !companyId) {
+      setCompositionEntitled(false)
+      return
+    }
+    catalogApi
+      .getOpportunityItemsEntitlement(companyId)
+      .then((e) => setCompositionEntitled(e.allowed))
+      .catch(() => setCompositionEntitled(false))
   }, [isOpen, companyId])
 
   // Carregar histórico de status ao abrir
@@ -472,6 +506,16 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     </p>
                   )}
                 </div>
+
+                <OpportunityItemsSection
+                  companyId={companyId}
+                  opportunity={detailOpportunity}
+                  canEdit={opportunity.status === 'open'}
+                  onOpportunityUpdated={(o) => {
+                    setDetailOpportunity(o)
+                    onUpdate?.(o)
+                  }}
+                />
 
                 <div>
                   <div className="flex items-center justify-between mb-2">

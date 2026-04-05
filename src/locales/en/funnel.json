@@ -241,6 +241,28 @@
       "statusPrefix": "Status:"
     }
   },
+  "opportunityComposition": {
+    "errors": {
+      "generic": "Could not complete the action. Please try again.",
+      "OPP_OPPORTUNITY_NOT_EDITABLE": "This opportunity can no longer be edited.",
+      "OPP_DISCOUNT_EXCEEDS_SUBTOTAL": "The discount cannot exceed the total amount.",
+      "OPP_INVALID_QUANTITY": "Invalid quantity.",
+      "OPP_FEATURE_NOT_ENABLED": "This feature is not enabled for your company.",
+      "OPP_PLAN_FEATURE_DENIED": "Your current plan does not include this feature.",
+      "OPP_OPPORTUNITY_ACCESS_DENIED": "Opportunity not found or access denied.",
+      "OPP_WRONG_VALUE_MODE": "This action is not available in the current value mode.",
+      "OPP_NO_LINES_FOR_ITEMS_MODE": "Add at least one line item to use item-based value.",
+      "OPP_INVALID_VALUE_MODE": "Invalid value mode.",
+      "OPP_CATALOG_NOT_FOUND": "Product or service not found.",
+      "OPP_ITEM_NOT_FOUND": "Line item not found.",
+      "OPP_CATALOG_ITEM_INACTIVE": "This item is inactive and cannot be used.",
+      "OPP_CATALOG_NOT_SALEABLE": "This item is not available for sale.",
+      "OPP_COMPANY_CURRENCY_INVALID": "Invalid company currency configuration. Contact support.",
+      "OPP_INVALID_DISCOUNT_PERCENT": "Enter a discount percentage between 0 and 100.",
+      "OPP_CATALOG_COMPANY_MISMATCH": "The product or service does not belong to this company.",
+      "OPP_ITEM_COMPANY_MISMATCH": "The item does not belong to this company."
+    }
+  },
   "timeline": {
     "unknownStage": "unknown stage",
     "moveBadges": {

@@ -4,13 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
 import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
+import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { CompanyUser } from '../types/user';
 
 // Ícone oficial do WhatsApp
@@ -96,7 +97,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1058,6 +1059,19 @@ export const Settings: React.FC = () => {
             >
               <SettingsIcon className="w-4 h-4" />
               {t('tabs.system')}
+            </button>
+
+            {/* Aba Catálogo (produtos/serviços) */}
+            <button
+              onClick={() => setActiveTab('catalogo')}
+              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                activeTab === 'catalogo'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Produtos e serviços
             </button>
           </nav>
         </div>
@@ -3418,6 +3432,17 @@ export const Settings: React.FC = () => {
       {activeTab === 'sistema' && (
         <div className="space-y-6">
           <SystemSettings />
+        </div>
+      )}
+
+      {/* Aba Produtos e serviços (catálogo) */}
+      {activeTab === 'catalogo' && company?.id && (
+        <div className="space-y-6 max-w-4xl">
+          <CatalogSettings
+            companyId={company.id}
+            companyPlan={company.plan || 'basic'}
+            onCompanyFlagChange={() => refreshCompany?.()}
+          />
         </div>
       )}
 

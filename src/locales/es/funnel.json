@@ -241,6 +241,28 @@
       "statusPrefix": "Estado:"
     }
   },
+  "opportunityComposition": {
+    "errors": {
+      "generic": "No se pudo completar la operación. Inténtelo de nuevo.",
+      "OPP_OPPORTUNITY_NOT_EDITABLE": "Esta oportunidad ya no puede editarse.",
+      "OPP_DISCOUNT_EXCEEDS_SUBTOTAL": "El descuento no puede ser mayor que el importe total.",
+      "OPP_INVALID_QUANTITY": "Cantidad inválida.",
+      "OPP_FEATURE_NOT_ENABLED": "Recurso no habilitado para esta empresa.",
+      "OPP_PLAN_FEATURE_DENIED": "Su plan actual no incluye este recurso.",
+      "OPP_OPPORTUNITY_ACCESS_DENIED": "Oportunidad no encontrada o sin permiso.",
+      "OPP_WRONG_VALUE_MODE": "Esta acción no está disponible en el modo de valor actual.",
+      "OPP_NO_LINES_FOR_ITEMS_MODE": "Incluya al menos un ítem para usar el modo por ítems.",
+      "OPP_INVALID_VALUE_MODE": "Modo de valor inválido.",
+      "OPP_CATALOG_NOT_FOUND": "Producto o servicio no encontrado.",
+      "OPP_ITEM_NOT_FOUND": "Ítem no encontrado.",
+      "OPP_CATALOG_ITEM_INACTIVE": "Este ítem está inactivo y no puede usarse.",
+      "OPP_CATALOG_NOT_SALEABLE": "Este ítem no está disponible para la venta.",
+      "OPP_COMPANY_CURRENCY_INVALID": "Configuración de moneda de la empresa inválida. Contacte al soporte.",
+      "OPP_INVALID_DISCOUNT_PERCENT": "Indique un porcentaje de descuento entre 0 y 100.",
+      "OPP_CATALOG_COMPANY_MISMATCH": "El producto o servicio no pertenece a esta empresa.",
+      "OPP_ITEM_COMPANY_MISMATCH": "El ítem no pertenece a esta empresa."
+    }
+  },
   "timeline": {
     "unknownStage": "etapa desconocida",
     "moveBadges": {

@@ -46,6 +46,11 @@ export interface FunnelStage {
 // INTERFACE: Opportunity (NOVO MODELO)
 // =====================================================
 
+export type OpportunityValueMode = 'manual' | 'items'
+export type DiscountType = 'fixed' | 'percent'
+export type CatalogAvailabilityStatus = 'available' | 'unavailable' | 'on_demand' | 'discontinued'
+export type CatalogStockStatus = 'in_stock' | 'out_of_stock' | 'unknown' | 'not_applicable'
+
 export interface Opportunity {
   id: string
   lead_id: number
@@ -65,8 +70,104 @@ export interface Opportunity {
   closed_at?: string
   loss_reason?: string
 
+  /** Composição por itens (feature) */
+  value_mode?: OpportunityValueMode
+  items_subtotal?: number | null
+  discount_type?: DiscountType | null
+  discount_value?: number | null
+
   // Joins
   lead?: LeadCardData
+}
+
+export interface CatalogProduct {
+  id: string
+  company_id: string
+  name: string
+  description?: string | null
+  default_price: number
+  category?: string | null
+  is_active: boolean
+  availability_status: CatalogAvailabilityStatus
+  stock_status: CatalogStockStatus
+  track_inventory: boolean
+  ai_notes?: string | null
+  /** Instrução interna para o agente de IA quando o item não estiver disponível; não é texto público. */
+  ai_unavailable_guidance?: string | null
+  available_for_ai: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CatalogService {
+  id: string
+  company_id: string
+  name: string
+  description?: string | null
+  default_price: number
+  category?: string | null
+  is_active: boolean
+  availability_status: CatalogAvailabilityStatus
+  stock_status: CatalogStockStatus
+  track_inventory: boolean
+  ai_notes?: string | null
+  /** Instrução interna para o agente de IA quando o item não estiver disponível; não é texto público. */
+  ai_unavailable_guidance?: string | null
+  available_for_ai: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Valores do ENUM Postgres `catalog_relation_type`. */
+export type CatalogRelationType = 'alternative' | 'addon'
+
+/** Constante para iteração / validação (ordem estável). */
+export const CATALOG_RELATION_TYPES: readonly CatalogRelationType[] = ['alternative', 'addon']
+
+/** Linha em `catalog_item_relations` (CRUD direto / inspeção). */
+export interface CatalogItemRelation {
+  id: string
+  company_id: string
+  relation_type: CatalogRelationType
+  source_product_id: string | null
+  source_service_id: string | null
+  target_product_id: string | null
+  target_service_id: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+/** Retorno de `list_catalog_relations_for_source` — destino resolvido para UI/agente. */
+export interface CatalogRelationResolvedRow {
+  relation_id: string
+  sort_order: number
+  target_kind: 'product' | 'service'
+  target_id: string
+  name: string
+  description: string | null
+  availability_status: string
+  is_active: boolean
+  available_for_ai: boolean
+  default_price: number
+}
+
+export interface OpportunityItemRow {
+  id: string
+  company_id: string
+  opportunity_id: string
+  product_id: string | null
+  service_id: string | null
+  line_type: 'product' | 'service'
+  name_snapshot: string
+  description_snapshot?: string | null
+  unit_price: number
+  quantity: number
+  discount_type: DiscountType
+  discount_value: number
+  line_total: number
+  created_at: string
+  updated_at: string
 }
 
 // =====================================================
@@ -268,6 +369,13 @@ export interface UpdateOpportunityForm {
   closed_at?: string
   loss_reason?: string
   owner_user_id?: string
+}
+
+/** Opções para `funnelApi.updateOpportunity` — composição por itens (valor manual via RPC). */
+export interface UpdateOpportunityOptions {
+  companyId?: string
+  /** Quando true, `value` é persistido apenas via RPC `opportunity_set_manual_value` (backend valida feature e `value_mode = manual`). */
+  useCompositionManualValueRpc?: boolean
 }
 
 // =====================================================
