@@ -8,7 +8,7 @@
 import React, { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Draggable } from '@hello-pangea/dnd'
-import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info } from 'lucide-react'
+import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
@@ -27,7 +27,10 @@ interface LeadCardProps {
   position: OpportunityFunnelPosition
   index: number
   visibleFields?: string[]
+  /** Legado: se não houver `onDetailClick`, o clique no card chama isto (ex.: abrir chat). */
   onClick?: (leadId: number) => void
+  /** Abre o chat/histórico do lead (ícone separado; clique principal abre detalhes quando `onDetailClick` existe). */
+  onChatClick?: (leadId: number) => void
   /** Necessário para TagSelectorPopover (multi-tenant). */
   companyId?: string
   /** Abre o modal de detalhes/jornada da oportunidade. */
@@ -41,6 +44,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
   onClick,
+  onChatClick,
   companyId,
   onDetailClick,
   companyUsers = []
@@ -63,6 +67,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const displayTags = localTagNames ?? lead.tags ?? []
 
   const handleClick = () => {
+    if (onDetailClick) {
+      onDetailClick(position.opportunity_id)
+      return
+    }
     if (onClick) onClick(lead.id)
   }
 
@@ -128,21 +136,36 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               )}
             </div>
 
-            {/* Ícone de detalhes — aparece no hover do card */}
-            {onDetailClick && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDetailClick(position.opportunity_id)
-                }}
-                className="absolute top-0 right-0 opacity-40 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
-                title={t('leadCard.detailTooltip')}
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            )}
+            <div className="absolute top-0 right-0 flex items-center gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+              {onChatClick && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onChatClick(lead.id)
+                  }}
+                  className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md"
+                  title={t('leadCard.chatTooltip')}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </button>
+              )}
+              {onDetailClick && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDetailClick(position.opportunity_id)
+                  }}
+                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
+                  title={t('leadCard.detailTooltip')}
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Informações do lead */}

@@ -191,6 +191,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   index={index}
                   visibleFields={visibleFields}
                   onClick={onLeadClick}
+                  onChatClick={onLeadClick}
                   companyId={companyId}
                   onDetailClick={onDetailClick}
                   companyUsers={companyUsers}

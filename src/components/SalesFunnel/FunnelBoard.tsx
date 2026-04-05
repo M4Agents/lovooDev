@@ -153,9 +153,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   // Modal de detalhes / jornada da oportunidade
   const [detailOpportunityId, setDetailOpportunityId] = useState<string | null>(null)
+  /** Quando a RPC do board não traz `opportunity` aninhado, carregamos por id. */
+  const [detailOpportunityFetched, setDetailOpportunityFetched] = useState<Opportunity | null>(null)
 
-  // Encontra o objeto Opportunity a partir do stageMap para passar ao modal
-  const detailOpportunity = useMemo((): Opportunity | null => {
+  const detailOpportunityFromMap = useMemo((): Opportunity | null => {
     if (!detailOpportunityId) return null
     for (const stageData of stageMap.values()) {
       const pos = stageData.positions?.find(
@@ -166,12 +167,38 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     return null
   }, [detailOpportunityId, stageMap])
 
+  useEffect(() => {
+    if (!detailOpportunityId) {
+      setDetailOpportunityFetched(null)
+      return
+    }
+    if (detailOpportunityFromMap) {
+      setDetailOpportunityFetched(null)
+      return
+    }
+    let cancelled = false
+    funnelApi
+      .getOpportunityById(detailOpportunityId)
+      .then((o) => {
+        if (!cancelled) setDetailOpportunityFetched(o)
+      })
+      .catch(() => {
+        if (!cancelled) setDetailOpportunityFetched(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [detailOpportunityId, detailOpportunityFromMap])
+
+  const detailOpportunity = detailOpportunityFromMap ?? detailOpportunityFetched
+
   const handleDetailClick = useCallback((opportunityId: string) => {
     setDetailOpportunityId(opportunityId)
   }, [])
 
   // Após salvar edição no modal, faz refresh cirúrgico da coluna onde a oportunidade está
   const handleOpportunityUpdate = useCallback((updated: Opportunity) => {
+    setDetailOpportunityFetched((prev) => (prev?.id === updated.id ? updated : prev))
     for (const [stageId, stageData] of stageMap.entries()) {
       const found = stageData.positions?.some(
         (p: { opportunity_id: string }) => p.opportunity_id === updated.id
@@ -680,7 +707,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       {detailOpportunity && (
         <OpportunityDetailModal
           isOpen={true}
-          onClose={() => setDetailOpportunityId(null)}
+          onClose={() => {
+            setDetailOpportunityId(null)
+            setDetailOpportunityFetched(null)
+          }}
           opportunity={detailOpportunity}
           companyId={companyId ?? ''}
           initialTab="journey"

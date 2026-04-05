@@ -98,6 +98,7 @@
   },
   "leadCard": {
     "detailTooltip": "View details and journey",
+    "chatTooltip": "Open conversation with lead",
     "manageTagsTooltip": "Manage tags",
     "lastContact": "Last contact: {{date}}",
     "ownerFallback": "Owner"
@@ -121,6 +122,7 @@
       "titleRequired": "Title is required",
       "generic": "Error creating opportunity"
     },
+    "compositionHintCreate": "With item-based value enabled, after creating the opportunity open its details from the funnel (info icon on the card) to add products, services, and discounts.",
     "fields": {
       "title": "Opportunity title *",
       "titlePlaceholder": "e.g. Product X sale",

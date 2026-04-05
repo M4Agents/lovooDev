@@ -248,28 +248,6 @@ export const Settings: React.FC = () => {
     }
   }, [company, activeTab, integracoesTab]);
 
-  // #region agent log
-  useEffect(() => {
-    if (activeTab !== 'catalogo' || !company?.id) return
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f28051' },
-      body: JSON.stringify({
-        sessionId: 'f28051',
-        location: 'Settings.tsx:catalogTab',
-        message: 'Company currency when catalog tab active',
-        data: {
-          default_currency: company?.default_currency ?? null,
-          companyId: company.id,
-        },
-        timestamp: Date.now(),
-        hypothesisId: 'H3',
-        runId: 'pre-fix',
-      }),
-    }).catch(() => {})
-  }, [activeTab, company?.id, company?.default_currency])
-  // #endregion
-
   const loadWebhookLogs = async () => {
     if (!company?.id) return;
     

@@ -13,7 +13,8 @@ import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
 import { supabase } from '../../lib/supabase'
-import type { CreateOpportunityForm } from '../../types/sales-funnel'
+import type { CreateOpportunityForm, Opportunity } from '../../types/sales-funnel'
+import { OpportunityItemsSection } from './OpportunityItemsSection'
 import type { CompanyUser } from '../../types/user'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import {
@@ -54,6 +55,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   const [error, setError] = useState<string>()
   const [valueDisplay, setValueDisplay] = useState('0,00')
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+  const [compositionEntitled, setCompositionEntitled] = useState(false)
+  const [fullOpportunity, setFullOpportunity] = useState<Opportunity | null>(null)
   const isEditMode = !!opportunityData
 
   const [formData, setFormData] = useState<Partial<CreateOpportunityForm>>({
@@ -134,6 +137,28 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     if (!isOpen || !company?.id || !isManager) return
     getCompanyUsers(company.id).then(setCompanyUsers).catch(() => setCompanyUsers([]))
   }, [isOpen, company?.id, isManager])
+
+  useEffect(() => {
+    if (!isOpen || !company?.id) {
+      setCompositionEntitled(false)
+      return
+    }
+    catalogApi
+      .getOpportunityItemsEntitlement(company.id)
+      .then((e) => setCompositionEntitled(e.allowed))
+      .catch(() => setCompositionEntitled(false))
+  }, [isOpen, company?.id])
+
+  useEffect(() => {
+    if (!isOpen || !isEditMode || !opportunityData?.id) {
+      setFullOpportunity(null)
+      return
+    }
+    funnelApi
+      .getOpportunityById(opportunityData.id)
+      .then(setFullOpportunity)
+      .catch(() => setFullOpportunity(null))
+  }, [isOpen, isEditMode, opportunityData?.id])
 
   // Resetar formulário quando modal fechar
   useEffect(() => {
@@ -329,7 +354,11 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 
   const modalContent = (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div
+        className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto ${
+          isEditMode && compositionEntitled ? 'max-w-3xl' : 'max-w-2xl'
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
@@ -496,6 +525,23 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             />
           </div>
+
+          {!isEditMode && compositionEntitled && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              {t('createOpportunity.compositionHintCreate')}
+            </div>
+          )}
+
+          {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
+            <div className="max-h-[min(50vh,28rem)] overflow-y-auto rounded-lg border border-gray-100">
+              <OpportunityItemsSection
+                companyId={company.id}
+                opportunity={fullOpportunity}
+                canEdit={fullOpportunity.status === 'open'}
+                onOpportunityUpdated={(o) => setFullOpportunity(o)}
+              />
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
