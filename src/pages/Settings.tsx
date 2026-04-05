@@ -3463,6 +3463,7 @@ export const Settings: React.FC = () => {
           <CatalogSettings
             companyId={company.id}
             companyPlan={company.plan || 'basic'}
+            defaultCurrency={company.default_currency ?? 'BRL'}
             onCompanyFlagChange={() => refreshCompany?.()}
           />
         </div>

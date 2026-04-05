@@ -8,16 +8,21 @@ import { Package, Plus, Pencil, RefreshCw } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
+import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
+import { formatMoney } from '../../lib/formatMoney'
 
 type Props = {
   companyId: string
   companyPlan: string
+  /** ISO 4217 — ex.: moeda padrão da empresa */
+  defaultCurrency: string
   onCompanyFlagChange?: () => void
 }
 
 export const CatalogSettings: React.FC<Props> = ({
   companyId,
   companyPlan,
+  defaultCurrency,
   onCompanyFlagChange,
 }) => {
   const [loading, setLoading] = useState(true)
@@ -66,13 +71,18 @@ export const CatalogSettings: React.FC<Props> = ({
         sessionId: 'f28051',
         location: 'CatalogSettings.tsx:mount',
         message: 'Catalog props — currency not in props until fix',
-        data: { companyId, companyPlan, receivesDefaultCurrency: false },
+        data: {
+          companyId,
+          companyPlan,
+          defaultCurrency,
+          receivesDefaultCurrency: true,
+        },
         timestamp: Date.now(),
         hypothesisId: 'H1',
         runId: 'pre-fix',
       }),
     }).catch(() => {})
-  }, [companyId, companyPlan])
+  }, [companyId, companyPlan, defaultCurrency])
   // #endregion
 
   const toggleFeature = async () => {
@@ -167,6 +177,7 @@ export const CatalogSettings: React.FC<Props> = ({
           {subTab === 'products' && (
             <CatalogProductList
               companyId={companyId}
+              defaultCurrency={defaultCurrency}
               items={products}
               allServices={services}
               onRefresh={load}
@@ -175,6 +186,7 @@ export const CatalogSettings: React.FC<Props> = ({
           {subTab === 'services' && (
             <CatalogServiceList
               companyId={companyId}
+              defaultCurrency={defaultCurrency}
               items={services}
               allProducts={products}
               onRefresh={load}
@@ -188,10 +200,11 @@ export const CatalogSettings: React.FC<Props> = ({
 
 const CatalogProductList: React.FC<{
   companyId: string
+  defaultCurrency: string
   items: CatalogProduct[]
   allServices: CatalogService[]
   onRefresh: () => void
-}> = ({ companyId, items, allServices, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, allServices, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogProduct | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -209,7 +222,9 @@ const CatalogProductList: React.FC<{
       </div>
       {(creating || editing) && (
         <ProductForm
+          key={editing?.id ?? (creating ? 'new-product' : 'closed')}
           companyId={companyId}
+          defaultCurrency={defaultCurrency}
           initial={editing}
           allProducts={items}
           allServices={allServices}
@@ -232,7 +247,9 @@ const CatalogProductList: React.FC<{
             {items.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{p.default_price.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {formatMoney(p.default_price, defaultCurrency)}
+                </td>
                 <td className="px-3 py-2">{p.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{p.availability_status}</td>
                 <td className="px-3 py-2">
@@ -263,12 +280,13 @@ const CatalogProductList: React.FC<{
 
 const ProductForm: React.FC<{
   companyId: string
+  defaultCurrency: string
   initial: CatalogProduct | null
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
   onCancel: () => void
   onSaved: () => void
-}> = ({ companyId, initial, allProducts, allServices, onCancel, onSaved }) => {
+}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -331,13 +349,11 @@ const ProductForm: React.FC<{
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Preço padrão</label>
-          <input
-            type="number"
-            min={0}
-            step={0.01}
+          <CatalogDefaultPriceField
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            currencyCode={defaultCurrency}
             value={defaultPrice}
-            onChange={(e) => setDefaultPrice(parseFloat(e.target.value) || 0)}
+            onChange={setDefaultPrice}
             required
           />
         </div>
@@ -447,10 +463,11 @@ const ProductForm: React.FC<{
 
 const CatalogServiceList: React.FC<{
   companyId: string
+  defaultCurrency: string
   items: CatalogService[]
   allProducts: CatalogProduct[]
   onRefresh: () => void
-}> = ({ companyId, items, allProducts, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, allProducts, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogService | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -468,7 +485,9 @@ const CatalogServiceList: React.FC<{
       </div>
       {(creating || editing) && (
         <ServiceForm
+          key={editing?.id ?? (creating ? 'new-service' : 'closed')}
           companyId={companyId}
+          defaultCurrency={defaultCurrency}
           initial={editing}
           allProducts={allProducts}
           allServices={items}
@@ -491,7 +510,9 @@ const CatalogServiceList: React.FC<{
             {items.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-3 py-2 font-medium text-slate-900">{s.name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{s.default_price.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {formatMoney(s.default_price, defaultCurrency)}
+                </td>
                 <td className="px-3 py-2">{s.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{s.availability_status}</td>
                 <td className="px-3 py-2">
@@ -522,12 +543,13 @@ const CatalogServiceList: React.FC<{
 
 const ServiceForm: React.FC<{
   companyId: string
+  defaultCurrency: string
   initial: CatalogService | null
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
   onCancel: () => void
   onSaved: () => void
-}> = ({ companyId, initial, allProducts, allServices, onCancel, onSaved }) => {
+}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -587,13 +609,11 @@ const ServiceForm: React.FC<{
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Preço padrão</label>
-          <input
-            type="number"
-            min={0}
-            step={0.01}
+          <CatalogDefaultPriceField
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+            currencyCode={defaultCurrency}
             value={defaultPrice}
-            onChange={(e) => setDefaultPrice(parseFloat(e.target.value) || 0)}
+            onChange={setDefaultPrice}
             required
           />
         </div>
