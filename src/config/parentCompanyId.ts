@@ -1,6 +1,6 @@
 // =====================================================
 // UUID da empresa Pai — usado no frontend (Vite).
-// Deve coincidir com lib/openai/config.ts (servidor) e com RLS no Supabase.
+// Deve coincidir com api/lib/openai/config.ts (servidor) e com RLS no Supabase.
 // Vercel: defina VITE_PARENT_COMPANY_ID igual a PARENT_COMPANY_ID.
 // =====================================================
 

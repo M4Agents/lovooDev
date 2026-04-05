@@ -1,11 +1,11 @@
 // =====================================================
 // POST /api/integrations/openai/test
-// Teste de conexão via lib/openai/gate.ts (sessão JWT apenas)
+// Teste de conexão via api/lib/openai/gate.ts (sessão JWT apenas)
 // Resposta de erro genérica — sem mensagens brutas da API OpenAI
 // =====================================================
 
-import { assertCanManageOpenAIIntegration } from '../../../lib/openai/auth'
-import { runOpenAIConnectionTest } from '../../../lib/openai/gate'
+import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth'
+import { runOpenAIConnectionTest } from '../../lib/openai/gate'
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json')

@@ -1,7 +1,7 @@
 // =====================================================
 // Gate — ponto único de uso do cliente OpenAI para o restante do backend.
 // Importe daqui nas rotas / features; não importe `client.ts` diretamente.
-// SDK `openai`: apenas em client.ts (dentro de lib/openai).
+// SDK `openai`: apenas em client.ts (neste diretório).
 // =====================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
