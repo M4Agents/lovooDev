@@ -33,6 +33,36 @@ import type { CompanyUser } from '../../types/user'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
+// #region agent log (debug sessão f28051 — remover após confirmar correção)
+const DEBUG_SESSION_ID = 'f28051'
+const DEBUG_INGEST_URL =
+  'http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c'
+function opportunityDetailDebugLog(
+  message: string,
+  data: Record<string, unknown>,
+  hypothesisId: string
+) {
+  const timestamp = Date.now()
+  const body = {
+    sessionId: DEBUG_SESSION_ID,
+    hypothesisId,
+    location: 'OpportunityDetailModal.tsx',
+    message,
+    data,
+    timestamp,
+  }
+  fetch(DEBUG_INGEST_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': DEBUG_SESSION_ID,
+    },
+    body: JSON.stringify(body),
+  }).catch(() => {})
+  console.info('[OpportunityDetailModal:debug]', message, { ...data, hypothesisId, timestamp })
+}
+// #endregion
+
 type TabType = 'details' | 'journey' | 'status'
 
 interface OpportunityDetailModalProps {
@@ -301,6 +331,15 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   // Sincronizar aba quando initialTab muda (ex: aberto pelo board sempre em 'journey')
   useEffect(() => {
     if (isOpen) {
+      opportunityDetailDebugLog(
+        'sync_effect_run',
+        {
+          initialTab,
+          opportunityId: opportunity.id,
+          setsActiveTabTo: initialTab,
+        },
+        'H1'
+      )
       setActiveTab(initialTab)
       setEditMode(false)
       setSaveError(null)
@@ -309,6 +348,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       setDetailOpportunity(opportunity)
     }
   }, [isOpen, initialTab, opportunity])
+
+  useEffect(() => {
+    if (!isOpen) return
+    opportunityDetailDebugLog('activeTab_commit', { activeTab }, 'H1')
+  }, [isOpen, activeTab])
 
   // Carregar usuários da empresa para o select de responsável
   useEffect(() => {
@@ -410,7 +454,14 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
           {tabs.map(({ key, label, icon }) => (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
+              onClick={() => {
+                opportunityDetailDebugLog(
+                  'tab_click',
+                  { targetTab: key, activeTabBefore: activeTab },
+                  'H1'
+                )
+                setActiveTab(key)
+              }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === key
                   ? 'border-blue-500 text-blue-600'
