@@ -37,38 +37,12 @@ export const OpenAIIntegrationPanel: React.FC = () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const [s, modelsOutcome] = await Promise.all([
+      const [s, modelList] = await Promise.all([
         fetchOpenAISettings(),
-        fetchOpenAIModels()
-          .then((ids) => ({ ok: true as const, ids, err: null as string | null }))
-          .catch((e: unknown) => ({
-            ok: false as const,
-            ids: [] as string[],
-            err: e instanceof Error ? e.message : String(e),
-          })),
+        fetchOpenAIModels().catch(() => [] as string[]),
       ])
       setForm(s)
-      setOpenaiModelIds(modelsOutcome.ids)
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f28051' },
-        body: JSON.stringify({
-          sessionId: 'f28051',
-          hypothesisId: 'H1-H3',
-          location: 'OpenAIIntegrationPanel.tsx:load',
-          message: 'openai_models_fetch_outcome',
-          data: {
-            modelsOk: modelsOutcome.ok,
-            count: modelsOutcome.ids.length,
-            sample: modelsOutcome.ids.slice(0, 8),
-            err: modelsOutcome.err,
-            savedModel: s.model,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
+      setOpenaiModelIds(modelList)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : t('integrations.openai.errors.load'))
     } finally {
