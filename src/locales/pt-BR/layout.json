@@ -36,5 +36,12 @@
   },
   "notifications": {
     "sidebarLink": "Notificações"
+  },
+  "language": {
+    "sectionLabel": "Idioma",
+    "selectorAriaLabel": "Selecionar idioma da interface",
+    "optionTitle": "{{name}} — {{code}}",
+    "collapsedToggleAriaLabel": "Selecionar idioma",
+    "collapsedMenuAriaLabel": "Idiomas disponíveis"
   }
 }

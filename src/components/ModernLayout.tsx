@@ -26,6 +26,7 @@ import {
 import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
 import { ActivityNotificationButton } from './ActivityNotificationButton';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 type ModernLayoutProps = {
   children: React.ReactNode;
@@ -247,6 +248,8 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                 </p>
               </div>
 
+              <LanguageSwitcher collapsed={false} />
+
               {/* Notificações */}
               <ActivityNotificationButton
                 isMaster={currentRole === 'super_admin' || currentRole === 'support' || currentRole === 'admin'}
@@ -270,6 +273,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                 )}
               </div>
               <ActivityNotifications />
+              <LanguageSwitcher collapsed />
             </div>
           )}
           

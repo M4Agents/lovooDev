@@ -1,0 +1,47 @@
+{
+  "brand": {
+    "logoAlt": "Lovoo CRM Logo",
+    "tagline": "Optimized Leads. Sales Flying."
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "chat": "Chat",
+    "salesFunnel": "Sales funnel",
+    "leads": "Leads",
+    "calendar": "Calendar",
+    "automations": "Automations",
+    "companies": "Companies",
+    "mediaLibrary": "Media library",
+    "reports": "Reports",
+    "plans": "Plans",
+    "settings": "Settings"
+  },
+  "impersonation": {
+    "viewingPrefix": "You are viewing as:",
+    "originalUser": "(Original: {{email}})",
+    "backToOriginal": "Back to original"
+  },
+  "profile": {
+    "avatarFallbackName": "User"
+  },
+  "actions": {
+    "signOut": "Sign out"
+  },
+  "mobile": {
+    "openMenuAriaLabel": "Open menu"
+  },
+  "realtime": {
+    "activeVisitors_one": "{{count}} active visitor",
+    "activeVisitors_other": "{{count}} active visitors"
+  },
+  "notifications": {
+    "sidebarLink": "Notifications"
+  },
+  "language": {
+    "sectionLabel": "Language",
+    "selectorAriaLabel": "Choose interface language",
+    "optionTitle": "{{name}} — {{code}}",
+    "collapsedToggleAriaLabel": "Choose language",
+    "collapsedMenuAriaLabel": "Available languages"
+  }
+}

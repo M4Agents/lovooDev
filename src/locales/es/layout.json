@@ -1,0 +1,47 @@
+{
+  "brand": {
+    "logoAlt": "Logo Lovoo CRM",
+    "tagline": "Leads optimizados. Ventas en alza."
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "chat": "Chat",
+    "salesFunnel": "Embudo de ventas",
+    "leads": "Leads",
+    "calendar": "Calendario",
+    "automations": "Automatizaciones",
+    "companies": "Empresas",
+    "mediaLibrary": "Biblioteca",
+    "reports": "Informes",
+    "plans": "Planes",
+    "settings": "Configuración"
+  },
+  "impersonation": {
+    "viewingPrefix": "Está viendo como:",
+    "originalUser": "(Original: {{email}})",
+    "backToOriginal": "Volver al original"
+  },
+  "profile": {
+    "avatarFallbackName": "Usuario"
+  },
+  "actions": {
+    "signOut": "Salir"
+  },
+  "mobile": {
+    "openMenuAriaLabel": "Abrir menú"
+  },
+  "realtime": {
+    "activeVisitors_one": "{{count}} visitante activo",
+    "activeVisitors_other": "{{count}} visitantes activos"
+  },
+  "notifications": {
+    "sidebarLink": "Notificaciones"
+  },
+  "language": {
+    "sectionLabel": "Idioma",
+    "selectorAriaLabel": "Elegir idioma de la interfaz",
+    "optionTitle": "{{name}} — {{code}}",
+    "collapsedToggleAriaLabel": "Elegir idioma",
+    "collapsedMenuAriaLabel": "Idiomas disponibles"
+  }
+}
