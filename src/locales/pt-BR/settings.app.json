@@ -105,7 +105,7 @@
         "enabled": "Habilitar integração",
         "enabledHint": "Quando desligada, o sistema não usará a OpenAI para recursos de IA.",
         "model": "Modelo",
-        "modelHint": "Identificador do modelo configurado no painel (sincronizado com o banco).",
+        "modelHint": "Lista carregada da sua conta OpenAI (via servidor). Se a lista não carregar, você pode informar o ID do modelo manualmente.",
         "timeout": "Timeout (ms)",
         "timeoutHint": "Entre {{min}} e {{max}} milissegundos."
       },

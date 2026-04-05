@@ -105,7 +105,7 @@
         "enabled": "Enable integration",
         "enabledHint": "When off, the app will not use OpenAI for AI features.",
         "model": "Model",
-        "modelHint": "Model id as stored in settings (synced with the database).",
+        "modelHint": "List loaded from your OpenAI account (via server). If the list fails to load, you can type a model id manually.",
         "timeout": "Timeout (ms)",
         "timeoutHint": "Between {{min}} and {{max}} milliseconds."
       },

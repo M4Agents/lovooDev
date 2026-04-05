@@ -105,7 +105,7 @@
         "enabled": "Habilitar integración",
         "enabledHint": "Si está desactivada, la app no usará OpenAI para funciones de IA.",
         "model": "Modelo",
-        "modelHint": "Identificador del modelo guardado (sincronizado con la base de datos).",
+        "modelHint": "Lista cargada desde tu cuenta OpenAI (vía servidor). Si no carga, puedes escribir el ID del modelo manualmente.",
         "timeout": "Timeout (ms)",
         "timeoutHint": "Entre {{min}} y {{max}} milisegundos."
       },

@@ -63,6 +63,20 @@ export async function patchOpenAISettings(
   }
 }
 
+/** IDs de modelos (chat) retornados pela OpenAI para a conta da API key do servidor. */
+export async function fetchOpenAIModels(): Promise<string[]> {
+  const headers = await getAuthHeaders()
+  const res = await fetch('/api/integrations/openai/models', { headers })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || 'Erro ao listar modelos')
+  }
+  if (!data.ok || !Array.isArray(data.models)) {
+    throw new Error((data as { error?: string }).error || 'Resposta inválida')
+  }
+  return data.models as string[]
+}
+
 export async function postOpenAIConnectionTest(): Promise<void> {
   const headers = await getAuthHeaders()
   const res = await fetch('/api/integrations/openai/test', {

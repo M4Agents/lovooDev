@@ -2,11 +2,12 @@
 // Painel Configurações → Integrações → OpenAI
 // =====================================================
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Sparkles, Save, PlugZap } from 'lucide-react'
 import {
   fetchOpenAISettings,
+  fetchOpenAIModels,
   patchOpenAISettings,
   postOpenAIConnectionTest,
   type OpenAIIntegrationSettingsDTO,
@@ -29,13 +30,45 @@ export const OpenAIIntegrationPanel: React.FC = () => {
     model: 'gpt-4.1-mini',
     timeout_ms: 60_000,
   })
+  /** IDs retornados pela OpenAI; vazio = usar campo texto (fallback). */
+  const [openaiModelIds, setOpenaiModelIds] = useState<string[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const s = await fetchOpenAISettings()
+      const [s, modelsOutcome] = await Promise.all([
+        fetchOpenAISettings(),
+        fetchOpenAIModels()
+          .then((ids) => ({ ok: true as const, ids, err: null as string | null }))
+          .catch((e: unknown) => ({
+            ok: false as const,
+            ids: [] as string[],
+            err: e instanceof Error ? e.message : String(e),
+          })),
+      ])
       setForm(s)
+      setOpenaiModelIds(modelsOutcome.ids)
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f28051' },
+        body: JSON.stringify({
+          sessionId: 'f28051',
+          hypothesisId: 'H1-H3',
+          location: 'OpenAIIntegrationPanel.tsx:load',
+          message: 'openai_models_fetch_outcome',
+          data: {
+            modelsOk: modelsOutcome.ok,
+            count: modelsOutcome.ids.length,
+            sample: modelsOutcome.ids.slice(0, 8),
+            err: modelsOutcome.err,
+            savedModel: s.model,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : t('integrations.openai.errors.load'))
     } finally {
@@ -46,6 +79,13 @@ export const OpenAIIntegrationPanel: React.FC = () => {
   useEffect(() => {
     void load()
   }, [load])
+
+  const modelSelectOptions = useMemo(() => {
+    const m = form.model.trim()
+    const set = new Set(openaiModelIds)
+    if (m) set.add(m)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [openaiModelIds, form.model])
 
   const handleSave = async () => {
     setSaveMessage(null)
@@ -141,13 +181,27 @@ export const OpenAIIntegrationPanel: React.FC = () => {
           <label className="block text-sm font-medium text-slate-700 mb-1">
             {t('integrations.openai.fields.model')}
           </label>
-          <input
-            type="text"
-            value={form.model}
-            onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-            autoComplete="off"
-          />
+          {openaiModelIds.length > 0 ? (
+            <select
+              value={form.model}
+              onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white"
+            >
+              {modelSelectOptions.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={form.model}
+              onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+              autoComplete="off"
+            />
+          )}
           <p className="text-xs text-slate-500 mt-1">{t('integrations.openai.fields.modelHint')}</p>
         </div>
         <div>
