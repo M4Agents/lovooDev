@@ -6,9 +6,9 @@
 // o cliente não pode enviá-los (body só: enabled, model, timeout_ms).
 // =====================================================
 
-import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth'
-import { PARENT_COMPANY_ID } from '../../lib/openai/config'
-import { fetchParentOpenAISettings, OPENAI_PROVIDER } from '../../lib/openai/settingsDb'
+import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
+import { PARENT_COMPANY_ID } from '../../lib/openai/config.js'
+import { fetchParentOpenAISettings, OPENAI_PROVIDER } from '../../lib/openai/settingsDb.js'
 
 /** Alinhado à constraint integration_settings_timeout_positive no banco */
 const TIMEOUT_MS_MIN = 1000

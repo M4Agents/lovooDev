@@ -5,10 +5,10 @@
 // =====================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getOpenAIClient } from './client'
-import { isOpenAIApiKeyConfigured } from './config'
-import { fetchParentOpenAISettings, fetchParentOpenAISettingsForSystem } from './settingsDb'
-import { logOpenAIEvent } from './log'
+import { getOpenAIClient } from './client.js'
+import { isOpenAIApiKeyConfigured } from './config.js'
+import { fetchParentOpenAISettings, fetchParentOpenAISettingsForSystem } from './settingsDb.js'
+import { logOpenAIEvent } from './log.js'
 
 export type ConnectionTestResult = {
   ok: boolean

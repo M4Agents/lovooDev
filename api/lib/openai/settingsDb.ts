@@ -9,7 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { PARENT_COMPANY_ID } from './config'
+import { PARENT_COMPANY_ID } from './config.js'
 
 export const OPENAI_PROVIDER = 'openai' as const
 

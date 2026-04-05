@@ -4,8 +4,8 @@
 // Resposta de erro genérica — sem mensagens brutas da API OpenAI
 // =====================================================
 
-import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth'
-import { runOpenAIConnectionTest } from '../../lib/openai/gate'
+import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
+import { runOpenAIConnectionTest } from '../../lib/openai/gate.js'
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json')

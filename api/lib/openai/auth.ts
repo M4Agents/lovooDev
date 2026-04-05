@@ -10,7 +10,7 @@ import {
   getSupabasePublicEnv,
   PARENT_COMPANY_ID,
   isManageOpenAIIntegrationRole,
-} from './config'
+} from './config.js'
 
 export type ManageOpenAIAuthSuccess = {
   ok: true

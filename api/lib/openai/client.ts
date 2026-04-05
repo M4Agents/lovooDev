@@ -4,7 +4,7 @@
 // =====================================================
 
 import OpenAI from 'openai'
-import { OPENAI_CLIENT_MAX_TIMEOUT_MS } from './config'
+import { OPENAI_CLIENT_MAX_TIMEOUT_MS } from './config.js'
 
 let cached: OpenAI | null | undefined
 
