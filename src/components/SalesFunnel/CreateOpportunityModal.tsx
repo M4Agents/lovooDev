@@ -184,6 +184,23 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
       .catch(() => setFullOpportunity(null))
   }, [isOpen, isEditMode, opportunityData?.id])
 
+  // Edição: totais/modo atualizados pela seção de itens (ex.: troca automática para "itens") → refletir no campo Valor
+  useEffect(() => {
+    if (!isEditMode || !isOpen || !fullOpportunity) return
+    const v = fullOpportunity.value ?? 0
+    setFormData((prev) => ({
+      ...prev,
+      value: v,
+      currency: fullOpportunity.currency ?? prev.currency,
+    }))
+    setValueDisplay(
+      v.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    )
+  }, [isEditMode, isOpen, fullOpportunity?.id, fullOpportunity?.value, fullOpportunity?.value_mode])
+
   useEffect(() => {
     if (!isOpen || !compositionEntitled || isEditMode || !company?.id) {
       setCatalogProducts([])
@@ -290,7 +307,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         // Modo de edição - atualizar oportunidade existente
         console.log('✏️ CreateOpportunityModal - Atualizando oportunidade:', opportunityData.id)
         const ent = await catalogApi.getOpportunityItemsEntitlement(company.id)
-        const manualMode = (opportunityData.value_mode ?? 'manual') === 'manual'
+        const manualMode =
+          (fullOpportunity?.value_mode ?? opportunityData.value_mode ?? 'manual') === 'manual'
         result = await funnelApi.updateOpportunity(
           opportunityData.id,
           {

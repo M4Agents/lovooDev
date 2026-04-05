@@ -117,6 +117,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
   }) => {
     setBusy(true)
     setError(null)
+    const wasManual = (opportunity.value_mode ?? 'manual') === 'manual'
     try {
       await funnelApi.opportunityAddItem({
         companyId,
@@ -127,6 +128,9 @@ export const OpportunityItemsSection: React.FC<Props> = ({
         discountType: payload.discountType,
         discountValue: payload.discountValue,
       })
+      if (wasManual) {
+        await funnelApi.opportunitySetValueMode(companyId, opportunity.id, 'items')
+      }
       await reload()
     } catch (err) {
       setError(resolveOpportunityCompositionErrorMessage(err, t, 'opportunityComposition.errors.generic'))
