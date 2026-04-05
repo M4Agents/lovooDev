@@ -40,9 +40,8 @@ function getAuthorizationHeader(req: OpenAIRequestLike): string | undefined {
 }
 
 /**
- * Garante: usuário autenticado, papel super_admin ou admin (src/types/user.ts),
- * e vínculo em company_users na empresa Pai.
- * Empresas filhas não possuem essa membership → 403.
+ * Garante: usuário autenticado e (vínculo admin/super_admin em company_users na empresa Pai
+ * OU dono legado: linha em companies com id = empresa Pai, user_id = auth e is_super_admin).
  */
 export async function assertCanManageOpenAIIntegration(
   req: OpenAIRequestLike
@@ -78,18 +77,30 @@ export async function assertCanManageOpenAIIntegration(
     .eq('company_id', PARENT_COMPANY_ID)
     .maybeSingle()
 
+  const role = membership?.role
+  if (role && isManageOpenAIIntegrationRole(role)) {
+    return { ok: true, userId: user.id, role, supabase }
+  }
+
+  const { data: legacyParentOwner } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('id', PARENT_COMPANY_ID)
+    .eq('user_id', user.id)
+    .eq('is_super_admin', true)
+    .maybeSingle()
+
+  if (legacyParentOwner) {
+    return { ok: true, userId: user.id, role: 'super_admin', supabase }
+  }
+
   if (membershipErr) {
     return { ok: false, status: 403, message: 'Acesso negado' }
   }
 
-  const role = membership?.role
   if (!role) {
     return { ok: false, status: 403, message: 'Acesso restrito à empresa matriz' }
   }
 
-  if (!isManageOpenAIIntegrationRole(role)) {
-    return { ok: false, status: 403, message: 'Permissão insuficiente' }
-  }
-
-  return { ok: true, userId: user.id, role, supabase }
+  return { ok: false, status: 403, message: 'Permissão insuficiente' }
 }

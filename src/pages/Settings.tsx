@@ -126,6 +126,7 @@ export const Settings: React.FC = () => {
       companyId: company?.id ?? null,
       expectedParentId: PARENT_COMPANY_ID_OPENAI,
       companyIdMatchesParent: company?.id === PARENT_COMPANY_ID_OPENAI,
+      companyIsLegacySuperAdmin: company?.is_super_admin === true,
       currentRole: currentRole ?? null,
       roleIsAdminOrSuperAdmin: currentRole === 'super_admin' || currentRole === 'admin',
       authLoading,
@@ -148,7 +149,7 @@ export const Settings: React.FC = () => {
         hypothesisId: 'H-openai-visibility',
       }),
     }).catch(() => {});
-  }, [company?.id, currentRole, authLoading, isLoadingCompany, canManageOpenAI]);
+  }, [company?.id, company?.is_super_admin, currentRole, authLoading, isLoadingCompany, canManageOpenAI]);
   // #endregion
 
   useEffect(() => {
