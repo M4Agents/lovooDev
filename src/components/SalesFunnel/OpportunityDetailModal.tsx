@@ -431,7 +431,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -545,8 +545,8 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 )}
               </div>
 
-              {/* Grid: Valor + Probabilidade */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Grid: Valor + Probabilidade (composição fica em bloco full-width abaixo) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                     <DollarSign className="w-3.5 h-3.5" />
@@ -567,16 +567,6 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                     </p>
                   )}
                 </div>
-
-                <OpportunityItemsSection
-                  companyId={companyId}
-                  opportunity={detailOpportunity}
-                  canEdit={opportunity.status === 'open'}
-                  onOpportunityUpdated={(o) => {
-                    setDetailOpportunity(o)
-                    onUpdate?.(o)
-                  }}
-                />
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -634,8 +624,20 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 </div>
               </div>
 
+              <div className="w-full min-w-0 pt-1">
+                <OpportunityItemsSection
+                  companyId={companyId}
+                  opportunity={detailOpportunity}
+                  canEdit={opportunity.status === 'open'}
+                  onOpportunityUpdated={(o) => {
+                    setDetailOpportunity(o)
+                    onUpdate?.(o)
+                  }}
+                />
+              </div>
+
               {/* Grid: Responsável + Previsão de fechamento */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
                     <User className="w-3.5 h-3.5" />
@@ -716,7 +718,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
 
               {/* Campos somente leitura */}
               {!editMode && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-gray-100">
                   {opportunity.source && (
                     <div>
                       <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
