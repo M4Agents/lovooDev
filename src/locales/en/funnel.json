@@ -1,0 +1,304 @@
+{
+  "header": {
+    "title": "Sales Pipeline"
+  },
+  "actions": {
+    "filters": "Filters",
+    "moreOptions": "More options",
+    "customize": "Customize",
+    "export": "Export",
+    "editFunnel": "Edit pipeline",
+    "newLead": "New lead"
+  },
+  "filters": {
+    "searchLabel": "Search",
+    "searchPlaceholder": "Name, email, phone...",
+    "tagsLabel": "Tags",
+    "tagsComingSoon": "(coming soon)",
+    "tagsAll": "All tags",
+    "tagsDisabledTitle": "Tag filtering will be available soon",
+    "originLabel": "Source",
+    "originAll": "All sources",
+    "originWhatsapp": "WhatsApp",
+    "originSite": "Website",
+    "originReferral": "Referral",
+    "periodLabel": "Period",
+    "periodAll": "All time",
+    "periodToday": "Today",
+    "periodWeek": "This week",
+    "periodMonth": "This month"
+  },
+  "states": {
+    "companyNotFound": "Company not found",
+    "loadingFunnels": "Loading pipelines...",
+    "retry": "Try again",
+    "selectFunnelTitle": "Select a pipeline",
+    "selectFunnelDescription": "Choose a sales pipeline to view leads",
+    "createFirstFunnel": "Create your first pipeline"
+  },
+  "board": {
+    "loading": "Loading pipeline...",
+    "errorTitle": "Error loading pipeline",
+    "emptyStagesTitle": "No stages found",
+    "emptyStagesDescription": "This pipeline has no stages configured.",
+    "column": {
+      "addOpportunityTitle": "Add opportunity",
+      "editStageTitle": "Edit stage",
+      "partialTotalTooltip": "Partial total: only opportunities already loaded in the column.",
+      "opportunityCount_one": "{{count}} opportunity",
+      "opportunityCount_other": "{{count}} opportunities",
+      "emptyTitle": "No opportunities in this stage",
+      "emptyHint": "Drag opportunities here",
+      "stageFooterWon": "✅ Won",
+      "stageFooterLost": "❌ Lost",
+      "showingLoaded": "Showing {{loaded}} of {{total}} opportunities",
+      "loadMoreLoading": "Loading...",
+      "loadMoreRemaining_one": "Load {{count}} remaining",
+      "loadMoreRemaining_other": "Load {{count}} remaining",
+      "loadMoreNext": "Load {{count}} more"
+    }
+  },
+  "selector": {
+    "placeholder": "Select a pipeline",
+    "hint": "Select a sales pipeline",
+    "defaultBadge": "Default",
+    "noFunnels": "No pipelines available",
+    "createFirstFunnel": "Create your first pipeline",
+    "createNew": "Create new pipeline"
+  },
+  "alerts": {
+    "savePreferencesError": "Could not save preferences. Please try again.",
+    "exportSelectFunnel": "Select a pipeline to export",
+    "exportNoLeads": "No leads found in this pipeline",
+    "exportError": "Error exporting data. Please try again."
+  },
+  "export": {
+    "csvHeaders": {
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "company": "Company",
+      "stage": "Current stage",
+      "dealValue": "Deal value",
+      "origin": "Source",
+      "entryDate": "Entry date",
+      "daysInStage": "Days in stage"
+    }
+  },
+  "form": {
+    "save": "Save",
+    "saving": "Saving...",
+    "savingEllipsis": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "edit": "Edit",
+    "create": "Create",
+    "updateChanges": "Save changes",
+    "loading": "Loading..."
+  },
+  "leadCard": {
+    "detailTooltip": "View details and journey",
+    "manageTagsTooltip": "Manage tags",
+    "lastContact": "Last contact: {{date}}",
+    "ownerFallback": "Owner"
+  },
+  "addLeadModal": {
+    "title": "Add lead to pipeline",
+    "searchPlaceholder": "Search by name, email, or phone...",
+    "emptySearch": "No leads found",
+    "emptyList": "No leads available",
+    "selectLead": "Select a lead",
+    "errorAdd": "Error adding lead",
+    "adding": "Adding...",
+    "submit": "Add lead"
+  },
+  "createOpportunity": {
+    "titleNew": "New opportunity",
+    "titleEdit": "Edit opportunity",
+    "leadLine": "Lead: {{name}}",
+    "errors": {
+      "companyRequired": "Company not identified",
+      "titleRequired": "Title is required",
+      "generic": "Error creating opportunity"
+    },
+    "fields": {
+      "title": "Opportunity title *",
+      "titlePlaceholder": "e.g. Product X sale",
+      "description": "Description",
+      "descriptionPlaceholder": "Details about the opportunity...",
+      "value": "Value",
+      "valuePlaceholder": "0.00",
+      "currencyIso": "Currency (ISO 4217)",
+      "currencyLocked": "(cannot be changed)",
+      "probability": "Probability (%)",
+      "expectedClose": "Expected close date",
+      "owner": "Owner",
+      "noOwner": "Unassigned",
+      "you": "You",
+      "source": "Source",
+      "sourcePlaceholder": "e.g. WhatsApp, Website, Referral"
+    },
+    "creating": "Creating...",
+    "createSubmit": "Create opportunity"
+  },
+  "closeOpportunity": {
+    "confirmWon": "Confirm win",
+    "confirmLost": "Confirm loss",
+    "closeDateTime": "Close date and time",
+    "saleValue": "Sale value ({{code}})",
+    "saleValueHint": "Will be saved as the final value for this opportunity.",
+    "lossReason": "Loss reason",
+    "optional": "(optional)",
+    "lossReasonPlaceholder": "e.g. price, competition, project cancelled...",
+    "errorGeneric": "Error closing opportunity",
+    "confirmWonBtn": "Confirm win",
+    "confirmLostBtn": "Confirm loss"
+  },
+  "reopenOpportunity": {
+    "title": "Reopen opportunity",
+    "statusWon": "Won",
+    "statusLost": "Lost",
+    "dateUnknown": "date not recorded",
+    "introPrefix": "This opportunity is marked as",
+    "introDate": " on {{date}}",
+    "willOpen": "When you confirm, it will return to",
+    "statusOpen": "Open",
+    "changesHeading": "What will change",
+    "change1": "Status will return to",
+    "change1b": "Open",
+    "change2": "Close date will be removed",
+    "change3": "Loss reason will be removed (if any)",
+    "preservedHeading": "What will be preserved",
+    "preserve1": "Previous close history (for reports)",
+    "preserve2": "Opportunity value",
+    "preserve3": "All lead data and contact info",
+    "errorGeneric": "Error reopening opportunity",
+    "confirmReopen": "Confirm reopen"
+  },
+  "editStage": {
+    "titleNew": "New stage",
+    "titleEdit": "Edit stage",
+    "name": "Stage name *",
+    "namePlaceholder": "e.g. Proposal sent",
+    "systemNameLocked": "System stages cannot be renamed",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe this stage...",
+    "color": "Stage color *",
+    "stageType": "Stage type *",
+    "stageTypeActive": "Active (in progress)",
+    "stageTypeWon": "Won (closed successfully)",
+    "stageTypeLost": "Lost (closed unsuccessfully)",
+    "hintActive": "Leads in this stage are in the sales process",
+    "hintWon": "Leads in this stage were converted to customers",
+    "hintLost": "Leads in this stage were not converted",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this stage? All leads will be moved to the first stage of the pipeline.",
+    "deleteYes": "Yes, delete",
+    "errorSave": "Error saving stage",
+    "errorDelete": "Error deleting stage",
+    "createSubmit": "Create stage"
+  },
+  "opportunityDetail": {
+    "tabs": {
+      "details": "Details",
+      "journey": "Journey",
+      "status": "Status"
+    },
+    "badge": {
+      "open": "Open",
+      "won": "Won",
+      "lost": "Lost"
+    },
+    "sectionEditing": "Editing opportunity",
+    "sectionInfo": "Opportunity information",
+    "fields": {
+      "title": "Title",
+      "titlePlaceholder": "Opportunity title",
+      "description": "Description",
+      "descriptionPlaceholder": "Opportunity description",
+      "value": "Value ({{currency}})",
+      "probability": "Probability",
+      "owner": "Owner",
+      "noOwner": "Unassigned",
+      "expectedClose": "Expected close",
+      "lossReason": "Loss reason",
+      "lossReasonPlaceholder": "Enter the loss reason",
+      "source": "Source",
+      "closedAt": "Closed on",
+      "createdAt": "Created on",
+      "updatedAt": "Updated on"
+    },
+    "statusTab": {
+      "title": "Status history",
+      "empty": "No status transition records."
+    },
+    "errors": {
+      "saveFailed": "Could not save. Please try again."
+    },
+    "timeline": {
+      "lossReason": "Reason: {{reason}}",
+      "valueLabel": "Value:",
+      "statusPrefix": "Status:"
+    }
+  },
+  "timeline": {
+    "unknownStage": "unknown stage",
+    "moveBadges": {
+      "funnelEntry": "Entry",
+      "stageChange": "Change",
+      "won": "Won",
+      "lost": "Lost",
+      "reopened": "Reopened"
+    },
+    "events": {
+      "enteredFunnel": "Entered pipeline",
+      "movedTo": "Moved to {{stage}}",
+      "closedWon": "Closed as won",
+      "closedLost": "Closed as lost",
+      "reopened": "Reopened"
+    },
+    "durationFmt": {
+      "seconds": "{{count}}s",
+      "minutes": "{{count}} min",
+      "hoursMinutes": "{{hours}}h {{minutes}} min",
+      "daysHoursMinutes": "{{days}}d {{hours}}h {{minutes}} min"
+    },
+    "badges": {
+      "current": "Current",
+      "reentry": "Re-entry"
+    },
+    "labels": {
+      "stagePrefix": "Stage:",
+      "entryAt": "Entry: {{datetime}}",
+      "exitAt": "Exit: {{datetime}}",
+      "inProgress": "In progress for {{duration}}",
+      "durationInStage": "{{duration}} in this stage",
+      "byUser": "By: {{name}}"
+    },
+    "userRemoved": "User removed",
+    "states": {
+      "errorPrefix": "Error loading history: {{message}}",
+      "emptyTitle": "No stage history available.",
+      "emptyHint": "History is recorded from the date this feature was enabled."
+    },
+    "currentStage": {
+      "title": "Current stage",
+      "timeRunning": "Time in progress",
+      "lessThanOneMinute": "Less than 1 min"
+    },
+    "summary": {
+      "title": "Journey summary",
+      "totalTime": "Total time in pipeline",
+      "stagesVisited": "Stages visited",
+      "reentries": "Re-entries",
+      "avgPerStage": "Average per stage",
+      "longestStage": "Longest stage (bottleneck)"
+    },
+    "sectionTitle": "Timeline",
+    "collapse": {
+      "showHidden_one": "Show {{count}} hidden event",
+      "showHidden_other": "Show {{count}} hidden events",
+      "collapse": "Collapse"
+    }
+  }
+}

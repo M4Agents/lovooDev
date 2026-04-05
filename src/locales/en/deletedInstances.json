@@ -1,0 +1,43 @@
+{
+  "header": {
+    "title": "Deleted Instances",
+    "description": "Manage WhatsApp instances that were deleted (soft delete)"
+  },
+  "actions": {
+    "refresh": "Refresh"
+  },
+  "error": {
+    "title": "Error",
+    "loadFailed": "Could not load deleted instances",
+    "restoreFailed": "Could not restore instance"
+  },
+  "empty": {
+    "title": "No deleted instances",
+    "description": "All your WhatsApp instances are active"
+  },
+  "table": {
+    "columns": {
+      "instance": "Instance",
+      "phone": "Phone",
+      "conversations": "Conversations",
+      "deletedAt": "Deleted at",
+      "status": "Status",
+      "actions": "Actions"
+    }
+  },
+  "instance": {
+    "phoneMissing": "No phone",
+    "statusDeleted": "Deleted"
+  },
+  "restore": {
+    "restoring": "Restoring...",
+    "action": "Restore"
+  },
+  "info": {
+    "title": "About deleted instances",
+    "bulletSoftDelete": "Deleted instances are hidden but can be restored",
+    "bulletConversations": "All conversations are preserved and remain accessible",
+    "bulletRestoredState": "When restored, the instance returns as \"disconnected\"",
+    "bulletReconnect": "You will need to reconnect the instance after restoring"
+  }
+}

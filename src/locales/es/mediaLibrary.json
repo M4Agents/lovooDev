@@ -1,0 +1,153 @@
+{
+  "states": {
+    "loadingCompany": "Cargando información de la empresa...",
+    "loadingFolders": "Cargando carpetas...",
+    "loadingFiles": "Cargando archivos...",
+    "processing": "Procesando..."
+  },
+  "header": {
+    "title": "Biblioteca de medios",
+    "subtitle": "Administre todos los archivos de su empresa"
+  },
+  "actions": {
+    "refresh": "Actualizar lista",
+    "newFolder": "Nueva carpeta",
+    "upload": "Subir",
+    "uploadDisabledTitle": "Seleccione una carpeta para subir",
+    "uploadEnabledTitle": "Subir archivos",
+    "deselectAll": "Desmarcar todos",
+    "bulkActions": "Acciones en lote",
+    "preview": "Ver",
+    "download": "Descargar",
+    "editFolder": "Editar carpeta",
+    "deleteFolder": "Eliminar carpeta"
+  },
+  "hints": {
+    "selectFolderForUpload": "Seleccione una carpeta para subir archivos"
+  },
+  "breadcrumb": {
+    "home": "Inicio"
+  },
+  "filters": {
+    "searchPlaceholder": "Buscar archivos...",
+    "allTypes": "Todos los tipos",
+    "images": "Imágenes",
+    "videos": "Vídeos",
+    "audio": "Audio",
+    "documents": "Documentos"
+  },
+  "sort": {
+    "name": "Nombre",
+    "date": "Fecha",
+    "size": "Tamaño"
+  },
+  "bulk": {
+    "selectedCount": "{{count}} archivo(s) seleccionado(s)"
+  },
+  "uploadModal": {
+    "title": "📤 Subida de archivo",
+    "noFolderTitle": "Ninguna carpeta seleccionada",
+    "noFolderDescription": "Para mantener el orden, seleccione una carpeta antes de subir.",
+    "createFolderCta": "Crear nueva carpeta"
+  },
+  "folderExplorer": {
+    "title": "Carpetas",
+    "libraryRoot": "Biblioteca",
+    "loading": "Cargando carpetas...",
+    "emptyTitle": "Ninguna carpeta creada",
+    "emptyHint": "Pulse \"Nueva carpeta\" para empezar",
+    "statsTotalFolders": "Total de carpetas:",
+    "statsTotalFiles": "Archivos totales:"
+  },
+  "fileGrid": {
+    "loading": "Cargando archivos...",
+    "emptyTitle": "Ningún archivo encontrado",
+    "emptyDescription": "Esta carpeta está vacía o no hay archivos que coincidan con los filtros.",
+    "uploadCta": "Subir",
+    "selectAll": "Seleccionar todos",
+    "selectedOfTotal": "{{selected}} de {{total}} seleccionados",
+    "filesCount_one": "{{count}} archivo",
+    "filesCount_other": "{{count}} archivos",
+    "previewUnavailable": "Vista previa no disponible para este tipo de archivo"
+  },
+  "folderManager": {
+    "titleNew": "Nueva carpeta",
+    "titleEdit": "Editar carpeta",
+    "nameLabel": "Nombre de la carpeta *",
+    "namePlaceholder": "Escriba el nombre de la carpeta...",
+    "iconLabel": "Ícono",
+    "descriptionLabel": "Descripción (opcional)",
+    "descriptionPlaceholder": "Describa el contenido de esta carpeta...",
+    "previewLabel": "Vista previa:",
+    "previewFallbackName": "Nombre de la carpeta",
+    "delete": "Eliminar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "create": "Crear carpeta",
+    "saving": "Guardando...",
+    "creating": "Creando...",
+    "validationNameRequired": "El nombre de la carpeta es obligatorio",
+    "validationInvalid": "Datos no válidos",
+    "errorSave": "Error al guardar la carpeta",
+    "errorDelete": "Error al eliminar la carpeta",
+    "confirmDelete": "¿Seguro que desea eliminar la carpeta \"{{name}}\"?\n\nEsta acción no se puede deshacer."
+  },
+  "mediaActions": {
+    "header": "Acciones en lote",
+    "selectionTitle": "Acciones en lote",
+    "selectionSubtitle": "{{count}} archivo(s) seleccionado(s)",
+    "moveTitle": "Mover archivos",
+    "moveDescription": "Mover a otra carpeta",
+    "downloadTitle": "Descargar archivos",
+    "downloadDescription": "Descargar como ZIP",
+    "deleteTitle": "Eliminar archivos",
+    "deleteDescription": "Eliminar permanentemente",
+    "moveHeading": "Mover {{count}} archivo(s)",
+    "destinationLabel": "Carpeta de destino",
+    "destinationPlaceholder": "Seleccione una carpeta...",
+    "destinationRoot": "📁 Biblioteca (raíz)",
+    "confirmTitle": "Confirmar acción",
+    "confirmIntro": "Está a punto de {{verb}} {{count}} archivo(s).",
+    "verbMove": "mover",
+    "verbDelete": "eliminar",
+    "verbDownload": "descargar",
+    "destinationLine": "Destino: {{name}}",
+    "rootLibrary": "Biblioteca (raíz)",
+    "deleteWarning": "⚠️ ¡Esta acción no se puede deshacer!",
+    "errorSelectDestination": "Seleccione una carpeta de destino",
+    "errorMove": "Error al mover archivos",
+    "errorDelete": "Error al eliminar archivos",
+    "errorDownload": "Error al descargar archivos",
+    "confirmDeleteMany": "¿Seguro que desea eliminar {{count}} archivo(s)?\n\nEsta acción no se puede deshacer.",
+    "resultSuccess": "¡Acción completada!",
+    "resultPartial": "Acción completada parcialmente",
+    "processed": "Procesados: {{count}}",
+    "failed": "Fallidos: {{count}}",
+    "errorsHeading": "Errores:",
+    "back": "Volver",
+    "cancel": "Cancelar",
+    "executeMove": "Mover",
+    "executeDelete": "Eliminar",
+    "executeDownload": "Descargar"
+  },
+  "editFolderModal": {
+    "title": "✏️ Editar carpeta",
+    "nameLabel": "Nombre de la carpeta *",
+    "namePlaceholder": "Escriba el nombre de la carpeta",
+    "iconLabel": "Ícono",
+    "descriptionLabel": "Descripción",
+    "descriptionPlaceholder": "Descripción opcional de la carpeta",
+    "cancel": "Cancelar",
+    "save": "Guardar cambios",
+    "alertError": "Error al editar la carpeta: {{message}}"
+  },
+  "deleteFolderModal": {
+    "title": "🗑️ Eliminar carpeta",
+    "cannotDeleteTitle": "No se puede eliminar",
+    "warningTitle": "Atención",
+    "warningBody": "Esta acción no se puede deshacer. La carpeta se eliminará permanentemente.",
+    "cancel": "Cancelar",
+    "confirm": "Eliminar carpeta",
+    "connectionError": "Error de conexión al eliminar la carpeta"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "alerts": {
+    "companyNotFound": "❌ Error: Empresa no encontrada",
+    "countryInvalid": "❌ País: use ISO alpha-2 en mayúsculas (ej.: BR) o déjelo en blanco.",
+    "saveSuccess": "✅ Configuración guardada.\n\nRecargue la página si algo no se actualiza de inmediato.",
+    "saveError": "❌ Error al guardar la configuración"
+  },
+  "timezone": {
+    "sectionTitle": "Zona horaria",
+    "sectionDescription": "Defina la zona horaria de su empresa. Todas las fechas y horas del sistema se mostrarán en esta zona.",
+    "commonLabel": "⭐ Zonas horarias más usadas",
+    "seeAll": "🌍 Ver todas las zonas horarias del mundo",
+    "allLabel": "🌍 Todas las zonas horarias",
+    "backToSuggestions": "← Volver a sugerencias",
+    "currentTimeLabel": "🕐 Hora actual en la zona seleccionada:",
+    "timezoneCodePrefix": "Zona horaria:",
+    "infoBold": "ℹ️ Información:",
+    "infoRest": "Tras cambiar la zona horaria, todas las fechas y horas se mostrarán en la nueva zona. Los datos en la base permanecen en UTC (estándar internacional). Recargue la página tras guardar para aplicar los cambios."
+  },
+  "currency": {
+    "sectionTitle": "Moneda y región",
+    "sectionDescription": "Moneda predeterminada para <strong>nuevas oportunidades</strong>. No hay conversión automática entre monedas. El país es opcional y solo de referencia (no define la moneda).",
+    "defaultLabel": "Moneda predeterminada (ISO 4217)",
+    "countryLabel": "País (ISO 3166-1 alpha-2, opcional)",
+    "countryPlaceholder": "Ej.: BR",
+    "countryHintInvalid": "Dos letras mayúsculas o vacío."
+  },
+  "actions": {
+    "save": "Guardar configuración",
+    "saving": "Guardando...",
+    "cancel": "Cancelar"
+  },
+  "timezones": {
+    "regions": {
+      "brazil": "Brasil",
+      "latam": "América Latina",
+      "northAmerica": "América del Norte",
+      "europe": "Europa",
+      "asia": "Asia",
+      "oceania": "Oceanía"
+    },
+    "labels": {
+      "saoPaulo": "🇧🇷 Brasil - São Paulo (UTC-3)",
+      "manaus": "🇧🇷 Brasil - Manaus (UTC-4)",
+      "fortaleza": "🇧🇷 Brasil - Fortaleza (UTC-3)",
+      "buenosAires": "🇦🇷 Argentina - Buenos Aires (UTC-3)",
+      "santiago": "🇨🇱 Chile - Santiago (UTC-3)",
+      "lima": "🇵🇪 Perú - Lima (UTC-5)",
+      "bogota": "🇨🇴 Colombia - Bogotá (UTC-5)",
+      "mexicoCity": "🇲🇽 México - Ciudad de México (UTC-6)",
+      "newYork": "🇺🇸 EE. UU. - Nueva York (UTC-5)",
+      "chicago": "🇺🇸 EE. UU. - Chicago (UTC-6)",
+      "losAngeles": "🇺🇸 EE. UU. - Los Ángeles (UTC-8)",
+      "toronto": "🇨🇦 Canadá - Toronto (UTC-5)",
+      "lisbon": "🇵🇹 Portugal - Lisboa (UTC+0)",
+      "madrid": "🇪🇸 España - Madrid (UTC+1)",
+      "paris": "🇫🇷 Francia - París (UTC+1)",
+      "london": "🇬🇧 Reino Unido - Londres (UTC+0)",
+      "berlin": "🇩🇪 Alemania - Berlín (UTC+1)",
+      "rome": "🇮🇹 Italia - Roma (UTC+1)",
+      "tokyo": "🇯🇵 Japón - Tokio (UTC+9)",
+      "shanghai": "🇨🇳 China - Shanghái (UTC+8)",
+      "dubai": "🇦🇪 EAU - Dubái (UTC+4)",
+      "singapore": "🇸🇬 Singapur (UTC+8)",
+      "sydney": "🇦🇺 Australia - Sídney (UTC+10)",
+      "auckland": "🇳🇿 Nueva Zelanda - Auckland (UTC+12)"
+    }
+  }
+}

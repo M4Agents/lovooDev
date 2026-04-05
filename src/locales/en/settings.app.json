@@ -1,0 +1,992 @@
+{
+  "header": {
+    "title": "Settings",
+    "subtitle": "Manage your account settings"
+  },
+  "tabs": {
+    "integrations": "Integrations",
+    "users": "Users",
+    "trackingSite": "Tracking Site",
+    "companyData": "Company data",
+    "system": "System",
+    "usersManagement": "User management",
+    "userProfiles": "User profiles",
+    "companyMain": "Main details",
+    "companyAddress": "Address",
+    "companyContacts": "Contacts",
+    "companyDomains": "Domains & URLs"
+  },
+  "integrationsNav": {
+    "whatsapp": "WhatsApp",
+    "api": "API",
+    "webhookAdvanced": "Advanced webhook",
+    "salesFunnel": "Sales funnel"
+  },
+  "integrations": {
+    "cards": {
+      "whatsapp": {
+        "badge": "3 features",
+        "description": "WhatsApp automations and integrations"
+      },
+      "api": {
+        "badge": "Active",
+        "description": "Receive data from forms"
+      },
+      "webhookAdvanced": {
+        "badge": "Configurable",
+        "description": "Send data automatically"
+      },
+      "salesFunnel": {
+        "badge": "REST API",
+        "description": "Move leads between stages via API"
+      }
+    },
+    "whatsappNav": {
+      "life": {
+        "title": "WhatsApp Life",
+        "subtitle": "Local connection"
+      },
+      "cloudApi": {
+        "title": "Cloud API",
+        "subtitle": "Official API"
+      },
+      "templates": {
+        "title": "Templates",
+        "subtitle": "Templates"
+      }
+    },
+    "tabs": {
+      "whatsappLife": "WhatsApp Life",
+      "cloudApi": "Cloud API",
+      "templates": "Templates"
+    },
+    "placeholders": {
+      "cloudApi": {
+        "title": "🚧 WhatsApp Cloud API — In development",
+        "subtitle": "Official WhatsApp Business Cloud API",
+        "body": "Feature in development. Soon you will be able to use the official WhatsApp Business API for bulk sends and automations."
+      },
+      "messageTemplates": {
+        "title": "🚧 Message templates — In development",
+        "subtitle": "Register and manage WhatsApp message templates",
+        "body": "Feature in development. Soon you will be able to create and manage message templates for WhatsApp automations."
+      }
+    },
+    "apiDoc": {
+      "title": "📖 API documentation",
+      "subtitle": "Open the full developer guide with code examples and technical setup",
+      "actions": {
+        "openDocs": "View full documentation"
+      }
+    },
+    "webhookAdvancedIntro": {
+      "title": "Advanced webhook — Automatic triggers",
+      "subtitle": "Configure webhooks that fire automatically when specific events occur",
+      "calloutTitle": "🚀 Full system",
+      "calloutBody": "Configure webhooks that fire automatically when specific events occur in the system (e.g. lead converted). Unlike a simple webhook, the system sends data to you automatically."
+    },
+    "states": {
+      "inDevelopment": "In development"
+    },
+    "actions": {
+      "copy": "Copy",
+      "loading": "Loading..."
+    },
+    "apiLeads": {
+      "title": "Leads API",
+      "subtitle": "Create leads automatically from any form",
+      "urlLabel": "🚀 Ultra-simple URL for leads",
+      "urlHint": "Send any JSON and we create the lead automatically!",
+      "apiKeyLabel": "🔑 Your API key (include in JSON)",
+      "apiKeyHelp": "Use this key in the \"api_key\" field of your JSON to identify your company",
+      "howToTitle": "How to use (3 steps):",
+      "howToStep1": "Point your form to POST to the URL above",
+      "howToStep2": "Include your API key + form data as JSON",
+      "howToStep3": "Done! The lead will be created automatically",
+      "hybridTitle": "Hybrid system V5:",
+      "hybridMethod": "Method:",
+      "hybridPost": "POST",
+      "hybridContentType": "Content-Type:",
+      "hybridJson": "application/json",
+      "hybridStandardTitle": "Standard fields (by name):",
+      "hybridCustomTitle": "Custom fields (by ID):",
+      "exampleTitle": "Usage example:",
+      "hybridFooter": "Hybrid system: Blue fields are standard (by name), purple fields are custom (by numeric ID)!",
+      "quickTestTitle": "Quick test:",
+      "quickTestHint": "Click the button below to test if the webhook is working:",
+      "testing": "Testing...",
+      "testWebhook": "Test webhook",
+      "testSuccess": "Success! Test lead created: {{leadId}}",
+      "testErrorLabel": "Error:",
+      "tooltips": {
+        "hideApiKey": "Hide API key",
+        "showApiKey": "Show API key"
+      }
+    },
+    "webhookAdvanced": {
+      "form": {
+        "titleNew": "➕ New webhook configuration",
+        "titleEdit": "✏️ Edit webhook configuration",
+        "cancelEdit": "Cancel editing",
+        "configName": "Configuration name *",
+        "configNamePlaceholder": "E.g. Converted lead webhook",
+        "webhookUrl": "Webhook URL *",
+        "webhookUrlPlaceholder": "https://your-system.com/webhook",
+        "triggerEvent": "Trigger event",
+        "timeoutSeconds": "Timeout (seconds)",
+        "retryAttempts": "Retries",
+        "payloadSectionTitle": "Payload settings",
+        "payloadSectionHint": "Choose which fields to include in the webhook",
+        "payloadLeadTitle": "Lead data",
+        "payloadCompanyTitle": "Lead company",
+        "payloadCustomTitle": "Custom fields",
+        "payloadTipTitle": "Setup tip",
+        "payloadTipBody": "Select only the fields you need to keep the payload lean. The lead ID is always included automatically.",
+        "headersLabel": "Custom headers (JSON)",
+        "saving": "Saving...",
+        "submitCreate": "Create configuration",
+        "submitUpdate": "Update configuration",
+        "testing": "Testing...",
+        "testWebhook": "Test webhook"
+      },
+      "triggerOptions": {
+        "lead_created": "Lead created",
+        "lead_converted": "Lead converted",
+        "lead_updated": "Lead updated"
+      },
+      "fieldTypes": {
+        "text": "Text field",
+        "number": "Number field",
+        "date": "Date field",
+        "boolean": "Yes/no field",
+        "select": "Option list"
+      },
+      "payload": {
+        "lead": {
+          "name": { "label": "Name", "desc": "Lead full name" },
+          "email": { "label": "Email", "desc": "Email address" },
+          "phone": { "label": "Phone", "desc": "Phone number" },
+          "status": { "label": "Status", "desc": "Current lead status" },
+          "origin": { "label": "Origin", "desc": "Lead source" },
+          "interest": { "label": "Interest", "desc": "Lead interest" },
+          "responsible_user_id": { "label": "Owner", "desc": "Assigned user" },
+          "created_at": { "label": "Created at", "desc": "When the lead was created" },
+          "updated_at": { "label": "Last updated", "desc": "Last modification" }
+        },
+        "empresa": {
+          "company_name": { "label": "Company name", "desc": "Lead company name" },
+          "company_cnpj": { "label": "CNPJ", "desc": "Lead company CNPJ" },
+          "company_razao_social": { "label": "Legal name", "desc": "Company legal name" },
+          "company_nome_fantasia": { "label": "Trade name", "desc": "Company trade name" },
+          "company_telefone": { "label": "Phone", "desc": "Company phone" },
+          "company_email": { "label": "Email", "desc": "Company email" },
+          "company_site": { "label": "Website", "desc": "Company website" },
+          "company_cidade": { "label": "City", "desc": "Company city" },
+          "company_estado": { "label": "State", "desc": "Company state" },
+          "company_cep": { "label": "ZIP", "desc": "Company postal code" },
+          "company_endereco": { "label": "Address", "desc": "Full address" }
+        }
+      },
+      "configsTitle": "⚙️ Existing configurations",
+      "configsEmpty": "No configurations yet",
+      "configsEmptyHint": "Create your first configuration above",
+      "eventLabel": "Event:",
+      "statusLabel": "Status:",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "timeoutLabel": "Timeout:",
+      "retryLabel": "Retry:",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleting": "Deleting...",
+      "logsTitle": "📊 Delivery logs",
+      "logsSubtitle": "Webhook execution history",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "statsTotal": "Total",
+      "statsSuccess": "Successes",
+      "statsErrors": "Errors",
+      "statsLast24h": "Last 24h",
+      "filtersTitle": "🔍 Filters",
+      "filterStatus": "Status",
+      "filterAll": "All",
+      "filterSuccess": "Success",
+      "filterError": "Error",
+      "filterDateFrom": "Start date",
+      "filterDateTo": "End date",
+      "applyFilters": "Apply",
+      "clearFilters": "Clear",
+      "logsLoading": "Loading logs...",
+      "logsEmpty": "No delivery logs found",
+      "logsEmptyHint": "Logs will appear here when webhooks fire",
+      "logSuccess": "Success",
+      "logError": "Error",
+      "logCheckHint": "Check logs",
+      "viewPayload": "View payload",
+      "viewPayloadTitle": "View sent payload",
+      "responseLabel": "Response:",
+      "infoLabel": "Information:",
+      "debugInfoP1": "The webhook fired but is marked as error in the database.",
+      "debugInfoManual": "Manual test: The webhook responds correctly (200 OK) when tested directly.",
+      "debugInfoProblem": "Issue: The RPC function that writes logs needs to be updated.",
+      "footerSummary": "Showing {{count}} log(s) • Auto-refreshed • Live data",
+      "errorPrefix": "Error:",
+      "logDatePrefix": "Date:",
+      "logDateUnavailable": "Date unavailable"
+    },
+    "funnelApi": {
+      "title": "Sales funnel API",
+      "subtitle": "Move leads between funnel stages via webhook",
+      "endpointMappingLabel": "List funnels and stages",
+      "endpointMoveLabel": "Move lead between stages",
+      "apiKeyLabel": "Your API key",
+      "apiKeyHelp": "Use this key in the api_key parameter on every request",
+      "howToTitle": "How to use (3 steps):",
+      "howToStep1": "Call the mapping endpoint to get slugs",
+      "howToStep2": "POST with lead_id, funnel_slug, and stage_slug",
+      "howToStep3": "The lead will be moved automatically with history",
+      "techInfoTitle": "Technical details:",
+      "exampleMappingTitle": "Example 1: List funnels",
+      "exampleMoveTitle": "Example 2: Move lead (recommended)",
+      "advantageLabel": "Advantage:",
+      "exampleMoveFooter": "Works even if someone renames the stage",
+      "exampleSuccessTitle": "Success response:",
+      "externalIdsTitle": "SDR funnel external IDs:"
+    },
+    "modals": {
+      "documentation": {
+        "title": "Full API documentation",
+        "subtitle": "Complete developer guide"
+      },
+      "payload": {
+        "title": "Payload sent",
+        "urlLabel": "URL:",
+        "statusLabel": "Status:",
+        "executionTimeLabel": "Execution time:",
+        "dateLabel": "Date/time:",
+        "jsonTitle": "JSON payload",
+        "copyTitle": "Copy payload",
+        "close": "Close"
+      }
+    }
+  },
+  "company": {
+    "sections": {
+      "mainData": "Main details",
+      "address": "Address",
+      "contacts": "Contacts",
+      "domains": "Domains & URLs"
+    },
+    "account": {
+      "title": "Account information",
+      "typeLabel": "Type:",
+      "planLabel": "Plan:",
+      "types": {
+        "superAdmin": "Super Admin",
+        "childCompany": "Child company"
+      },
+      "plans": {
+        "basic": "Basic",
+        "pro": "Pro",
+        "enterprise": "Enterprise",
+        "undefined": "Not set"
+      }
+    },
+    "subsections": {
+      "mainResponsible": "Primary contact",
+      "financialContact": "Billing contact",
+      "socialNetworks": "Social networks"
+    },
+    "fields": {
+      "accountName": "Account name *",
+      "tradeName": "Trade name",
+      "cnpj": "CNPJ",
+      "legalName": "Legal name",
+      "stateRegistration": "State registration",
+      "municipalRegistration": "Municipal registration",
+      "companyType": "Company type",
+      "companySize": "Company size",
+      "activity": "Industry",
+      "foundedAt": "Founded on",
+      "mainSite": "Main website",
+      "companyDescription": "Company description",
+      "zipCode": "ZIP",
+      "street": "Street",
+      "number": "Number",
+      "neighborhood": "Neighborhood",
+      "city": "City",
+      "state": "State",
+      "complement": "Apt / suite",
+      "country": "Country",
+      "phonePrimary": "Primary phone",
+      "phoneSecondary": "Secondary phone",
+      "whatsapp": "WhatsApp",
+      "emailMain": "Primary email",
+      "emailCommercial": "Sales email",
+      "emailFinancial": "Billing email",
+      "emailSupport": "Support email",
+      "name": "Name",
+      "role": "Role",
+      "email": "Email",
+      "phone": "Phone",
+      "googleBusinessUrl": "Google Business Profile URL",
+      "secondaryDomains": "Secondary domains",
+      "landingPageUrls": "Landing page URLs",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "linkedin": "LinkedIn",
+      "twitter": "Twitter",
+      "youtube": "YouTube"
+    },
+    "placeholders": {
+      "accountName": "Your account name",
+      "tradeName": "Trade name",
+      "cnpj": "00.000.000/0000-00",
+      "legalName": "Company legal name",
+      "stateRegistration": "State registration",
+      "municipalRegistration": "Municipal registration",
+      "activity": "Industry",
+      "mainSite": "https://www.company.com",
+      "companyDescription": "Briefly describe your company...",
+      "zipCode": "00000-000",
+      "street": "Street, avenue, etc.",
+      "number": "Number",
+      "neighborhood": "Neighborhood",
+      "city": "City",
+      "complement": "Apt, suite, etc.",
+      "country": "Country",
+      "phone": "(11) 99999-9999",
+      "emailGeneric": "contact@company.com",
+      "emailCommercial": "sales@company.com",
+      "emailFinancial": "billing@company.com",
+      "emailSupport": "support@company.com",
+      "responsibleName": "Contact name",
+      "responsibleRole": "Contact role",
+      "financialContactName": "Billing contact name",
+      "emailShort": "email@company.com",
+      "googleBusiness": "https://goo.gl/maps/...",
+      "facebook": "https://facebook.com/...",
+      "instagram": "https://instagram.com/...",
+      "linkedin": "https://linkedin.com/company/...",
+      "twitter": "https://twitter.com/...",
+      "youtube": "https://youtube.com/...",
+      "secondaryDomains": "Enter secondary domains, one per line\nexample.com\nother-domain.com",
+      "landingPages": "Enter landing page URLs, one per line\nhttps://landing1.com\nhttps://landing2.com"
+    },
+    "helpers": {
+      "onePerLineDomains": "One domain per line",
+      "onePerLineUrls": "One URL per line"
+    },
+    "select": {
+      "choose": "Select",
+      "chooseState": "Select",
+      "companyType": {
+        "mei": "MEI",
+        "ltda": "Ltda",
+        "sa": "S.A.",
+        "eireli": "EIRELI",
+        "other": "Other"
+      },
+      "companySize": {
+        "micro": "Micro",
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large"
+      }
+    },
+    "brazilStates": {
+      "AC": "Acre",
+      "AL": "Alagoas",
+      "AP": "Amapá",
+      "AM": "Amazonas",
+      "BA": "Bahia",
+      "CE": "Ceará",
+      "DF": "Federal District",
+      "ES": "Espírito Santo",
+      "GO": "Goiás",
+      "MA": "Maranhão",
+      "MT": "Mato Grosso",
+      "MS": "Mato Grosso do Sul",
+      "MG": "Minas Gerais",
+      "PA": "Pará",
+      "PB": "Paraíba",
+      "PR": "Paraná",
+      "PE": "Pernambuco",
+      "PI": "Piauí",
+      "RJ": "Rio de Janeiro",
+      "RN": "Rio Grande do Norte",
+      "RS": "Rio Grande do Sul",
+      "RO": "Rondônia",
+      "RR": "Roraima",
+      "SC": "Santa Catarina",
+      "SP": "São Paulo",
+      "SE": "Sergipe",
+      "TO": "Tocantins"
+    },
+    "actions": {
+      "save": "Save",
+      "saving": "Saving...",
+      "saveMainData": "Save main details",
+      "saveAddress": "Save address",
+      "saveContacts": "Save contacts",
+      "saveDomains": "Save domains & URLs"
+    },
+    "messages": {
+      "saveSuccess": "Company details updated successfully!",
+      "saveError": "Could not save company details: {{message}}",
+      "saveErrorGeneric": "Could not save company details"
+    }
+  },
+  "users": {
+    "sections": {
+      "management": "User management",
+      "templates": "User templates",
+      "systemTemplates": "System templates",
+      "customTemplates": "Custom templates"
+    },
+    "subtitles": {
+      "management": "Manage users, roles, and company permissions",
+      "templates": "Manage profile templates for fast user onboarding"
+    },
+    "roles": {
+      "super_admin": "Super admin",
+      "support": "Support",
+      "admin": "Admin",
+      "partner": "Partner",
+      "manager": "Manager",
+      "seller": "Sales rep",
+      "user": "User"
+    },
+    "fields": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role"
+    },
+    "templateSelector": {
+      "label": "Profile template",
+      "optional": "(Optional)",
+      "loadError": "Could not load templates",
+      "defaultTitle": "Default {{role}}",
+      "defaultHint": "Use default permissions for role {{role}}",
+      "systemBadge": "System",
+      "basePrefix": "Base:",
+      "usageCount": "{{count}} uses",
+      "usedOn": "Used on {{date}}",
+      "emptyTitle": "No template available for role {{role}}",
+      "emptyHint": "Use default permissions or create a custom template",
+      "aboutTitle": "About templates:",
+      "aboutBullet1": "Templates apply custom permissions on top of the base role",
+      "aboutBullet2": "System templates cannot be edited",
+      "aboutBullet3": "You can create custom templates for your company"
+    },
+    "table": {
+      "columns": {
+        "user": "User",
+        "role": "Role",
+        "company": "Company",
+        "createdAt": "Created",
+        "actions": "Actions"
+      }
+    },
+    "companyType": {
+      "parent": "Parent company",
+      "client": "Client"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "notAvailable": "N/A",
+    "mockUser": "Mock user {{suffix}}",
+    "avatarAlt": "User",
+    "actions": {
+      "create": "New user",
+      "createFirst": "Create first user",
+      "retry": "Try again",
+      "edit": "Edit user",
+      "resendInvite": "Resend invite",
+      "deactivate": "Deactivate user",
+      "reactivate": "Reactivate user",
+      "delete": "Delete permanently",
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "discard": "Discard",
+      "saveChanges": "Save changes",
+      "newTemplate": "New template",
+      "useTemplate": "Use template",
+      "createFirstTemplate": "Create first template",
+      "viewPermissions": "View permissions",
+      "duplicateTemplate": "Duplicate template",
+      "editTemplate": "Edit template",
+      "deactivateTemplate": "Deactivate template",
+      "invite": "Invite",
+      "copy": "Copy",
+      "close": "Close",
+      "continue": "Continue",
+      "back": "Back"
+    },
+    "states": {
+      "loading": "Loading users...",
+      "loadError": "Could not load users",
+      "loadErrorTitle": "Load error",
+      "deactivateError": "Could not deactivate user",
+      "reactivateError": "Could not reactivate user",
+      "empty": "No users found",
+      "emptyGeneric": "No users to display",
+      "emptyWithCompany": "No users registered for company {{name}}",
+      "templatesLoadError": "Could not load templates",
+      "duplicateError": "Could not duplicate template",
+      "deactivateTemplateError": "Could not deactivate template",
+      "templatesEmpty": "No custom templates",
+      "templatesEmptyHint": "Create custom templates to speed up user creation"
+    },
+    "confirm": {
+      "deactivate": "🔒 DEACTIVATE USER\n\nDeactivate user {{id}}?\n\n• The user will be deactivated but remain in the system\n• They can be reactivated later\n• No data or history will be lost",
+      "reactivate": "✅ REACTIVATE USER\n\nReactivate user {{id}}?\n\n• The user will be active again\n• They can sign in as usual\n• All permissions will be restored",
+      "deactivateTemplate": "Deactivate this template?"
+    },
+    "summary": {
+      "activeUsersTitle": "Users system active",
+      "activeUsersBody": "{{count}} user(s) found. The app is using the multi-user-per-company model."
+    },
+    "templates": {
+      "badgePredefined": "Predefined",
+      "badgeSystem": "System",
+      "badgeCustom": "Custom",
+      "badgeChanged": "Changed",
+      "baseLabel": "Base: {{role}}",
+      "usageCount": "{{count}} uses",
+      "customCount": "{{count}} templates",
+      "visibilityForChildren": "Visible to child companies",
+      "visibilityOn": "Visible to child companies",
+      "visibilityOff": "Parent company only",
+      "visibilityHintOn": "Child companies can use this profile",
+      "visibilityHintOff": "Available only to the parent company",
+      "aboutTitle": "About templates:",
+      "aboutBullet1": "• System templates cannot be edited, only duplicated",
+      "aboutBullet2": "• Custom templates can be edited and deactivated",
+      "aboutBullet3": "• Using a template applies permissions on top of the base role",
+      "aboutBullet4": "• Templates help onboard users consistently",
+      "copySuffix": "Copy",
+      "copyDescriptionPrefix": "Copy of:",
+      "copyTag": "copy",
+      "messages": {
+        "savedCount": "{{count}} change(s) saved successfully!",
+        "discarded": "Changes discarded",
+        "saveVisibilityError": "Could not save settings"
+      }
+    },
+    "modals": {
+      "createUser": "New user",
+      "editUser": "Edit user",
+      "inviteUser": "Invite",
+      "deleteUser": "Permanent deletion",
+      "permissions": "View permissions",
+      "accessLink": "Access link",
+      "templateCreate": "New template",
+      "templateEdit": "Edit template"
+    },
+    "messages": {
+      "confirmDelete": "Delete {{name}}?",
+      "inviteSuccess": "Invite sent successfully",
+      "copyLink": "Copy link",
+      "linkCopied": "Link copied to clipboard!"
+    },
+    "roleDescriptions": {
+      "parent": {
+        "super_admin": "Full system access",
+        "admin": "Manages child companies",
+        "partner": "Manages own accounts"
+      },
+      "client": {
+        "admin": "Company settings",
+        "manager": "Leads and sales management",
+        "seller": "Own leads and chat"
+      }
+    },
+    "invite": {
+      "title": "Access link",
+      "subtitle": "Share with the user to activate their account",
+      "linkLabel": "Access link:",
+      "regenerate": "Generate new",
+      "generating": "Generating secure link...",
+      "fallbackGenerateError": "Could not generate the link. Try again.",
+      "connectionError": "Connection error while generating the link. Try again.",
+      "roleIdLine": "Role: {{role}} • ID: {{id}}...",
+      "copyTitle": "Copy link",
+      "openTitle": "Open link",
+      "howToTitle": "How to use:",
+      "howToStep1": "1. Copy the link above",
+      "howToStep2": "2. Send it to the user via WhatsApp, email, or another channel",
+      "howToStep3": "3. The user opens the link and sets a password",
+      "howToStep4": "4. After activation, they can sign in normally",
+      "linkExpires": "⚠️ The link expires in 1 hour.",
+      "footerCopy": "Copy link",
+      "footerCopied": "Copied!",
+      "footerClose": "Close"
+    },
+    "deleteModal": {
+      "title": "Permanent deletion",
+      "step1Heading": "Are you absolutely sure?",
+      "step1Before": "You are about to",
+      "step1Emphasis": "permanently delete",
+      "step1After": "the user:",
+      "warningTitle": "⚠️ WARNING: This action CANNOT be undone!",
+      "warningBullet1": "• The user will be fully removed from the system",
+      "warningBullet2": "• All data and history will be lost",
+      "warningBullet3": "• This information cannot be recovered",
+      "step2Heading": "Final confirmation",
+      "step2Instruction": "To confirm permanent deletion, type exactly:",
+      "confirmKeyword": "EXCLUIR",
+      "placeholder": "Type: EXCLUIR",
+      "wrongConfirm": "Confirmation text incorrect. Type exactly: EXCLUIR",
+      "deleteFailed": "Could not delete user",
+      "protectionIntro": "🛡️ User protected from deletion",
+      "protectionP1": "This user is still ACTIVE and cannot be deleted directly.",
+      "protectionStepsTitle": "📋 To delete safely, follow these steps:",
+      "protectionStep1": "1️⃣ First: Click the ORANGE (👤❌) button to DEACTIVATE the user",
+      "protectionStep2": "2️⃣ Then: Click the RED (🗑️) button to DELETE permanently",
+      "protectionFooter": "🔒 This prevents accidental deletion of active users.",
+      "protectionTip": "💡 Tip: Deactivated users can be reactivated; deleted users cannot be recovered.",
+      "continue": "Continue",
+      "back": "Back",
+      "deletePermanent": "Delete permanently",
+      "deleting": "Deleting..."
+    },
+    "permissionsView": {
+      "title": "View permissions",
+      "subtitle": "Full access profile details",
+      "typeLabel": "Type:",
+      "typeSystem": "System",
+      "typeCustom": "Custom",
+      "baseRoleLabel": "Base role:",
+      "tagsLabel": "Tags:",
+      "sections": {
+        "mainModules": "Main modules",
+        "specificActions": "Specific actions",
+        "limitations": "Limitations"
+      },
+      "modules": {
+        "dashboard": "Dashboard",
+        "dashboardDesc": "Main dashboard",
+        "leads": "Leads",
+        "leadsDesc": "Lead management",
+        "chat": "Chat",
+        "chatDesc": "Chat system",
+        "analytics": "Analytics",
+        "analyticsDesc": "Reports and metrics",
+        "settings": "Settings",
+        "settingsDesc": "General settings",
+        "companies": "Companies",
+        "companiesDesc": "Company management",
+        "users": "Users",
+        "usersDesc": "User management",
+        "financial": "Financial",
+        "financialDesc": "Financial module"
+      },
+      "actions": {
+        "createUsers": "Create users",
+        "editUsers": "Edit users",
+        "deleteUsers": "Delete users",
+        "impersonate": "Impersonate companies",
+        "viewAllLeads": "View all leads",
+        "editAllLeads": "Edit all leads",
+        "viewFinancial": "View financial data",
+        "editFinancial": "Edit financial data"
+      },
+      "limitations": {
+        "maxCompanies": "Max companies:",
+        "maxUsers": "Max users:",
+        "unlimited": "Unlimited",
+        "restrictedCompanies": "Restricted companies:",
+        "restrictedCount": "{{count}} company(ies) with restricted access"
+      },
+      "close": "Close"
+    },
+    "templateModal": {
+      "editTitle": "Edit template",
+      "createTitle": "New template",
+      "editSubtitle": "Change template settings",
+      "createSubtitle": "Create a custom template for users",
+      "basicInfo": "Basic information",
+      "nameLabel": "Template name *",
+      "namePlaceholder": "E.g. Senior sales rep",
+      "baseRoleLabel": "Base role *",
+      "baseRoleLockedHint": "Base role cannot be changed after creation",
+      "descriptionLabel": "Description *",
+      "descriptionPlaceholder": "Describe the purpose and traits of this template...",
+      "tagsLabel": "Tags (optional)",
+      "tagInputPlaceholder": "Type a tag and press Enter",
+      "addTag": "Add",
+      "validationName": "Name is required",
+      "validationDescription": "Description is required",
+      "companyUnknown": "Company not identified",
+      "saveError": "Could not save template",
+      "createButton": "Create template",
+      "editButton": "Save changes"
+    },
+    "userModal": {
+      "titleEdit": "Edit user",
+      "titleCreate": "New user",
+      "subtitleEdit": "Update user information",
+      "subtitleCreate": "Add a new user to the company",
+      "tabs": {
+        "info": "Details",
+        "password": "Password & access"
+      },
+      "errorLabel": "Error",
+      "successLabel": "Success",
+      "emailLabel": "User email",
+      "emailPlaceholder": "user@company.com",
+      "emailHint": "The user will receive an email invite to access the system",
+      "profilePhoto": "Profile photo",
+      "avatarAlt": "User",
+      "imageMaxSize": "Image must be at most 2MB",
+      "imageTypeOnly": "Only image files are allowed",
+      "changePhoto": "Change photo",
+      "choosePhoto": "Choose photo",
+      "removePhoto": "Remove",
+      "photoFormatsHint": "Accepted formats: JPG, PNG, GIF. Max 2MB.",
+      "accessProfile": "Access profile",
+      "accessLevelRole": "Access level (role)",
+      "selectProfile": "Select a profile...",
+      "optgroupSystem": "System profiles",
+      "optgroupCustom": "Custom profiles",
+      "fallbackRolesWarning": "⚠️ Using basic roles. Custom profiles are temporarily unavailable.",
+      "sendInvite": "Send email invite",
+      "sendInviteHint": "The user will get instructions to access the system",
+      "companySection": "Company",
+      "companyName": "Name:",
+      "companyType": "Type:",
+      "companyTypeParent": "Parent company",
+      "companyTypeClient": "Client",
+      "systemStatus": "System status",
+      "inviteByEmailTitle": "Email invite",
+      "internalUserTitle": "Internal user",
+      "inviteByEmailBody": "The user will receive an email with steps to activate the account and set a password.",
+      "inviteByEmailBodyNoFeature": "A user will be created and can be invited once email is configured.",
+      "internalUserBody": "An internal record will be created. For full access, enable \"Send email invite\".",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "User name",
+      "displayNameHint": "Name shown in the app",
+      "managePassword": "Manage password",
+      "resetPasswordTitle": "Reset password",
+      "resetPasswordDesc": "Email the user a password reset link",
+      "sending": "Sending...",
+      "sendResetEmail": "Send reset email",
+      "directPasswordTitle": "Set password directly",
+      "directPasswordDesc": "Set a new password without sending email",
+      "setPasswordButton": "Set password",
+      "newPasswordFormTitle": "Set new password",
+      "newPasswordPlaceholder": "New password (min. 6 characters)",
+      "confirmPasswordPlaceholder": "Confirm new password",
+      "minLengthOk": "At least 6 characters",
+      "passwordsMatch": "Passwords match",
+      "forceChangeTitle": "Force change on next sign-in",
+      "forceChangeOn": "User must change password on next login",
+      "forceChangeOff": "Password stays until changed again",
+      "changing": "Updating...",
+      "setTemporary": "Set temporary",
+      "changePassword": "Change password",
+      "resendInviteTitle": "Resend invite",
+      "resendInviteDesc": "Generate a new invite link for the user",
+      "resendInvite": "Resend invite",
+      "accountInfo": "Account information",
+      "accountEmail": "Email:",
+      "accountStatus": "Status:",
+      "statusActive": "🟢 Active",
+      "statusInactive": "⚪ Inactive",
+      "accountRole": "Role:",
+      "footerCreate": "Create user",
+      "messages": {
+        "emailRequired": "Email is required",
+        "companyUnknown": "Company not identified",
+        "invalidRole": "Role {{role}} is not valid for this company type",
+        "inviteLinkFailed": "User created, but the access link could not be generated. Open the user list and use \"Generate new link\" for this user.",
+        "inviteMessage": "Access link generated — share it with the user",
+        "compatMode": "User created in compatibility mode. Open the user list and use \"Generate new link\" to send access.",
+        "resetEmailSent": "Recovery email sent to {{email}}",
+        "resetEmailError": "Could not send recovery email",
+        "displayNameSuccess": "Name updated successfully",
+        "displayNameError": "Could not update name",
+        "resendSuccess": "New invite sent to {{email}}",
+        "resendError": "Could not resend invite",
+        "passwordMismatch": "Make sure the passwords match",
+        "passwordMinLength": "Password must be at least 6 characters",
+        "passwordTempSuccess": "Temporary password set. {{name}} must change it on next sign-in.",
+        "passwordChangedSuccess": "Password updated successfully for {{name}}.",
+        "passwordChangeError": "Could not change password",
+        "saveError": "Could not save user",
+        "unauthenticatedUpload": "Not authenticated for upload"
+      }
+    },
+    "inviteSuccess": {
+      "titleReal": "Invite sent!",
+      "titleSimulated": "Invite created!",
+      "subtitleReal": "Email sent successfully",
+      "subtitleSimulated": "Invite link generated",
+      "userEmailLabel": "User email",
+      "realSentTitle": "Real invite sent",
+      "realSentBody": "The user will receive an email with steps to activate the account.",
+      "simulatedTitle": "Simulated invite",
+      "simulatedDefaultMessage": "Configure Admin API for real email delivery.",
+      "testLinkLabel": "Test link:",
+      "linkCopiedShort": "Link copied!",
+      "nextSteps": "Next steps:",
+      "nextReal1": "• The user will receive the invite email",
+      "nextReal2": "• They must open the link to activate the account",
+      "nextReal3": "• After activation, they can sign in normally",
+      "nextSim1": "• Use the link above to test the acceptance page",
+      "nextSim2": "• Configure Admin API for real email delivery",
+      "nextSim3": "• The user was created in the system",
+      "understood": "Got it",
+      "copyTitle": "Copy link",
+      "openTitle": "Open link"
+    }
+  },
+  "tracking": {
+    "sections": {
+      "landingPages": "Landing pages",
+      "trackingCode": "Tracking code",
+      "webhookConversions": "Conversions webhook",
+      "verification": "Tracking tag verification",
+      "installGuide": "📖 Installation guide — LovoCRM Analytics"
+    },
+    "header": {
+      "title": "Landing pages",
+      "subtitle": {
+        "superAdmin": "All landing pages on the platform",
+        "company": "Manage your capture pages"
+      }
+    },
+    "stats": {
+      "totalPages": "Total pages",
+      "activePages": "Active pages",
+      "pausedPages": "Paused pages",
+      "conversionsToday": "Conversions today"
+    },
+    "fields": {
+      "name": "Name",
+      "url": "URL"
+    },
+    "placeholders": {
+      "name": "Capture page",
+      "url": "https://yoursite.com/lp"
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "actions": {
+      "newLandingPage": "New landing page",
+      "createFirst": "Create first landing page",
+      "pause": "Pause",
+      "activate": "Activate",
+      "edit": "Edit",
+      "code": "Code",
+      "verifyTag": "Verify tag",
+      "verifying": "Verifying...",
+      "delete": "Delete",
+      "analytics": "Analytics",
+      "analyticsPro": "Analytics Pro",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "installGuide": "Installation guide",
+      "understoodClose": "Got it, close"
+    },
+    "modals": {
+      "editLandingPage": "Edit landing page",
+      "newLandingPage": "New landing page"
+    },
+    "empty": {
+      "title": "No landing pages yet",
+      "description": "Create your first landing page to start tracking visitor behavior."
+    },
+    "trackingCode": {
+      "pasteInstructions": "Paste this code inside the {{bodyTagOpen}} tag, at the end of the body, immediately before {{bodyTagClose}} (never in the head):",
+      "helpBanner": "📖 Need help? See where to place this code",
+      "howToTitle": "How to use:",
+      "howToStep1": "1. Copy the code above",
+      "howToStep2": "2. Paste it before the </body> tag on your landing page",
+      "howToStep3": "3. Publish the page",
+      "howToStep4": "4. Data will start appearing in analytics",
+      "webhookIntro": "To record conversions (leads), point your form to this webhook:",
+      "requiredParams": "Required parameters:",
+      "formDataBullet": "Form data (name, email, phone, etc.)",
+      "exampleUsage": "Usage example:"
+    },
+    "verification": {
+      "title": "Tracking tag verification",
+      "installedTitle": "Tag installed correctly!",
+      "installedBody": "The tracking tag was found on {{pageName}}",
+      "notFoundTitle": "Tag not found",
+      "notFoundBody": "The tracking tag was not found or is not set up correctly",
+      "detailsTitle": "Verification details:",
+      "scriptFound": "LovoCRM script found",
+      "scriptNotFound": "LovoCRM script not found",
+      "codeFound": "Tracking code found",
+      "codeNotFound": "Tracking code not found",
+      "positionOk": "Script position OK (before </body>)",
+      "positionWarn": "Script position may be wrong",
+      "limitationTitle": "Verification limitation",
+      "corsTip": "💡 Tip: Open your landing page and check the browser console for M4Track-related errors.",
+      "howToFixTitle": "How to fix:",
+      "howToFixStep1": "Open your landing page HTML",
+      "howToFixStep2": "Make sure the tracking code is installed before the </body> tag",
+      "howToFixStep3": "Ensure the code matches what we provided (no edits)",
+      "howToFixStep4": "Publish changes and test again",
+      "metaPageLabel": "Page:",
+      "metaUrlLabel": "URL:"
+    },
+    "installGuide": {
+      "mainRuleTitle": "🎯 Main rule",
+      "mainRuleBody": "ALWAYS paste the code inside the <body> tag, at the end of the body, immediately before </body>. NEVER in the <head>",
+      "correctPositionTitle": "✅ Correct position",
+      "wrongPositionTitle": "❌ Wrong position",
+      "platformExamplesTitle": "🛠️ Examples by platform",
+      "platformWordPress": "WordPress",
+      "platformElementor": "Elementor/Divi",
+      "elementorStep1": "1. Settings → Advanced",
+      "elementorStep2": "2. \"Code before </body>\"",
+      "elementorStep3": "3. Paste the code there",
+      "elementorStep4": "4. Save and publish",
+      "platformHtml": "Plain HTML",
+      "platformGtm": "Google Tag Manager",
+      "gtmStep1": "1. Create a new \"Custom HTML\" tag",
+      "gtmStep2": "2. Paste the code in the tag",
+      "gtmStep3": "3. Trigger: \"All Pages\"",
+      "gtmStep4": "4. Publish the container",
+      "whyPositionTitle": "🚨 Why this position matters",
+      "bodyAdvantagesTitle": "✅ Benefits of end-of-body",
+      "bodyAdvantage1": "• DOM is fully loaded",
+      "bodyAdvantage2": "• Does not block page load",
+      "bodyAdvantage3": "• Access to all elements",
+      "bodyAdvantage4": "• Better performance",
+      "bodyAdvantage5": "• Better compatibility",
+      "headProblemsTitle": "❌ Head issues",
+      "headProblem1": "• DOM may not exist yet",
+      "headProblem2": "• Blocks loading",
+      "headProblem3": "• Can cause JavaScript errors",
+      "headProblem4": "• Poor performance",
+      "headProblem5": "• Slower perceived load",
+      "checklistTitle": "✅ Verification checklist",
+      "checklist1": "• ✅ Code is INSIDE <body>?",
+      "checklist2": "• ✅ Code is at the END of the body?",
+      "checklist3": "• ✅ NOT in <head>?",
+      "checklist4": "• ✅ Tracking code is correct?",
+      "checklist5": "• ✅ Script URL is correct?",
+      "checklist6": "• ✅ Page was published?",
+      "footerTip": "💡 Tip: After installing, use \"Verify tag\" to confirm it works"
+    },
+    "messages": {
+      "confirmDelete": "Delete this landing page?",
+      "errorNoCompany": "Error: Could not identify the company",
+      "saveError": "Could not save landing page: {{message}}",
+      "verifyGenericError": "Something went wrong during verification."
+    }
+  }
+}

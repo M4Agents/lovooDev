@@ -1,0 +1,992 @@
+{
+  "header": {
+    "title": "Configuración",
+    "subtitle": "Administra la configuración de tu cuenta"
+  },
+  "tabs": {
+    "integrations": "Integraciones",
+    "users": "Usuarios",
+    "trackingSite": "Tracking Site",
+    "companyData": "Datos de la empresa",
+    "system": "Sistema",
+    "usersManagement": "Gestión de usuarios",
+    "userProfiles": "Perfiles de usuario",
+    "companyMain": "Datos principales",
+    "companyAddress": "Dirección",
+    "companyContacts": "Contactos",
+    "companyDomains": "Dominios y URLs"
+  },
+  "integrationsNav": {
+    "whatsapp": "WhatsApp",
+    "api": "API",
+    "webhookAdvanced": "Webhook avanzado",
+    "salesFunnel": "Embudo de ventas"
+  },
+  "integrations": {
+    "cards": {
+      "whatsapp": {
+        "badge": "3 funciones",
+        "description": "Automatizaciones e integraciones de WhatsApp"
+      },
+      "api": {
+        "badge": "Activo",
+        "description": "Recibe datos de formularios"
+      },
+      "webhookAdvanced": {
+        "badge": "Configurable",
+        "description": "Envía datos automáticamente"
+      },
+      "salesFunnel": {
+        "badge": "API REST",
+        "description": "Mueve leads entre etapas vía API"
+      }
+    },
+    "whatsappNav": {
+      "life": {
+        "title": "WhatsApp Life",
+        "subtitle": "Conexión local"
+      },
+      "cloudApi": {
+        "title": "Cloud API",
+        "subtitle": "API oficial"
+      },
+      "templates": {
+        "title": "Plantillas",
+        "subtitle": "Plantillas"
+      }
+    },
+    "tabs": {
+      "whatsappLife": "WhatsApp Life",
+      "cloudApi": "Cloud API",
+      "templates": "Plantillas"
+    },
+    "placeholders": {
+      "cloudApi": {
+        "title": "🚧 WhatsApp Cloud API — En desarrollo",
+        "subtitle": "API oficial de WhatsApp Business Cloud",
+        "body": "Función en desarrollo. Pronto podrás usar la API oficial de WhatsApp Business para envíos masivos y automatizaciones."
+      },
+      "messageTemplates": {
+        "title": "🚧 Plantillas de mensajes — En desarrollo",
+        "subtitle": "Registro y gestión de plantillas de mensajes de WhatsApp",
+        "body": "Función en desarrollo. Pronto podrás crear y gestionar plantillas para automatizaciones de WhatsApp."
+      }
+    },
+    "apiDoc": {
+      "title": "📖 Documentación de la API",
+      "subtitle": "Abre la guía completa para desarrolladores con ejemplos de código y configuración técnica",
+      "actions": {
+        "openDocs": "Ver documentación completa"
+      }
+    },
+    "webhookAdvancedIntro": {
+      "title": "Webhook avanzado — Disparos automáticos",
+      "subtitle": "Configura webhooks que se disparan automáticamente cuando ocurren eventos concretos",
+      "calloutTitle": "🚀 Sistema completo",
+      "calloutBody": "Configura webhooks que se disparan automáticamente cuando ocurren eventos en el sistema (p. ej., lead convertido). A diferencia del webhook simple, aquí el sistema te envía los datos automáticamente."
+    },
+    "states": {
+      "inDevelopment": "En desarrollo"
+    },
+    "actions": {
+      "copy": "Copiar",
+      "loading": "Cargando..."
+    },
+    "apiLeads": {
+      "title": "API de leads",
+      "subtitle": "Crea leads automáticamente desde cualquier formulario",
+      "urlLabel": "🚀 URL ultra simple para leads",
+      "urlHint": "¡Envía cualquier JSON y creamos el lead automáticamente!",
+      "apiKeyLabel": "🔑 Tu API key (incluir en el JSON)",
+      "apiKeyHelp": "Usa esta clave en el campo \"api_key\" de tu JSON para identificar tu empresa",
+      "howToTitle": "Cómo usar (3 pasos):",
+      "howToStep1": "Configura tu formulario para enviar POST a la URL de arriba",
+      "howToStep2": "Incluye tu API key + datos del formulario en JSON",
+      "howToStep3": "¡Listo! El lead se creará automáticamente",
+      "hybridTitle": "Sistema híbrido V5:",
+      "hybridMethod": "Método:",
+      "hybridPost": "POST",
+      "hybridContentType": "Content-Type:",
+      "hybridJson": "application/json",
+      "hybridStandardTitle": "Campos estándar (por nombre):",
+      "hybridCustomTitle": "Campos personalizados (por ID):",
+      "exampleTitle": "Ejemplo de uso:",
+      "hybridFooter": "Sistema híbrido: los campos azules son estándar (por nombre), los morados son personalizados (por ID numérico).",
+      "quickTestTitle": "Prueba rápida:",
+      "quickTestHint": "Haz clic en el botón de abajo para probar si el webhook funciona:",
+      "testing": "Probando...",
+      "testWebhook": "Probar webhook",
+      "testSuccess": "¡Correcto! Lead de prueba creado: {{leadId}}",
+      "testErrorLabel": "Error:",
+      "tooltips": {
+        "hideApiKey": "Ocultar API key",
+        "showApiKey": "Mostrar API key"
+      }
+    },
+    "webhookAdvanced": {
+      "form": {
+        "titleNew": "➕ Nueva configuración de webhook",
+        "titleEdit": "✏️ Editar configuración de webhook",
+        "cancelEdit": "Cancelar edición",
+        "configName": "Nombre de la configuración *",
+        "configNamePlaceholder": "Ej.: Webhook lead convertido",
+        "webhookUrl": "URL del webhook *",
+        "webhookUrlPlaceholder": "https://tu-sistema.com/webhook",
+        "triggerEvent": "Evento de disparo",
+        "timeoutSeconds": "Tiempo de espera (segundos)",
+        "retryAttempts": "Reintentos",
+        "payloadSectionTitle": "Configuración del payload",
+        "payloadSectionHint": "Elige qué campos incluir en el webhook",
+        "payloadLeadTitle": "Datos del lead",
+        "payloadCompanyTitle": "Empresa del lead",
+        "payloadCustomTitle": "Campos personalizados",
+        "payloadTipTitle": "Consejo de configuración",
+        "payloadTipBody": "Selecciona solo los campos necesarios para optimizar el payload. El ID del lead siempre se incluye automáticamente.",
+        "headersLabel": "Encabezados personalizados (JSON)",
+        "saving": "Guardando...",
+        "submitCreate": "Crear configuración",
+        "submitUpdate": "Actualizar configuración",
+        "testing": "Probando...",
+        "testWebhook": "Probar webhook"
+      },
+      "triggerOptions": {
+        "lead_created": "Lead creado",
+        "lead_converted": "Lead convertido",
+        "lead_updated": "Lead actualizado"
+      },
+      "fieldTypes": {
+        "text": "Campo de texto",
+        "number": "Campo numérico",
+        "date": "Campo de fecha",
+        "boolean": "Campo sí/no",
+        "select": "Lista de opciones"
+      },
+      "payload": {
+        "lead": {
+          "name": { "label": "Nombre", "desc": "Nombre completo del lead" },
+          "email": { "label": "Correo", "desc": "Dirección de correo" },
+          "phone": { "label": "Teléfono", "desc": "Número de teléfono" },
+          "status": { "label": "Estado", "desc": "Estado actual del lead" },
+          "origin": { "label": "Origen", "desc": "Fuente del lead" },
+          "interest": { "label": "Interés", "desc": "Interés del lead" },
+          "responsible_user_id": { "label": "Responsable", "desc": "Usuario asignado" },
+          "created_at": { "label": "Fecha de creación", "desc": "Cuándo se creó el lead" },
+          "updated_at": { "label": "Última actualización", "desc": "Última modificación" }
+        },
+        "empresa": {
+          "company_name": { "label": "Nombre de la empresa", "desc": "Nombre de la empresa del lead" },
+          "company_cnpj": { "label": "CNPJ", "desc": "CNPJ de la empresa del lead" },
+          "company_razao_social": { "label": "Razón social", "desc": "Razón social de la empresa" },
+          "company_nome_fantasia": { "label": "Nombre comercial", "desc": "Nombre comercial de la empresa" },
+          "company_telefone": { "label": "Teléfono", "desc": "Teléfono de la empresa" },
+          "company_email": { "label": "Correo", "desc": "Correo de la empresa" },
+          "company_site": { "label": "Sitio web", "desc": "Sitio web de la empresa" },
+          "company_cidade": { "label": "Ciudad", "desc": "Ciudad de la empresa" },
+          "company_estado": { "label": "Estado", "desc": "Estado de la empresa" },
+          "company_cep": { "label": "CEP", "desc": "CEP de la empresa" },
+          "company_endereco": { "label": "Dirección", "desc": "Dirección completa" }
+        }
+      },
+      "configsTitle": "⚙️ Configuraciones existentes",
+      "configsEmpty": "Aún no hay configuraciones",
+      "configsEmptyHint": "Crea tu primera configuración arriba",
+      "eventLabel": "Evento:",
+      "statusLabel": "Estado:",
+      "statusActive": "Activo",
+      "statusInactive": "Inactivo",
+      "timeoutLabel": "Tiempo de espera:",
+      "retryLabel": "Reintentos:",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "deleting": "Eliminando...",
+      "logsTitle": "📊 Registros de envíos",
+      "logsSubtitle": "Historial de ejecuciones de webhooks",
+      "refresh": "Actualizar",
+      "refreshing": "Actualizando...",
+      "statsTotal": "Total",
+      "statsSuccess": "Correctos",
+      "statsErrors": "Errores",
+      "statsLast24h": "Últimas 24 h",
+      "filtersTitle": "🔍 Filtros",
+      "filterStatus": "Estado",
+      "filterAll": "Todos",
+      "filterSuccess": "Correcto",
+      "filterError": "Error",
+      "filterDateFrom": "Fecha inicio",
+      "filterDateTo": "Fecha fin",
+      "applyFilters": "Aplicar",
+      "clearFilters": "Limpiar",
+      "logsLoading": "Cargando registros...",
+      "logsEmpty": "No hay registros de envío",
+      "logsEmptyHint": "Los registros aparecerán aquí cuando se disparen webhooks",
+      "logSuccess": "Correcto",
+      "logError": "Error",
+      "logCheckHint": "Revisar registros",
+      "viewPayload": "Ver payload",
+      "viewPayloadTitle": "Ver payload enviado",
+      "responseLabel": "Respuesta:",
+      "infoLabel": "Información:",
+      "debugInfoP1": "El webhook se disparó pero está marcado como error en la base de datos.",
+      "debugInfoManual": "Prueba manual: el webhook responde correctamente (200 OK) al probarlo directamente.",
+      "debugInfoProblem": "Problema: la función RPC que registra los registros debe actualizarse.",
+      "footerSummary": "Mostrando {{count}} registro(s) • Actualizado automáticamente • Datos en tiempo real",
+      "errorPrefix": "Error:",
+      "logDatePrefix": "Fecha:",
+      "logDateUnavailable": "Fecha no disponible"
+    },
+    "funnelApi": {
+      "title": "API de embudo de ventas",
+      "subtitle": "Mueve leads entre etapas del embudo vía webhook",
+      "endpointMappingLabel": "Consultar embudos y etapas",
+      "endpointMoveLabel": "Mover lead entre etapas",
+      "apiKeyLabel": "Tu API key",
+      "apiKeyHelp": "Usa esta clave en el parámetro api_key de todas las solicitudes",
+      "howToTitle": "Cómo usar (3 pasos):",
+      "howToStep1": "Consulta el endpoint de mapeo para obtener los slugs",
+      "howToStep2": "Envía POST con lead_id, funnel_slug y stage_slug",
+      "howToStep3": "El lead se moverá automáticamente con historial",
+      "techInfoTitle": "Información técnica:",
+      "exampleMappingTitle": "Ejemplo 1: Consultar embudos",
+      "exampleMoveTitle": "Ejemplo 2: Mover lead (recomendado)",
+      "advantageLabel": "Ventaja:",
+      "exampleMoveFooter": "Funciona aunque se renombre la etapa",
+      "exampleSuccessTitle": "Respuesta correcta:",
+      "externalIdsTitle": "External IDs del embudo SDR:"
+    },
+    "modals": {
+      "documentation": {
+        "title": "Documentación completa de la API",
+        "subtitle": "Guía completa para desarrolladores"
+      },
+      "payload": {
+        "title": "Payload enviado",
+        "urlLabel": "URL:",
+        "statusLabel": "Estado:",
+        "executionTimeLabel": "Tiempo de ejecución:",
+        "dateLabel": "Fecha/hora:",
+        "jsonTitle": "Payload JSON",
+        "copyTitle": "Copiar payload",
+        "close": "Cerrar"
+      }
+    }
+  },
+  "company": {
+    "sections": {
+      "mainData": "Datos principales",
+      "address": "Dirección",
+      "contacts": "Contactos",
+      "domains": "Dominios y URLs"
+    },
+    "account": {
+      "title": "Información de la cuenta",
+      "typeLabel": "Tipo:",
+      "planLabel": "Plan:",
+      "types": {
+        "superAdmin": "Super Admin",
+        "childCompany": "Empresa hija"
+      },
+      "plans": {
+        "basic": "Básico",
+        "pro": "Pro",
+        "enterprise": "Enterprise",
+        "undefined": "Sin definir"
+      }
+    },
+    "subsections": {
+      "mainResponsible": "Responsable principal",
+      "financialContact": "Contacto financiero",
+      "socialNetworks": "Redes sociales"
+    },
+    "fields": {
+      "accountName": "Nombre de la cuenta *",
+      "tradeName": "Nombre comercial",
+      "cnpj": "CNPJ",
+      "legalName": "Razón social",
+      "stateRegistration": "Inscripción estatal",
+      "municipalRegistration": "Inscripción municipal",
+      "companyType": "Tipo de empresa",
+      "companySize": "Tamaño de la empresa",
+      "activity": "Sector / actividad",
+      "foundedAt": "Fecha de fundación",
+      "mainSite": "Sitio web principal",
+      "companyDescription": "Descripción de la empresa",
+      "zipCode": "CEP",
+      "street": "Calle / vía",
+      "number": "Número",
+      "neighborhood": "Barrio / colonia",
+      "city": "Ciudad",
+      "state": "Estado / provincia",
+      "complement": "Complemento",
+      "country": "País",
+      "phonePrimary": "Teléfono principal",
+      "phoneSecondary": "Teléfono secundario",
+      "whatsapp": "WhatsApp",
+      "emailMain": "Correo principal",
+      "emailCommercial": "Correo comercial",
+      "emailFinancial": "Correo financiero",
+      "emailSupport": "Correo de soporte",
+      "name": "Nombre",
+      "role": "Cargo",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "googleBusinessUrl": "URL de Google Business Profile",
+      "secondaryDomains": "Dominios secundarios",
+      "landingPageUrls": "URLs de landing pages",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "linkedin": "LinkedIn",
+      "twitter": "Twitter",
+      "youtube": "YouTube"
+    },
+    "placeholders": {
+      "accountName": "Nombre de tu cuenta",
+      "tradeName": "Nombre comercial",
+      "cnpj": "00.000.000/0000-00",
+      "legalName": "Razón social de la empresa",
+      "stateRegistration": "Inscripción estatal",
+      "municipalRegistration": "Inscripción municipal",
+      "activity": "Sector / actividad",
+      "mainSite": "https://www.empresa.com",
+      "companyDescription": "Describe brevemente tu empresa...",
+      "zipCode": "00000-000",
+      "street": "Calle, avenida, etc.",
+      "number": "Número",
+      "neighborhood": "Barrio / colonia",
+      "city": "Ciudad",
+      "complement": "Depto., oficina, etc.",
+      "country": "País",
+      "phone": "(11) 99999-9999",
+      "emailGeneric": "contacto@empresa.com",
+      "emailCommercial": "comercial@empresa.com",
+      "emailFinancial": "finanzas@empresa.com",
+      "emailSupport": "soporte@empresa.com",
+      "responsibleName": "Nombre del responsable",
+      "responsibleRole": "Cargo del responsable",
+      "financialContactName": "Nombre del contacto financiero",
+      "emailShort": "correo@empresa.com",
+      "googleBusiness": "https://goo.gl/maps/...",
+      "facebook": "https://facebook.com/...",
+      "instagram": "https://instagram.com/...",
+      "linkedin": "https://linkedin.com/company/...",
+      "twitter": "https://twitter.com/...",
+      "youtube": "https://youtube.com/...",
+      "secondaryDomains": "Escribe los dominios secundarios, uno por línea\nejemplo.com\notro-dominio.com",
+      "landingPages": "Escribe las URLs de las landing pages, una por línea\nhttps://landing1.com\nhttps://landing2.com"
+    },
+    "helpers": {
+      "onePerLineDomains": "Un dominio por línea",
+      "onePerLineUrls": "Una URL por línea"
+    },
+    "select": {
+      "choose": "Seleccionar",
+      "chooseState": "Selecciona",
+      "companyType": {
+        "mei": "MEI",
+        "ltda": "Ltda",
+        "sa": "S.A.",
+        "eireli": "EIRELI",
+        "other": "Otro"
+      },
+      "companySize": {
+        "micro": "Microempresa",
+        "small": "Pequeña",
+        "medium": "Mediana",
+        "large": "Grande"
+      }
+    },
+    "brazilStates": {
+      "AC": "Acre",
+      "AL": "Alagoas",
+      "AP": "Amapá",
+      "AM": "Amazonas",
+      "BA": "Bahia",
+      "CE": "Ceará",
+      "DF": "Distrito Federal",
+      "ES": "Espírito Santo",
+      "GO": "Goiás",
+      "MA": "Maranhão",
+      "MT": "Mato Grosso",
+      "MS": "Mato Grosso do Sul",
+      "MG": "Minas Gerais",
+      "PA": "Pará",
+      "PB": "Paraíba",
+      "PR": "Paraná",
+      "PE": "Pernambuco",
+      "PI": "Piauí",
+      "RJ": "Rio de Janeiro",
+      "RN": "Rio Grande do Norte",
+      "RS": "Rio Grande do Sul",
+      "RO": "Rondônia",
+      "RR": "Roraima",
+      "SC": "Santa Catarina",
+      "SP": "São Paulo",
+      "SE": "Sergipe",
+      "TO": "Tocantins"
+    },
+    "actions": {
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saveMainData": "Guardar datos principales",
+      "saveAddress": "Guardar dirección",
+      "saveContacts": "Guardar contactos",
+      "saveDomains": "Guardar dominios y URLs"
+    },
+    "messages": {
+      "saveSuccess": "¡Datos de la empresa actualizados correctamente!",
+      "saveError": "Error al guardar los datos de la empresa: {{message}}",
+      "saveErrorGeneric": "Error al guardar los datos de la empresa"
+    }
+  },
+  "users": {
+    "sections": {
+      "management": "Gestión de usuarios",
+      "templates": "Plantillas de usuario",
+      "systemTemplates": "Plantillas del sistema",
+      "customTemplates": "Plantillas personalizadas"
+    },
+    "subtitles": {
+      "management": "Administra usuarios, roles y permisos de la empresa",
+      "templates": "Administra plantillas de perfil para crear usuarios más rápido"
+    },
+    "roles": {
+      "super_admin": "Superadministrador",
+      "support": "Soporte",
+      "admin": "Administrador",
+      "partner": "Socio",
+      "manager": "Gerente",
+      "seller": "Vendedor",
+      "user": "Usuario"
+    },
+    "fields": {
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol"
+    },
+    "templateSelector": {
+      "label": "Plantilla de perfil",
+      "optional": "(Opcional)",
+      "loadError": "Error al cargar plantillas",
+      "defaultTitle": "{{role}} predeterminado",
+      "defaultHint": "Usar permisos predeterminados del rol {{role}}",
+      "systemBadge": "Sistema",
+      "basePrefix": "Base:",
+      "usageCount": "{{count}} usos",
+      "usedOn": "Usado el {{date}}",
+      "emptyTitle": "No hay plantilla disponible para el rol {{role}}",
+      "emptyHint": "Usa los permisos predeterminados o crea una plantilla personalizada",
+      "aboutTitle": "Sobre las plantillas:",
+      "aboutBullet1": "Las plantillas aplican permisos personalizados sobre el rol base",
+      "aboutBullet2": "Las plantillas del sistema no se pueden editar",
+      "aboutBullet3": "Puedes crear plantillas personalizadas para tu empresa"
+    },
+    "table": {
+      "columns": {
+        "user": "Usuario",
+        "role": "Rol",
+        "company": "Empresa",
+        "createdAt": "Creado",
+        "actions": "Acciones"
+      }
+    },
+    "companyType": {
+      "parent": "Empresa matriz",
+      "client": "Cliente"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "notAvailable": "N/A",
+    "mockUser": "Usuario simulado {{suffix}}",
+    "avatarAlt": "Usuario",
+    "actions": {
+      "create": "Nuevo usuario",
+      "createFirst": "Crear primer usuario",
+      "retry": "Intentar de nuevo",
+      "edit": "Editar usuario",
+      "resendInvite": "Reenviar invitación",
+      "deactivate": "Desactivar usuario",
+      "reactivate": "Reactivar usuario",
+      "delete": "Eliminar permanentemente",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "cancel": "Cancelar",
+      "discard": "Descartar",
+      "saveChanges": "Guardar cambios",
+      "newTemplate": "Nueva plantilla",
+      "useTemplate": "Usar plantilla",
+      "createFirstTemplate": "Crear primera plantilla",
+      "viewPermissions": "Ver permisos",
+      "duplicateTemplate": "Duplicar plantilla",
+      "editTemplate": "Editar plantilla",
+      "deactivateTemplate": "Desactivar plantilla",
+      "invite": "Invitar",
+      "copy": "Copiar",
+      "close": "Cerrar",
+      "continue": "Continuar",
+      "back": "Volver"
+    },
+    "states": {
+      "loading": "Cargando usuarios...",
+      "loadError": "Error al cargar usuarios",
+      "loadErrorTitle": "Error al cargar",
+      "deactivateError": "Error al desactivar usuario",
+      "reactivateError": "Error al reactivar usuario",
+      "empty": "No se encontraron usuarios",
+      "emptyGeneric": "No hay usuarios para mostrar",
+      "emptyWithCompany": "No hay usuarios registrados para la empresa {{name}}",
+      "templatesLoadError": "Error al cargar plantillas",
+      "duplicateError": "Error al duplicar plantilla",
+      "deactivateTemplateError": "Error al desactivar plantilla",
+      "templatesEmpty": "No hay plantillas personalizadas",
+      "templatesEmptyHint": "Crea plantillas personalizadas para agilizar la creación de usuarios"
+    },
+    "confirm": {
+      "deactivate": "🔒 DESACTIVAR USUARIO\n\n¿Desactivar al usuario {{id}}?\n\n• El usuario quedará desactivado pero seguirá en el sistema\n• Podrá reactivarse después\n• No perderá datos ni historial",
+      "reactivate": "✅ REACTIVAR USUARIO\n\n¿Reactivar al usuario {{id}}?\n\n• El usuario volverá a estar activo\n• Podrá acceder con normalidad\n• Se restaurarán todos los permisos",
+      "deactivateTemplate": "¿Desactivar esta plantilla?"
+    },
+    "summary": {
+      "activeUsersTitle": "Sistema de usuarios activo",
+      "activeUsersBody": "Total: {{count}} usuario(s). La plataforma usa el modelo de varios usuarios por empresa."
+    },
+    "templates": {
+      "badgePredefined": "Predefinidos",
+      "badgeSystem": "Sistema",
+      "badgeCustom": "Personalizado",
+      "badgeChanged": "Modificado",
+      "baseLabel": "Base: {{role}}",
+      "usageCount": "{{count}} usos",
+      "customCount": "{{count}} plantillas",
+      "visibilityForChildren": "Visible para empresas hijas",
+      "visibilityOn": "Visible para empresas hijas",
+      "visibilityOff": "Solo empresa matriz",
+      "visibilityHintOn": "Las empresas hijas pueden usar este perfil",
+      "visibilityHintOff": "Disponible solo para la empresa matriz",
+      "aboutTitle": "Sobre las plantillas:",
+      "aboutBullet1": "• Las plantillas del sistema no se editan, solo se duplican",
+      "aboutBullet2": "• Las plantillas personalizadas se pueden editar y desactivar",
+      "aboutBullet3": "• Al usar una plantilla, los permisos se aplican sobre el rol base",
+      "aboutBullet4": "• Las plantillas ayudan a crear usuarios de forma coherente",
+      "copySuffix": "Copia",
+      "copyDescriptionPrefix": "Copia de:",
+      "copyTag": "copia",
+      "messages": {
+        "savedCount": "¡{{count}} cambio(s) guardado(s) correctamente!",
+        "discarded": "Cambios descartados",
+        "saveVisibilityError": "Error al guardar la configuración"
+      }
+    },
+    "modals": {
+      "createUser": "Nuevo usuario",
+      "editUser": "Editar usuario",
+      "inviteUser": "Invitación",
+      "deleteUser": "Eliminación permanente",
+      "permissions": "Ver permisos",
+      "accessLink": "Enlace de acceso",
+      "templateCreate": "Nueva plantilla",
+      "templateEdit": "Editar plantilla"
+    },
+    "messages": {
+      "confirmDelete": "¿Eliminar a {{name}}?",
+      "inviteSuccess": "Invitación enviada correctamente",
+      "copyLink": "Copiar enlace",
+      "linkCopied": "¡Enlace copiado al portapapeles!"
+    },
+    "roleDescriptions": {
+      "parent": {
+        "super_admin": "Acceso total al sistema",
+        "admin": "Administra empresas hijas",
+        "partner": "Administra sus propias cuentas"
+      },
+      "client": {
+        "admin": "Configuración de la empresa",
+        "manager": "Gestión de leads y ventas",
+        "seller": "Leads propios y chat"
+      }
+    },
+    "invite": {
+      "title": "Enlace de acceso",
+      "subtitle": "Compártelo con el usuario para activar la cuenta",
+      "linkLabel": "Enlace de acceso:",
+      "regenerate": "Generar nuevo",
+      "generating": "Generando enlace seguro...",
+      "fallbackGenerateError": "No se pudo generar el enlace. Inténtalo de nuevo.",
+      "connectionError": "Error de conexión al generar el enlace. Inténtalo de nuevo.",
+      "roleIdLine": "Rol: {{role}} • ID: {{id}}...",
+      "copyTitle": "Copiar enlace",
+      "openTitle": "Abrir enlace",
+      "howToTitle": "Cómo usarlo:",
+      "howToStep1": "1. Copia el enlace de arriba",
+      "howToStep2": "2. Envíalo al usuario por WhatsApp, correo u otro canal",
+      "howToStep3": "3. El usuario abre el enlace y define una contraseña",
+      "howToStep4": "4. Tras activar, podrá iniciar sesión con normalidad",
+      "linkExpires": "⚠️ El enlace caduca en 1 hora.",
+      "footerCopy": "Copiar enlace",
+      "footerCopied": "¡Copiado!",
+      "footerClose": "Cerrar"
+    },
+    "deleteModal": {
+      "title": "Eliminación permanente",
+      "step1Heading": "¿Estás completamente seguro?",
+      "step1Before": "Estás a punto de",
+      "step1Emphasis": "eliminar permanentemente",
+      "step1After": "al usuario:",
+      "warningTitle": "⚠️ ATENCIÓN: ¡esta acción NO se puede deshacer!",
+      "warningBullet1": "• El usuario se eliminará por completo del sistema",
+      "warningBullet2": "• Se perderán todos los datos e historial",
+      "warningBullet3": "• No podrás recuperar la información",
+      "step2Heading": "Confirmación final",
+      "step2Instruction": "Para confirmar la eliminación permanente, escribe exactamente:",
+      "confirmKeyword": "EXCLUIR",
+      "placeholder": "Escribe: EXCLUIR",
+      "wrongConfirm": "Texto de confirmación incorrecto. Escribe exactamente: EXCLUIR",
+      "deleteFailed": "Error al eliminar usuario",
+      "protectionIntro": "🛡️ Usuario protegido contra eliminación",
+      "protectionP1": "Este usuario sigue ACTIVO y no puede eliminarse directamente.",
+      "protectionStepsTitle": "📋 Para eliminar con seguridad, sigue estos pasos:",
+      "protectionStep1": "1️⃣ Primero: haz clic en el botón NARANJA (👤❌) para DESACTIVAR al usuario",
+      "protectionStep2": "2️⃣ Después: haz clic en el botón ROJO (🗑️) para ELIMINAR permanentemente",
+      "protectionFooter": "🔒 Esta protección evita eliminaciones accidentales de usuarios activos.",
+      "protectionTip": "💡 Consejo: los usuarios desactivados pueden reactivarse; los eliminados, no.",
+      "continue": "Continuar",
+      "back": "Volver",
+      "deletePermanent": "Eliminar permanentemente",
+      "deleting": "Eliminando..."
+    },
+    "permissionsView": {
+      "title": "Ver permisos",
+      "subtitle": "Detalles completos del perfil de acceso",
+      "typeLabel": "Tipo:",
+      "typeSystem": "Sistema",
+      "typeCustom": "Personalizado",
+      "baseRoleLabel": "Rol base:",
+      "tagsLabel": "Etiquetas:",
+      "sections": {
+        "mainModules": "Módulos principales",
+        "specificActions": "Acciones específicas",
+        "limitations": "Limitaciones"
+      },
+      "modules": {
+        "dashboard": "Dashboard",
+        "dashboardDesc": "Panel principal",
+        "leads": "Leads",
+        "leadsDesc": "Gestión de leads",
+        "chat": "Chat",
+        "chatDesc": "Sistema de chat",
+        "analytics": "Analytics",
+        "analyticsDesc": "Informes y métricas",
+        "settings": "Configuración",
+        "settingsDesc": "Configuración general",
+        "companies": "Empresas",
+        "companiesDesc": "Gestión de empresas",
+        "users": "Usuarios",
+        "usersDesc": "Gestión de usuarios",
+        "financial": "Finanzas",
+        "financialDesc": "Módulo financiero"
+      },
+      "actions": {
+        "createUsers": "Crear usuarios",
+        "editUsers": "Editar usuarios",
+        "deleteUsers": "Eliminar usuarios",
+        "impersonate": "Suplantar empresas",
+        "viewAllLeads": "Ver todos los leads",
+        "editAllLeads": "Editar todos los leads",
+        "viewFinancial": "Ver datos financieros",
+        "editFinancial": "Editar datos financieros"
+      },
+      "limitations": {
+        "maxCompanies": "Máximo de empresas:",
+        "maxUsers": "Máximo de usuarios:",
+        "unlimited": "Ilimitado",
+        "restrictedCompanies": "Empresas restringidas:",
+        "restrictedCount": "{{count}} empresa(s) con acceso restringido"
+      },
+      "close": "Cerrar"
+    },
+    "templateModal": {
+      "editTitle": "Editar plantilla",
+      "createTitle": "Nueva plantilla",
+      "editSubtitle": "Modifica la configuración de la plantilla",
+      "createSubtitle": "Crea una plantilla personalizada para usuarios",
+      "basicInfo": "Información básica",
+      "nameLabel": "Nombre de la plantilla *",
+      "namePlaceholder": "Ej.: Vendedor senior",
+      "baseRoleLabel": "Rol base *",
+      "baseRoleLockedHint": "El rol base no se puede cambiar tras la creación",
+      "descriptionLabel": "Descripción *",
+      "descriptionPlaceholder": "Describe el propósito y las características de esta plantilla...",
+      "tagsLabel": "Etiquetas (opcional)",
+      "tagInputPlaceholder": "Escribe una etiqueta y pulsa Enter",
+      "addTag": "Añadir",
+      "validationName": "El nombre es obligatorio",
+      "validationDescription": "La descripción es obligatoria",
+      "companyUnknown": "Empresa no identificada",
+      "saveError": "Error al guardar la plantilla",
+      "createButton": "Crear plantilla",
+      "editButton": "Guardar cambios"
+    },
+    "userModal": {
+      "titleEdit": "Editar usuario",
+      "titleCreate": "Nuevo usuario",
+      "subtitleEdit": "Modifica la información del usuario",
+      "subtitleCreate": "Añade un nuevo usuario a la empresa",
+      "tabs": {
+        "info": "Información",
+        "password": "Contraseña y acceso"
+      },
+      "errorLabel": "Error",
+      "successLabel": "Correcto",
+      "emailLabel": "Correo del usuario",
+      "emailPlaceholder": "usuario@empresa.com",
+      "emailHint": "El usuario recibirá una invitación por correo para acceder al sistema",
+      "profilePhoto": "Foto de perfil",
+      "avatarAlt": "Usuario",
+      "imageMaxSize": "La imagen debe tener como máximo 2 MB",
+      "imageTypeOnly": "Solo se permiten archivos de imagen",
+      "changePhoto": "Cambiar foto",
+      "choosePhoto": "Elegir foto",
+      "removePhoto": "Quitar",
+      "photoFormatsHint": "Formatos aceptados: JPG, PNG, GIF. Máximo 2 MB.",
+      "accessProfile": "Perfil de acceso",
+      "accessLevelRole": "Nivel de acceso (rol)",
+      "selectProfile": "Selecciona un perfil...",
+      "optgroupSystem": "Perfiles del sistema",
+      "optgroupCustom": "Perfiles personalizados",
+      "fallbackRolesWarning": "⚠️ Usando roles básicos. Los perfiles personalizados no están disponibles temporalmente.",
+      "sendInvite": "Enviar invitación por correo",
+      "sendInviteHint": "El usuario recibirá instrucciones para acceder al sistema",
+      "companySection": "Empresa",
+      "companyName": "Nombre:",
+      "companyType": "Tipo:",
+      "companyTypeParent": "Empresa matriz",
+      "companyTypeClient": "Cliente",
+      "systemStatus": "Estado del sistema",
+      "inviteByEmailTitle": "Invitación por correo",
+      "internalUserTitle": "Usuario interno",
+      "inviteByEmailBody": "El usuario recibirá un correo con pasos para activar la cuenta y definir su contraseña.",
+      "inviteByEmailBodyNoFeature": "Se creará un usuario que podrá invitarse cuando el correo esté configurado.",
+      "internalUserBody": "Se creará un registro interno. Para acceso completo, marca \"Enviar invitación por correo\".",
+      "displayName": "Nombre para mostrar",
+      "displayNamePlaceholder": "Nombre del usuario",
+      "displayNameHint": "Nombre que verás en la interfaz",
+      "managePassword": "Gestionar contraseña",
+      "resetPasswordTitle": "Restablecer contraseña",
+      "resetPasswordDesc": "Enviar correo para que el usuario restablezca la contraseña",
+      "sending": "Enviando...",
+      "sendResetEmail": "Enviar correo de restablecimiento",
+      "directPasswordTitle": "Definir contraseña directamente",
+      "directPasswordDesc": "Establecer nueva contraseña sin enviar correo",
+      "setPasswordButton": "Definir contraseña",
+      "newPasswordFormTitle": "Definir nueva contraseña",
+      "newPasswordPlaceholder": "Nueva contraseña (mín. 6 caracteres)",
+      "confirmPasswordPlaceholder": "Confirmar nueva contraseña",
+      "minLengthOk": "Mínimo 6 caracteres",
+      "passwordsMatch": "Las contraseñas coinciden",
+      "forceChangeTitle": "Forzar cambio en el próximo acceso",
+      "forceChangeOn": "El usuario deberá cambiar la contraseña en el próximo inicio de sesión",
+      "forceChangeOff": "La contraseña definida se mantendrá hasta el próximo cambio",
+      "changing": "Actualizando...",
+      "setTemporary": "Definir temporal",
+      "changePassword": "Cambiar contraseña",
+      "resendInviteTitle": "Reenviar invitación",
+      "resendInviteDesc": "Generar un nuevo enlace de invitación para el usuario",
+      "resendInvite": "Reenviar invitación",
+      "accountInfo": "Información de la cuenta",
+      "accountEmail": "Correo:",
+      "accountStatus": "Estado:",
+      "statusActive": "🟢 Activo",
+      "statusInactive": "⚪ Inactivo",
+      "accountRole": "Rol:",
+      "footerCreate": "Crear usuario",
+      "messages": {
+        "emailRequired": "El correo es obligatorio",
+        "companyUnknown": "Empresa no identificada",
+        "invalidRole": "El rol {{role}} no es válido para este tipo de empresa",
+        "inviteLinkFailed": "Usuario creado, pero no se pudo generar el enlace de acceso. Abre el listado de usuarios y usa \"Generar nuevo enlace\" para este usuario.",
+        "inviteMessage": "Enlace de acceso generado — compártelo con el usuario",
+        "compatMode": "Usuario creado en modo compatibilidad. Abre el listado de usuarios y usa \"Generar nuevo enlace\" para enviar el acceso.",
+        "resetEmailSent": "Correo de recuperación enviado a {{email}}",
+        "resetEmailError": "Error al enviar el correo de recuperación",
+        "displayNameSuccess": "Nombre actualizado correctamente",
+        "displayNameError": "Error al actualizar el nombre",
+        "resendSuccess": "Nueva invitación enviada a {{email}}",
+        "resendError": "Error al reenviar la invitación",
+        "passwordMismatch": "Comprueba que las contraseñas coincidan",
+        "passwordMinLength": "La contraseña debe tener al menos 6 caracteres",
+        "passwordTempSuccess": "Contraseña temporal definida. {{name}} debe cambiarla en el próximo acceso.",
+        "passwordChangedSuccess": "Contraseña actualizada correctamente para {{name}}.",
+        "passwordChangeError": "Error al cambiar la contraseña",
+        "saveError": "Error al guardar el usuario",
+        "unauthenticatedUpload": "Usuario no autenticado para subir archivos"
+      }
+    },
+    "inviteSuccess": {
+      "titleReal": "¡Invitación enviada!",
+      "titleSimulated": "¡Invitación creada!",
+      "subtitleReal": "Correo enviado correctamente",
+      "subtitleSimulated": "Enlace de invitación generado",
+      "userEmailLabel": "Correo del usuario",
+      "realSentTitle": "Invitación real enviada",
+      "realSentBody": "El usuario recibirá un correo con pasos para activar la cuenta.",
+      "simulatedTitle": "Invitación simulada",
+      "simulatedDefaultMessage": "Configura Admin API para el envío real de correos.",
+      "testLinkLabel": "Enlace de prueba:",
+      "linkCopiedShort": "¡Enlace copiado!",
+      "nextSteps": "Próximos pasos:",
+      "nextReal1": "• El usuario recibirá el correo de invitación",
+      "nextReal2": "• Debe abrir el enlace para activar la cuenta",
+      "nextReal3": "• Tras activar, podrá iniciar sesión con normalidad",
+      "nextSim1": "• Usa el enlace de arriba para probar la página de aceptación",
+      "nextSim2": "• Configura Admin API para el envío real de correos",
+      "nextSim3": "• El usuario fue creado en el sistema",
+      "understood": "Entendido",
+      "copyTitle": "Copiar enlace",
+      "openTitle": "Abrir enlace"
+    }
+  },
+  "tracking": {
+    "sections": {
+      "landingPages": "Landing pages",
+      "trackingCode": "Código de seguimiento",
+      "webhookConversions": "Webhook de conversiones",
+      "verification": "Verificación de la etiqueta de seguimiento",
+      "installGuide": "📖 Guía de instalación — LovoCRM Analytics"
+    },
+    "header": {
+      "title": "Landing pages",
+      "subtitle": {
+        "superAdmin": "Todas las landing pages de la plataforma",
+        "company": "Administra tus páginas de captación"
+      }
+    },
+    "stats": {
+      "totalPages": "Total de páginas",
+      "activePages": "Páginas activas",
+      "pausedPages": "Páginas en pausa",
+      "conversionsToday": "Conversiones hoy"
+    },
+    "fields": {
+      "name": "Nombre",
+      "url": "URL"
+    },
+    "placeholders": {
+      "name": "Página de captación",
+      "url": "https://misitio.com/lp"
+    },
+    "status": {
+      "active": "Activo",
+      "paused": "En pausa"
+    },
+    "actions": {
+      "newLandingPage": "Nueva landing page",
+      "createFirst": "Crear primera landing page",
+      "pause": "Pausar",
+      "activate": "Activar",
+      "edit": "Editar",
+      "code": "Código",
+      "verifyTag": "Verificar etiqueta",
+      "verifying": "Verificando...",
+      "delete": "Eliminar",
+      "analytics": "Analytics",
+      "analyticsPro": "Analytics Pro",
+      "cancel": "Cancelar",
+      "create": "Crear",
+      "save": "Guardar",
+      "copy": "Copiar",
+      "copied": "¡Copiado!",
+      "installGuide": "Guía de instalación",
+      "understoodClose": "Entendido, cerrar"
+    },
+    "modals": {
+      "editLandingPage": "Editar landing page",
+      "newLandingPage": "Nueva landing page"
+    },
+    "empty": {
+      "title": "No hay landing pages registradas",
+      "description": "Crea tu primera landing page para empezar a seguir el comportamiento de los visitantes."
+    },
+    "trackingCode": {
+      "pasteInstructions": "Pega este código dentro de la etiqueta {{bodyTagOpen}}, al final del body, justo antes del cierre {{bodyTagClose}} (nunca en el head):",
+      "helpBanner": "📖 ¿Necesitas ayuda? Mira dónde colocar este código",
+      "howToTitle": "Cómo usarlo:",
+      "howToStep1": "1. Copia el código de arriba",
+      "howToStep2": "2. Pégalo antes de la etiqueta </body> en tu landing page",
+      "howToStep3": "3. Publica la página",
+      "howToStep4": "4. Los datos empezarán a aparecer en analytics",
+      "webhookIntro": "Para registrar conversiones (leads), configura tu formulario para enviar datos a este webhook:",
+      "requiredParams": "Parámetros obligatorios:",
+      "formDataBullet": "Datos del formulario (nombre, correo, teléfono, etc.)",
+      "exampleUsage": "Ejemplo de uso:"
+    },
+    "verification": {
+      "title": "Verificación de la etiqueta de seguimiento",
+      "installedTitle": "¡Etiqueta instalada correctamente!",
+      "installedBody": "Se encontró la etiqueta de seguimiento en {{pageName}}",
+      "notFoundTitle": "Etiqueta no encontrada",
+      "notFoundBody": "No se encontró la etiqueta de seguimiento o no está bien configurada",
+      "detailsTitle": "Detalles de la verificación:",
+      "scriptFound": "Script LovoCRM encontrado",
+      "scriptNotFound": "Script LovoCRM no encontrado",
+      "codeFound": "Código de seguimiento encontrado",
+      "codeNotFound": "Código de seguimiento no encontrado",
+      "positionOk": "Posición del script correcta (antes de </body>)",
+      "positionWarn": "La posición del script podría ser incorrecta",
+      "limitationTitle": "Limitación de la verificación",
+      "corsTip": "💡 Consejo: abre tu landing page y revisa la consola del navegador por errores relacionados con M4Track.",
+      "howToFixTitle": "Cómo corregirlo:",
+      "howToFixStep1": "Abre el HTML de tu landing page",
+      "howToFixStep2": "Asegúrate de que el código de seguimiento esté antes de la etiqueta </body>",
+      "howToFixStep3": "Comprueba que el código coincide con el proporcionado (sin cambios)",
+      "howToFixStep4": "Publica los cambios y prueba de nuevo",
+      "metaPageLabel": "Página:",
+      "metaUrlLabel": "URL:"
+    },
+    "installGuide": {
+      "mainRuleTitle": "🎯 Regla principal",
+      "mainRuleBody": "SIEMPRE pega el código dentro de la etiqueta <body>, al final del body, justo antes de </body>. NUNCA en el <head>",
+      "correctPositionTitle": "✅ Posición correcta",
+      "wrongPositionTitle": "❌ Posición incorrecta",
+      "platformExamplesTitle": "🛠️ Ejemplos por plataforma",
+      "platformWordPress": "WordPress",
+      "platformElementor": "Elementor/Divi",
+      "elementorStep1": "1. Ajustes → Avanzado",
+      "elementorStep2": "2. \"Código antes de </body>\"",
+      "elementorStep3": "3. Pega el código ahí",
+      "elementorStep4": "4. Guardar y publicar",
+      "platformHtml": "HTML puro",
+      "platformGtm": "Google Tag Manager",
+      "gtmStep1": "1. Crear una etiqueta nueva \"HTML personalizado\"",
+      "gtmStep2": "2. Pega el código en la etiqueta",
+      "gtmStep3": "3. Disparador: \"All Pages\"",
+      "gtmStep4": "4. Publicar el contenedor",
+      "whyPositionTitle": "🚨 Por qué importa esta posición",
+      "bodyAdvantagesTitle": "✅ Ventajas del final del body",
+      "bodyAdvantage1": "• El DOM está completamente cargado",
+      "bodyAdvantage2": "• No bloquea la carga de la página",
+      "bodyAdvantage3": "• Acceso a todos los elementos",
+      "bodyAdvantage4": "• Mejor rendimiento",
+      "bodyAdvantage5": "• Mejor compatibilidad",
+      "headProblemsTitle": "❌ Problemas del head",
+      "headProblem1": "• El DOM aún no existe",
+      "headProblem2": "• Bloquea la carga",
+      "headProblem3": "• Puede causar errores de JavaScript",
+      "headProblem4": "• Peor rendimiento",
+      "headProblem5": "• El usuario percibe más espera",
+      "checklistTitle": "✅ Lista de verificación",
+      "checklist1": "• ✅ ¿El código está DENTRO de <body>?",
+      "checklist2": "• ✅ ¿El código está al FINAL del body?",
+      "checklist3": "• ✅ ¿NO está en <head>?",
+      "checklist4": "• ✅ ¿El código de seguimiento es correcto?",
+      "checklist5": "• ✅ ¿La URL del script es correcta?",
+      "checklist6": "• ✅ ¿Se publicó la página?",
+      "footerTip": "💡 Consejo: tras instalar, usa \"Verificar etiqueta\" para confirmar que funciona"
+    },
+    "messages": {
+      "confirmDelete": "¿Eliminar esta landing page?",
+      "errorNoCompany": "Error: no se pudo identificar la empresa",
+      "saveError": "Error al guardar la landing page: {{message}}",
+      "verifyGenericError": "Ocurrió un error durante la verificación."
+    }
+  }
+}

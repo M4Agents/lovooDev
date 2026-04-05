@@ -1,0 +1,121 @@
+{
+  "impersonation": {
+    "pageTitle": "Dashboard - {{name}}",
+    "subtitleViewingChild": "Viewing child company data",
+    "childDashboardCard": {
+      "title": "Child company dashboard",
+      "descriptionPrefix": "You are viewing the dashboard for",
+      "note": "This is an isolated environment with data specific to this company."
+    },
+    "actions": {
+      "reloadCompany": "Reload company",
+      "reloadPage": "Reload page"
+    },
+    "fallbackCompanyName": "Impersonated company"
+  },
+  "loadingCompany": {
+    "title": "Loading company...",
+    "description": "Please wait while we load your company data."
+  },
+  "errorNoCompany": {
+    "title": "Company not found",
+    "description": "We couldn’t load your company data.",
+    "debugUserId": "User ID: {{id}}",
+    "debugImpersonating": "Impersonating: {{value}}",
+    "debugCompanyId": "Company ID: {{value}}",
+    "reloadPage": "Reload page",
+    "reloadCompany": "Reload company",
+    "clearAndReturnSuperAdmin": "Clear and return to super admin"
+  },
+  "header": {
+    "titlePlatform": "Platform dashboard",
+    "titleDefault": "Dashboard",
+    "subtitlePlatform": "Overview of the entire M4 Track platform",
+    "subtitleTenant": "Overview of your metrics",
+    "fullReportLink": "View full report"
+  },
+  "metrics": {
+    "landingPages": "Landing pages",
+    "activePages": "Active pages",
+    "pagesOfCompany": "Pages for this company",
+    "totalVisitors": "Total visitors",
+    "uniqueVisitors": "Unique visitors",
+    "conversions": "Conversions",
+    "conversionRate": "Rate: {{rate}}%",
+    "avgEngagement": "Avg. engagement",
+    "engagementScale": "out of 10.0",
+    "clientCompanies": "Client companies",
+    "platformTotal": "Platform total",
+    "totalUsers": "Total users",
+    "registeredUsers": "Registered users",
+    "activeInstances": "Active instances",
+    "whatsappConnected": "WhatsApp connected"
+  },
+  "analyticsAdvanced": {
+    "sectionTitle": "Advanced analytics",
+    "growthChartTitle": "Company growth in period",
+    "planDistributionChartTitle": "Distribution by plan",
+    "planDetailsTitle": "Plan details",
+    "loadErrorTitle": "⚠️ Could not load analytics",
+    "retry": "Try again"
+  },
+  "companyInfo": {
+    "title": "Company information",
+    "fieldName": "Name",
+    "fieldPlan": "Plan",
+    "badgePremium": "Premium",
+    "fieldStatus": "Status",
+    "statusActive": "Active",
+    "statusInactive": "Inactive",
+    "fieldDomain": "Domain"
+  },
+  "quickActions": {
+    "title": "Quick actions",
+    "newLanding": {
+      "title": "New landing page",
+      "subtitle": "Create a page for tracking"
+    },
+    "manageCompanies": {
+      "title": "Manage companies",
+      "subtitle": "Add a new company"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Webhooks and API keys"
+    },
+    "documentation": {
+      "title": "Documentation",
+      "subtitle": "Guides and API docs"
+    }
+  },
+  "recentActivity": {
+    "title": "Recent activity",
+    "viewAll": "View all",
+    "emptyTitle": "No recent activity",
+    "emptyDescription": "When there are visitors and conversions, they will appear here."
+  },
+  "analyticsCards": {
+    "newCompanies": "New companies",
+    "vsPreviousPeriod": "{{growth}} vs previous period",
+    "avgLabel": "Avg.",
+    "companiesPerDay": "Companies/day",
+    "avgDailyGrowth": "Average daily growth",
+    "topPlanBadge": "Top plan",
+    "mostPopularPlan": "Most popular plan",
+    "companiesPercent": "{{count}} companies ({{percent}}%)",
+    "plansBadge": "Plans",
+    "planTypes": "Plan types",
+    "activeDistribution": "Active distribution",
+    "notAvailable": "N/A"
+  },
+  "planDistributionMini": {
+    "noData": "No data available",
+    "morePlans": "+{{count}} other plans"
+  },
+  "charts": {
+    "barEmpty": "No data for the period",
+    "tooltipCompanies": "{{count}} companies",
+    "pieEmpty": "No plans found",
+    "pieTotal": "Total"
+  }
+}

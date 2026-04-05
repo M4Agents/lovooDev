@@ -1,22 +1,50 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import settingsSystem from '../locales/pt-BR/settings.system.json'
-import layout from '../locales/pt-BR/layout.json'
+import settingsSystemPt from '../locales/pt-BR/settings.system.json'
+import settingsSystemEn from '../locales/en/settings.system.json'
+import settingsSystemEs from '../locales/es/settings.system.json'
+import layoutPt from '../locales/pt-BR/layout.json'
 import layoutEn from '../locales/en/layout.json'
 import layoutEs from '../locales/es/layout.json'
-import auth from '../locales/pt-BR/auth.json'
-import deletedInstances from '../locales/pt-BR/deletedInstances.json'
-import analytics from '../locales/pt-BR/analytics.json'
-import dashboard from '../locales/pt-BR/dashboard.json'
-import notifications from '../locales/pt-BR/notifications.json'
-import plans from '../locales/pt-BR/plans.json'
-import mediaLibrary from '../locales/pt-BR/mediaLibrary.json'
-import companies from '../locales/pt-BR/companies.json'
-import reports from '../locales/pt-BR/reports.json'
-import periodFilter from '../locales/pt-BR/periodFilter.json'
-import settingsApp from '../locales/pt-BR/settings.app.json'
-import funnel from '../locales/pt-BR/funnel.json'
-import chat from '../locales/pt-BR/chat.json'
+import authPt from '../locales/pt-BR/auth.json'
+import authEn from '../locales/en/auth.json'
+import authEs from '../locales/es/auth.json'
+import deletedInstancesPt from '../locales/pt-BR/deletedInstances.json'
+import deletedInstancesEn from '../locales/en/deletedInstances.json'
+import deletedInstancesEs from '../locales/es/deletedInstances.json'
+import analyticsPt from '../locales/pt-BR/analytics.json'
+import analyticsEn from '../locales/en/analytics.json'
+import analyticsEs from '../locales/es/analytics.json'
+import dashboardPt from '../locales/pt-BR/dashboard.json'
+import dashboardEn from '../locales/en/dashboard.json'
+import dashboardEs from '../locales/es/dashboard.json'
+import notificationsPt from '../locales/pt-BR/notifications.json'
+import notificationsEn from '../locales/en/notifications.json'
+import notificationsEs from '../locales/es/notifications.json'
+import plansPt from '../locales/pt-BR/plans.json'
+import plansEn from '../locales/en/plans.json'
+import plansEs from '../locales/es/plans.json'
+import mediaLibraryPt from '../locales/pt-BR/mediaLibrary.json'
+import mediaLibraryEn from '../locales/en/mediaLibrary.json'
+import mediaLibraryEs from '../locales/es/mediaLibrary.json'
+import companiesPt from '../locales/pt-BR/companies.json'
+import companiesEn from '../locales/en/companies.json'
+import companiesEs from '../locales/es/companies.json'
+import reportsPt from '../locales/pt-BR/reports.json'
+import reportsEn from '../locales/en/reports.json'
+import reportsEs from '../locales/es/reports.json'
+import periodFilterPt from '../locales/pt-BR/periodFilter.json'
+import periodFilterEn from '../locales/en/periodFilter.json'
+import periodFilterEs from '../locales/es/periodFilter.json'
+import settingsAppPt from '../locales/pt-BR/settings.app.json'
+import settingsAppEn from '../locales/en/settings.app.json'
+import settingsAppEs from '../locales/es/settings.app.json'
+import funnelPt from '../locales/pt-BR/funnel.json'
+import funnelEn from '../locales/en/funnel.json'
+import funnelEs from '../locales/es/funnel.json'
+import chatPt from '../locales/pt-BR/chat.json'
+import chatEn from '../locales/en/chat.json'
+import chatEs from '../locales/es/chat.json'
 import { LOCALE_STORAGE_KEY, parseStoredLocale, syncDocumentLang } from './supportedLocales'
 
 /** Idioma inicial: localStorage válido ou pt-BR (evita flicker se a chave já existir). */
@@ -30,39 +58,61 @@ function getInitialLanguage(): string {
   }
 }
 
-const sharedNamespaces = {
-  'settings.system': settingsSystem,
-  auth,
-  deletedInstances,
-  analytics,
-  dashboard,
-  notifications,
-  plans,
-  mediaLibrary,
-  companies,
-  reports,
-  periodFilter,
-  'settings.app': settingsApp,
-  funnel,
-  chat,
-}
-
 void i18n.use(initReactI18next).init(
   {
     lng: getInitialLanguage(),
     fallbackLng: 'pt-BR',
     resources: {
       'pt-BR': {
-        ...sharedNamespaces,
-        layout,
+        'settings.system': settingsSystemPt,
+        layout: layoutPt,
+        auth: authPt,
+        deletedInstances: deletedInstancesPt,
+        analytics: analyticsPt,
+        dashboard: dashboardPt,
+        notifications: notificationsPt,
+        plans: plansPt,
+        mediaLibrary: mediaLibraryPt,
+        companies: companiesPt,
+        reports: reportsPt,
+        periodFilter: periodFilterPt,
+        'settings.app': settingsAppPt,
+        funnel: funnelPt,
+        chat: chatPt,
       },
       en: {
-        ...sharedNamespaces,
+        'settings.system': settingsSystemEn,
         layout: layoutEn,
+        auth: authEn,
+        deletedInstances: deletedInstancesEn,
+        analytics: analyticsEn,
+        dashboard: dashboardEn,
+        notifications: notificationsEn,
+        plans: plansEn,
+        mediaLibrary: mediaLibraryEn,
+        companies: companiesEn,
+        reports: reportsEn,
+        periodFilter: periodFilterEn,
+        'settings.app': settingsAppEn,
+        funnel: funnelEn,
+        chat: chatEn,
       },
       es: {
-        ...sharedNamespaces,
+        'settings.system': settingsSystemEs,
         layout: layoutEs,
+        auth: authEs,
+        deletedInstances: deletedInstancesEs,
+        analytics: analyticsEs,
+        dashboard: dashboardEs,
+        notifications: notificationsEs,
+        plans: plansEs,
+        mediaLibrary: mediaLibraryEs,
+        companies: companiesEs,
+        reports: reportsEs,
+        periodFilter: periodFilterEs,
+        'settings.app': settingsAppEs,
+        funnel: funnelEs,
+        chat: chatEs,
       },
     },
     ns: [

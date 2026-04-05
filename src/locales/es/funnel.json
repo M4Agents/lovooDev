@@ -1,0 +1,304 @@
+{
+  "header": {
+    "title": "Embudo de ventas"
+  },
+  "actions": {
+    "filters": "Filtros",
+    "moreOptions": "Más opciones",
+    "customize": "Personalizar",
+    "export": "Exportar",
+    "editFunnel": "Editar embudo",
+    "newLead": "Nuevo lead"
+  },
+  "filters": {
+    "searchLabel": "Buscar",
+    "searchPlaceholder": "Nombre, correo, teléfono...",
+    "tagsLabel": "Etiquetas",
+    "tagsComingSoon": "(próximamente)",
+    "tagsAll": "Todas las etiquetas",
+    "tagsDisabledTitle": "El filtro por etiqueta estará disponible pronto",
+    "originLabel": "Origen",
+    "originAll": "Todos los orígenes",
+    "originWhatsapp": "WhatsApp",
+    "originSite": "Sitio web",
+    "originReferral": "Referido",
+    "periodLabel": "Período",
+    "periodAll": "Todo el período",
+    "periodToday": "Hoy",
+    "periodWeek": "Esta semana",
+    "periodMonth": "Este mes"
+  },
+  "states": {
+    "companyNotFound": "Empresa no encontrada",
+    "loadingFunnels": "Cargando embudos...",
+    "retry": "Intentar de nuevo",
+    "selectFunnelTitle": "Seleccione un embudo",
+    "selectFunnelDescription": "Elija un embudo de ventas para ver los leads",
+    "createFirstFunnel": "Crear el primer embudo"
+  },
+  "board": {
+    "loading": "Cargando embudo...",
+    "errorTitle": "Error al cargar el embudo",
+    "emptyStagesTitle": "No hay etapas",
+    "emptyStagesDescription": "Este embudo no tiene etapas configuradas.",
+    "column": {
+      "addOpportunityTitle": "Añadir oportunidad",
+      "editStageTitle": "Editar etapa",
+      "partialTotalTooltip": "Total parcial: solo oportunidades ya cargadas en la columna.",
+      "opportunityCount_one": "{{count}} oportunidad",
+      "opportunityCount_other": "{{count}} oportunidades",
+      "emptyTitle": "No hay oportunidades en esta etapa",
+      "emptyHint": "Arrastre oportunidades aquí",
+      "stageFooterWon": "✅ Ganados",
+      "stageFooterLost": "❌ Perdidos",
+      "showingLoaded": "Mostrando {{loaded}} de {{total}} oportunidades",
+      "loadMoreLoading": "Cargando...",
+      "loadMoreRemaining_one": "Cargar {{count}} restante",
+      "loadMoreRemaining_other": "Cargar {{count}} restantes",
+      "loadMoreNext": "Cargar {{count}} más"
+    }
+  },
+  "selector": {
+    "placeholder": "Seleccione un embudo",
+    "hint": "Seleccione un embudo de ventas",
+    "defaultBadge": "Predeterminado",
+    "noFunnels": "No hay embudos disponibles",
+    "createFirstFunnel": "Crear el primer embudo",
+    "createNew": "Crear nuevo embudo"
+  },
+  "alerts": {
+    "savePreferencesError": "Error al guardar preferencias. Inténtelo de nuevo.",
+    "exportSelectFunnel": "Seleccione un embudo para exportar",
+    "exportNoLeads": "No hay leads en este embudo",
+    "exportError": "Error al exportar datos. Inténtelo de nuevo."
+  },
+  "export": {
+    "csvHeaders": {
+      "name": "Nombre",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "company": "Empresa",
+      "stage": "Etapa actual",
+      "dealValue": "Valor del negocio",
+      "origin": "Origen",
+      "entryDate": "Fecha de entrada",
+      "daysInStage": "Días en la etapa"
+    }
+  },
+  "form": {
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "savingEllipsis": "Guardando…",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "edit": "Editar",
+    "create": "Crear",
+    "updateChanges": "Guardar cambios",
+    "loading": "Cargando..."
+  },
+  "leadCard": {
+    "detailTooltip": "Ver detalles y recorrido",
+    "manageTagsTooltip": "Gestionar etiquetas",
+    "lastContact": "Último contacto: {{date}}",
+    "ownerFallback": "Responsable"
+  },
+  "addLeadModal": {
+    "title": "Añadir lead al embudo",
+    "searchPlaceholder": "Buscar por nombre, correo o teléfono...",
+    "emptySearch": "No se encontraron leads",
+    "emptyList": "No hay leads disponibles",
+    "selectLead": "Seleccione un lead",
+    "errorAdd": "Error al añadir el lead",
+    "adding": "Añadiendo...",
+    "submit": "Añadir lead"
+  },
+  "createOpportunity": {
+    "titleNew": "Nueva oportunidad",
+    "titleEdit": "Editar oportunidad",
+    "leadLine": "Lead: {{name}}",
+    "errors": {
+      "companyRequired": "Empresa no identificada",
+      "titleRequired": "El título es obligatorio",
+      "generic": "Error al crear la oportunidad"
+    },
+    "fields": {
+      "title": "Título de la oportunidad *",
+      "titlePlaceholder": "Ej.: Venta del producto X",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Detalles sobre la oportunidad...",
+      "value": "Valor",
+      "valuePlaceholder": "0,00",
+      "currencyIso": "Moneda (ISO 4217)",
+      "currencyLocked": "(no se puede cambiar)",
+      "probability": "Probabilidad (%)",
+      "expectedClose": "Fecha prevista de cierre",
+      "owner": "Responsable",
+      "noOwner": "Sin responsable",
+      "you": "Usted",
+      "source": "Origen",
+      "sourcePlaceholder": "Ej.: WhatsApp, sitio web, referido"
+    },
+    "creating": "Creando...",
+    "createSubmit": "Crear oportunidad"
+  },
+  "closeOpportunity": {
+    "confirmWon": "Confirmar ganancia",
+    "confirmLost": "Confirmar pérdida",
+    "closeDateTime": "Fecha y hora de cierre",
+    "saleValue": "Valor de la venta ({{code}})",
+    "saleValueHint": "Se guardará como valor final de esta oportunidad.",
+    "lossReason": "Motivo de la pérdida",
+    "optional": "(opcional)",
+    "lossReasonPlaceholder": "Ej.: precio, competencia, proyecto cancelado...",
+    "errorGeneric": "Error al cerrar la oportunidad",
+    "confirmWonBtn": "Confirmar ganancia",
+    "confirmLostBtn": "Confirmar pérdida"
+  },
+  "reopenOpportunity": {
+    "title": "Reabrir oportunidad",
+    "statusWon": "Ganada",
+    "statusLost": "Perdida",
+    "dateUnknown": "fecha no registrada",
+    "introPrefix": "Esta oportunidad está marcada como",
+    "introDate": " el {{date}}",
+    "willOpen": "Al confirmar, volverá al estado",
+    "statusOpen": "Abierta",
+    "changesHeading": "Qué cambiará",
+    "change1": "El estado volverá a",
+    "change1b": "Abierta",
+    "change2": "Se eliminará la fecha de cierre",
+    "change3": "Se eliminará el motivo de pérdida (si lo hay)",
+    "preservedHeading": "Qué se conservará",
+    "preserve1": "Historial del cierre anterior (para informes)",
+    "preserve2": "Valor de la oportunidad",
+    "preserve3": "Todos los datos y el contacto del lead",
+    "errorGeneric": "Error al reabrir la oportunidad",
+    "confirmReopen": "Confirmar reapertura"
+  },
+  "editStage": {
+    "titleNew": "Nueva etapa",
+    "titleEdit": "Editar etapa",
+    "name": "Nombre de la etapa *",
+    "namePlaceholder": "Ej.: Propuesta enviada",
+    "systemNameLocked": "Las etapas del sistema no pueden cambiar de nombre",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Describa esta etapa...",
+    "color": "Color de la etapa *",
+    "stageType": "Tipo de etapa *",
+    "stageTypeActive": "Activa (en curso)",
+    "stageTypeWon": "Ganada (cerrada con éxito)",
+    "stageTypeLost": "Perdida (cerrada sin éxito)",
+    "hintActive": "Los leads en esta etapa están en proceso de venta",
+    "hintWon": "Los leads en esta etapa se convirtieron en clientes",
+    "hintLost": "Los leads en esta etapa no se convirtieron",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Seguro que desea eliminar esta etapa? Todos los leads pasarán a la primera etapa del embudo.",
+    "deleteYes": "Sí, eliminar",
+    "errorSave": "Error al guardar la etapa",
+    "errorDelete": "Error al eliminar la etapa",
+    "createSubmit": "Crear etapa"
+  },
+  "opportunityDetail": {
+    "tabs": {
+      "details": "Detalles",
+      "journey": "Recorrido",
+      "status": "Estado"
+    },
+    "badge": {
+      "open": "Abierta",
+      "won": "Ganada",
+      "lost": "Perdida"
+    },
+    "sectionEditing": "Editando oportunidad",
+    "sectionInfo": "Información de la oportunidad",
+    "fields": {
+      "title": "Título",
+      "titlePlaceholder": "Título de la oportunidad",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Descripción de la oportunidad",
+      "value": "Valor ({{currency}})",
+      "probability": "Probabilidad",
+      "owner": "Responsable",
+      "noOwner": "Sin responsable",
+      "expectedClose": "Previsión de cierre",
+      "lossReason": "Motivo de la pérdida",
+      "lossReasonPlaceholder": "Indique el motivo de la pérdida",
+      "source": "Origen",
+      "closedAt": "Cerrada el",
+      "createdAt": "Creada el",
+      "updatedAt": "Actualizada el"
+    },
+    "statusTab": {
+      "title": "Historial de estado",
+      "empty": "No hay registros de cambios de estado."
+    },
+    "errors": {
+      "saveFailed": "Error al guardar. Inténtelo de nuevo."
+    },
+    "timeline": {
+      "lossReason": "Motivo: {{reason}}",
+      "valueLabel": "Valor:",
+      "statusPrefix": "Estado:"
+    }
+  },
+  "timeline": {
+    "unknownStage": "etapa desconocida",
+    "moveBadges": {
+      "funnelEntry": "Entrada",
+      "stageChange": "Cambio",
+      "won": "Ganada",
+      "lost": "Perdida",
+      "reopened": "Reabierta"
+    },
+    "events": {
+      "enteredFunnel": "Entró al embudo",
+      "movedTo": "Movido a {{stage}}",
+      "closedWon": "Cerrada como ganada",
+      "closedLost": "Cerrada como perdida",
+      "reopened": "Reabierta"
+    },
+    "durationFmt": {
+      "seconds": "{{count}} s",
+      "minutes": "{{count}} min",
+      "hoursMinutes": "{{hours}} h {{minutes}} min",
+      "daysHoursMinutes": "{{days}} d {{hours}} h {{minutes}} min"
+    },
+    "badges": {
+      "current": "Actual",
+      "reentry": "Reentrada"
+    },
+    "labels": {
+      "stagePrefix": "Etapa:",
+      "entryAt": "Entrada: {{datetime}}",
+      "exitAt": "Salida: {{datetime}}",
+      "inProgress": "En curso desde hace {{duration}}",
+      "durationInStage": "{{duration}} en esta etapa",
+      "byUser": "Por: {{name}}"
+    },
+    "userRemoved": "Usuario eliminado",
+    "states": {
+      "errorPrefix": "Error al cargar el historial: {{message}}",
+      "emptyTitle": "No hay historial de etapas disponible.",
+      "emptyHint": "El historial se registra a partir de la fecha de activación de esta función."
+    },
+    "currentStage": {
+      "title": "Etapa actual",
+      "timeRunning": "Tiempo en curso",
+      "lessThanOneMinute": "Menos de 1 min"
+    },
+    "summary": {
+      "title": "Resumen del recorrido",
+      "totalTime": "Tiempo total en el embudo",
+      "stagesVisited": "Etapas visitadas",
+      "reentries": "Reentradas",
+      "avgPerStage": "Promedio por etapa",
+      "longestStage": "Etapa más larga (cuello de botella)"
+    },
+    "sectionTitle": "Línea de tiempo",
+    "collapse": {
+      "showHidden_one": "Ver {{count}} evento oculto",
+      "showHidden_other": "Ver {{count}} eventos ocultos",
+      "collapse": "Contraer"
+    }
+  }
+}

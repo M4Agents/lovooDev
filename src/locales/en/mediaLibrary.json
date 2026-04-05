@@ -1,0 +1,153 @@
+{
+  "states": {
+    "loadingCompany": "Loading company information...",
+    "loadingFolders": "Loading folders...",
+    "loadingFiles": "Loading files...",
+    "processing": "Processing..."
+  },
+  "header": {
+    "title": "Media library",
+    "subtitle": "Manage all your company’s files"
+  },
+  "actions": {
+    "refresh": "Refresh list",
+    "newFolder": "New folder",
+    "upload": "Upload",
+    "uploadDisabledTitle": "Select a folder to upload",
+    "uploadEnabledTitle": "Upload files",
+    "deselectAll": "Deselect all",
+    "bulkActions": "Bulk actions",
+    "preview": "View",
+    "download": "Download",
+    "editFolder": "Edit folder",
+    "deleteFolder": "Delete folder"
+  },
+  "hints": {
+    "selectFolderForUpload": "Select a folder to upload files"
+  },
+  "breadcrumb": {
+    "home": "Home"
+  },
+  "filters": {
+    "searchPlaceholder": "Search files...",
+    "allTypes": "All types",
+    "images": "Images",
+    "videos": "Videos",
+    "audio": "Audio",
+    "documents": "Documents"
+  },
+  "sort": {
+    "name": "Name",
+    "date": "Date",
+    "size": "Size"
+  },
+  "bulk": {
+    "selectedCount": "{{count}} file(s) selected"
+  },
+  "uploadModal": {
+    "title": "📤 File upload",
+    "noFolderTitle": "No folder selected",
+    "noFolderDescription": "To stay organized, select a folder before uploading.",
+    "createFolderCta": "Create new folder"
+  },
+  "folderExplorer": {
+    "title": "Folders",
+    "libraryRoot": "Library",
+    "loading": "Loading folders...",
+    "emptyTitle": "No folders yet",
+    "emptyHint": "Click \"New folder\" to get started",
+    "statsTotalFolders": "Total folders:",
+    "statsTotalFiles": "Total files:"
+  },
+  "fileGrid": {
+    "loading": "Loading files...",
+    "emptyTitle": "No files found",
+    "emptyDescription": "This folder is empty or no files match the filters.",
+    "uploadCta": "Upload",
+    "selectAll": "Select all",
+    "selectedOfTotal": "{{selected}} of {{total}} selected",
+    "filesCount_one": "{{count}} file",
+    "filesCount_other": "{{count}} files",
+    "previewUnavailable": "Preview not available for this file type"
+  },
+  "folderManager": {
+    "titleNew": "New folder",
+    "titleEdit": "Edit folder",
+    "nameLabel": "Folder name *",
+    "namePlaceholder": "Enter folder name...",
+    "iconLabel": "Icon",
+    "descriptionLabel": "Description (optional)",
+    "descriptionPlaceholder": "Describe this folder’s content...",
+    "previewLabel": "Preview:",
+    "previewFallbackName": "Folder name",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create folder",
+    "saving": "Saving...",
+    "creating": "Creating...",
+    "validationNameRequired": "Folder name is required",
+    "validationInvalid": "Invalid data",
+    "errorSave": "Could not save folder",
+    "errorDelete": "Could not delete folder",
+    "confirmDelete": "Are you sure you want to delete folder \"{{name}}\"?\n\nThis action cannot be undone."
+  },
+  "mediaActions": {
+    "header": "Bulk actions",
+    "selectionTitle": "Bulk actions",
+    "selectionSubtitle": "{{count}} file(s) selected",
+    "moveTitle": "Move files",
+    "moveDescription": "Move to another folder",
+    "downloadTitle": "Download files",
+    "downloadDescription": "Download as ZIP",
+    "deleteTitle": "Delete files",
+    "deleteDescription": "Delete permanently",
+    "moveHeading": "Move {{count}} file(s)",
+    "destinationLabel": "Destination folder",
+    "destinationPlaceholder": "Select a folder...",
+    "destinationRoot": "📁 Library (root)",
+    "confirmTitle": "Confirm action",
+    "confirmIntro": "You are about to {{verb}} {{count}} file(s).",
+    "verbMove": "move",
+    "verbDelete": "delete",
+    "verbDownload": "download",
+    "destinationLine": "Destination: {{name}}",
+    "rootLibrary": "Library (root)",
+    "deleteWarning": "⚠️ This action cannot be undone!",
+    "errorSelectDestination": "Select a destination folder",
+    "errorMove": "Could not move files",
+    "errorDelete": "Could not delete files",
+    "errorDownload": "Could not download files",
+    "confirmDeleteMany": "Are you sure you want to delete {{count}} file(s)?\n\nThis action cannot be undone.",
+    "resultSuccess": "Action completed!",
+    "resultPartial": "Action partially completed",
+    "processed": "Processed: {{count}}",
+    "failed": "Failed: {{count}}",
+    "errorsHeading": "Errors:",
+    "back": "Back",
+    "cancel": "Cancel",
+    "executeMove": "Move",
+    "executeDelete": "Delete",
+    "executeDownload": "Download"
+  },
+  "editFolderModal": {
+    "title": "✏️ Edit folder",
+    "nameLabel": "Folder name *",
+    "namePlaceholder": "Enter folder name",
+    "iconLabel": "Icon",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Optional folder description",
+    "cancel": "Cancel",
+    "save": "Save changes",
+    "alertError": "Could not edit folder: {{message}}"
+  },
+  "deleteFolderModal": {
+    "title": "🗑️ Delete folder",
+    "cannotDeleteTitle": "Cannot delete",
+    "warningTitle": "Warning",
+    "warningBody": "This action cannot be undone. The folder will be deleted permanently.",
+    "cancel": "Cancel",
+    "confirm": "Delete folder",
+    "connectionError": "Connection error while deleting folder"
+  }
+}

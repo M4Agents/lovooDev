@@ -1,0 +1,31 @@
+{
+  "groups": {
+    "shortTerm": "Short term",
+    "monthly": "Monthly",
+    "longTerm": "Long term"
+  },
+  "periods": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "7days": "Last 7 days",
+    "15days": "Last 15 days",
+    "30days": "Last 30 days",
+    "this_month": "This month",
+    "last_month": "Last month",
+    "90days": "Last 90 days",
+    "this_quarter": "This quarter",
+    "this_year": "This year",
+    "custom": "Custom range"
+  },
+  "custom": {
+    "title": "Custom range",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "apply": "Apply range",
+    "placeholder": "mm/dd/yyyy"
+  },
+  "validation": {
+    "startBeforeEnd": "The start date must be before the end date."
+  },
+  "autoRefresh": "Auto refresh"
+}

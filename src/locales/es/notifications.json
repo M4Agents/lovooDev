@@ -1,0 +1,48 @@
+{
+  "header": {
+    "title": "Notificaciones",
+    "subtitleAllRead": "Todas las notificaciones leídas",
+    "unreadOne": "{{count}} sin leer",
+    "unreadOther": "{{count}} sin leer"
+  },
+  "master": {
+    "viewNotificationsOf": "Ver notificaciones de:",
+    "myNotifications": "Mis notificaciones"
+  },
+  "userFallback": "Usuario",
+  "search": {
+    "placeholder": "Buscar notificaciones..."
+  },
+  "filters": {
+    "all": "Todas",
+    "unread": "No leídas",
+    "read": "Leídas"
+  },
+  "actions": {
+    "markAllAsRead": "Marcar todas como leídas"
+  },
+  "loading": "Cargando notificaciones...",
+  "empty": {
+    "filteredTitle": "No se encontraron notificaciones",
+    "noNotificationsTitle": "Sin notificaciones",
+    "adjustFilters": "Intente ajustar los filtros de búsqueda",
+    "ownNoNotifications": "No tiene notificaciones en este momento",
+    "otherUserNoNotifications": "Este usuario no tiene notificaciones"
+  },
+  "groups": {
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "thisWeek": "Esta semana",
+    "older": "Más antiguas",
+    "line": "{{group}} ({{count}})"
+  },
+  "timeRelative": {
+    "now": "Ahora",
+    "minutesAgo": "hace {{count}} min",
+    "hoursAgo": "hace {{count}} h",
+    "daysAgo": "hace {{count}} d"
+  },
+  "footer": {
+    "viewingOtherUser": "ℹ️ Está viendo las notificaciones de otro usuario. No es posible marcarlas como leídas."
+  }
+}

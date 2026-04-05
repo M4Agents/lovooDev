@@ -1,0 +1,45 @@
+{
+  "page": {
+    "title": "Analytics",
+    "subtitle": "In-depth analysis of visitor behavior"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "heatmap": "Heatmap"
+  },
+  "error": {
+    "loadFailed": "Could not load analytics"
+  },
+  "kpis": {
+    "totalVisitors": "Total visitors",
+    "conversions": "Conversions",
+    "rateLine": "Rate: {{rate}}%",
+    "engagementAvg": "Avg. engagement",
+    "engagementScale": "out of 10.0",
+    "avgTimeToConvert": "Avg. time to convert",
+    "secondsSuffix": "s"
+  },
+  "sections": {
+    "devices": "Devices",
+    "recentConversions": "Recent conversions",
+    "behaviorDetails": "Behavior details"
+  },
+  "conversions": {
+    "none": "No conversions yet",
+    "fallbackName": "Conversion",
+    "scoreLine": "Score: {{score}}/10"
+  },
+  "table": {
+    "headers": {
+      "visitor": "Visitor",
+      "device": "Device",
+      "duration": "Duration",
+      "scroll": "Scroll",
+      "clicks": "Clicks",
+      "score": "Score",
+      "status": "Status"
+    },
+    "notAvailable": "N/A",
+    "statusConverted": "Converted"
+  }
+}

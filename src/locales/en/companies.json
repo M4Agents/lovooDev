@@ -1,0 +1,88 @@
+{
+  "states": {
+    "loading": "Loading companies..."
+  },
+  "accessDenied": "Restricted to administrators",
+  "header": {
+    "title": "Companies",
+    "subtitle": "Manage your client companies"
+  },
+  "actions": {
+    "create": "New company",
+    "enter": "Enter",
+    "manageUser": "Manage user",
+    "editCompany": "Edit company",
+    "deleteCompany": "Delete company",
+    "save": "Save",
+    "createSubmit": "Create",
+    "cancel": "Cancel",
+    "saveChanges": "Save changes",
+    "gotIt": "Got it"
+  },
+  "card": {
+    "plan": "Plan: {{plan}}",
+    "createdAt": "Created: {{date}}"
+  },
+  "status": {
+    "active": "Active",
+    "suspended": "Suspended",
+    "cancelled": "Cancelled"
+  },
+  "planLabels": {
+    "basic": "Basic",
+    "pro": "Pro",
+    "enterprise": "Enterprise"
+  },
+  "modals": {
+    "createTitle": "New company",
+    "editTitle": "Edit company",
+    "companyName": "Company name",
+    "domainOptional": "Domain (optional)",
+    "domainPlaceholder": "example.com",
+    "plan": "Plan",
+    "adminEmail": "Administrator email",
+    "adminPassword": "Administrator password",
+    "sendInviteAuto": "📧 Send invite email automatically",
+    "inviteAutoHint": "✅ Automatic invite: the client receives an email with a link to set their password and access the app.",
+    "inviteManualHint": "⚠️ Manual process: credentials will be shown for you to copy and send to the client yourself."
+  },
+  "userModal": {
+    "title": "Manage user - {{name}}",
+    "userEmail": "User email",
+    "emailPlaceholder": "user@company.com",
+    "emailHint": "This will be the user’s new login email",
+    "newPasswordOptional": "New password (optional)",
+    "passwordPlaceholder": "Leave blank to keep current",
+    "passwordHint": "Minimum 6 characters. Leave blank to keep unchanged.",
+    "infoTitle": "ℹ️ Information:",
+    "infoBullet1": "• Changes apply immediately",
+    "infoBullet2": "• The user will be notified by email",
+    "infoBullet3": "• If the password changes, a confirmation link will be sent"
+  },
+  "successModal": {
+    "title": "Company created!",
+    "successTitle": "✅ Company created successfully!",
+    "labelName": "Name:",
+    "labelApiKey": "API key:",
+    "nextStepsTitle": "📧 Next steps:",
+    "nextStep1": "• The user will receive a confirmation email",
+    "nextStep2": "• They must confirm the email to activate the account",
+    "nextStep3": "• After confirmation, they can log in normally"
+  },
+  "confirms": {
+    "deleteCompany": "Are you sure you want to delete this company?",
+    "impersonate": "Enter as a user of company \"{{name}}\"?\n\nYou can return to your original user anytime via the orange banner at the top.",
+    "noUser": "Company \"{{name}}\" has no associated user.\n\nClick OK to create access credentials for this company.\nClick Cancel to go back."
+  },
+  "messages": {
+    "createError": "Error creating company: {{message}}",
+    "impersonateError": "Error entering as user: {{message}}"
+  },
+  "alerts": {
+    "credentialsCreated": "✅ Credentials created successfully!\n\n📧 Email: {{email}}\n🔑 Password: {{password}}\n\n⚠️ IMPORTANT — NEXT STEPS:\n\n1️⃣ SHARE THE CREDENTIALS:\n   • Email: {{email}}\n   • Password: {{password}}\n\n2️⃣ INSTRUCT THE CLIENT:\n   • Go to: {{origin}}\n   • Click \"Sign up\"\n   • Company name: \"{{companyName}}\" (EXACT)\n   • Use the email and password provided\n\n3️⃣ AFTER REGISTRATION:\n   • The system will link automatically\n   • The company will have a valid user_id\n   • All features will work\n\n📋 The client must register to activate the account!",
+    "createUserError": "Error creating user: {{message}}",
+    "emailChanged": "✅ Email changed successfully!\n\nNew email: {{email}}\n\n⚠️ In production, this would be done via a server-side API.",
+    "passwordChanged": "✅ Password changed successfully!\n\n⚠️ In production, this would be done via a server-side API.\n\nThe user will receive an email to confirm the new password.",
+    "updateUserError": "Error updating user: {{message}}"
+  }
+}

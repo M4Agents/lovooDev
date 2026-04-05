@@ -1,0 +1,89 @@
+{
+  "accessDenied": {
+    "title": "Acceso denegado",
+    "description": "Solo los superadministradores pueden acceder a esta página."
+  },
+  "header": {
+    "title": "Gestión de planes",
+    "subtitle": "Administre los planes disponibles en la plataforma"
+  },
+  "actions": {
+    "create": "Nuevo plan",
+    "edit": "Editar",
+    "delete": "Eliminar"
+  },
+  "badges": {
+    "popular": "Popular"
+  },
+  "status": {
+    "active": "Activo",
+    "inactive": "Inactivo"
+  },
+  "card": {
+    "featuresTitle": "Recursos:",
+    "whatsappLimit": "{{count}} WhatsApp",
+    "landingPagesLimit": "{{count}} landing pages",
+    "usersLimit": "{{count}} usuarios",
+    "moreFeatures": "+{{count}} recursos adicionales"
+  },
+  "billing": {
+    "perMonth": "/mes",
+    "perYear": "/año"
+  },
+  "pricing": {
+    "free": "Gratis"
+  },
+  "confirm": {
+    "deletePlan": "¿Seguro que desea eliminar el plan \"{{name}}\"?"
+  },
+  "errors": {
+    "load": "Error al cargar planes",
+    "save": "Error al guardar plan",
+    "delete": "Error al eliminar plan"
+  },
+  "modals": {
+    "create": {
+      "title": "Nuevo plan"
+    },
+    "edit": {
+      "title": "Editar plan"
+    }
+  },
+  "form": {
+    "labels": {
+      "name": "Nombre del plan *",
+      "slug": "Slug *",
+      "description": "Descripción",
+      "price": "Precio *",
+      "currency": "Moneda",
+      "billingCycle": "Ciclo",
+      "whatsapp": "WhatsApp *",
+      "landingPages": "Landing pages",
+      "leads": "Leads",
+      "users": "Usuarios",
+      "planFeatures": "Recursos del plan",
+      "sortOrder": "Orden",
+      "active": "Activo",
+      "popular": "Popular"
+    },
+    "placeholders": {
+      "name": "Ej.: Plan Básico",
+      "slug": "Ej.: basic",
+      "description": "Descripción del plan...",
+      "unlimited": "Ilimitado",
+      "addFeature": "Añadir recurso..."
+    },
+    "currency": {
+      "brl": "BRL (R$)",
+      "usd": "USD ($)"
+    },
+    "billing": {
+      "monthly": "Mensual",
+      "yearly": "Anual",
+      "lifetime": "De por vida"
+    },
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando..."
+  }
+}

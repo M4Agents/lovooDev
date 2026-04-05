@@ -1,0 +1,48 @@
+{
+  "header": {
+    "title": "Notifications",
+    "subtitleAllRead": "All notifications read",
+    "unreadOne": "{{count}} unread",
+    "unreadOther": "{{count}} unread"
+  },
+  "master": {
+    "viewNotificationsOf": "View notifications for:",
+    "myNotifications": "My notifications"
+  },
+  "userFallback": "User",
+  "search": {
+    "placeholder": "Search notifications..."
+  },
+  "filters": {
+    "all": "All",
+    "unread": "Unread",
+    "read": "Read"
+  },
+  "actions": {
+    "markAllAsRead": "Mark all as read"
+  },
+  "loading": "Loading notifications...",
+  "empty": {
+    "filteredTitle": "No notifications found",
+    "noNotificationsTitle": "No notifications",
+    "adjustFilters": "Try adjusting your search filters",
+    "ownNoNotifications": "You have no notifications right now",
+    "otherUserNoNotifications": "This user has no notifications"
+  },
+  "groups": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This week",
+    "older": "Older",
+    "line": "{{group}} ({{count}})"
+  },
+  "timeRelative": {
+    "now": "Now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  },
+  "footer": {
+    "viewingOtherUser": "ℹ️ You are viewing another user’s notifications. They cannot be marked as read."
+  }
+}

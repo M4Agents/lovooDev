@@ -1,0 +1,96 @@
+{
+  "header": {
+    "title": "Reports"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "byStage": "By stage",
+    "bySeller": "By seller",
+    "cycleTime": "Cycle time"
+  },
+  "sections": {
+    "byStage": "Time by stage — open opportunities and historical moves in the period",
+    "bySeller": "Seller performance — wins and losses in the selected period",
+    "cycleTime": "Sales cycle — time between open and close (won and lost in the period)"
+  },
+  "duration": {
+    "empty": "—",
+    "hours": "{{count}}h",
+    "days": "{{count}}d",
+    "monthsApprox": "{{count}}m",
+    "minutes": "{{count}}min",
+    "hoursDecimal": "{{value}}h"
+  },
+  "kpi": {
+    "openOpportunities": "Open opportunities",
+    "wonInPeriod": "Won in period",
+    "lostInPeriod": "Lost in period",
+    "conversionRate": "Conversion rate",
+    "conversionClosedOnly": "Closed in period only",
+    "conversionPercent": "{{value}}%",
+    "wonValue": "Won value",
+    "stalled": "Stalled +{{days}}d",
+    "limitPrefix": "Limit:",
+    "daysUnit": "days",
+    "avgCycleWon": "Avg. cycle — Won",
+    "avgCycleLost": "Avg. cycle — Lost",
+    "sinceOpenToWon": "From open to won",
+    "sinceOpenToLost": "From open to lost",
+    "cycleWonShort": "Avg. cycle — Won",
+    "medianWonShort": "Median — Won",
+    "maxWonShort": "Max — Won",
+    "cycleLostShort": "Avg. cycle — Lost"
+  },
+  "charts": {
+    "openByStageTitle": "Open opportunities by stage",
+    "noOpenInSelectedFunnel": "No open opportunities in the selected funnel."
+  },
+  "cycleTable": {
+    "noClosedInPeriod": "No opportunities closed in the selected period.",
+    "byFunnel": "By funnel",
+    "bySeller": "By seller",
+    "columnName": "Name",
+    "columnWon": "Won",
+    "columnLost": "Lost",
+    "columnAvgCycleWon": "Avg. cycle (W)",
+    "columnMedianWon": "Median (W)",
+    "columnMaxWon": "Max (W)",
+    "columnAvgCycleLost": "Avg. cycle (L)"
+  },
+  "messages": {
+    "loadError": "Could not load reports: {{error}}"
+  },
+  "empty": {
+    "defaultTitle": "No data for this period",
+    "defaultDescription": "Try widening the period or checking the selected filters."
+  },
+  "funnel": {
+    "allFunnels": "All funnels",
+    "singleFallback": "1 funnel",
+    "selectedCount": "{{count}} funnels selected",
+    "noneFound": "No funnels found"
+  },
+  "stageTable": {
+    "searchPlaceholder": "Search stage or funnel...",
+    "columnStage": "Stage",
+    "columnOpen": "Open",
+    "columnAvgTime": "Avg. time",
+    "columnMedian": "Median",
+    "columnMax": "Max",
+    "columnStatus": "Status",
+    "bottleneck": "Bottleneck"
+  },
+  "sellerTable": {
+    "searchPlaceholder": "Search seller...",
+    "filterAll": "All",
+    "filterWithWon": "With wins",
+    "filterWithLost": "With losses",
+    "columnSeller": "Seller",
+    "columnOpen": "Open",
+    "columnWon": "Won",
+    "columnLost": "Lost",
+    "columnWonValue": "Won value",
+    "columnConversion": "Conversion",
+    "columnAvgCycle": "Avg. cycle"
+  }
+}

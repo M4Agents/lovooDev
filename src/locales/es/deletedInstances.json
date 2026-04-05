@@ -1,0 +1,43 @@
+{
+  "header": {
+    "title": "Instancias eliminadas",
+    "description": "Administre instancias de WhatsApp que fueron eliminadas (soft delete)"
+  },
+  "actions": {
+    "refresh": "Actualizar"
+  },
+  "error": {
+    "title": "Error",
+    "loadFailed": "Error al cargar instancias eliminadas",
+    "restoreFailed": "Error al restaurar la instancia"
+  },
+  "empty": {
+    "title": "Ninguna instancia eliminada",
+    "description": "Todas sus instancias de WhatsApp están activas"
+  },
+  "table": {
+    "columns": {
+      "instance": "Instancia",
+      "phone": "Teléfono",
+      "conversations": "Conversaciones",
+      "deletedAt": "Eliminada el",
+      "status": "Estado",
+      "actions": "Acciones"
+    }
+  },
+  "instance": {
+    "phoneMissing": "Sin teléfono",
+    "statusDeleted": "Eliminada"
+  },
+  "restore": {
+    "restoring": "Restaurando...",
+    "action": "Restaurar"
+  },
+  "info": {
+    "title": "Sobre instancias eliminadas",
+    "bulletSoftDelete": "Las instancias eliminadas quedan ocultas pero pueden restaurarse",
+    "bulletConversations": "Todas las conversaciones se conservan y siguen accesibles",
+    "bulletRestoredState": "Al restaurar, la instancia vuelve como \"desconectada\"",
+    "bulletReconnect": "Deberá volver a conectar la instancia después de restaurar"
+  }
+}

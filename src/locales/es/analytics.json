@@ -1,0 +1,45 @@
+{
+  "page": {
+    "title": "Analytics",
+    "subtitle": "Análisis detallado del comportamiento de los visitantes"
+  },
+  "tabs": {
+    "overview": "Resumen",
+    "heatmap": "Mapa de calor"
+  },
+  "error": {
+    "loadFailed": "Error al cargar analytics"
+  },
+  "kpis": {
+    "totalVisitors": "Total de visitantes",
+    "conversions": "Conversiones",
+    "rateLine": "Tasa: {{rate}}%",
+    "engagementAvg": "Compromiso promedio",
+    "engagementScale": "de 10.0",
+    "avgTimeToConvert": "Tiempo prom. para convertir",
+    "secondsSuffix": "s"
+  },
+  "sections": {
+    "devices": "Dispositivos",
+    "recentConversions": "Conversiones recientes",
+    "behaviorDetails": "Detalles de comportamiento"
+  },
+  "conversions": {
+    "none": "Aún no hay conversiones",
+    "fallbackName": "Conversión",
+    "scoreLine": "Puntuación: {{score}}/10"
+  },
+  "table": {
+    "headers": {
+      "visitor": "Visitante",
+      "device": "Dispositivo",
+      "duration": "Duración",
+      "scroll": "Scroll",
+      "clicks": "Clics",
+      "score": "Puntuación",
+      "status": "Estado"
+    },
+    "notAvailable": "N/D",
+    "statusConverted": "Convertido"
+  }
+}

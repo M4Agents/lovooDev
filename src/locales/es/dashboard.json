@@ -1,0 +1,121 @@
+{
+  "impersonation": {
+    "pageTitle": "Panel - {{name}}",
+    "subtitleViewingChild": "Viendo datos de la empresa hija",
+    "childDashboardCard": {
+      "title": "Panel de la empresa hija",
+      "descriptionPrefix": "Está viendo el panel de",
+      "note": "Este es un entorno aislado con datos específicos de esta empresa."
+    },
+    "actions": {
+      "reloadCompany": "Recargar empresa",
+      "reloadPage": "Recargar página"
+    },
+    "fallbackCompanyName": "Empresa en suplantación"
+  },
+  "loadingCompany": {
+    "title": "Cargando empresa...",
+    "description": "Espere mientras cargamos los datos de su empresa."
+  },
+  "errorNoCompany": {
+    "title": "Empresa no encontrada",
+    "description": "No fue posible cargar los datos de su empresa.",
+    "debugUserId": "ID de usuario: {{id}}",
+    "debugImpersonating": "Suplantación: {{value}}",
+    "debugCompanyId": "ID de empresa: {{value}}",
+    "reloadPage": "Recargar página",
+    "reloadCompany": "Recargar empresa",
+    "clearAndReturnSuperAdmin": "Limpiar y volver al super admin"
+  },
+  "header": {
+    "titlePlatform": "Panel de la plataforma",
+    "titleDefault": "Panel",
+    "subtitlePlatform": "Visión general de toda la plataforma M4 Track",
+    "subtitleTenant": "Visión general de sus métricas",
+    "fullReportLink": "Ver informe completo"
+  },
+  "metrics": {
+    "landingPages": "Landing pages",
+    "activePages": "Páginas activas",
+    "pagesOfCompany": "Páginas de esta empresa",
+    "totalVisitors": "Total de visitantes",
+    "uniqueVisitors": "Visitantes únicos",
+    "conversions": "Conversiones",
+    "conversionRate": "Tasa: {{rate}}%",
+    "avgEngagement": "Compromiso promedio",
+    "engagementScale": "de 10.0",
+    "clientCompanies": "Empresas clientes",
+    "platformTotal": "Total de la plataforma",
+    "totalUsers": "Total de usuarios",
+    "registeredUsers": "Usuarios registrados",
+    "activeInstances": "Instancias activas",
+    "whatsappConnected": "WhatsApp conectados"
+  },
+  "analyticsAdvanced": {
+    "sectionTitle": "Analytics avanzados",
+    "growthChartTitle": "Crecimiento de empresas en el período",
+    "planDistributionChartTitle": "Distribución por planes",
+    "planDetailsTitle": "Detalle de planes",
+    "loadErrorTitle": "⚠️ Error al cargar analytics",
+    "retry": "Intentar de nuevo"
+  },
+  "companyInfo": {
+    "title": "Información de la empresa",
+    "fieldName": "Nombre",
+    "fieldPlan": "Plan",
+    "badgePremium": "Premium",
+    "fieldStatus": "Estado",
+    "statusActive": "Activo",
+    "statusInactive": "Inactivo",
+    "fieldDomain": "Dominio"
+  },
+  "quickActions": {
+    "title": "Acciones rápidas",
+    "newLanding": {
+      "title": "Nueva landing page",
+      "subtitle": "Crear página para tracking"
+    },
+    "manageCompanies": {
+      "title": "Administrar empresas",
+      "subtitle": "Añadir nueva empresa"
+    },
+    "settings": {
+      "title": "Configuración",
+      "subtitle": "Webhooks y API keys"
+    },
+    "documentation": {
+      "title": "Documentación",
+      "subtitle": "Guías y documentación API"
+    }
+  },
+  "recentActivity": {
+    "title": "Actividad reciente",
+    "viewAll": "Ver todas",
+    "emptyTitle": "Sin actividad reciente",
+    "emptyDescription": "Cuando haya visitantes y conversiones, aparecerán aquí."
+  },
+  "analyticsCards": {
+    "newCompanies": "Nuevas empresas",
+    "vsPreviousPeriod": "{{growth}} vs período anterior",
+    "avgLabel": "Media",
+    "companiesPerDay": "Empresas/día",
+    "avgDailyGrowth": "Crecimiento medio diario",
+    "topPlanBadge": "Plan top",
+    "mostPopularPlan": "Plan más popular",
+    "companiesPercent": "{{count}} empresas ({{percent}}%)",
+    "plansBadge": "Planes",
+    "planTypes": "Tipos de plan",
+    "activeDistribution": "Distribución activa",
+    "notAvailable": "N/D"
+  },
+  "planDistributionMini": {
+    "noData": "Sin datos disponibles",
+    "morePlans": "+{{count}} otros planes"
+  },
+  "charts": {
+    "barEmpty": "Sin datos para el período",
+    "tooltipCompanies": "{{count}} empresas",
+    "pieEmpty": "Ningún plan encontrado",
+    "pieTotal": "Total"
+  }
+}

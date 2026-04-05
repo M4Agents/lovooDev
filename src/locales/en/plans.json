@@ -1,0 +1,89 @@
+{
+  "accessDenied": {
+    "title": "Access denied",
+    "description": "Only super administrators can access this page."
+  },
+  "header": {
+    "title": "Plan management",
+    "subtitle": "Manage plans available on the platform"
+  },
+  "actions": {
+    "create": "New plan",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "badges": {
+    "popular": "Popular"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "card": {
+    "featuresTitle": "Features:",
+    "whatsappLimit": "{{count}} WhatsApp",
+    "landingPagesLimit": "{{count}} landing pages",
+    "usersLimit": "{{count}} users",
+    "moreFeatures": "+{{count}} more features"
+  },
+  "billing": {
+    "perMonth": "/month",
+    "perYear": "/year"
+  },
+  "pricing": {
+    "free": "Free"
+  },
+  "confirm": {
+    "deletePlan": "Are you sure you want to delete plan \"{{name}}\"?"
+  },
+  "errors": {
+    "load": "Could not load plans",
+    "save": "Could not save plan",
+    "delete": "Could not delete plan"
+  },
+  "modals": {
+    "create": {
+      "title": "New plan"
+    },
+    "edit": {
+      "title": "Edit plan"
+    }
+  },
+  "form": {
+    "labels": {
+      "name": "Plan name *",
+      "slug": "Slug *",
+      "description": "Description",
+      "price": "Price *",
+      "currency": "Currency",
+      "billingCycle": "Billing cycle",
+      "whatsapp": "WhatsApp *",
+      "landingPages": "Landing pages",
+      "leads": "Leads",
+      "users": "Users",
+      "planFeatures": "Plan features",
+      "sortOrder": "Order",
+      "active": "Active",
+      "popular": "Popular"
+    },
+    "placeholders": {
+      "name": "e.g. Basic plan",
+      "slug": "e.g. basic",
+      "description": "Plan description...",
+      "unlimited": "Unlimited",
+      "addFeature": "Add feature..."
+    },
+    "currency": {
+      "brl": "BRL (R$)",
+      "usd": "USD ($)"
+    },
+    "billing": {
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "lifetime": "Lifetime"
+    },
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving..."
+  }
+}

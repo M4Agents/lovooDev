@@ -1,0 +1,88 @@
+{
+  "states": {
+    "loading": "Cargando empresas..."
+  },
+  "accessDenied": "Restringido a administradores",
+  "header": {
+    "title": "Empresas",
+    "subtitle": "Administre sus empresas clientes"
+  },
+  "actions": {
+    "create": "Nueva empresa",
+    "enter": "Entrar",
+    "manageUser": "Administrar usuario",
+    "editCompany": "Editar empresa",
+    "deleteCompany": "Eliminar empresa",
+    "save": "Guardar",
+    "createSubmit": "Crear",
+    "cancel": "Cancelar",
+    "saveChanges": "Guardar cambios",
+    "gotIt": "Entendido"
+  },
+  "card": {
+    "plan": "Plan: {{plan}}",
+    "createdAt": "Creada: {{date}}"
+  },
+  "status": {
+    "active": "Activo",
+    "suspended": "Suspendido",
+    "cancelled": "Cancelado"
+  },
+  "planLabels": {
+    "basic": "Básico",
+    "pro": "Pro",
+    "enterprise": "Enterprise"
+  },
+  "modals": {
+    "createTitle": "Nueva empresa",
+    "editTitle": "Editar empresa",
+    "companyName": "Nombre de la empresa",
+    "domainOptional": "Dominio (opcional)",
+    "domainPlaceholder": "ejemplo.com",
+    "plan": "Plan",
+    "adminEmail": "Correo del administrador",
+    "adminPassword": "Contraseña del administrador",
+    "sendInviteAuto": "📧 Enviar invitación por correo automáticamente",
+    "inviteAutoHint": "✅ Invitación automática: el cliente recibirá un correo con enlace para definir su contraseña y acceder al sistema.",
+    "inviteManualHint": "⚠️ Proceso manual: las credenciales se mostrarán para que usted las copie y envíe al cliente."
+  },
+  "userModal": {
+    "title": "Administrar usuario - {{name}}",
+    "userEmail": "Correo del usuario",
+    "emailPlaceholder": "usuario@empresa.com",
+    "emailHint": "Será el nuevo correo de inicio de sesión del usuario",
+    "newPasswordOptional": "Nueva contraseña (opcional)",
+    "passwordPlaceholder": "Deje en blanco para mantener la actual",
+    "passwordHint": "Mínimo 6 caracteres. Deje en blanco para no cambiar.",
+    "infoTitle": "ℹ️ Información:",
+    "infoBullet1": "• Los cambios se aplican de inmediato",
+    "infoBullet2": "• El usuario será notificado por correo",
+    "infoBullet3": "• Si cambia la contraseña, se enviará un enlace de confirmación"
+  },
+  "successModal": {
+    "title": "¡Empresa creada!",
+    "successTitle": "✅ ¡Empresa creada con éxito!",
+    "labelName": "Nombre:",
+    "labelApiKey": "API Key:",
+    "nextStepsTitle": "📧 Próximos pasos:",
+    "nextStep1": "• El usuario recibirá un correo de confirmación",
+    "nextStep2": "• Debe confirmar el correo para activar la cuenta",
+    "nextStep3": "• Tras la confirmación, podrá iniciar sesión con normalidad"
+  },
+  "confirms": {
+    "deleteCompany": "¿Seguro que desea eliminar esta empresa?",
+    "impersonate": "¿Desea entrar como usuario de la empresa \"{{name}}\"?\n\nPodrá volver a su usuario original en cualquier momento con el banner naranja superior.",
+    "noUser": "La empresa \"{{name}}\" no tiene un usuario asociado.\n\nPulse Aceptar para crear credenciales de acceso.\nPulse Cancelar para volver."
+  },
+  "messages": {
+    "createError": "Error al crear empresa: {{message}}",
+    "impersonateError": "Error al entrar como usuario: {{message}}"
+  },
+  "alerts": {
+    "credentialsCreated": "✅ ¡Credenciales creadas con éxito!\n\n📧 Correo: {{email}}\n🔑 Contraseña: {{password}}\n\n⚠️ IMPORTANTE — PRÓXIMOS PASOS:\n\n1️⃣ COMPARTA LAS CREDENCIALES:\n   • Correo: {{email}}\n   • Contraseña: {{password}}\n\n2️⃣ INSTRUYA AL CLIENTE:\n   • Acceda a: {{origin}}\n   • Pulse \"Registrarse\"\n   • Nombre de empresa: \"{{companyName}}\" (EXACTO)\n   • Use el correo y contraseña indicados\n\n3️⃣ TRAS EL REGISTRO:\n   • El sistema vinculará automáticamente\n   • La empresa tendrá un user_id válido\n   • Todas las funciones funcionarán\n\n📋 ¡El cliente debe registrarse para activar la cuenta!",
+    "createUserError": "Error al crear usuario: {{message}}",
+    "emailChanged": "✅ ¡Correo cambiado con éxito!\n\nNuevo correo: {{email}}\n\n⚠️ En producción, esto se haría vía API en el servidor.",
+    "passwordChanged": "✅ ¡Contraseña cambiada con éxito!\n\n⚠️ En producción, esto se haría vía API en el servidor.\n\nEl usuario recibirá un correo para confirmar la nueva contraseña.",
+    "updateUserError": "Error al actualizar usuario: {{message}}"
+  }
+}
