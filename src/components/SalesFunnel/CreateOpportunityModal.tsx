@@ -4,7 +4,7 @@
 // Objetivo: Modal para criar nova oportunidade manualmente
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User, Trash2, Layers } from 'lucide-react'
@@ -23,12 +23,13 @@ import {
 import { OpportunityItemsSection } from './OpportunityItemsSection'
 import { OpportunityQuickAddRow, type OpportunityQuickAddPayload } from './OpportunityQuickAddRow'
 import type { CompanyUser } from '../../types/user'
-import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import {
   normalizeOpportunityManualValue,
   parseOpportunityCompositionError,
   resolveOpportunityCompositionErrorMessage
 } from '../../utils/opportunityCompositionErrors'
+import { estimateDraftLinesTotal } from '../../utils/opportunityDraftPricing'
+import { formatMoney } from '../../lib/formatMoney'
 
 const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
 
@@ -225,8 +226,41 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     setDraftLines((lines) => [...lines, { ...p, key: crypto.randomUUID() }])
   }
 
-  // Atualizar display do valor com formatação brasileira
+  const companyCurrency = company?.default_currency ?? 'BRL'
+  const valueInputMode: 'manual' | 'fromItems' =
+    !isEditMode && draftLines.length > 0 ? 'fromItems' : 'manual'
+
+  const estimatedTotal = useMemo(() => {
+    if (isEditMode || draftLines.length === 0) return null
+    return estimateDraftLinesTotal(draftLines, catalogProducts, catalogServices)
+  }, [isEditMode, draftLines, catalogProducts, catalogServices])
+
+  const prevDraftLenRef = useRef(0)
+
+  useEffect(() => {
+    if (!isOpen) prevDraftLenRef.current = 0
+  }, [isOpen])
+
+  useEffect(() => {
+    if (isEditMode) return
+    const len = draftLines.length
+    if (prevDraftLenRef.current > 0 && len === 0) {
+      setFormData((prev) => ({ ...prev, value: 0 }))
+      setValueDisplay('0,00')
+    }
+    prevDraftLenRef.current = len
+  }, [draftLines.length, isEditMode])
+
+  useEffect(() => {
+    if (isEditMode || estimatedTotal === null) return
+    setFormData((prev) => ({ ...prev, value: estimatedTotal, currency: companyCurrency }))
+    setValueDisplay(formatMoney(estimatedTotal, companyCurrency))
+  }, [isEditMode, estimatedTotal, companyCurrency])
+
+  // Atualizar display do valor com formatação brasileira (modo manual)
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (valueInputMode === 'fromItems') return
+
     const input = e.target.value
     
     // Remover tudo exceto números
@@ -234,7 +268,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     
     if (!numbersOnly) {
       setValueDisplay('0,00')
-      setFormData({ ...formData, value: 0 })
+      setFormData((prev) => ({ ...prev, value: 0, currency: companyCurrency }))
       return
     }
     
@@ -248,7 +282,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
     })
     
     setValueDisplay(formatted)
-    setFormData({ ...formData, value: numericValue })
+    setFormData((prev) => ({ ...prev, value: numericValue, currency: companyCurrency }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -307,7 +341,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
           title: formData.title,
           description: formData.description,
           value: normalizeOpportunityManualValue(formData.value),
-          currency: formData.currency || company.default_currency || 'BRL',
+          currency: companyCurrency,
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || undefined,
           source: formData.source,
@@ -446,6 +480,62 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {!isEditMode && compositionEntitled && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 shadow-sm p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Layers className="w-4 h-4 text-purple-600" />
+                {t('createOpportunity.compositionSectionTitle')}
+              </div>
+              <p className="text-xs text-slate-600">{t('createOpportunity.compositionSectionHelp')}</p>
+              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
+                <p className="text-sm text-amber-800 bg-amber-50/90 border border-amber-100 rounded-lg px-3 py-2">
+                  {t('createOpportunity.compositionEmptyCatalog')}
+                </p>
+              ) : (
+                <>
+                  <OpportunityQuickAddRow
+                    busy={loading}
+                    products={catalogProducts}
+                    services={catalogServices}
+                    onAdd={appendDraftLine}
+                  />
+                  {draftLines.length > 0 && (
+                    <ul className="max-h-[min(40vh,16rem)] overflow-y-auto space-y-2 text-xs pr-1">
+                      {draftLines.map((line) => (
+                        <li
+                          key={line.key}
+                          className="flex items-start justify-between gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm"
+                        >
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {draftLineLabel(line, catalogProducts, catalogServices)}
+                            </div>
+                            <div className="text-gray-500">
+                              Qtd {line.quantity} ·{' '}
+                              {line.discountType === 'percent'
+                                ? `Desc. ${line.discountValue}%`
+                                : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
+                            }
+                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
+                            aria-label={t('createOpportunity.removeDraftLine')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -476,10 +566,10 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             />
           </div>
 
-          {/* Valor, moeda e Probabilidade */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+          {/* Valor e Probabilidade */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
                 <DollarSign className="w-4 h-4 inline mr-1" />
                 {t('createOpportunity.fields.value')}
               </label>
@@ -487,32 +577,36 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 type="text"
                 value={valueDisplay}
                 onChange={handleValueChange}
+                readOnly={valueInputMode === 'fromItems'}
                 placeholder={t('createOpportunity.fields.valuePlaceholder')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                  valueInputMode === 'fromItems'
+                    ? 'border-slate-200 bg-slate-50 text-slate-800 cursor-not-allowed'
+                    : 'border-gray-300'
+                }`}
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('createOpportunity.fields.currencyIso')}</label>
-              {isEditMode ? (
-                <p className="px-4 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
-                  {opportunityData?.currency ?? formData.currency ?? 'BRL'}{' '}
-                  <span className="text-xs text-gray-400">{t('createOpportunity.fields.currencyLocked')}</span>
+              {!isEditMode && (
+                <p className="text-xs text-slate-500">
+                  {t('createOpportunity.companyCurrencyHint', { code: companyCurrency })}
                 </p>
-              ) : (
-                <select
-                  value={formData.currency || 'BRL'}
-                  onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                >
-                  {SUPPORTED_CURRENCIES.map(c => (
-                    <option key={c.code} value={c.code}>{c.label}</option>
-                  ))}
-                </select>
+              )}
+              {isEditMode && (
+                <div>
+                  <p className="text-xs font-medium text-slate-600 mt-1">
+                    {t('createOpportunity.fields.currencyLabel')}
+                  </p>
+                  <p className="text-sm border border-slate-200 rounded-lg bg-slate-50/80 px-3 py-2 text-slate-800">
+                    {opportunityData?.currency ?? formData.currency ?? 'BRL'}{' '}
+                    <span className="text-xs text-slate-400">{t('createOpportunity.fields.currencyLocked')}</span>
+                  </p>
+                </div>
+              )}
+              {valueInputMode === 'fromItems' && (
+                <p className="text-xs text-purple-700">{t('createOpportunity.valueCalculatedFromItems')}</p>
               )}
             </div>
 
-            <div>
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <Percent className="w-4 h-4 inline mr-1" />
                 {t('createOpportunity.fields.probability')}
@@ -590,64 +684,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             />
           </div>
 
-          {!isEditMode && compositionEntitled && (
-            <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                {t('createOpportunity.compositionSectionTitle')}
-              </div>
-              <p className="text-xs text-gray-600">{t('createOpportunity.compositionSectionHelp')}</p>
-              {catalogProducts.length === 0 && catalogServices.length === 0 ? (
-                <p className="text-sm text-amber-800 bg-amber-50 rounded px-3 py-2">
-                  {t('createOpportunity.compositionEmptyCatalog')}
-                </p>
-              ) : (
-                <>
-                  <OpportunityQuickAddRow
-                    busy={loading}
-                    products={catalogProducts}
-                    services={catalogServices}
-                    onAdd={appendDraftLine}
-                  />
-                  {draftLines.length > 0 && (
-                    <ul className="space-y-2 text-xs">
-                      {draftLines.map((line) => (
-                        <li
-                          key={line.key}
-                          className="flex items-start justify-between gap-2 bg-white border border-gray-100 rounded px-3 py-2"
-                        >
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {draftLineLabel(line, catalogProducts, catalogServices)}
-                            </div>
-                            <div className="text-gray-500">
-                              Qtd {line.quantity} ·{' '}
-                              {line.discountType === 'percent'
-                                ? `Desc. ${line.discountValue}%`
-                                : `Desc. ${formatCurrency(line.discountValue, formData.currency || 'BRL')}`}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraftLines((rows) => rows.filter((r) => r.key !== line.key))
-                            }
-                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
-                            aria-label="Remover linha"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
           {isEditMode && compositionEntitled && fullOpportunity && company?.id && (
-            <div className="max-h-[min(50vh,28rem)] overflow-y-auto rounded-lg border border-gray-100">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 shadow-sm max-h-[min(50vh,28rem)] overflow-y-auto">
               <OpportunityItemsSection
                 companyId={company.id}
                 opportunity={fullOpportunity}
