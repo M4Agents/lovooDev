@@ -139,7 +139,6 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant }) =
     )
   }
 
-  /* expanded: globo + código ao lado do plano */
   return (
     <div className="relative shrink-0">
       <button

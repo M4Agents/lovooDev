@@ -1,4 +1,4 @@
-/** Chave de persistência local do idioma da UI (Etapa 1). */
+/** localStorage key for UI language (client-only; no backend persistence in this phase). */
 export const LOCALE_STORAGE_KEY = 'lovoo_crm_ui_locale'
 
 export type AppLocale = 'pt-BR' | 'en' | 'es'

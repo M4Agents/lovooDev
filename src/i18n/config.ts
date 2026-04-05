@@ -1,3 +1,7 @@
+/**
+ * i18n entry: locales pt-BR, en, es. Initial lng from localStorage (LOCALE_STORAGE_KEY) or pt-BR.
+ * fallbackLng pt-BR. document.lang synced via syncDocumentLang. Language switch: LanguageSwitcher + localStorage only.
+ */
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import settingsSystemPt from '../locales/pt-BR/settings.system.json'
