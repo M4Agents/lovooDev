@@ -474,7 +474,7 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
               <p className="text-xs text-slate-400">Envie arquivos ou selecione da biblioteca acima.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {rows.map((row) => (
                 <CatalogMediaCard
                   key={row.id}
