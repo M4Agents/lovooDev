@@ -157,7 +157,10 @@
         "sectionTitle": "Voces ElevenLabs",
         "firstPageHint": "Hasta 100 voces por carga (primera página de la API).",
         "needApiKey": "Configura la clave en el servidor para cargar la lista.",
-        "empty": "No se devolvieron voces. Revisa tu cuenta de ElevenLabs."
+        "empty": "No se devolvieron voces. Revisa tu cuenta de ElevenLabs.",
+        "previewListen": "Escuchar vista previa",
+        "previewUnavailable": "Vista previa no disponible para esta voz.",
+        "previewAriaLabel": "Reproducir muestra de la voz seleccionada"
       },
       "actions": {
         "save": "Guardar",

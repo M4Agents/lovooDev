@@ -2,9 +2,9 @@
 // Painel Configurações → Integrações → ElevenLabs
 // =====================================================
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Mic2, Save, PlugZap, Volume2 } from 'lucide-react'
+import { Loader2, Mic2, Play, Save, PlugZap, Volume2 } from 'lucide-react'
 import {
   fetchElevenLabsSettings,
   fetchElevenLabsVoices,
@@ -29,6 +29,7 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
   const [voicesError, setVoicesError] = useState<string | null>(null)
   /** null = ainda não carregou pela UI; array após "Carregar vozes" */
   const [voices, setVoices] = useState<ElevenLabsVoiceDTO[] | null>(null)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const [form, setForm] = useState<ElevenLabsIntegrationSettingsDTO>({
     enabled: false,
@@ -53,6 +54,11 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
   useEffect(() => {
     void load()
   }, [load])
+
+  const selectedVoiceId = form.provider_config.default_voice_id
+  useEffect(() => {
+    previewAudioRef.current?.pause()
+  }, [selectedVoiceId])
 
   const handleLoadVoices = async () => {
     setVoicesError(null)
@@ -132,6 +138,26 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
     !new Set(voices.map((x) => x.voice_id)).has(form.provider_config.default_voice_id)
       ? form.provider_config.default_voice_id
       : null
+
+  const selectedVoice =
+    voices !== null && selectedVoiceId
+      ? voices.find((x) => x.voice_id === selectedVoiceId)
+      : undefined
+  const previewUrl = selectedVoice?.preview_url ?? null
+
+  const handlePreviewPlay = () => {
+    if (!previewUrl) return
+    const el = previewAudioRef.current
+    if (!el) return
+    try {
+      el.pause()
+      el.currentTime = 0
+    } catch {
+      /* ignore */
+    }
+    el.src = previewUrl
+    void el.play().catch(() => {})
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
@@ -272,6 +298,24 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
                 </option>
               ))}
             </select>
+            <audio ref={previewAudioRef} preload="none" className="hidden" />
+            {defaultVoiceValue ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePreviewPlay()}
+                  disabled={!previewUrl}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label={t('integrations.elevenlabs.voices.previewAriaLabel')}
+                >
+                  <Play className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                  {t('integrations.elevenlabs.voices.previewListen')}
+                </button>
+                {!previewUrl && (
+                  <span className="text-xs text-slate-500">{t('integrations.elevenlabs.voices.previewUnavailable')}</span>
+                )}
+              </div>
+            ) : null}
             <p className="text-xs text-slate-500 mt-1">{t('integrations.elevenlabs.fields.defaultVoiceHint')}</p>
           </div>
         )}

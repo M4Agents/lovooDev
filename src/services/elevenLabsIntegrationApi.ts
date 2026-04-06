@@ -13,6 +13,8 @@ export type ElevenLabsVoiceDTO = {
   voice_id: string
   name: string
   category?: string
+  /** URL de preview da listagem ElevenLabs; null se ausente ou inválida */
+  preview_url: string | null
 }
 
 export type ElevenLabsIntegrationSettingsDTO = {
@@ -110,7 +112,15 @@ export async function fetchElevenLabsVoices(): Promise<ElevenLabsVoiceDTO[]> {
   if (!data.ok || !Array.isArray(data.voices)) {
     throw new Error((data as { error?: string }).error || 'Resposta inválida')
   }
-  return data.voices as ElevenLabsVoiceDTO[]
+  return (data.voices as Partial<ElevenLabsVoiceDTO>[]).map((v) => ({
+    voice_id: String(v.voice_id ?? ''),
+    name: String(v.name ?? ''),
+    ...(typeof v.category === 'string' && v.category ? { category: v.category } : {}),
+    preview_url:
+      typeof v.preview_url === 'string' && v.preview_url.startsWith('https://')
+        ? v.preview_url
+        : null,
+  }))
 }
 
 export async function postElevenLabsConnectionTest(): Promise<void> {

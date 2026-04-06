@@ -157,7 +157,10 @@
         "sectionTitle": "ElevenLabs voices",
         "firstPageHint": "Up to 100 voices per load (first API page).",
         "needApiKey": "Configure the server API key to load the list.",
-        "empty": "No voices returned. Check your ElevenLabs account."
+        "empty": "No voices returned. Check your ElevenLabs account.",
+        "previewListen": "Play preview",
+        "previewUnavailable": "No preview available for this voice.",
+        "previewAriaLabel": "Play sample of the selected voice"
       },
       "actions": {
         "save": "Save",

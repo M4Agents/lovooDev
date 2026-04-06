@@ -14,6 +14,8 @@ export type ElevenLabsVoiceDTO = {
   voice_id: string
   name: string
   category?: string
+  /** URL HTTPS de amostra da ElevenLabs, quando existir na listagem */
+  preview_url: string | null
 }
 
 export default async function handler(req: any, res: any) {
@@ -66,6 +68,7 @@ export default async function handler(req: any, res: any) {
         voice_id?: unknown
         name?: unknown
         category?: unknown
+        preview_url?: unknown
       }>
     } | null
 
@@ -86,12 +89,30 @@ export default async function handler(req: any, res: any) {
     }
 
     const raw = Array.isArray(json?.voices) ? json.voices : []
+
+    function parsePreviewUrl(rawUrl: unknown): string | null {
+      if (typeof rawUrl !== 'string') return null
+      const u = rawUrl.trim()
+      if (!u.startsWith('https://')) return null
+      try {
+        const parsed = new URL(u)
+        if (parsed.protocol !== 'https:') return null
+        return u
+      } catch {
+        return null
+      }
+    }
+
     const voices: ElevenLabsVoiceDTO[] = raw
       .map((v) => {
         const voice_id = typeof v.voice_id === 'string' ? v.voice_id.trim() : ''
         const name = typeof v.name === 'string' ? v.name : ''
         if (!voice_id) return null
-        const out: ElevenLabsVoiceDTO = { voice_id, name: name || voice_id }
+        const out: ElevenLabsVoiceDTO = {
+          voice_id,
+          name: name || voice_id,
+          preview_url: parsePreviewUrl(v.preview_url),
+        }
         if (typeof v.category === 'string' && v.category.length > 0) {
           out.category = v.category
         }
