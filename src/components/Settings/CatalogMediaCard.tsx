@@ -41,7 +41,7 @@ function Thumbnail({ mediaType, previewUrl, filename }: ThumbnailProps) {
         src={previewUrl}
         alt={filename}
         loading="lazy"
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
         onError={() => setImgError(true)}
       />
     )
@@ -130,7 +130,7 @@ export function CatalogMediaCard({
         .join(' ')}
     >
       {/* ── Thumbnail (altura fixa, proporcional ao card) ─────── */}
-      <div className="relative h-28 w-full">
+      <div className="relative h-28 w-full bg-slate-50">
         <Thumbnail
           mediaType={row.media_type}
           previewUrl={row.preview_url}
