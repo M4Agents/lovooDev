@@ -4,12 +4,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Mic2, Save, PlugZap } from 'lucide-react'
+import { Loader2, Mic2, Save, PlugZap, Volume2 } from 'lucide-react'
 import {
   fetchElevenLabsSettings,
+  fetchElevenLabsVoices,
   patchElevenLabsSettings,
   postElevenLabsConnectionTest,
   type ElevenLabsIntegrationSettingsDTO,
+  type ElevenLabsVoiceDTO,
 } from '../../services/elevenLabsIntegrationApi'
 
 const TIMEOUT_MIN = 1000
@@ -20,14 +22,18 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [loadingVoices, setLoadingVoices] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [testMessage, setTestMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [voicesError, setVoicesError] = useState<string | null>(null)
+  /** null = ainda não carregou pela UI; array após "Carregar vozes" */
+  const [voices, setVoices] = useState<ElevenLabsVoiceDTO[] | null>(null)
 
   const [form, setForm] = useState<ElevenLabsIntegrationSettingsDTO>({
     enabled: false,
     timeout_ms: 60_000,
-    provider_config: { version: 1 },
+    provider_config: { version: 2, default_voice_id: null },
     api_key_configured: false,
   })
 
@@ -48,6 +54,19 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
     void load()
   }, [load])
 
+  const handleLoadVoices = async () => {
+    setVoicesError(null)
+    setLoadingVoices(true)
+    try {
+      const list = await fetchElevenLabsVoices()
+      setVoices(list)
+    } catch (e) {
+      setVoicesError(e instanceof Error ? e.message : t('integrations.elevenlabs.errors.voicesLoad'))
+    } finally {
+      setLoadingVoices(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaveMessage(null)
     setSaving(true)
@@ -55,6 +74,10 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
       const s = await patchElevenLabsSettings({
         enabled: form.enabled,
         timeout_ms: form.timeout_ms,
+        provider_config: {
+          version: 2,
+          default_voice_id: form.provider_config.default_voice_id,
+        },
       })
       setForm(s)
       setSaveMessage({ type: 'ok', text: t('integrations.elevenlabs.messages.saved') })
@@ -100,6 +123,15 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
       </div>
     )
   }
+
+  const defaultVoiceValue = form.provider_config.default_voice_id ?? ''
+  const orphanVoiceId =
+    voices !== null &&
+    voices.length > 0 &&
+    form.provider_config.default_voice_id &&
+    !new Set(voices.map((x) => x.voice_id)).has(form.provider_config.default_voice_id)
+      ? form.provider_config.default_voice_id
+      : null
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
@@ -183,6 +215,66 @@ export const ElevenLabsIntegrationPanel: React.FC = () => {
           />
           <p className="text-xs text-slate-500 mt-1">{t('integrations.elevenlabs.fields.configVersionHint')}</p>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Volume2 className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span className="text-sm font-medium text-slate-900">{t('integrations.elevenlabs.voices.sectionTitle')}</span>
+        </div>
+        <p className="text-xs text-slate-500">{t('integrations.elevenlabs.voices.firstPageHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleLoadVoices()}
+            disabled={loadingVoices || !form.api_key_configured}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-white text-indigo-800 text-sm font-medium hover:bg-indigo-50 disabled:opacity-50"
+          >
+            {loadingVoices ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {t('integrations.elevenlabs.actions.loadVoices')}
+          </button>
+        </div>
+        {!form.api_key_configured && (
+          <p className="text-xs text-amber-800">{t('integrations.elevenlabs.voices.needApiKey')}</p>
+        )}
+        {voicesError && <p className="text-sm text-red-600">{voicesError}</p>}
+        {voices !== null && voices.length === 0 && !voicesError && (
+          <p className="text-sm text-slate-600">{t('integrations.elevenlabs.voices.empty')}</p>
+        )}
+        {voices !== null && voices.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {t('integrations.elevenlabs.fields.defaultVoice')}
+            </label>
+            <select
+              value={defaultVoiceValue}
+              onChange={(e) => {
+                const v = e.target.value
+                setForm((f) => ({
+                  ...f,
+                  provider_config: {
+                    version: 2,
+                    default_voice_id: v.length > 0 ? v : null,
+                  },
+                }))
+              }}
+              className="w-full max-w-md px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+            >
+              <option value="">{t('integrations.elevenlabs.fields.defaultVoiceNone')}</option>
+              {orphanVoiceId && (
+                <option value={orphanVoiceId}>
+                  {t('integrations.elevenlabs.fields.defaultVoiceOrphan', { id: orphanVoiceId })}
+                </option>
+              )}
+              {voices.map((v) => (
+                <option key={v.voice_id} value={v.voice_id}>
+                  {v.category ? `${v.name} (${v.category})` : v.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">{t('integrations.elevenlabs.fields.defaultVoiceHint')}</p>
+          </div>
+        )}
       </div>
 
       {saveMessage && (

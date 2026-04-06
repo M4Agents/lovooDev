@@ -5,7 +5,14 @@
 import { supabase } from '../lib/supabase'
 
 export type ElevenLabsProviderConfigDTO = {
-  version: number
+  version: 2
+  default_voice_id: string | null
+}
+
+export type ElevenLabsVoiceDTO = {
+  voice_id: string
+  name: string
+  category?: string
 }
 
 export type ElevenLabsIntegrationSettingsDTO = {
@@ -13,6 +20,27 @@ export type ElevenLabsIntegrationSettingsDTO = {
   timeout_ms: number
   provider_config: ElevenLabsProviderConfigDTO
   api_key_configured: boolean
+}
+
+function parseProviderConfigFromApi(raw: unknown): ElevenLabsProviderConfigDTO {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { version: 2, default_voice_id: null }
+  }
+  const o = raw as Record<string, unknown>
+  if (o.version === 1) {
+    return { version: 2, default_voice_id: null }
+  }
+  if (o.version === 2) {
+    const dv = o.default_voice_id
+    if (dv === null || dv === undefined) {
+      return { version: 2, default_voice_id: null }
+    }
+    if (typeof dv === 'string') {
+      const t = dv.trim()
+      return { version: 2, default_voice_id: t.length > 0 ? t : null }
+    }
+  }
+  return { version: 2, default_voice_id: null }
 }
 
 async function getAuthHeaders(): Promise<HeadersInit> {
@@ -38,20 +66,18 @@ export async function fetchElevenLabsSettings(): Promise<ElevenLabsIntegrationSe
   if (!data.ok) {
     throw new Error((data as { error?: string }).error || 'Resposta inválida')
   }
-  const pc = data.provider_config
   return {
     enabled: Boolean(data.enabled),
     timeout_ms: Number(data.timeout_ms) || 60_000,
-    provider_config:
-      pc && typeof pc === 'object' && !Array.isArray(pc) && typeof (pc as { version?: unknown }).version === 'number'
-        ? { version: (pc as { version: number }).version }
-        : { version: 1 },
+    provider_config: parseProviderConfigFromApi(data.provider_config),
     api_key_configured: Boolean(data.api_key_configured),
   }
 }
 
 export async function patchElevenLabsSettings(
-  patch: Partial<Pick<ElevenLabsIntegrationSettingsDTO, 'enabled' | 'timeout_ms'>>
+  patch: Partial<
+    Pick<ElevenLabsIntegrationSettingsDTO, 'enabled' | 'timeout_ms' | 'provider_config'>
+  >
 ): Promise<ElevenLabsIntegrationSettingsDTO> {
   const headers = await getAuthHeaders()
   const res = await fetch('/api/integrations/elevenlabs/settings', {
@@ -66,16 +92,25 @@ export async function patchElevenLabsSettings(
   if (!data.ok) {
     throw new Error((data as { error?: string }).error || 'Resposta inválida')
   }
-  const pc = data.provider_config
   return {
     enabled: Boolean(data.enabled),
     timeout_ms: Number(data.timeout_ms) || 60_000,
-    provider_config:
-      pc && typeof pc === 'object' && !Array.isArray(pc) && typeof (pc as { version?: unknown }).version === 'number'
-        ? { version: (pc as { version: number }).version }
-        : { version: 1 },
+    provider_config: parseProviderConfigFromApi(data.provider_config),
     api_key_configured: Boolean(data.api_key_configured),
   }
+}
+
+export async function fetchElevenLabsVoices(): Promise<ElevenLabsVoiceDTO[]> {
+  const headers = await getAuthHeaders()
+  const res = await fetch('/api/integrations/elevenlabs/voices', { headers })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || 'Erro ao carregar vozes')
+  }
+  if (!data.ok || !Array.isArray(data.voices)) {
+    throw new Error((data as { error?: string }).error || 'Resposta inválida')
+  }
+  return data.voices as ElevenLabsVoiceDTO[]
 }
 
 export async function postElevenLabsConnectionTest(): Promise<void> {

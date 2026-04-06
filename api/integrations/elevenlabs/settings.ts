@@ -9,7 +9,7 @@ import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
 import {
   DEFAULT_ELEVENLABS_PROVIDER_CONFIG,
   fetchParentElevenLabsSettings,
-  type ElevenLabsProviderConfigV1,
+  type ElevenLabsProviderConfigV2,
 } from '../../lib/elevenlabs/settingsDb.js'
 import {
   ELEVENLABS_MODEL_SENTINEL,
@@ -24,10 +24,12 @@ const TIMEOUT_MS_MAX = 600_000
 type PatchFields = {
   enabled?: boolean
   timeout_ms?: number
-  provider_config?: unknown
+  provider_config?: ElevenLabsProviderConfigV2
 }
 
-function validateElevenLabsProviderConfigInput(raw: unknown): { ok: true; value: ElevenLabsProviderConfigV1 } | { ok: false; error: string } {
+function validateElevenLabsProviderConfigInput(
+  raw: unknown
+): { ok: true; value: ElevenLabsProviderConfigV2 } | { ok: false; error: string } {
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
     return { ok: false, error: 'provider_config deve ser um objeto' }
   }
@@ -36,15 +38,48 @@ function validateElevenLabsProviderConfigInput(raw: unknown): { ok: true; value:
   if (keys.length === 0) {
     return { ok: true, value: DEFAULT_ELEVENLABS_PROVIDER_CONFIG }
   }
-  for (const k of keys) {
-    if (k !== 'version') {
-      return { ok: false, error: `Chave não permitida em provider_config: ${k}` }
+
+  const ver = o.version
+  if (ver === 1 && typeof ver === 'number') {
+    for (const k of keys) {
+      if (k !== 'version') {
+        return { ok: false, error: `Chave não permitida em provider_config: ${k}` }
+      }
     }
+    if (o.version !== 1) {
+      return { ok: false, error: 'provider_config.version deve ser 1' }
+    }
+    return { ok: true, value: { version: 2, default_voice_id: null } }
   }
-  if (o.version !== 1 || typeof o.version !== 'number') {
-    return { ok: false, error: 'provider_config.version deve ser 1' }
+
+  if (ver === 2 && typeof ver === 'number') {
+    const allowed = new Set(['version', 'default_voice_id'])
+    for (const k of keys) {
+      if (!allowed.has(k)) {
+        return { ok: false, error: `Chave não permitida em provider_config: ${k}` }
+      }
+    }
+    if (o.version !== 2) {
+      return { ok: false, error: 'provider_config.version deve ser 2' }
+    }
+    const dv = o.default_voice_id
+    if (dv === null || dv === undefined) {
+      return { ok: true, value: { version: 2, default_voice_id: null } }
+    }
+    if (typeof dv === 'string') {
+      const t = dv.trim()
+      if (t.length === 0) {
+        return {
+          ok: false,
+          error: 'default_voice_id não pode ser string vazia; use null para nenhuma voz padrão',
+        }
+      }
+      return { ok: true, value: { version: 2, default_voice_id: t } }
+    }
+    return { ok: false, error: 'default_voice_id deve ser null ou string' }
   }
-  return { ok: true, value: { version: 1 } }
+
+  return { ok: false, error: 'provider_config.version deve ser 1 ou 2' }
 }
 
 function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { ok: false; error: string } {
@@ -127,7 +162,7 @@ export default async function handler(req: any, res: any) {
     let nextProviderConfig = current.provider_config
 
     if (parsed.value.provider_config !== undefined) {
-      nextProviderConfig = parsed.value.provider_config as ElevenLabsProviderConfigV1
+      nextProviderConfig = parsed.value.provider_config
     }
 
     const next = {

@@ -130,7 +130,7 @@
     },
     "elevenlabs": {
       "title": "ElevenLabs",
-      "subtitle": "Activa la integración y define el timeout. La clave de API (ELEVENLABS_API_KEY) solo está en el servidor.",
+      "subtitle": "Activa la integración, define el timeout y opcionalmente la voz predeterminada. La clave de API (ELEVENLABS_API_KEY) solo está en el servidor.",
       "loading": "Cargando configuración…",
       "status": {
         "active": "Integración activa",
@@ -147,11 +147,22 @@
         "timeout": "Timeout (ms)",
         "timeoutHint": "Entre {{min}} y {{max}} milisegundos (llamadas a la API en el servidor).",
         "configVersion": "Versión de configuración",
-        "configVersionHint": "Esquema versionado en provider_config; evolucionará con nuevas capacidades."
+        "configVersionHint": "Esquema versionado en provider_config; evolucionará con nuevas capacidades.",
+        "defaultVoice": "Voz predeterminada",
+        "defaultVoiceNone": "Ninguna (usar predeterminado del flujo)",
+        "defaultVoiceHint": "Guarda para persistir provider_config en el servidor.",
+        "defaultVoiceOrphan": "{{id}} (guardada; no está en la lista actual)"
+      },
+      "voices": {
+        "sectionTitle": "Voces ElevenLabs",
+        "firstPageHint": "Hasta 100 voces por carga (primera página de la API).",
+        "needApiKey": "Configura la clave en el servidor para cargar la lista.",
+        "empty": "No se devolvieron voces. Revisa tu cuenta de ElevenLabs."
       },
       "actions": {
         "save": "Guardar",
-        "test": "Probar conexión"
+        "test": "Probar conexión",
+        "loadVoices": "Cargar voces"
       },
       "messages": {
         "saved": "Configuración guardada.",
@@ -160,7 +171,8 @@
       "errors": {
         "load": "No se pudo cargar la configuración.",
         "save": "No se pudo guardar.",
-        "test": "Falló la prueba de conexión."
+        "test": "Falló la prueba de conexión.",
+        "voicesLoad": "No se pudo cargar la lista de voces."
       }
     },
     "actions": {

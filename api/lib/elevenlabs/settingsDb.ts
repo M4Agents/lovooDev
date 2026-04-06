@@ -7,17 +7,26 @@ import { ELEVENLABS_MODEL_SENTINEL, ELEVENLABS_PROVIDER, PARENT_COMPANY_ID } fro
 
 export const FALLBACK_TIMEOUT_MS = 60_000
 
-/** Shape v1 oficial em provider_config */
+/** Legado em banco: apenas version */
 export type ElevenLabsProviderConfigV1 = {
   version: 1
 }
 
-export const DEFAULT_ELEVENLABS_PROVIDER_CONFIG: ElevenLabsProviderConfigV1 = { version: 1 }
+/** Shape atual em provider_config (normalizado na leitura) */
+export type ElevenLabsProviderConfigV2 = {
+  version: 2
+  default_voice_id: string | null
+}
+
+export const DEFAULT_ELEVENLABS_PROVIDER_CONFIG: ElevenLabsProviderConfigV2 = {
+  version: 2,
+  default_voice_id: null,
+}
 
 export type ParentElevenLabsSettingsResolved = {
   enabled: boolean
   timeout_ms: number
-  provider_config: ElevenLabsProviderConfigV1
+  provider_config: ElevenLabsProviderConfigV2
 }
 
 type SettingsRow = {
@@ -27,19 +36,39 @@ type SettingsRow = {
   provider_config: unknown
 }
 
-function parseProviderConfig(raw: unknown): ElevenLabsProviderConfigV1 {
-  if (
-    raw &&
-    typeof raw === 'object' &&
-    !Array.isArray(raw) &&
-    (raw as ElevenLabsProviderConfigV1).version === 1
-  ) {
-    const o = raw as Record<string, unknown>
+function parseProviderConfig(raw: unknown): ElevenLabsProviderConfigV2 {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return DEFAULT_ELEVENLABS_PROVIDER_CONFIG
+  }
+  const o = raw as Record<string, unknown>
+  const ver = o.version
+
+  if (ver === 1 && typeof ver === 'number') {
     const keys = Object.keys(o)
     if (keys.length === 1 && keys[0] === 'version') {
-      return { version: 1 }
+      return { version: 2, default_voice_id: null }
     }
+    return DEFAULT_ELEVENLABS_PROVIDER_CONFIG
   }
+
+  if (ver === 2 && typeof ver === 'number') {
+    const allowed = new Set(['version', 'default_voice_id'])
+    for (const k of Object.keys(o)) {
+      if (!allowed.has(k)) {
+        return DEFAULT_ELEVENLABS_PROVIDER_CONFIG
+      }
+    }
+    const dv = o.default_voice_id
+    if (dv === null || dv === undefined) {
+      return { version: 2, default_voice_id: null }
+    }
+    if (typeof dv === 'string') {
+      const t = dv.trim()
+      return { version: 2, default_voice_id: t.length > 0 ? t : null }
+    }
+    return DEFAULT_ELEVENLABS_PROVIDER_CONFIG
+  }
+
   return DEFAULT_ELEVENLABS_PROVIDER_CONFIG
 }
 

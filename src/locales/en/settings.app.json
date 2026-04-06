@@ -130,7 +130,7 @@
     },
     "elevenlabs": {
       "title": "ElevenLabs",
-      "subtitle": "Enable the integration and set timeout. The API key (ELEVENLABS_API_KEY) stays on the server only.",
+      "subtitle": "Enable the integration, set timeout, and optionally the default voice. The API key (ELEVENLABS_API_KEY) stays on the server only.",
       "loading": "Loading settings…",
       "status": {
         "active": "Integration enabled",
@@ -147,11 +147,22 @@
         "timeout": "Timeout (ms)",
         "timeoutHint": "Between {{min}} and {{max}} milliseconds (server-side API calls).",
         "configVersion": "Config version",
-        "configVersionHint": "Versioned schema in provider_config; will evolve with new capabilities."
+        "configVersionHint": "Versioned schema in provider_config; will evolve with new capabilities.",
+        "defaultVoice": "Default voice",
+        "defaultVoiceNone": "None (use flow default)",
+        "defaultVoiceHint": "Save to persist provider_config on the server.",
+        "defaultVoiceOrphan": "{{id}} (saved; not in current list)"
+      },
+      "voices": {
+        "sectionTitle": "ElevenLabs voices",
+        "firstPageHint": "Up to 100 voices per load (first API page).",
+        "needApiKey": "Configure the server API key to load the list.",
+        "empty": "No voices returned. Check your ElevenLabs account."
       },
       "actions": {
         "save": "Save",
-        "test": "Test connection"
+        "test": "Test connection",
+        "loadVoices": "Load voices"
       },
       "messages": {
         "saved": "Settings saved.",
@@ -160,7 +171,8 @@
       "errors": {
         "load": "Could not load settings.",
         "save": "Could not save.",
-        "test": "Connection test failed."
+        "test": "Connection test failed.",
+        "voicesLoad": "Could not load the voice list."
       }
     },
     "actions": {

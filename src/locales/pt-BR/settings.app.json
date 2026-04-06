@@ -130,7 +130,7 @@
     },
     "elevenlabs": {
       "title": "ElevenLabs",
-      "subtitle": "Ative a integração e defina timeout. A chave de API (ELEVENLABS_API_KEY) permanece apenas no servidor.",
+      "subtitle": "Ative a integração, defina timeout e opcionalmente a voz padrão. A chave de API (ELEVENLABS_API_KEY) permanece apenas no servidor.",
       "loading": "Carregando configurações…",
       "status": {
         "active": "Integração ativa",
@@ -147,11 +147,22 @@
         "timeout": "Timeout (ms)",
         "timeoutHint": "Entre {{min}} e {{max}} milissegundos (chamadas à API no servidor).",
         "configVersion": "Versão da configuração",
-        "configVersionHint": "Esquema versionado em provider_config; evoluirá com novos recursos."
+        "configVersionHint": "Esquema versionado em provider_config; evoluirá com novos recursos.",
+        "defaultVoice": "Voz padrão",
+        "defaultVoiceNone": "Nenhuma (usar padrão do fluxo)",
+        "defaultVoiceHint": "Salve para persistir em provider_config no servidor.",
+        "defaultVoiceOrphan": "{{id}} (salva; não está na lista atual)"
+      },
+      "voices": {
+        "sectionTitle": "Vozes ElevenLabs",
+        "firstPageHint": "Até 100 vozes por carregamento (primeira página da API).",
+        "needApiKey": "Configure a chave no servidor para carregar a lista.",
+        "empty": "Nenhuma voz retornada. Verifique sua conta ElevenLabs."
       },
       "actions": {
         "save": "Salvar",
-        "test": "Testar conexão"
+        "test": "Testar conexão",
+        "loadVoices": "Carregar vozes"
       },
       "messages": {
         "saved": "Configurações salvas.",
@@ -160,7 +171,8 @@
       "errors": {
         "load": "Não foi possível carregar as configurações.",
         "save": "Não foi possível salvar.",
-        "test": "Falha no teste de conexão."
+        "test": "Falha no teste de conexão.",
+        "voicesLoad": "Não foi possível carregar a lista de vozes."
       }
     },
     "actions": {
