@@ -3,8 +3,9 @@
  * Altura da thumbnail fixa para uniformidade no grid.
  */
 
-import { useState } from 'react'
-import { Image as ImageIcon, Loader2, Play, Trash2, Video } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Image as ImageIcon, Loader2, Play, Trash2, Video, X } from 'lucide-react'
 import {
   CATALOG_MEDIA_USAGE_ROLES,
   type CatalogItemMediaResolved,
@@ -35,8 +36,73 @@ function resolveVideoThumbnail(metadata: Record<string, unknown>): string | null
   return null
 }
 
-const PlayOverlay = () => (
-  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+// ── VideoLightbox ──────────────────────────────────────────────────────────────
+
+type VideoLightboxProps = {
+  src: string
+  filename: string
+  open: boolean
+  onClose: () => void
+}
+
+function VideoLightbox({ src, filename, open, onClose }: VideoLightboxProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (!open && videoRef.current) {
+      videoRef.current.pause()
+    }
+  }, [open])
+
+  if (!open) return null
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-3xl w-full bg-black rounded-xl overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <span className="text-sm text-white/80 truncate pr-4">{filename}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Player */}
+        <video
+          ref={videoRef}
+          src={src}
+          controls
+          autoPlay
+          className="w-full max-h-[70vh] bg-black"
+        />
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ── PlayOverlay ────────────────────────────────────────────────────────────────
+
+const PlayOverlay = ({ onClick }: { onClick?: () => void }) => (
+  <div
+    className={[
+      'absolute inset-0 flex items-center justify-center bg-black/30',
+      onClick ? 'cursor-pointer' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')}
+    onClick={onClick}
+  >
     <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
       <Play className="w-4 h-4 text-slate-800 ml-0.5" fill="currentColor" />
     </div>
@@ -48,9 +114,10 @@ type ThumbnailProps = {
   previewUrl: string | null
   filename: string
   metadata: Record<string, unknown>
+  onPlayClick?: () => void
 }
 
-function Thumbnail({ mediaType, previewUrl, filename, metadata }: ThumbnailProps) {
+function Thumbnail({ mediaType, previewUrl, filename, metadata, onPlayClick }: ThumbnailProps) {
   const [imgError, setImgError] = useState(false)
   const [thumbError, setThumbError] = useState(false)
 
@@ -81,7 +148,7 @@ function Thumbnail({ mediaType, previewUrl, filename, metadata }: ThumbnailProps
             className="w-full h-full object-contain"
             onError={() => setThumbError(true)}
           />
-          <PlayOverlay />
+          <PlayOverlay onClick={onPlayClick} />
         </div>
       )
     }
@@ -95,7 +162,7 @@ function Thumbnail({ mediaType, previewUrl, filename, metadata }: ThumbnailProps
             className="w-full h-full object-contain bg-slate-900/5"
             preload="metadata"
           />
-          <PlayOverlay />
+          <PlayOverlay onClick={onPlayClick} />
         </div>
       )
     }
@@ -136,6 +203,7 @@ export function CatalogMediaCard({
 }: CatalogMediaCardProps) {
   const [patching, setPatching] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   const busy = disabled || patching || removing
 
@@ -174,6 +242,11 @@ export function CatalogMediaCard({
           previewUrl={row.preview_url}
           filename={row.original_filename}
           metadata={row.metadata}
+          onPlayClick={
+            row.media_type === 'video' && row.preview_url
+              ? () => setLightboxOpen(true)
+              : undefined
+          }
         />
 
         {/* Badge inativo */}
@@ -205,6 +278,16 @@ export function CatalogMediaCard({
           </div>
         )}
       </div>
+
+      {/* ── Lightbox de vídeo ────────────────────────────────────── */}
+      {row.media_type === 'video' && row.preview_url && (
+        <VideoLightbox
+          src={row.preview_url}
+          filename={row.original_filename}
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
 
       {/* ── Informações + controles ──────────────────────────────── */}
       <div className="p-2.5 space-y-2">
