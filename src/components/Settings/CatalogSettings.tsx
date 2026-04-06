@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Package, Plus, Pencil, RefreshCw } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
+import { catalogMediaApi } from '../../services/catalogMediaApi'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
@@ -32,6 +33,8 @@ export const CatalogSettings: React.FC<Props> = ({
   const [planOk, setPlanOk] = useState(false)
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [services, setServices] = useState<CatalogService[]>([])
+  const [productThumbs, setProductThumbs] = useState<Record<string, string>>({})
+  const [serviceThumbs, setServiceThumbs] = useState<Record<string, string>>({})
   const [subTab, setSubTab] = useState<'products' | 'services'>('products')
   const [error, setError] = useState<string | null>(null)
   const [savingFlag, setSavingFlag] = useState(false)
@@ -45,12 +48,16 @@ export const CatalogSettings: React.FC<Props> = ({
       setCompanyEnabled(Boolean(e.company_enabled))
       setPlanOk(Boolean(e.plan_ok))
       if (e.allowed) {
-        const [p, s] = await Promise.all([
+        const [p, s, pt, st] = await Promise.all([
           catalogApi.getProducts(companyId),
           catalogApi.getServices(companyId),
+          catalogMediaApi.getThumbnails(companyId, 'product'),
+          catalogMediaApi.getThumbnails(companyId, 'service'),
         ])
         setProducts(p)
         setServices(s)
+        setProductThumbs(pt)
+        setServiceThumbs(st)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar catálogo')
@@ -157,6 +164,7 @@ export const CatalogSettings: React.FC<Props> = ({
               companyId={companyId}
               defaultCurrency={defaultCurrency}
               items={products}
+              thumbnails={productThumbs}
               allServices={services}
               onRefresh={load}
             />
@@ -166,6 +174,7 @@ export const CatalogSettings: React.FC<Props> = ({
               companyId={companyId}
               defaultCurrency={defaultCurrency}
               items={services}
+              thumbnails={serviceThumbs}
               allProducts={products}
               onRefresh={load}
             />
@@ -180,9 +189,10 @@ const CatalogProductList: React.FC<{
   companyId: string
   defaultCurrency: string
   items: CatalogProduct[]
+  thumbnails: Record<string, string>
   allServices: CatalogService[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, allServices, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, thumbnails, allServices, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogProduct | null>(null)
   const [creating, setCreating] = useState(false)
   /** Mantém o mesmo formulário montado na transição criar → editar (evita perder estado). */
@@ -248,6 +258,7 @@ const CatalogProductList: React.FC<{
         <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
+              <th className="w-8 px-2 py-2" />
               <th className="text-left px-3 py-2">Nome</th>
               <th className="text-right px-3 py-2">Preço</th>
               <th className="text-left px-3 py-2">Ativo</th>
@@ -258,6 +269,16 @@ const CatalogProductList: React.FC<{
           <tbody>
             {items.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
+                <td className="px-2 py-1 align-middle">
+                  {thumbnails[p.id] && (
+                    <img
+                      src={thumbnails[p.id]}
+                      alt=""
+                      loading="lazy"
+                      className="w-6 h-6 rounded object-cover"
+                    />
+                  )}
+                </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatMoney(p.default_price, defaultCurrency)}
@@ -283,7 +304,7 @@ const CatalogProductList: React.FC<{
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                   Nenhum produto cadastrado.
                 </td>
               </tr>
@@ -507,9 +528,10 @@ const CatalogServiceList: React.FC<{
   companyId: string
   defaultCurrency: string
   items: CatalogService[]
+  thumbnails: Record<string, string>
   allProducts: CatalogProduct[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, allProducts, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, thumbnails, allProducts, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogService | null>(null)
   const [creating, setCreating] = useState(false)
   const [formSessionKey, setFormSessionKey] = useState('')
@@ -574,6 +596,7 @@ const CatalogServiceList: React.FC<{
         <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
+              <th className="w-8 px-2 py-2" />
               <th className="text-left px-3 py-2">Nome</th>
               <th className="text-right px-3 py-2">Preço</th>
               <th className="text-left px-3 py-2">Ativo</th>
@@ -584,6 +607,16 @@ const CatalogServiceList: React.FC<{
           <tbody>
             {items.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
+                <td className="px-2 py-1 align-middle">
+                  {thumbnails[s.id] && (
+                    <img
+                      src={thumbnails[s.id]}
+                      alt=""
+                      loading="lazy"
+                      className="w-6 h-6 rounded object-cover"
+                    />
+                  )}
+                </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{s.name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatMoney(s.default_price, defaultCurrency)}
@@ -609,7 +642,7 @@ const CatalogServiceList: React.FC<{
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                   Nenhum serviço cadastrado.
                 </td>
               </tr>

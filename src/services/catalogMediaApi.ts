@@ -151,4 +151,25 @@ export const catalogMediaApi = {
     const { error } = await supabase.from('catalog_item_media').delete().eq('id', id)
     if (error) throw error
   },
+
+  /**
+   * Retorna a primeira imagem ativa (menor sort_order) de cada item do tipo informado.
+   * Usado na listagem do catálogo para exibir thumbnail ao lado do nome.
+   */
+  async getThumbnails(
+    companyId: string,
+    type: 'product' | 'service'
+  ): Promise<Record<string, string>> {
+    const { data, error } = await supabase.rpc('get_catalog_thumbnails', {
+      p_company_id: companyId,
+      p_type: type,
+    })
+    if (error) throw error
+    const rows = (data || []) as { item_id: string; preview_url: string | null }[]
+    return Object.fromEntries(
+      rows
+        .filter((r) => r.item_id && r.preview_url)
+        .map((r) => [r.item_id, r.preview_url as string])
+    )
+  },
 }
