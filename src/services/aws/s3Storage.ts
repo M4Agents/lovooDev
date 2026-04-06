@@ -123,10 +123,6 @@ export class S3Storage {
       
       const { Upload } = await import('@aws-sdk/lib-storage');
       
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'s3Storage.ts:upload-config',message:'Upload config antes de criar Upload',data:{fileSizeBytes:options.buffer.length,fileSizeMB:(options.buffer.length/(1024*1024)).toFixed(2),contentType:options.contentType,multipartThresholdMB:5,willTriggerMultipart:options.buffer.length>5*1024*1024,checksumAlgorithmInParams:'SHA256',bufferType:options.buffer.constructor.name},timestamp:Date.now(),hypothesisId:'H1,H2,H4,H5'})}).catch(()=>{});
-      // #endregion
-
       const upload = new Upload({
         client: s3Client,
         params: {
@@ -134,7 +130,6 @@ export class S3Storage {
           Key: s3Key,
           Body: options.buffer,
           ContentType: options.contentType,
-          ChecksumAlgorithm: 'SHA256',
           Metadata: {
             'company-id': options.companyId,
             'source': options.source,
@@ -188,10 +183,6 @@ export class S3Storage {
       };
 
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'s3Storage.ts:upload-catch',message:'Erro capturado no upload S3',data:{errorName:error?.name,errorCode:error?.Code||error?.code,errorMessage:error?.message,httpStatus:error?.$metadata?.httpStatusCode,fileSizeBytes:options.buffer.length,willTriggerMultipart:options.buffer.length>5*1024*1024},timestamp:Date.now(),hypothesisId:'H1,H4'})}).catch(()=>{});
-      // #endregion
-
       console.error('❌ S3Storage - ERRO CRÍTICO no upload S3:', {
         message: error.message,
         name: error.name,
