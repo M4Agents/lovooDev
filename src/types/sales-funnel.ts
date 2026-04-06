@@ -80,13 +80,26 @@ export interface Opportunity {
   lead?: LeadCardData
 }
 
+export interface CatalogCategory {
+  id: string
+  company_id: string
+  type: 'product' | 'service'
+  name: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface CatalogProduct {
   id: string
   company_id: string
   name: string
   description?: string | null
   default_price: number
-  category?: string | null
+  category_id?: string | null
+  /** Resolvido via join: catalog_categories(name) — presente apenas quando a query inclui o join. */
+  catalog_categories?: { name: string } | null
   is_active: boolean
   availability_status: CatalogAvailabilityStatus
   stock_status: CatalogStockStatus
@@ -105,7 +118,9 @@ export interface CatalogService {
   name: string
   description?: string | null
   default_price: number
-  category?: string | null
+  category_id?: string | null
+  /** Resolvido via join: catalog_categories(name) — presente apenas quando a query inclui o join. */
+  catalog_categories?: { name: string } | null
   is_active: boolean
   availability_status: CatalogAvailabilityStatus
   stock_status: CatalogStockStatus

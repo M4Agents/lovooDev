@@ -24,7 +24,7 @@ export const catalogApi = {
   async getProducts(companyId: string): Promise<CatalogProduct[]> {
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, catalog_categories(name)')
       .eq('company_id', companyId)
       .order('name')
     if (error) throw error
@@ -34,7 +34,7 @@ export const catalogApi = {
   async getServices(companyId: string): Promise<CatalogService[]> {
     const { data, error } = await supabase
       .from('services')
-      .select('*')
+      .select('*, catalog_categories(name)')
       .eq('company_id', companyId)
       .order('name')
     if (error) throw error
@@ -52,7 +52,7 @@ export const catalogApi = {
         name: row.name,
         description: row.description ?? null,
         default_price: row.default_price,
-        category: row.category ?? null,
+        category_id: row.category_id ?? null,
         is_active: row.is_active ?? true,
         availability_status: row.availability_status ?? 'available',
         stock_status: row.stock_status ?? 'unknown',
@@ -89,7 +89,7 @@ export const catalogApi = {
         name: row.name,
         description: row.description ?? null,
         default_price: row.default_price,
-        category: row.category ?? null,
+        category_id: row.category_id ?? null,
         is_active: row.is_active ?? true,
         availability_status: row.availability_status ?? 'available',
         stock_status: row.stock_status ?? 'not_applicable',

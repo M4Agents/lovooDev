@@ -4,10 +4,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Package, Plus, Pencil, RefreshCw } from 'lucide-react'
+import { Package, Plus, Pencil, RefreshCw, Tag, Trash2 } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
-import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
+import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
+import type { CatalogCategory, CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
 import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
@@ -35,7 +36,8 @@ export const CatalogSettings: React.FC<Props> = ({
   const [services, setServices] = useState<CatalogService[]>([])
   const [productThumbs, setProductThumbs] = useState<Record<string, string>>({})
   const [serviceThumbs, setServiceThumbs] = useState<Record<string, string>>({})
-  const [subTab, setSubTab] = useState<'products' | 'services'>('products')
+  const [subTab, setSubTab] = useState<'products' | 'services' | 'categories'>('products')
+  const [categories, setCategories] = useState<CatalogCategory[]>([])
   const [error, setError] = useState<string | null>(null)
   const [savingFlag, setSavingFlag] = useState(false)
 
@@ -48,16 +50,18 @@ export const CatalogSettings: React.FC<Props> = ({
       setCompanyEnabled(Boolean(e.company_enabled))
       setPlanOk(Boolean(e.plan_ok))
       if (e.allowed) {
-        const [p, s, pt, st] = await Promise.all([
+        const [p, s, pt, st, cats] = await Promise.all([
           catalogApi.getProducts(companyId),
           catalogApi.getServices(companyId),
           catalogMediaApi.getThumbnails(companyId, 'product'),
           catalogMediaApi.getThumbnails(companyId, 'service'),
+          catalogCategoriesApi.listAll(companyId),
         ])
         setProducts(p)
         setServices(s)
         setProductThumbs(pt)
         setServiceThumbs(st)
+        setCategories(cats)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar catálogo')
@@ -157,6 +161,15 @@ export const CatalogSettings: React.FC<Props> = ({
             >
               Serviços ({services.length})
             </button>
+            <button
+              type="button"
+              onClick={() => setSubTab('categories')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                subTab === 'categories' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Categorias ({categories.length})
+            </button>
           </div>
 
           {subTab === 'products' && (
@@ -166,6 +179,7 @@ export const CatalogSettings: React.FC<Props> = ({
               items={products}
               thumbnails={productThumbs}
               allServices={services}
+              categories={categories.filter((c) => c.type === 'product')}
               onRefresh={load}
             />
           )}
@@ -176,6 +190,14 @@ export const CatalogSettings: React.FC<Props> = ({
               items={services}
               thumbnails={serviceThumbs}
               allProducts={products}
+              categories={categories.filter((c) => c.type === 'service')}
+              onRefresh={load}
+            />
+          )}
+          {subTab === 'categories' && (
+            <CatalogCategoryManager
+              companyId={companyId}
+              categories={categories}
               onRefresh={load}
             />
           )}
@@ -191,8 +213,9 @@ const CatalogProductList: React.FC<{
   items: CatalogProduct[]
   thumbnails: Record<string, string>
   allServices: CatalogService[]
+  categories: CatalogCategory[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, thumbnails, allServices, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, thumbnails, allServices, categories, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogProduct | null>(null)
   const [creating, setCreating] = useState(false)
   /** Mantém o mesmo formulário montado na transição criar → editar (evita perder estado). */
@@ -246,6 +269,7 @@ const CatalogProductList: React.FC<{
           initial={editing}
           allProducts={items}
           allServices={allServices}
+          categories={categories}
           onCancel={() => {
             setCreating(false)
             setEditing(null)
@@ -255,11 +279,12 @@ const CatalogProductList: React.FC<{
         />
       )}
       <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <table className="min-w-full text-sm">
+          <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               <th className="w-8 px-2 py-2" />
               <th className="text-left px-3 py-2">Nome</th>
+              <th className="text-left px-3 py-2">Categoria</th>
               <th className="text-right px-3 py-2">Preço</th>
               <th className="text-left px-3 py-2">Ativo</th>
               <th className="text-left px-3 py-2">Disponibilidade</th>
@@ -280,6 +305,9 @@ const CatalogProductList: React.FC<{
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
+                <td className="px-3 py-2 text-slate-500">
+                  {p.catalog_categories?.name ?? '—'}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatMoney(p.default_price, defaultCurrency)}
                 </td>
@@ -304,7 +332,7 @@ const CatalogProductList: React.FC<{
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
                   Nenhum produto cadastrado.
                 </td>
               </tr>
@@ -322,13 +350,15 @@ const ProductForm: React.FC<{
   initial: CatalogProduct | null
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
+  categories: CatalogCategory[]
   onCancel: () => void
   onSaved: (saved: CatalogProduct) => void
-}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
+}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, categories, onCancel, onSaved }) => {
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
   const [availability, setAvailability] = useState(initial?.availability_status ?? 'available')
   const [stock, setStock] = useState(initial?.stock_status ?? 'unknown')
@@ -348,6 +378,7 @@ const ProductForm: React.FC<{
           name,
           default_price: defaultPrice,
           description: description || null,
+          category_id: categoryId || null,
           is_active: isActive,
           availability_status: availability as CatalogProduct['availability_status'],
           stock_status: stock as CatalogProduct['stock_status'],
@@ -361,6 +392,7 @@ const ProductForm: React.FC<{
           name,
           default_price: defaultPrice,
           description: description || undefined,
+          category_id: categoryId || null,
           is_active: isActive,
           availability_status: availability as CatalogProduct['availability_status'],
           stock_status: stock as CatalogProduct['stock_status'],
@@ -412,6 +444,19 @@ const ProductForm: React.FC<{
             required
           />
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+        >
+          <option value="">Sem categoria</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>{cat.name}</option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição (catálogo)</label>
@@ -530,8 +575,9 @@ const CatalogServiceList: React.FC<{
   items: CatalogService[]
   thumbnails: Record<string, string>
   allProducts: CatalogProduct[]
+  categories: CatalogCategory[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, thumbnails, allProducts, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, items, thumbnails, allProducts, categories, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogService | null>(null)
   const [creating, setCreating] = useState(false)
   const [formSessionKey, setFormSessionKey] = useState('')
@@ -584,6 +630,7 @@ const CatalogServiceList: React.FC<{
           initial={editing}
           allProducts={allProducts}
           allServices={items}
+          categories={categories}
           onCancel={() => {
             setCreating(false)
             setEditing(null)
@@ -598,6 +645,7 @@ const CatalogServiceList: React.FC<{
             <tr>
               <th className="w-8 px-2 py-2" />
               <th className="text-left px-3 py-2">Nome</th>
+              <th className="text-left px-3 py-2">Categoria</th>
               <th className="text-right px-3 py-2">Preço</th>
               <th className="text-left px-3 py-2">Ativo</th>
               <th className="text-left px-3 py-2">Disponibilidade</th>
@@ -618,6 +666,9 @@ const CatalogServiceList: React.FC<{
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{s.name}</td>
+                <td className="px-3 py-2 text-slate-500">
+                  {s.catalog_categories?.name ?? '—'}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {formatMoney(s.default_price, defaultCurrency)}
                 </td>
@@ -642,7 +693,7 @@ const CatalogServiceList: React.FC<{
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
                   Nenhum serviço cadastrado.
                 </td>
               </tr>
@@ -660,13 +711,15 @@ const ServiceForm: React.FC<{
   initial: CatalogService | null
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
+  categories: CatalogCategory[]
   onCancel: () => void
   onSaved: (saved: CatalogService) => void
-}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
+}> = ({ companyId, defaultCurrency, initial, allProducts, allServices, categories, onCancel, onSaved }) => {
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
   const [availability, setAvailability] = useState(initial?.availability_status ?? 'available')
   const [aiNotes, setAiNotes] = useState(initial?.ai_notes ?? '')
@@ -685,6 +738,7 @@ const ServiceForm: React.FC<{
           name,
           default_price: defaultPrice,
           description: description || null,
+          category_id: categoryId || null,
           is_active: isActive,
           availability_status: availability as CatalogService['availability_status'],
           ai_notes: aiNotes || null,
@@ -697,6 +751,7 @@ const ServiceForm: React.FC<{
           name,
           default_price: defaultPrice,
           description: description || undefined,
+          category_id: categoryId || null,
           is_active: isActive,
           availability_status: availability as CatalogService['availability_status'],
           ai_notes: aiNotes || undefined,
@@ -747,6 +802,19 @@ const ServiceForm: React.FC<{
             required
           />
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+        >
+          <option value="">Sem categoria</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>{cat.name}</option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
@@ -841,5 +909,220 @@ const ServiceForm: React.FC<{
         </button>
       </div>
     </form>
+  )
+}
+
+// ── Gestão de Categorias ────────────────────────────────────────────────────
+
+type CategorySectionProps = {
+  type: 'product' | 'service'
+  label: string
+  categories: CatalogCategory[]
+  companyId: string
+  onRefresh: () => void
+}
+
+const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categories, companyId, onRefresh }) => {
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [sectionError, setSectionError] = useState<string | null>(null)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setCreating(true)
+    setSectionError(null)
+    try {
+      await catalogCategoriesApi.create(companyId, type, newName.trim())
+      setNewName('')
+      await onRefresh()
+    } catch (err) {
+      setSectionError(err instanceof Error ? err.message : 'Erro ao criar categoria')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleUpdate = async (id: string) => {
+    if (!editName.trim()) return
+    setSavingId(id)
+    setSectionError(null)
+    try {
+      await catalogCategoriesApi.update(id, { name: editName.trim() })
+      setEditingId(null)
+      await onRefresh()
+    } catch (err) {
+      setSectionError(err instanceof Error ? err.message : 'Erro ao atualizar')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const handleToggleActive = async (cat: CatalogCategory) => {
+    setSavingId(cat.id)
+    setSectionError(null)
+    try {
+      await catalogCategoriesApi.update(cat.id, { is_active: !cat.is_active })
+      await onRefresh()
+    } catch (err) {
+      setSectionError(err instanceof Error ? err.message : 'Erro ao atualizar')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const handleRemove = async (id: string) => {
+    if (!window.confirm('Remover categoria? Produtos/serviços vinculados perderão a categoria (dados preservados).')) return
+    setSavingId(id)
+    setSectionError(null)
+    try {
+      await catalogCategoriesApi.remove(id)
+      await onRefresh()
+    } catch (err) {
+      setSectionError(err instanceof Error ? err.message : 'Erro ao remover')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Tag className="w-4 h-4 text-indigo-500" />
+        <h4 className="text-sm font-semibold text-slate-800">{label}</h4>
+      </div>
+
+      {sectionError && (
+        <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">{sectionError}</p>
+      )}
+
+      <form onSubmit={handleCreate} className="flex gap-2">
+        <input
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          placeholder="Nova categoria…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          maxLength={120}
+        />
+        <button
+          type="submit"
+          disabled={creating || !newName.trim()}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Adicionar
+        </button>
+      </form>
+
+      {categories.length === 0 ? (
+        <p className="text-xs text-slate-400 italic">Nenhuma categoria cadastrada.</p>
+      ) : (
+        <ul className="space-y-1">
+          {categories.map((cat) => (
+            <li
+              key={cat.id}
+              className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+            >
+              {editingId === cat.id ? (
+                <>
+                  <input
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    autoFocus
+                    maxLength={120}
+                  />
+                  <button
+                    type="button"
+                    disabled={savingId === cat.id}
+                    onClick={() => handleUpdate(cat.id)}
+                    className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
+                  >
+                    {savingId === cat.id ? 'Salvando…' : 'Salvar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className="text-xs text-slate-500 hover:underline"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className={`flex-1 text-sm ${cat.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                    {cat.name}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={savingId === cat.id}
+                    onClick={() => handleToggleActive(cat)}
+                    className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                    title={cat.is_active ? 'Desativar' : 'Ativar'}
+                  >
+                    {cat.is_active ? 'Ativa' : 'Inativa'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingId(cat.id)
+                      setEditName(cat.name)
+                    }}
+                    className="text-indigo-600 hover:text-indigo-800"
+                    title="Editar nome"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingId === cat.id}
+                    onClick={() => handleRemove(cat.id)}
+                    className="text-red-500 hover:text-red-700 disabled:opacity-50"
+                    title="Remover categoria"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+const CatalogCategoryManager: React.FC<{
+  companyId: string
+  categories: CatalogCategory[]
+  onRefresh: () => void
+}> = ({ companyId, categories, onRefresh }) => {
+  const productCats = categories.filter((c) => c.type === 'product')
+  const serviceCats = categories.filter((c) => c.type === 'service')
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="rounded-xl border border-slate-200 shadow-sm p-5 bg-white space-y-4">
+        <CategorySection
+          type="product"
+          label="Categorias de Produtos"
+          categories={productCats}
+          companyId={companyId}
+          onRefresh={onRefresh}
+        />
+      </div>
+      <div className="rounded-xl border border-slate-200 shadow-sm p-5 bg-white space-y-4">
+        <CategorySection
+          type="service"
+          label="Categorias de Serviços"
+          categories={serviceCats}
+          companyId={companyId}
+          onRefresh={onRefresh}
+        />
+      </div>
+    </div>
   )
 }
