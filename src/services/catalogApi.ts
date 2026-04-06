@@ -60,6 +60,9 @@ export const catalogApi = {
         ai_notes: row.ai_notes ?? null,
         ai_unavailable_guidance: row.ai_unavailable_guidance ?? null,
         available_for_ai: row.available_for_ai ?? true,
+        external_source: row.external_source?.toLowerCase().trim() || null,
+        external_id: row.external_id || null,
+        external_reference: row.external_reference || null,
       })
       .select()
       .single()
@@ -97,6 +100,9 @@ export const catalogApi = {
         ai_notes: row.ai_notes ?? null,
         ai_unavailable_guidance: row.ai_unavailable_guidance ?? null,
         available_for_ai: row.available_for_ai ?? true,
+        external_source: row.external_source?.toLowerCase().trim() || null,
+        external_id: row.external_id || null,
+        external_reference: row.external_reference || null,
       })
       .select()
       .single()

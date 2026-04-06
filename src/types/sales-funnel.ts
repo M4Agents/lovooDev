@@ -108,6 +108,10 @@ export interface CatalogProduct {
   /** Instrução interna para o agente de IA quando o item não estiver disponível; não é texto público. */
   ai_unavailable_guidance?: string | null
   available_for_ai: boolean
+  /** Campos de integração externa — opcionais, não exibidos na listagem. */
+  external_source?: string | null
+  external_id?: string | null
+  external_reference?: string | null
   created_at: string
   updated_at: string
 }
@@ -129,6 +133,10 @@ export interface CatalogService {
   /** Instrução interna para o agente de IA quando o item não estiver disponível; não é texto público. */
   ai_unavailable_guidance?: string | null
   available_for_ai: boolean
+  /** Campos de integração externa — opcionais, não exibidos na listagem. */
+  external_source?: string | null
+  external_id?: string | null
+  external_reference?: string | null
   created_at: string
   updated_at: string
 }

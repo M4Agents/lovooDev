@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Package, Plus, Pencil, RefreshCw, Tag, Trash2 } from 'lucide-react'
+import { Package, Plus, Pencil, RefreshCw, Tag, Trash2, ChevronDown } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
 import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
@@ -367,6 +367,12 @@ const ProductForm: React.FC<{
     initial?.ai_unavailable_guidance ?? ''
   )
   const [availableAi, setAvailableAi] = useState(initial?.available_for_ai ?? true)
+  const [externalSource, setExternalSource] = useState(initial?.external_source ?? '')
+  const [externalId, setExternalId] = useState(initial?.external_id ?? '')
+  const [externalReference, setExternalReference] = useState(initial?.external_reference ?? '')
+  const [integrationOpen, setIntegrationOpen] = useState(
+    Boolean(initial?.external_source || initial?.external_id || initial?.external_reference)
+  )
   const [saving, setSaving] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -385,6 +391,9 @@ const ProductForm: React.FC<{
           ai_notes: aiNotes || null,
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || null,
           available_for_ai: availableAi,
+          external_source: externalSource.toLowerCase().trim() || null,
+          external_id: externalId.trim() || null,
+          external_reference: externalReference.trim() || null,
         })
         onSaved(updated)
       } else {
@@ -399,6 +408,9 @@ const ProductForm: React.FC<{
           ai_notes: aiNotes || undefined,
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || undefined,
           available_for_ai: availableAi,
+          external_source: externalSource || undefined,
+          external_id: externalId || undefined,
+          external_reference: externalReference || undefined,
         })
         onSaved(created)
       }
@@ -535,6 +547,51 @@ const ProductForm: React.FC<{
             placeholder="Ex.: explicar indisponibilidade, sugerir alternativa, oferecer lista de espera ou humano, evitar prazo…"
           />
         </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIntegrationOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 text-left hover:bg-slate-100 transition-colors"
+        >
+          <span className="text-xs font-medium text-slate-600">Integração externa</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-slate-400 transition-transform ${integrationOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {integrationOpen && (
+          <div className="p-3 space-y-3 border-t border-slate-100">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Origem da integração</label>
+              <input
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="ex: shopify, bling"
+                value={externalSource}
+                onChange={(e) => setExternalSource(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">ID externo</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="ID no sistema externo"
+                  value={externalId}
+                  onChange={(e) => setExternalId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Referência externa</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="ex: SKU, código"
+                  value={externalReference}
+                  onChange={(e) => setExternalReference(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       {initial && (
         <CatalogItemMediaEditor
@@ -727,6 +784,12 @@ const ServiceForm: React.FC<{
     initial?.ai_unavailable_guidance ?? ''
   )
   const [availableAi, setAvailableAi] = useState(initial?.available_for_ai ?? true)
+  const [externalSource, setExternalSource] = useState(initial?.external_source ?? '')
+  const [externalId, setExternalId] = useState(initial?.external_id ?? '')
+  const [externalReference, setExternalReference] = useState(initial?.external_reference ?? '')
+  const [integrationOpen, setIntegrationOpen] = useState(
+    Boolean(initial?.external_source || initial?.external_id || initial?.external_reference)
+  )
   const [saving, setSaving] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
@@ -744,6 +807,9 @@ const ServiceForm: React.FC<{
           ai_notes: aiNotes || null,
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || null,
           available_for_ai: availableAi,
+          external_source: externalSource.toLowerCase().trim() || null,
+          external_id: externalId.trim() || null,
+          external_reference: externalReference.trim() || null,
         })
         onSaved(updated)
       } else {
@@ -757,6 +823,9 @@ const ServiceForm: React.FC<{
           ai_notes: aiNotes || undefined,
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || undefined,
           available_for_ai: availableAi,
+          external_source: externalSource || undefined,
+          external_id: externalId || undefined,
+          external_reference: externalReference || undefined,
         })
         onSaved(created)
       }
@@ -878,6 +947,51 @@ const ServiceForm: React.FC<{
             placeholder="Ex.: explicar indisponibilidade, sugerir alternativa, oferecer lista de espera ou humano, evitar prazo…"
           />
         </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIntegrationOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 text-left hover:bg-slate-100 transition-colors"
+        >
+          <span className="text-xs font-medium text-slate-600">Integração externa</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-slate-400 transition-transform ${integrationOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {integrationOpen && (
+          <div className="p-3 space-y-3 border-t border-slate-100">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Origem da integração</label>
+              <input
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="ex: shopify, bling"
+                value={externalSource}
+                onChange={(e) => setExternalSource(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">ID externo</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="ID no sistema externo"
+                  value={externalId}
+                  onChange={(e) => setExternalId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Referência externa</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="ex: SKU, código"
+                  value={externalReference}
+                  onChange={(e) => setExternalReference(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       {initial && (
         <CatalogItemMediaEditor
