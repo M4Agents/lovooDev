@@ -222,6 +222,9 @@ export const MediaLibrary: React.FC = () => {
 
   const handleEditFolder = (folder: MediaFolder) => {
     console.log('✏️ Editando pasta:', folder.name)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'MediaLibrary.tsx:handleEditFolder',message:'handleEditFolder chamado',data:{folderId:folder.id,folderName:folder.name,is_system_folder:folder.is_system_folder,folderKeys:Object.keys(folder)},hypothesisId:'A-C-D',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     setSelectedFolderForEdit(folder)
     setEditFolderName(folder.name)
     setEditFolderIcon(folder.icon || '📁')
