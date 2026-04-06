@@ -82,17 +82,52 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:load-start',message:'load() iniciado',data:{companyId,sourceType,sourceId},hypothesisId:'A-B-D',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     try {
-      const [r, a] = await Promise.all([
-        catalogMediaApi.listResolved(companyId, {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:before-listResolved',message:'Chamando listResolved (rpc get_catalog_item_media)',data:{companyId,sourceType,sourceId},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      let r: CatalogItemMediaResolved[] = []
+      let rpcError: string | null = null
+      try {
+        r = await catalogMediaApi.listResolved(companyId, {
           productId: sourceType === 'product' ? sourceId : null,
           serviceId: sourceType === 'service' ? sourceId : null,
-        }),
-        catalogMediaApi.listLibraryAssetsForPicker(companyId),
-      ])
+        })
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:listResolved-ok',message:'listResolved OK',data:{count:r.length},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      } catch (e) {
+        rpcError = e instanceof Error ? e.message : String(e)
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:listResolved-error',message:'listResolved ERRO',data:{error:rpcError,raw:String(e)},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:before-listAssets',message:'Chamando listLibraryAssetsForPicker (company_media_library)',data:{companyId},hypothesisId:'B-D',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      let a: CompanyLibraryAssetPicker[] = []
+      try {
+        a = await catalogMediaApi.listLibraryAssetsForPicker(companyId)
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:listAssets-ok',message:'listLibraryAssetsForPicker OK',data:{count:a.length},hypothesisId:'B-D',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      } catch (e) {
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:listAssets-error',message:'listLibraryAssetsForPicker ERRO',data:{error:e instanceof Error ? e.message : String(e)},hypothesisId:'B-D',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+
       setRows(r)
       setAssets(a)
+      if (rpcError) throw new Error(rpcError)
     } catch (e) {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'CatalogItemMediaEditor.tsx:load-catch',message:'load() ERRO final',data:{error:e instanceof Error ? e.message : String(e)},hypothesisId:'A-B-D',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setError(e instanceof Error ? e.message : 'Erro ao carregar mídias do item')
     } finally {
       setLoading(false)
