@@ -21,7 +21,8 @@
     "api": "API",
     "webhookAdvanced": "Advanced webhook",
     "salesFunnel": "Sales funnel",
-    "openai": "OpenAI"
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs"
   },
   "integrations": {
     "cards": {
@@ -44,6 +45,10 @@
       "openai": {
         "badge": "AI",
         "description": "Models and OpenAI API connection"
+      },
+      "elevenlabs": {
+        "badge": "Voice",
+        "description": "Base integration with the ElevenLabs API"
       }
     },
     "whatsappNav": {
@@ -116,6 +121,41 @@
       "messages": {
         "saved": "Settings saved.",
         "testOk": "Connection verified successfully."
+      },
+      "errors": {
+        "load": "Could not load settings.",
+        "save": "Could not save.",
+        "test": "Connection test failed."
+      }
+    },
+    "elevenlabs": {
+      "title": "ElevenLabs",
+      "subtitle": "Enable the integration and set timeout. The API key (ELEVENLABS_API_KEY) stays on the server only.",
+      "loading": "Loading settings…",
+      "status": {
+        "active": "Integration enabled",
+        "inactive": "Integration disabled"
+      },
+      "apiKeyStatus": {
+        "label": "API key",
+        "configured": "Detected in the server environment.",
+        "missing": "Not detected in the server environment. Set ELEVENLABS_API_KEY in Vercel."
+      },
+      "fields": {
+        "enabled": "Enable integration",
+        "enabledHint": "When off, the app will not use ElevenLabs until future features ship.",
+        "timeout": "Timeout (ms)",
+        "timeoutHint": "Between {{min}} and {{max}} milliseconds (server-side API calls).",
+        "configVersion": "Config version",
+        "configVersionHint": "Versioned schema in provider_config; will evolve with new capabilities."
+      },
+      "actions": {
+        "save": "Save",
+        "test": "Test connection"
+      },
+      "messages": {
+        "saved": "Settings saved.",
+        "testOk": "ElevenLabs connection verified successfully."
       },
       "errors": {
         "load": "Could not load settings.",

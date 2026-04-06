@@ -21,7 +21,8 @@
     "api": "API",
     "webhookAdvanced": "Webhook Avançado",
     "salesFunnel": "Funil de Vendas",
-    "openai": "OpenAI"
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs"
   },
   "integrations": {
     "cards": {
@@ -44,6 +45,10 @@
       "openai": {
         "badge": "IA",
         "description": "Modelos e conexão com a API OpenAI"
+      },
+      "elevenlabs": {
+        "badge": "Voz",
+        "description": "Integração base com a API ElevenLabs"
       }
     },
     "whatsappNav": {
@@ -116,6 +121,41 @@
       "messages": {
         "saved": "Configurações salvas.",
         "testOk": "Conexão verificada com sucesso."
+      },
+      "errors": {
+        "load": "Não foi possível carregar as configurações.",
+        "save": "Não foi possível salvar.",
+        "test": "Falha no teste de conexão."
+      }
+    },
+    "elevenlabs": {
+      "title": "ElevenLabs",
+      "subtitle": "Ative a integração e defina timeout. A chave de API (ELEVENLABS_API_KEY) permanece apenas no servidor.",
+      "loading": "Carregando configurações…",
+      "status": {
+        "active": "Integração ativa",
+        "inactive": "Integração inativa"
+      },
+      "apiKeyStatus": {
+        "label": "Chave de API",
+        "configured": "Detectada no ambiente do servidor.",
+        "missing": "Não detectada no ambiente do servidor. Configure ELEVENLABS_API_KEY na Vercel."
+      },
+      "fields": {
+        "enabled": "Habilitar integração",
+        "enabledHint": "Quando desligada, o sistema não usará a ElevenLabs até futuras funcionalidades.",
+        "timeout": "Timeout (ms)",
+        "timeoutHint": "Entre {{min}} e {{max}} milissegundos (chamadas à API no servidor).",
+        "configVersion": "Versão da configuração",
+        "configVersionHint": "Esquema versionado em provider_config; evoluirá com novos recursos."
+      },
+      "actions": {
+        "save": "Salvar",
+        "test": "Testar conexão"
+      },
+      "messages": {
+        "saved": "Configurações salvas.",
+        "testOk": "Conexão com a ElevenLabs verificada com sucesso."
       },
       "errors": {
         "load": "Não foi possível carregar as configurações.",

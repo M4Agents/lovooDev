@@ -1,25 +1,50 @@
 // =====================================================
-// GET/PATCH /api/integrations/openai/settings
+// GET/PATCH /api/integrations/elevenlabs/settings
 // Gestão apenas empresa Pai + super_admin/admin (sessão JWT)
 //
-// company_id e provider são sempre constantes do backend (PARENT_COMPANY_ID, OPENAI_PROVIDER);
-// o cliente não pode enviá-los (body só: enabled, model, timeout_ms).
+// company_id e provider são constantes do backend; o cliente não envia tenant/provider.
 // =====================================================
 
 import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
-import { PARENT_COMPANY_ID } from '../../lib/openai/config.js'
-import { fetchParentOpenAISettings, OPENAI_PROVIDER } from '../../lib/openai/settingsDb.js'
+import {
+  DEFAULT_ELEVENLABS_PROVIDER_CONFIG,
+  fetchParentElevenLabsSettings,
+  type ElevenLabsProviderConfigV1,
+} from '../../lib/elevenlabs/settingsDb.js'
+import {
+  ELEVENLABS_MODEL_SENTINEL,
+  ELEVENLABS_PROVIDER,
+  isElevenLabsApiKeyConfigured,
+  PARENT_COMPANY_ID,
+} from '../../lib/elevenlabs/config.js'
 
-/** Alinhado à constraint integration_settings_timeout_positive no banco */
 const TIMEOUT_MS_MIN = 1000
 const TIMEOUT_MS_MAX = 600_000
 
-const MODEL_RE = /^[a-zA-Z0-9._-]{1,128}$/
-
 type PatchFields = {
   enabled?: boolean
-  model?: string
   timeout_ms?: number
+  provider_config?: unknown
+}
+
+function validateElevenLabsProviderConfigInput(raw: unknown): { ok: true; value: ElevenLabsProviderConfigV1 } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'provider_config deve ser um objeto' }
+  }
+  const o = raw as Record<string, unknown>
+  const keys = Object.keys(o)
+  if (keys.length === 0) {
+    return { ok: true, value: DEFAULT_ELEVENLABS_PROVIDER_CONFIG }
+  }
+  for (const k of keys) {
+    if (k !== 'version') {
+      return { ok: false, error: `Chave não permitida em provider_config: ${k}` }
+    }
+  }
+  if (o.version !== 1 || typeof o.version !== 'number') {
+    return { ok: false, error: 'provider_config.version deve ser 1' }
+  }
+  return { ok: true, value: { version: 1 } }
 }
 
 function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { ok: false; error: string } {
@@ -27,7 +52,7 @@ function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { 
     return { ok: false, error: 'Body inválido' }
   }
   const o = body as Record<string, unknown>
-  const allowed = new Set(['enabled', 'model', 'timeout_ms'])
+  const allowed = new Set(['enabled', 'timeout_ms', 'provider_config'])
   for (const key of Object.keys(o)) {
     if (!allowed.has(key)) {
       return { ok: false, error: `Campo não permitido: ${key}` }
@@ -40,12 +65,6 @@ function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { 
     }
     out.enabled = o.enabled
   }
-  if ('model' in o) {
-    if (typeof o.model !== 'string' || !MODEL_RE.test(o.model.trim())) {
-      return { ok: false, error: 'model inválido' }
-    }
-    out.model = o.model.trim()
-  }
   if ('timeout_ms' in o) {
     if (typeof o.timeout_ms !== 'number' || !Number.isInteger(o.timeout_ms)) {
       return { ok: false, error: 'timeout_ms deve ser inteiro' }
@@ -57,6 +76,13 @@ function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { 
       }
     }
     out.timeout_ms = o.timeout_ms
+  }
+  if ('provider_config' in o) {
+    const v = validateElevenLabsProviderConfigInput(o.provider_config)
+    if (!v.ok) {
+      return { ok: false, error: v.error }
+    }
+    out.provider_config = v.value
   }
   if (Object.keys(out).length === 0) {
     return { ok: false, error: 'Nenhum campo para atualizar' }
@@ -79,12 +105,13 @@ export default async function handler(req: any, res: any) {
   }
 
   if (req.method === 'GET') {
-    const settings = await fetchParentOpenAISettings(auth.supabase)
+    const settings = await fetchParentElevenLabsSettings(auth.supabase)
     res.status(200).json({
       ok: true,
       enabled: settings.enabled,
-      model: settings.model,
       timeout_ms: settings.timeout_ms,
+      provider_config: settings.provider_config,
+      api_key_configured: isElevenLabsApiKeyConfigured(),
     })
     return
   }
@@ -96,41 +123,28 @@ export default async function handler(req: any, res: any) {
       return
     }
 
-    const current = await fetchParentOpenAISettings(auth.supabase)
+    const current = await fetchParentElevenLabsSettings(auth.supabase)
+    let nextProviderConfig = current.provider_config
+
+    if (parsed.value.provider_config !== undefined) {
+      nextProviderConfig = parsed.value.provider_config as ElevenLabsProviderConfigV1
+    }
+
     const next = {
       enabled: parsed.value.enabled !== undefined ? parsed.value.enabled : current.enabled,
-      model: parsed.value.model !== undefined ? parsed.value.model : current.model,
       timeout_ms:
         parsed.value.timeout_ms !== undefined ? parsed.value.timeout_ms : current.timeout_ms,
+      provider_config: nextProviderConfig,
     }
-
-    const { data: existingRow, error: readCfgErr } = await auth.supabase
-      .from('integration_settings')
-      .select('provider_config')
-      .eq('company_id', PARENT_COMPANY_ID)
-      .eq('provider', OPENAI_PROVIDER)
-      .maybeSingle()
-
-    if (readCfgErr) {
-      res.status(500).json({ ok: false, error: 'Não foi possível ler as configurações' })
-      return
-    }
-
-    const preservedConfig =
-      existingRow?.provider_config &&
-      typeof existingRow.provider_config === 'object' &&
-      !Array.isArray(existingRow.provider_config)
-        ? (existingRow.provider_config as Record<string, unknown>)
-        : {}
 
     const { error } = await auth.supabase.from('integration_settings').upsert(
       {
         company_id: PARENT_COMPANY_ID,
-        provider: OPENAI_PROVIDER,
+        provider: ELEVENLABS_PROVIDER,
         enabled: next.enabled,
-        model: next.model,
+        model: ELEVENLABS_MODEL_SENTINEL,
         timeout_ms: next.timeout_ms,
-        provider_config: preservedConfig,
+        provider_config: next.provider_config,
       },
       { onConflict: 'company_id,provider' }
     )
@@ -140,12 +154,13 @@ export default async function handler(req: any, res: any) {
       return
     }
 
-    const merged = await fetchParentOpenAISettings(auth.supabase)
+    const merged = await fetchParentElevenLabsSettings(auth.supabase)
     res.status(200).json({
       ok: true,
       enabled: merged.enabled,
-      model: merged.model,
       timeout_ms: merged.timeout_ms,
+      provider_config: merged.provider_config,
+      api_key_configured: isElevenLabsApiKeyConfigured(),
     })
     return
   }

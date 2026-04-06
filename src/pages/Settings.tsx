@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2 } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -13,8 +13,9 @@ import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
+import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
-import { canManageOpenAIIntegration, PARENT_COMPANY_ID_OPENAI } from '../utils/openaiIntegrationAccess';
+import { canManageOpenAIIntegration } from '../utils/openaiIntegrationAccess';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -106,7 +107,7 @@ export const Settings: React.FC = () => {
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
   const [integracoesTab, setIntegracoesTab] = useState<
-    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai'
+    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai' | 'elevenlabs'
   >('whatsapp');
 
   // Detectar parâmetro tab na URL para ativar aba correta
@@ -119,45 +120,13 @@ export const Settings: React.FC = () => {
 
   const canManageOpenAI = canManageOpenAIIntegration(company, currentRole);
 
-  // #region agent log
   useEffect(() => {
-    const payload = {
-      hypothesisId: 'H-openai-visibility',
-      companyId: company?.id ?? null,
-      expectedParentId: PARENT_COMPANY_ID_OPENAI,
-      companyIdMatchesParent: company?.id === PARENT_COMPANY_ID_OPENAI,
-      companyIsLegacySuperAdmin: company?.is_super_admin === true,
-      currentRole: currentRole ?? null,
-      roleIsAdminOrSuperAdmin: currentRole === 'super_admin' || currentRole === 'admin',
-      authLoading,
-      isLoadingCompany,
-      canManageOpenAI,
-    };
-    console.info('[OpenAI Integration Debug]', payload);
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': 'f28051',
-      },
-      body: JSON.stringify({
-        sessionId: 'f28051',
-        location: 'Settings.tsx:openai-visibility',
-        message: 'OpenAI card visibility inputs',
-        data: payload,
-        timestamp: Date.now(),
-        hypothesisId: 'H-openai-visibility',
-      }),
-    }).catch(() => {});
-  }, [company?.id, company?.is_super_admin, currentRole, authLoading, isLoadingCompany, canManageOpenAI]);
-  // #endregion
-
-  useEffect(() => {
-    if (searchParams.get('integration') !== 'openai') return;
+    const integration = searchParams.get('integration');
+    if (integration !== 'openai' && integration !== 'elevenlabs') return;
     if (authLoading || isLoadingCompany) return;
     if (canManageOpenAI) {
       setActiveTab('integracoes');
-      setIntegracoesTab('openai');
+      setIntegracoesTab(integration === 'elevenlabs' ? 'elevenlabs' : 'openai');
     } else {
       navigate('/settings', { replace: true });
     }
@@ -165,7 +134,7 @@ export const Settings: React.FC = () => {
 
   useEffect(() => {
     if (authLoading || isLoadingCompany) return;
-    if (integracoesTab === 'openai' && !canManageOpenAI) {
+    if ((integracoesTab === 'openai' || integracoesTab === 'elevenlabs') && !canManageOpenAI) {
       setIntegracoesTab('whatsapp');
     }
   }, [integracoesTab, canManageOpenAI, authLoading, isLoadingCompany]);
@@ -1144,7 +1113,7 @@ export const Settings: React.FC = () => {
           {/* Sub-navegação das Integrações Moderna - OTIMIZADA */}
           <div
             className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
-              canManageOpenAI ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+              canManageOpenAI ? 'lg:grid-cols-6' : 'lg:grid-cols-4'
             }`}
           >
             {/* WhatsApp Card - COMPACTO */}
@@ -1291,6 +1260,40 @@ export const Settings: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-slate-600">{t('integrations.cards.openai.description')}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {canManageOpenAI && (
+              <div
+                onClick={() => setIntegracoesTab('elevenlabs')}
+                className="group cursor-pointer"
+              >
+                <div
+                  className={`bg-gradient-to-br from-slate-50 to-indigo-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+                    integracoesTab === 'elevenlabs'
+                      ? 'border-indigo-400 shadow-md scale-[1.02]'
+                      : 'border-transparent hover:border-indigo-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                        integracoesTab === 'elevenlabs' ? 'bg-indigo-600' : 'bg-indigo-500'
+                      }`}
+                    >
+                      <Mic2 className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.elevenlabs')}</h3>
+                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-medium">
+                          {t('integrations.cards.elevenlabs.badge')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">{t('integrations.cards.elevenlabs.description')}</p>
                     </div>
                   </div>
                 </div>
@@ -2393,6 +2396,8 @@ export const Settings: React.FC = () => {
           )}
 
           {integracoesTab === 'openai' && canManageOpenAI && <OpenAIIntegrationPanel />}
+
+          {integracoesTab === 'elevenlabs' && canManageOpenAI && <ElevenLabsIntegrationPanel />}
 
         </div>
       )}
