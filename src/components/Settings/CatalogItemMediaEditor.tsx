@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Image as ImageIcon, Plus, Trash2, Upload, Video } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import {
   catalogMediaApi,
   CATALOG_MEDIA_USAGE_ROLES,
@@ -17,19 +17,9 @@ import {
   uploadCatalogMediaToLibrary,
   validateCatalogMediaFile,
 } from '../../services/catalogLibraryUpload'
+import { CatalogMediaCard, usageRoleLabel } from './CatalogMediaCard'
 
 type SourceKind = 'product' | 'service'
-
-function usageRoleLabel(role: CatalogMediaUsageRole): string {
-  const map: Record<CatalogMediaUsageRole, string> = {
-    presentation: 'Apresentação',
-    demo: 'Demonstração',
-    proof: 'Prova / resultado',
-    testimonial: 'Depoimento',
-    before_after: 'Antes e depois',
-  }
-  return map[role] ?? role
-}
 
 type BatchLineResult = {
   fileName: string
@@ -465,99 +455,35 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
           )}
 
           {rows.length === 0 ? (
-            <p className="text-xs text-slate-500">Nenhuma mídia vinculada a este item.</p>
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-10 h-10 text-slate-300"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-sm text-slate-500">Nenhuma mídia vinculada a este item.</p>
+              <p className="text-xs text-slate-400">Envie arquivos ou selecione da biblioteca acima.</p>
+            </div>
           ) : (
-            <div className="overflow-x-auto border border-slate-200 rounded bg-white">
-              <table className="min-w-full text-xs">
-                <thead className="bg-slate-100 text-slate-600">
-                  <tr>
-                    <th className="text-left px-2 py-1.5">Arquivo</th>
-                    <th className="text-left px-2 py-1.5">Tipo</th>
-                    <th className="text-left px-2 py-1.5">Função</th>
-                    <th className="text-left px-2 py-1.5 w-14">Ordem</th>
-                    <th className="text-center px-2 py-1.5">Ativo</th>
-                    <th className="text-center px-2 py-1.5">IA</th>
-                    <th className="w-10 px-2 py-1.5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-t border-slate-100">
-                      <td className="px-2 py-1.5 max-w-[200px]">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {row.media_type === 'video' ? (
-                            <Video className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                          ) : (
-                            <ImageIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                          )}
-                          <span className="truncate" title={row.original_filename}>
-                            {row.original_filename}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">{row.media_type}</td>
-                      <td className="px-2 py-1.5">
-                        <select
-                          className="w-full border border-slate-200 rounded px-1 py-0.5 max-w-[140px]"
-                          value={row.usage_role}
-                          onChange={(e) =>
-                            void patchRow(row.id, { usage_role: e.target.value as CatalogMediaUsageRole })
-                          }
-                          disabled={batchProcessing}
-                        >
-                          {CATALOG_MEDIA_USAGE_ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {usageRoleLabel(r)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="number"
-                          className="w-12 border border-slate-200 rounded px-1 py-0.5"
-                          key={`ord-${row.id}-${row.sort_order}`}
-                          defaultValue={row.sort_order}
-                          onBlur={(e) => {
-                            const v = Number.parseInt(e.target.value, 10)
-                            if (Number.isFinite(v) && v !== row.sort_order) {
-                              void patchRow(row.id, { sort_order: v })
-                            }
-                          }}
-                          disabled={batchProcessing}
-                        />
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={row.is_active}
-                          onChange={(e) => void patchRow(row.id, { is_active: e.target.checked })}
-                          disabled={batchProcessing}
-                        />
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={row.use_in_ai}
-                          onChange={(e) => void patchRow(row.id, { use_in_ai: e.target.checked })}
-                          disabled={batchProcessing}
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => void handleRemove(row.id)}
-                          className="text-red-600 hover:bg-red-50 rounded p-1"
-                          title="Remover vínculo"
-                          disabled={batchProcessing}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rows.map((row) => (
+                <CatalogMediaCard
+                  key={row.id}
+                  row={row}
+                  disabled={batchProcessing}
+                  onPatch={patchRow}
+                  onRemove={handleRemove}
+                />
+              ))}
             </div>
           )}
         </>
