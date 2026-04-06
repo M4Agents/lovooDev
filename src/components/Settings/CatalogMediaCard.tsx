@@ -26,15 +26,35 @@ export function usageRoleLabel(role: CatalogMediaUsageRole): string {
 
 // ── Thumbnail ─────────────────────────────────────────────────────────────────
 
+/** Extrai URL de thumbnail estática dos campos livres do metadata. */
+function resolveVideoThumbnail(metadata: Record<string, unknown>): string | null {
+  for (const key of ['thumbnail_url', 'poster_url', 'thumbnail', 'poster']) {
+    const val = metadata[key]
+    if (typeof val === 'string' && val.length > 0) return val
+  }
+  return null
+}
+
+const PlayOverlay = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
+      <Play className="w-4 h-4 text-slate-800 ml-0.5" fill="currentColor" />
+    </div>
+  </div>
+)
+
 type ThumbnailProps = {
   mediaType: 'image' | 'video'
   previewUrl: string | null
   filename: string
+  metadata: Record<string, unknown>
 }
 
-function Thumbnail({ mediaType, previewUrl, filename }: ThumbnailProps) {
+function Thumbnail({ mediaType, previewUrl, filename, metadata }: ThumbnailProps) {
   const [imgError, setImgError] = useState(false)
+  const [thumbError, setThumbError] = useState(false)
 
+  // ── Imagem ──────────────────────────────────────────────────────
   if (mediaType === 'image' && previewUrl && !imgError) {
     return (
       <img
@@ -47,23 +67,41 @@ function Thumbnail({ mediaType, previewUrl, filename }: ThumbnailProps) {
     )
   }
 
-  if (mediaType === 'video' && previewUrl) {
-    return (
-      <div className="relative w-full h-full">
-        <video
-          src={previewUrl}
-          className="w-full h-full object-cover"
-          preload="metadata"
-        />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-          <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-            <Play className="w-4 h-4 text-slate-800 ml-0.5" fill="currentColor" />
-          </div>
+  // ── Vídeo ───────────────────────────────────────────────────────
+  if (mediaType === 'video') {
+    // 1ª prioridade: thumbnail estática em metadata (imagem, sem carregar o vídeo)
+    const staticThumb = !thumbError ? resolveVideoThumbnail(metadata) : null
+    if (staticThumb) {
+      return (
+        <div className="relative w-full h-full">
+          <img
+            src={staticThumb}
+            alt={filename}
+            loading="lazy"
+            className="w-full h-full object-contain"
+            onError={() => setThumbError(true)}
+          />
+          <PlayOverlay />
         </div>
-      </div>
-    )
+      )
+    }
+
+    // 2ª prioridade: elemento <video> — browser renderiza o primeiro frame
+    if (previewUrl) {
+      return (
+        <div className="relative w-full h-full">
+          <video
+            src={previewUrl}
+            className="w-full h-full object-contain bg-slate-900/5"
+            preload="metadata"
+          />
+          <PlayOverlay />
+        </div>
+      )
+    }
   }
 
+  // ── Fallback ────────────────────────────────────────────────────
   const Icon = mediaType === 'video' ? Video : ImageIcon
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 bg-slate-50">
@@ -135,6 +173,7 @@ export function CatalogMediaCard({
           mediaType={row.media_type}
           previewUrl={row.preview_url}
           filename={row.original_filename}
+          metadata={row.metadata}
         />
 
         {/* Badge inativo */}
