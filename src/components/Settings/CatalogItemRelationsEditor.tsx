@@ -311,7 +311,7 @@ const RelationBlock: React.FC<{
           type="button"
           disabled={busy || !targetId}
           onClick={() => add()}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-white text-xs disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs hover:bg-indigo-700 transition-colors disabled:opacity-50"
         >
           <Plus className="w-3.5 h-3.5" />
           Adicionar

@@ -3542,7 +3542,7 @@ export const Settings: React.FC = () => {
 
       {/* Aba Produtos e serviços (catálogo) */}
       {activeTab === 'catalogo' && company?.id && (
-        <div className="space-y-6 max-w-4xl">
+        <div className="space-y-6">
           <CatalogSettings
             companyId={company.id}
             companyPlan={company.plan || 'basic'}
