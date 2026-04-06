@@ -65,6 +65,7 @@ export default async function handler(req, res) {
       description: folder.description,
       file_count: folder.file_count || 0,
       total_size: 0,
+      is_system_folder: folder.is_system_folder || false,
       created_at: folder.created_at
     }))
 

@@ -296,6 +296,14 @@ export default async function handler(req, res) {
           })
         }
 
+        // Bloquear edição de pastas de sistema
+        if (existingFolder.is_system_folder) {
+          return res.status(403).json({
+            error: 'Pasta protegida',
+            message: 'Esta pasta é gerenciada pelo sistema e não pode ser editada.'
+          })
+        }
+
         // Verificar se já existe pasta com mesmo nome no mesmo nível (exceto a própria pasta)
         const { data: duplicateFolder } = await supabase
           .from('company_folders')
