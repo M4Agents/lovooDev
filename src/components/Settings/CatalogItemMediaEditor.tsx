@@ -2,9 +2,9 @@
  * Mídias do item (produto/serviço) — biblioteca + upload em lote (regras do catálogo).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Upload } from 'lucide-react'
+import { ChevronDown, Image as ImageIcon, Plus, Upload, Video } from 'lucide-react'
 import {
   catalogMediaApi,
   CATALOG_MEDIA_USAGE_ROLES,
@@ -43,6 +43,106 @@ type Props = {
   /** Indica processamento de upload em lote (para bloquear fechamento do formulário) */
   onBatchBusyChange?: (busy: boolean) => void
 }
+
+// ── AssetPicker ───────────────────────────────────────────────────────────────
+
+type AssetPickerProps = {
+  assets: CompanyLibraryAssetPicker[]
+  value: string
+  onChange: (id: string) => void
+  disabled?: boolean
+}
+
+function AssetThumb({ asset }: { asset: CompanyLibraryAssetPicker | null }) {
+  if (!asset) return null
+  if (asset.preview_url) {
+    return (
+      <img
+        src={asset.preview_url}
+        alt=""
+        loading="lazy"
+        className="w-6 h-6 rounded object-cover flex-shrink-0"
+      />
+    )
+  }
+  const Icon = asset.file_type === 'video' ? Video : ImageIcon
+  return <Icon className="w-5 h-5 text-slate-400 flex-shrink-0" />
+}
+
+function AssetPicker({ assets, value, onChange, disabled = false }: AssetPickerProps) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const selected = assets.find((a) => a.id === value) ?? null
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleSelect = (id: string) => {
+    onChange(id)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Trigger */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 border border-slate-300 rounded px-2 py-1 text-xs bg-white text-left disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {selected ? (
+          <>
+            <AssetThumb asset={selected} />
+            <span className="truncate flex-1 text-slate-800">{selected.original_filename}</span>
+            <span className="text-slate-400 shrink-0">({selected.file_type})</span>
+          </>
+        ) : (
+          <span className="flex-1 text-slate-400">Selecione…</span>
+        )}
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg">
+          <button
+            type="button"
+            onClick={() => handleSelect('')}
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-50"
+          >
+            Selecione…
+          </button>
+          {assets.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => handleSelect(a.id)}
+              className={[
+                'w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left hover:bg-indigo-50',
+                value === a.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800',
+              ].join(' ')}
+            >
+              <AssetThumb asset={a} />
+              <span className="truncate flex-1">{a.original_filename}</span>
+              <span className="text-slate-400 shrink-0">({a.file_type})</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function nextSortOrder(existing: CatalogItemMediaResolved[]): number {
   if (existing.length === 0) return 0
@@ -346,19 +446,12 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
             <div className="flex flex-wrap items-end gap-2 rounded border border-dashed border-slate-200 bg-white p-2">
               <div className="min-w-[180px] flex-1">
                 <label className="block text-[10px] text-slate-500 mb-0.5">Arquivo</label>
-                <select
-                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs"
+                <AssetPicker
+                  assets={selectableAssets}
                   value={addAssetId}
-                  onChange={(e) => setAddAssetId(e.target.value)}
+                  onChange={setAddAssetId}
                   disabled={adding || batchProcessing}
-                >
-                  <option value="">Selecione…</option>
-                  {selectableAssets.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.original_filename} ({a.file_type})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <button
                 type="button"
