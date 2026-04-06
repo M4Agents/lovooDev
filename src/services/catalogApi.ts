@@ -20,23 +20,50 @@ import type {
   CatalogService,
 } from '../types/sales-funnel'
 
+export type CatalogFilters = {
+  name?: string
+  isActive?: boolean
+  categoryId?: string
+  minPrice?: number
+  maxPrice?: number
+  availability?: string
+}
+
 export const catalogApi = {
-  async getProducts(companyId: string): Promise<CatalogProduct[]> {
-    const { data, error } = await supabase
+  async getProducts(companyId: string, filters?: CatalogFilters): Promise<CatalogProduct[]> {
+    let query = supabase
       .from('products')
       .select('*, catalog_categories(name)')
       .eq('company_id', companyId)
       .order('name')
+
+    if (filters?.name) query = query.ilike('name', `%${filters.name}%`)
+    if (filters?.isActive !== undefined) query = query.eq('is_active', filters.isActive)
+    if (filters?.categoryId) query = query.eq('category_id', filters.categoryId)
+    if (filters?.minPrice !== undefined) query = query.gte('default_price', filters.minPrice)
+    if (filters?.maxPrice !== undefined) query = query.lte('default_price', filters.maxPrice)
+    if (filters?.availability) query = query.eq('availability_status', filters.availability)
+
+    const { data, error } = await query
     if (error) throw error
     return (data || []) as CatalogProduct[]
   },
 
-  async getServices(companyId: string): Promise<CatalogService[]> {
-    const { data, error } = await supabase
+  async getServices(companyId: string, filters?: CatalogFilters): Promise<CatalogService[]> {
+    let query = supabase
       .from('services')
       .select('*, catalog_categories(name)')
       .eq('company_id', companyId)
       .order('name')
+
+    if (filters?.name) query = query.ilike('name', `%${filters.name}%`)
+    if (filters?.isActive !== undefined) query = query.eq('is_active', filters.isActive)
+    if (filters?.categoryId) query = query.eq('category_id', filters.categoryId)
+    if (filters?.minPrice !== undefined) query = query.gte('default_price', filters.minPrice)
+    if (filters?.maxPrice !== undefined) query = query.lte('default_price', filters.maxPrice)
+    if (filters?.availability) query = query.eq('availability_status', filters.availability)
+
+    const { data, error } = await query
     if (error) throw error
     return (data || []) as CatalogService[]
   },

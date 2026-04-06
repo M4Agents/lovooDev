@@ -4,7 +4,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Package, Plus, Pencil, RefreshCw, Tag, Trash2, ChevronDown } from 'lucide-react'
+import {
+  Package, Plus, Pencil, RefreshCw, Tag, Trash2,
+  ChevronDown, Search, SlidersHorizontal, X as XIcon,
+  Download, Upload,
+} from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
 import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
@@ -12,6 +16,9 @@ import type { CatalogCategory, CatalogProduct, CatalogService } from '../../type
 import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
 import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
+import { CatalogImportModal } from './CatalogImportModal'
+import { exportCatalogToCsv } from '../../utils/catalogCsvExport'
+import { useDebounce } from '../../hooks/useDebounce'
 import { formatMoney } from '../../lib/formatMoney'
 
 type Props = {
@@ -176,7 +183,6 @@ export const CatalogSettings: React.FC<Props> = ({
             <CatalogProductList
               companyId={companyId}
               defaultCurrency={defaultCurrency}
-              items={products}
               thumbnails={productThumbs}
               allServices={services}
               categories={categories.filter((c) => c.type === 'product')}
@@ -187,7 +193,6 @@ export const CatalogSettings: React.FC<Props> = ({
             <CatalogServiceList
               companyId={companyId}
               defaultCurrency={defaultCurrency}
-              items={services}
               thumbnails={serviceThumbs}
               allProducts={products}
               categories={categories.filter((c) => c.type === 'service')}
@@ -210,29 +215,149 @@ export const CatalogSettings: React.FC<Props> = ({
 const CatalogProductList: React.FC<{
   companyId: string
   defaultCurrency: string
-  items: CatalogProduct[]
   thumbnails: Record<string, string>
   allServices: CatalogService[]
   categories: CatalogCategory[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, thumbnails, allServices, categories, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, thumbnails, allServices, categories, onRefresh }) => {
+  const [listItems, setListItems] = useState<CatalogProduct[]>([])
+  const [listLoading, setListLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // Filtros básicos
+  const [filterName, setFilterName] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterCategoryId, setFilterCategoryId] = useState('')
+  // Filtros avançados (drawer)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [filterMinPrice, setFilterMinPrice] = useState('')
+  const [filterMaxPrice, setFilterMaxPrice] = useState('')
+  const [filterAvailability, setFilterAvailability] = useState('')
+
+  const debouncedName = useDebounce(filterName, 300)
+
+  const [importOpen, setImportOpen] = useState(false)
   const [editing, setEditing] = useState<CatalogProduct | null>(null)
   const [creating, setCreating] = useState(false)
-  /** Mantém o mesmo formulário montado na transição criar → editar (evita perder estado). */
   const [formSessionKey, setFormSessionKey] = useState('')
   const [postCreateHint, setPostCreateHint] = useState(false)
+
+  const hasActiveFilters =
+    filterName || filterStatus || filterCategoryId || filterMinPrice || filterMaxPrice || filterAvailability
+
+  const clearFilters = () => {
+    setFilterName('')
+    setFilterStatus('')
+    setFilterCategoryId('')
+    setFilterMinPrice('')
+    setFilterMaxPrice('')
+    setFilterAvailability('')
+  }
+
+  // Fetch com cancelamento para evitar race condition
+  useEffect(() => {
+    let cancelled = false
+    setListLoading(true)
+    const filters = {
+      name: debouncedName || undefined,
+      isActive: filterStatus === '' ? undefined : filterStatus === 'active',
+      categoryId: filterCategoryId || undefined,
+      minPrice: filterMinPrice !== '' ? parseFloat(filterMinPrice) : undefined,
+      maxPrice: filterMaxPrice !== '' ? parseFloat(filterMaxPrice) : undefined,
+      availability: filterAvailability || undefined,
+    }
+    catalogApi.getProducts(companyId, filters)
+      .then((data) => { if (!cancelled) setListItems(data) })
+      .catch(() => { /* silencioso — erro não bloqueia a UI */ })
+      .finally(() => { if (!cancelled) setListLoading(false) })
+    return () => { cancelled = true }
+  }, [companyId, debouncedName, filterStatus, filterCategoryId, filterMinPrice, filterMaxPrice, filterAvailability, refreshKey])
 
   const handleProductSaved = (saved: CatalogProduct) => {
     const wasCreate = creating
     setCreating(false)
     setEditing(saved)
     if (wasCreate) setPostCreateHint(true)
+    setRefreshKey((k) => k + 1)
     void onRefresh()
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      {/* Barra de ações e filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Busca */}
+        <div className="relative flex-1 min-w-[160px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            placeholder="Buscar produto…"
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+          />
+        </div>
+        {/* Status */}
+        <select
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+        >
+          <option value="">Todos</option>
+          <option value="active">Ativo</option>
+          <option value="inactive">Inativo</option>
+        </select>
+        {/* Categoria */}
+        <select
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
+        >
+          <option value="">Categoria</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {/* + Filtros */}
+        <button
+          type="button"
+          onClick={() => setDrawerOpen((o) => !o)}
+          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+            drawerOpen ? 'border-indigo-500 text-indigo-600 bg-indigo-50' : 'border-gray-300 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Filtros
+        </button>
+        {/* Limpar */}
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+          >
+            <XIcon className="w-3 h-3" />
+            Limpar
+          </button>
+        )}
+        <div className="flex-1" />
+        {/* Ações */}
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Importar
+        </button>
+        <button
+          type="button"
+          onClick={() => exportCatalogToCsv(listItems, 'produtos.csv')}
+          disabled={listItems.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Exportar CSV
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -247,39 +372,70 @@ const CatalogProductList: React.FC<{
           Novo produto
         </button>
       </div>
-      {postCreateHint && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
-          <span>
-            Produto criado — agora você pode adicionar mídias e relacionamentos abaixo.
-          </span>
-          <button
-            type="button"
-            className="text-emerald-800 underline text-xs shrink-0"
-            onClick={() => setPostCreateHint(false)}
-          >
-            Ok
-          </button>
+
+      {/* Drawer de filtros avançados */}
+      {drawerOpen && (
+        <div ref={drawerRef} className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preço mínimo</label>
+            <input
+              type="number" min="0" step="0.01"
+              className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="0,00"
+              value={filterMinPrice}
+              onChange={(e) => setFilterMinPrice(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preço máximo</label>
+            <input
+              type="number" min="0" step="0.01"
+              className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="—"
+              value={filterMaxPrice}
+              onChange={(e) => setFilterMaxPrice(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Disponibilidade</label>
+            <select
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              value={filterAvailability}
+              onChange={(e) => setFilterAvailability(e.target.value)}
+            >
+              <option value="">Todas</option>
+              <option value="available">Disponível</option>
+              <option value="unavailable">Indisponível</option>
+              <option value="on_demand">Sob consulta</option>
+              <option value="discontinued">Descontinuado</option>
+            </select>
+          </div>
         </div>
       )}
+
+      {postCreateHint && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
+          <span>Produto criado — agora você pode adicionar mídias e relacionamentos abaixo.</span>
+          <button type="button" className="text-emerald-800 underline text-xs shrink-0" onClick={() => setPostCreateHint(false)}>Ok</button>
+        </div>
+      )}
+
       {(creating || editing) && (
         <ProductForm
           key={formSessionKey}
           companyId={companyId}
           defaultCurrency={defaultCurrency}
           initial={editing}
-          allProducts={items}
+          allProducts={listItems}
           allServices={allServices}
           categories={categories}
-          onCancel={() => {
-            setCreating(false)
-            setEditing(null)
-            setPostCreateHint(false)
-          }}
+          onCancel={() => { setCreating(false); setEditing(null); setPostCreateHint(false) }}
           onSaved={handleProductSaved}
         />
       )}
+
       <div className="border border-slate-200 rounded-lg overflow-hidden">
-          <table className="min-w-full text-sm">
+        <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               <th className="w-8 px-2 py-2" />
@@ -292,54 +448,56 @@ const CatalogProductList: React.FC<{
             </tr>
           </thead>
           <tbody>
-            {items.map((p) => (
+            {listLoading && (
+              <tr>
+                <td colSpan={7} className="px-3 py-4 text-center text-slate-400 text-sm">
+                  <RefreshCw className="w-4 h-4 animate-spin inline mr-2" />Carregando…
+                </td>
+              </tr>
+            )}
+            {!listLoading && listItems.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="px-2 py-1 align-middle">
                   {thumbnails[p.id] && (
-                    <img
-                      src={thumbnails[p.id]}
-                      alt=""
-                      loading="lazy"
-                      className="w-6 h-6 rounded object-cover"
-                    />
+                    <img src={thumbnails[p.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
-                <td className="px-3 py-2 text-slate-500">
-                  {p.catalog_categories?.name ?? '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {formatMoney(p.default_price, defaultCurrency)}
-                </td>
+                <td className="px-3 py-2 text-slate-500">{p.catalog_categories?.name ?? '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.default_price, defaultCurrency)}</td>
                 <td className="px-3 py-2">{p.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{p.availability_status}</td>
                 <td className="px-3 py-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormSessionKey(`product-edit-${p.id}`)
-                      setEditing(p)
-                      setCreating(false)
-                      setPostCreateHint(false)
-                    }}
+                    onClick={() => { setFormSessionKey(`product-edit-${p.id}`); setEditing(p); setCreating(false); setPostCreateHint(false) }}
                     className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Editar
+                    <Pencil className="w-3.5 h-3.5" />Editar
                   </button>
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {!listLoading && listItems.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
-                  Nenhum produto cadastrado.
+                  {hasActiveFilters ? 'Nenhum produto encontrado com os filtros aplicados.' : 'Nenhum produto cadastrado.'}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {importOpen && (
+        <CatalogImportModal
+          companyId={companyId}
+          type="product"
+          existingCategories={categories}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setRefreshKey((k) => k + 1); void onRefresh() }}
+        />
+      )}
     </div>
   )
 }
@@ -629,56 +787,175 @@ const ProductForm: React.FC<{
 const CatalogServiceList: React.FC<{
   companyId: string
   defaultCurrency: string
-  items: CatalogService[]
   thumbnails: Record<string, string>
   allProducts: CatalogProduct[]
   categories: CatalogCategory[]
   onRefresh: () => void
-}> = ({ companyId, defaultCurrency, items, thumbnails, allProducts, categories, onRefresh }) => {
+}> = ({ companyId, defaultCurrency, thumbnails, allProducts, categories, onRefresh }) => {
+  const [listItems, setListItems] = useState<CatalogService[]>([])
+  const [listLoading, setListLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const [filterName, setFilterName] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterCategoryId, setFilterCategoryId] = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [filterMinPrice, setFilterMinPrice] = useState('')
+  const [filterMaxPrice, setFilterMaxPrice] = useState('')
+  const [filterAvailability, setFilterAvailability] = useState('')
+
+  const debouncedName = useDebounce(filterName, 300)
+
+  const [importOpen, setImportOpen] = useState(false)
   const [editing, setEditing] = useState<CatalogService | null>(null)
   const [creating, setCreating] = useState(false)
   const [formSessionKey, setFormSessionKey] = useState('')
   const [postCreateHint, setPostCreateHint] = useState(false)
+
+  const hasActiveFilters =
+    filterName || filterStatus || filterCategoryId || filterMinPrice || filterMaxPrice || filterAvailability
+
+  const clearFilters = () => {
+    setFilterName(''); setFilterStatus(''); setFilterCategoryId('')
+    setFilterMinPrice(''); setFilterMaxPrice(''); setFilterAvailability('')
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    setListLoading(true)
+    const filters = {
+      name: debouncedName || undefined,
+      isActive: filterStatus === '' ? undefined : filterStatus === 'active',
+      categoryId: filterCategoryId || undefined,
+      minPrice: filterMinPrice !== '' ? parseFloat(filterMinPrice) : undefined,
+      maxPrice: filterMaxPrice !== '' ? parseFloat(filterMaxPrice) : undefined,
+      availability: filterAvailability || undefined,
+    }
+    catalogApi.getServices(companyId, filters)
+      .then((data) => { if (!cancelled) setListItems(data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setListLoading(false) })
+    return () => { cancelled = true }
+  }, [companyId, debouncedName, filterStatus, filterCategoryId, filterMinPrice, filterMaxPrice, filterAvailability, refreshKey])
 
   const handleServiceSaved = (saved: CatalogService) => {
     const wasCreate = creating
     setCreating(false)
     setEditing(saved)
     if (wasCreate) setPostCreateHint(true)
+    setRefreshKey((k) => k + 1)
     void onRefresh()
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[160px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            placeholder="Buscar serviço…"
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+          />
+        </div>
+        <select
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+        >
+          <option value="">Todos</option>
+          <option value="active">Ativo</option>
+          <option value="inactive">Inativo</option>
+        </select>
+        <select
+          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
+        >
+          <option value="">Categoria</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
         <button
           type="button"
-          onClick={() => {
-            setFormSessionKey(`service-${Date.now()}`)
-            setCreating(true)
-            setEditing(null)
-            setPostCreateHint(false)
-          }}
+          onClick={() => setDrawerOpen((o) => !o)}
+          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+            drawerOpen ? 'border-indigo-500 text-indigo-600 bg-indigo-50' : 'border-gray-300 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />Filtros
+        </button>
+        {hasActiveFilters && (
+          <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+            <XIcon className="w-3 h-3" />Limpar
+          </button>
+        )}
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          <Upload className="w-3.5 h-3.5" />Importar
+        </button>
+        <button
+          type="button"
+          onClick={() => exportCatalogToCsv(listItems, 'servicos.csv')}
+          disabled={listItems.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+        >
+          <Download className="w-3.5 h-3.5" />Exportar CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => { setFormSessionKey(`service-${Date.now()}`); setCreating(true); setEditing(null); setPostCreateHint(false) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
         >
-          <Plus className="w-4 h-4" />
-          Novo serviço
+          <Plus className="w-4 h-4" />Novo serviço
         </button>
       </div>
-      {postCreateHint && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
-          <span>
-            Serviço criado — agora você pode adicionar mídias e relacionamentos abaixo.
-          </span>
-          <button
-            type="button"
-            className="text-emerald-800 underline text-xs shrink-0"
-            onClick={() => setPostCreateHint(false)}
-          >
-            Ok
-          </button>
+
+      {drawerOpen && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preço mínimo</label>
+            <input type="number" min="0" step="0.01"
+              className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="0,00" value={filterMinPrice} onChange={(e) => setFilterMinPrice(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preço máximo</label>
+            <input type="number" min="0" step="0.01"
+              className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="—" value={filterMaxPrice} onChange={(e) => setFilterMaxPrice(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Disponibilidade</label>
+            <select
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              value={filterAvailability} onChange={(e) => setFilterAvailability(e.target.value)}
+            >
+              <option value="">Todas</option>
+              <option value="available">Disponível</option>
+              <option value="unavailable">Indisponível</option>
+              <option value="on_demand">Sob consulta</option>
+              <option value="discontinued">Descontinuado</option>
+            </select>
+          </div>
         </div>
       )}
+
+      {postCreateHint && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
+          <span>Serviço criado — agora você pode adicionar mídias e relacionamentos abaixo.</span>
+          <button type="button" className="text-emerald-800 underline text-xs shrink-0" onClick={() => setPostCreateHint(false)}>Ok</button>
+        </div>
+      )}
+
       {(creating || editing) && (
         <ServiceForm
           key={formSessionKey}
@@ -686,16 +963,13 @@ const CatalogServiceList: React.FC<{
           defaultCurrency={defaultCurrency}
           initial={editing}
           allProducts={allProducts}
-          allServices={items}
+          allServices={listItems}
           categories={categories}
-          onCancel={() => {
-            setCreating(false)
-            setEditing(null)
-            setPostCreateHint(false)
-          }}
+          onCancel={() => { setCreating(false); setEditing(null); setPostCreateHint(false) }}
           onSaved={handleServiceSaved}
         />
       )}
+
       <div className="border border-slate-200 rounded-lg overflow-hidden">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
@@ -710,54 +984,56 @@ const CatalogServiceList: React.FC<{
             </tr>
           </thead>
           <tbody>
-            {items.map((s) => (
+            {listLoading && (
+              <tr>
+                <td colSpan={7} className="px-3 py-4 text-center text-slate-400 text-sm">
+                  <RefreshCw className="w-4 h-4 animate-spin inline mr-2" />Carregando…
+                </td>
+              </tr>
+            )}
+            {!listLoading && listItems.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-2 py-1 align-middle">
                   {thumbnails[s.id] && (
-                    <img
-                      src={thumbnails[s.id]}
-                      alt=""
-                      loading="lazy"
-                      className="w-6 h-6 rounded object-cover"
-                    />
+                    <img src={thumbnails[s.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{s.name}</td>
-                <td className="px-3 py-2 text-slate-500">
-                  {s.catalog_categories?.name ?? '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {formatMoney(s.default_price, defaultCurrency)}
-                </td>
+                <td className="px-3 py-2 text-slate-500">{s.catalog_categories?.name ?? '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(s.default_price, defaultCurrency)}</td>
                 <td className="px-3 py-2">{s.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{s.availability_status}</td>
                 <td className="px-3 py-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormSessionKey(`service-edit-${s.id}`)
-                      setEditing(s)
-                      setCreating(false)
-                      setPostCreateHint(false)
-                    }}
+                    onClick={() => { setFormSessionKey(`service-edit-${s.id}`); setEditing(s); setCreating(false); setPostCreateHint(false) }}
                     className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
-                    Editar
+                    <Pencil className="w-3.5 h-3.5" />Editar
                   </button>
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {!listLoading && listItems.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
-                  Nenhum serviço cadastrado.
+                  {hasActiveFilters ? 'Nenhum serviço encontrado com os filtros aplicados.' : 'Nenhum serviço cadastrado.'}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {importOpen && (
+        <CatalogImportModal
+          companyId={companyId}
+          type="service"
+          existingCategories={categories}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setRefreshKey((k) => k + 1); void onRefresh() }}
+        />
+      )}
     </div>
   )
 }
