@@ -104,6 +104,8 @@ export const catalogMediaApi = {
     mediaType: 'image' | 'video'
     usageRole: CatalogMediaUsageRole
     sortOrder?: number
+    isActive?: boolean
+    useInAi?: boolean
   }): Promise<void> {
     const row = {
       company_id: params.companyId,
@@ -113,8 +115,8 @@ export const catalogMediaApi = {
       media_type: params.mediaType,
       usage_role: params.usageRole,
       sort_order: params.sortOrder ?? 0,
-      is_active: true,
-      use_in_ai: true,
+      is_active: params.isActive ?? true,
+      use_in_ai: params.useInAi ?? true,
       metadata: {},
     }
     const { error } = await supabase.from('catalog_item_media').insert(row)

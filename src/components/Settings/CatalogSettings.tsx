@@ -185,29 +185,63 @@ const CatalogProductList: React.FC<{
 }> = ({ companyId, defaultCurrency, items, allServices, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogProduct | null>(null)
   const [creating, setCreating] = useState(false)
+  /** Mantém o mesmo formulário montado na transição criar → editar (evita perder estado). */
+  const [formSessionKey, setFormSessionKey] = useState('')
+  const [postCreateHint, setPostCreateHint] = useState(false)
+
+  const handleProductSaved = (saved: CatalogProduct) => {
+    const wasCreate = creating
+    setCreating(false)
+    setEditing(saved)
+    if (wasCreate) setPostCreateHint(true)
+    void onRefresh()
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => { setCreating(true); setEditing(null) }}
+          onClick={() => {
+            setFormSessionKey(`product-${Date.now()}`)
+            setCreating(true)
+            setEditing(null)
+            setPostCreateHint(false)
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
         >
           <Plus className="w-4 h-4" />
           Novo produto
         </button>
       </div>
+      {postCreateHint && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Produto criado — agora você pode adicionar mídias e relacionamentos abaixo.
+          </span>
+          <button
+            type="button"
+            className="text-emerald-800 underline text-xs shrink-0"
+            onClick={() => setPostCreateHint(false)}
+          >
+            Ok
+          </button>
+        </div>
+      )}
       {(creating || editing) && (
         <ProductForm
-          key={editing?.id ?? (creating ? 'new-product' : 'closed')}
+          key={formSessionKey}
           companyId={companyId}
           defaultCurrency={defaultCurrency}
           initial={editing}
           allProducts={items}
           allServices={allServices}
-          onCancel={() => { setCreating(false); setEditing(null) }}
-          onSaved={() => { setCreating(false); setEditing(null); onRefresh() }}
+          onCancel={() => {
+            setCreating(false)
+            setEditing(null)
+            setPostCreateHint(false)
+          }}
+          onSaved={handleProductSaved}
         />
       )}
       <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -233,7 +267,12 @@ const CatalogProductList: React.FC<{
                 <td className="px-3 py-2">
                   <button
                     type="button"
-                    onClick={() => { setEditing(p); setCreating(false) }}
+                    onClick={() => {
+                      setFormSessionKey(`product-edit-${p.id}`)
+                      setEditing(p)
+                      setCreating(false)
+                      setPostCreateHint(false)
+                    }}
                     className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -263,8 +302,9 @@ const ProductForm: React.FC<{
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
   onCancel: () => void
-  onSaved: () => void
+  onSaved: (saved: CatalogProduct) => void
 }> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
+  const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -283,7 +323,7 @@ const ProductForm: React.FC<{
     setSaving(true)
     try {
       if (initial) {
-        await catalogApi.updateProduct(initial.id, {
+        const updated = await catalogApi.updateProduct(initial.id, {
           name,
           default_price: defaultPrice,
           description: description || null,
@@ -294,8 +334,9 @@ const ProductForm: React.FC<{
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || null,
           available_for_ai: availableAi,
         })
+        onSaved(updated)
       } else {
-        await catalogApi.createProduct(companyId, {
+        const created = await catalogApi.createProduct(companyId, {
           name,
           default_price: defaultPrice,
           description: description || undefined,
@@ -306,15 +347,30 @@ const ProductForm: React.FC<{
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || undefined,
           available_for_ai: availableAi,
         })
+        onSaved(created)
       }
-      onSaved()
     } finally {
       setSaving(false)
     }
   }
 
+  const requestCancel = () => {
+    if (
+      mediaBatchBusy &&
+      !window.confirm(
+        'Envio de mídias em andamento. Cancelar mesmo assim? O que já foi enviado permanece na biblioteca.'
+      )
+    ) {
+      return
+    }
+    onCancel()
+  }
+
   return (
     <form onSubmit={submit} className="rounded-lg border border-slate-200 p-4 space-y-3 bg-white">
+      <h3 className="text-base font-semibold text-slate-900">
+        {initial ? 'Editar produto' : 'Novo produto'}
+      </h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Nome</label>
@@ -415,7 +471,12 @@ const ProductForm: React.FC<{
         </div>
       </div>
       {initial && (
-        <CatalogItemMediaEditor companyId={companyId} sourceType="product" sourceId={initial.id} />
+        <CatalogItemMediaEditor
+          companyId={companyId}
+          sourceType="product"
+          sourceId={initial.id}
+          onBatchBusyChange={setMediaBatchBusy}
+        />
       )}
       {initial && (
         <CatalogItemRelationsEditor
@@ -427,7 +488,7 @@ const ProductForm: React.FC<{
         />
       )}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-3 py-1.5 text-sm text-slate-600">
+        <button type="button" onClick={requestCancel} className="px-3 py-1.5 text-sm text-slate-600">
           Cancelar
         </button>
         <button
@@ -451,29 +512,62 @@ const CatalogServiceList: React.FC<{
 }> = ({ companyId, defaultCurrency, items, allProducts, onRefresh }) => {
   const [editing, setEditing] = useState<CatalogService | null>(null)
   const [creating, setCreating] = useState(false)
+  const [formSessionKey, setFormSessionKey] = useState('')
+  const [postCreateHint, setPostCreateHint] = useState(false)
+
+  const handleServiceSaved = (saved: CatalogService) => {
+    const wasCreate = creating
+    setCreating(false)
+    setEditing(saved)
+    if (wasCreate) setPostCreateHint(true)
+    void onRefresh()
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => { setCreating(true); setEditing(null) }}
+          onClick={() => {
+            setFormSessionKey(`service-${Date.now()}`)
+            setCreating(true)
+            setEditing(null)
+            setPostCreateHint(false)
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
         >
           <Plus className="w-4 h-4" />
           Novo serviço
         </button>
       </div>
+      {postCreateHint && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Serviço criado — agora você pode adicionar mídias e relacionamentos abaixo.
+          </span>
+          <button
+            type="button"
+            className="text-emerald-800 underline text-xs shrink-0"
+            onClick={() => setPostCreateHint(false)}
+          >
+            Ok
+          </button>
+        </div>
+      )}
       {(creating || editing) && (
         <ServiceForm
-          key={editing?.id ?? (creating ? 'new-service' : 'closed')}
+          key={formSessionKey}
           companyId={companyId}
           defaultCurrency={defaultCurrency}
           initial={editing}
           allProducts={allProducts}
           allServices={items}
-          onCancel={() => { setCreating(false); setEditing(null) }}
-          onSaved={() => { setCreating(false); setEditing(null); onRefresh() }}
+          onCancel={() => {
+            setCreating(false)
+            setEditing(null)
+            setPostCreateHint(false)
+          }}
+          onSaved={handleServiceSaved}
         />
       )}
       <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -499,7 +593,12 @@ const CatalogServiceList: React.FC<{
                 <td className="px-3 py-2">
                   <button
                     type="button"
-                    onClick={() => { setEditing(s); setCreating(false) }}
+                    onClick={() => {
+                      setFormSessionKey(`service-edit-${s.id}`)
+                      setEditing(s)
+                      setCreating(false)
+                      setPostCreateHint(false)
+                    }}
                     className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -529,8 +628,9 @@ const ServiceForm: React.FC<{
   allProducts: CatalogProduct[]
   allServices: CatalogService[]
   onCancel: () => void
-  onSaved: () => void
+  onSaved: (saved: CatalogService) => void
 }> = ({ companyId, defaultCurrency, initial, allProducts, allServices, onCancel, onSaved }) => {
+  const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -548,7 +648,7 @@ const ServiceForm: React.FC<{
     setSaving(true)
     try {
       if (initial) {
-        await catalogApi.updateService(initial.id, {
+        const updated = await catalogApi.updateService(initial.id, {
           name,
           default_price: defaultPrice,
           description: description || null,
@@ -558,8 +658,9 @@ const ServiceForm: React.FC<{
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || null,
           available_for_ai: availableAi,
         })
+        onSaved(updated)
       } else {
-        await catalogApi.createService(companyId, {
+        const created = await catalogApi.createService(companyId, {
           name,
           default_price: defaultPrice,
           description: description || undefined,
@@ -569,15 +670,30 @@ const ServiceForm: React.FC<{
           ai_unavailable_guidance: aiUnavailableGuidance.trim() || undefined,
           available_for_ai: availableAi,
         })
+        onSaved(created)
       }
-      onSaved()
     } finally {
       setSaving(false)
     }
   }
 
+  const requestCancel = () => {
+    if (
+      mediaBatchBusy &&
+      !window.confirm(
+        'Envio de mídias em andamento. Cancelar mesmo assim? O que já foi enviado permanece na biblioteca.'
+      )
+    ) {
+      return
+    }
+    onCancel()
+  }
+
   return (
     <form onSubmit={submit} className="rounded-lg border border-slate-200 p-4 space-y-3 bg-white">
+      <h3 className="text-base font-semibold text-slate-900">
+        {initial ? 'Editar serviço' : 'Novo serviço'}
+      </h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Nome</label>
@@ -663,7 +779,12 @@ const ServiceForm: React.FC<{
         </div>
       </div>
       {initial && (
-        <CatalogItemMediaEditor companyId={companyId} sourceType="service" sourceId={initial.id} />
+        <CatalogItemMediaEditor
+          companyId={companyId}
+          sourceType="service"
+          sourceId={initial.id}
+          onBatchBusyChange={setMediaBatchBusy}
+        />
       )}
       {initial && (
         <CatalogItemRelationsEditor
@@ -675,7 +796,7 @@ const ServiceForm: React.FC<{
         />
       )}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-3 py-1.5 text-sm text-slate-600">
+        <button type="button" onClick={requestCancel} className="px-3 py-1.5 text-sm text-slate-600">
           Cancelar
         </button>
         <button
