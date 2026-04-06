@@ -193,6 +193,10 @@ export class S3Storage {
       });
       
       console.error('❌ S3Storage - Detalhes completos do erro:', error);
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'s3Storage.ts:upload-error',message:'ERRO no upload S3 — checksum fix pode não ter surtido efeito',data:{errorMessage:error.message,errorName:error.name,httpStatus:error.$metadata?.httpStatusCode},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       
       return {
         success: false,

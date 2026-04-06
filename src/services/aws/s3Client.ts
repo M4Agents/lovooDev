@@ -36,13 +36,22 @@ export class S3ClientFactory {
       const credentials = credentialsResult.data;
 
       // Create S3 client
+      // requestChecksumCalculation: 'WHEN_REQUIRED' desativa o comportamento padrão
+      // do SDK v3 >= 3.577 que adiciona SHA256 ao CreateMultipartUpload mas não
+      // propaga para as partes individuais, causando erro 400 do S3.
       const s3Client = new S3Client({
         region: credentials.region,
         credentials: {
           accessKeyId: credentials.access_key_id,
           secretAccessKey: credentials.secret_access_key,
         },
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
       });
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'s3Client.ts:new-client',message:'S3Client criado com requestChecksumCalculation WHEN_REQUIRED',data:{companyId,region:credentials.region,checksumFix:'WHEN_REQUIRED'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       // Cache the client
       this.clientCache.set(cacheKey, s3Client);
