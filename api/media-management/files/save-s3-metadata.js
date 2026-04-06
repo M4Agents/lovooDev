@@ -60,6 +60,23 @@ export default async function handler(req, res) {
     // Usar service role key para bypassar RLS
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    // Bloquear upload direto em pastas de sistema
+    if (folder_id) {
+      const { data: folder } = await supabase
+        .from('company_folders')
+        .select('is_system_folder')
+        .eq('id', folder_id)
+        .eq('company_id', company_id)
+        .single()
+
+      if (folder?.is_system_folder) {
+        return res.status(403).json({
+          error: 'Pasta protegida',
+          message: 'Esta pasta é gerenciada pelo catálogo. Use a gestão de produtos ou serviços para adicionar mídias aqui.'
+        })
+      }
+    }
+
     // Inserir metadados
     const { data, error } = await supabase
       .from('lead_media_unified')

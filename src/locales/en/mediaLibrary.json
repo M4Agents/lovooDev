@@ -15,6 +15,7 @@
     "upload": "Upload",
     "uploadDisabledTitle": "Select a folder to upload",
     "uploadEnabledTitle": "Upload files",
+    "uploadSystemFolderTitle": "This folder is managed by the catalog — use the products or services module to add media",
     "deselectAll": "Deselect all",
     "bulkActions": "Bulk actions",
     "preview": "View",
@@ -57,7 +58,13 @@
     "emptyTitle": "No folders yet",
     "emptyHint": "Click \"New folder\" to get started",
     "statsTotalFolders": "Total folders:",
-    "statsTotalFiles": "Total files:"
+    "statsTotalFiles": "Total files:",
+    "systemBadge": "System",
+    "systemFolderTooltip": "This folder is managed by the product/service catalog"
+  },
+  "systemFolder": {
+    "notice": "This folder is managed by the catalog. To add or remove media, go to the corresponding product or service.",
+    "actionsNotice": "Files in system folders cannot be deleted here. Manage them from the corresponding product or service."
   },
   "fileGrid": {
     "loading": "Loading files...",

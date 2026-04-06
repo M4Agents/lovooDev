@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     // Buscar arquivos para verificar se existem e obter s3_keys
     const { data: filesToDelete, error: fetchError } = await supabase
       .from('lead_media_unified')
-      .select('id, s3_key, original_filename')
+      .select('id, s3_key, original_filename, folder_id')
       .eq('company_id', company_id)
       .in('id', fileIds)
 
@@ -68,6 +68,23 @@ export default async function handler(req, res) {
     }
 
     console.log('📁 Arquivos encontrados para delete:', filesToDelete.map(f => f.original_filename))
+
+    // Verificar se algum arquivo pertence a pasta de sistema (protegida)
+    const folderIds = [...new Set(filesToDelete.map(f => f.folder_id).filter(Boolean))]
+    if (folderIds.length > 0) {
+      const { data: systemFolders } = await supabase
+        .from('company_folders')
+        .select('id, name')
+        .in('id', folderIds)
+        .eq('is_system_folder', true)
+
+      if (systemFolders && systemFolders.length > 0) {
+        return res.status(403).json({
+          error: 'Arquivos protegidos',
+          message: 'Um ou mais arquivos pertencem a pastas do sistema (Produtos/Serviços). Gerencie estas mídias a partir do produto ou serviço correspondente.'
+        })
+      }
+    }
 
     // Deletar do AWS S3 (se necessário)
     try {

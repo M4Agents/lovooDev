@@ -28,6 +28,7 @@ export default async function handler(req, res) {
       file_size,
       s3_key,
       preview_url,
+      folder_path,
     } = req.body
 
     if (!company_id || !original_filename || !file_type || !mime_type || !file_size || !s3_key) {
@@ -61,6 +62,9 @@ export default async function handler(req, res) {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
+    // Determinar folder_path: aceita explícito ou usa '/' como raiz
+    const resolved_folder_path = folder_path && folder_path.startsWith('/') ? folder_path : '/'
+
     const { data, error } = await supabase
       .from('company_media_library')
       .insert({
@@ -71,8 +75,9 @@ export default async function handler(req, res) {
         file_size,
         s3_key,
         preview_url: preview_url || null,
+        folder_path: resolved_folder_path,
       })
-      .select('id, s3_key, file_type, original_filename, preview_url, company_id')
+      .select('id, s3_key, file_type, original_filename, preview_url, company_id, folder_path')
       .single()
 
     if (error) {

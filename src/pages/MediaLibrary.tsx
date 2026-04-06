@@ -338,13 +338,19 @@ export const MediaLibrary: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowUploadModal(true)}
-              disabled={!state.currentFolder}
+              disabled={!state.currentFolder || !!state.currentFolder?.is_system_folder}
               className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-                state.currentFolder
+                state.currentFolder && !state.currentFolder?.is_system_folder
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
-              title={!state.currentFolder ? t('actions.uploadDisabledTitle') : t('actions.uploadEnabledTitle')}
+              title={
+                state.currentFolder?.is_system_folder
+                  ? t('actions.uploadSystemFolderTitle')
+                  : !state.currentFolder
+                    ? t('actions.uploadDisabledTitle')
+                    : t('actions.uploadEnabledTitle')
+              }
             >
               <Upload className="w-5 h-5" />
               {t('actions.upload')}
@@ -515,6 +521,12 @@ export const MediaLibrary: React.FC = () => {
 
           {/* Área principal - Grid de arquivos */}
           <div className="col-span-9">
+            {state.currentFolder?.is_system_folder && (
+              <div className="flex items-start gap-3 p-3 mb-4 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <span className="text-lg flex-shrink-0">🔒</span>
+                <p>{t('systemFolder.notice')}</p>
+              </div>
+            )}
             <FileGrid
               files={state.files}
               selectedFiles={state.selectedFiles}
@@ -590,6 +602,7 @@ export const MediaLibrary: React.FC = () => {
             companyId={company.id}
             selectedFileIds={state.selectedFiles}
             folders={state.folders}
+            isSystemFolder={!!state.currentFolder?.is_system_folder}
             onClose={() => setShowActionsModal(false)}
             onComplete={handleActionsComplete}
           />

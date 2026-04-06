@@ -14,7 +14,8 @@ import {
   Home,
   Loader2,
   Edit3,
-  Trash2
+  Trash2,
+  Lock
 } from 'lucide-react'
 
 // =====================================================
@@ -104,6 +105,17 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
           {folder.name}
         </span>
 
+        {/* Badge de pasta de sistema */}
+        {folder.is_system_folder && (
+          <span
+            title={t('folderExplorer.systemFolderTooltip')}
+            className="flex items-center gap-0.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0"
+          >
+            <Lock className="w-2.5 h-2.5" />
+            {t('folderExplorer.systemBadge')}
+          </span>
+        )}
+
         {/* Contador de arquivos */}
         {folder.file_count > 0 && (
           <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
@@ -111,8 +123,8 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({
           </span>
         )}
 
-        {/* Botões de ação - aparecem no hover */}
-        {(onEditFolder || onDeleteFolder) && (
+        {/* Botões de ação - aparecem no hover, ocultos em pastas de sistema */}
+        {!folder.is_system_folder && (onEditFolder || onDeleteFolder) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {onEditFolder && (
               <button

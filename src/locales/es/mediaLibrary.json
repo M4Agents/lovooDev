@@ -15,6 +15,7 @@
     "upload": "Subir",
     "uploadDisabledTitle": "Seleccione una carpeta para subir",
     "uploadEnabledTitle": "Subir archivos",
+    "uploadSystemFolderTitle": "Esta carpeta es administrada por el catálogo — use el módulo de productos o servicios para añadir medios",
     "deselectAll": "Desmarcar todos",
     "bulkActions": "Acciones en lote",
     "preview": "Ver",
@@ -57,7 +58,13 @@
     "emptyTitle": "Ninguna carpeta creada",
     "emptyHint": "Pulse \"Nueva carpeta\" para empezar",
     "statsTotalFolders": "Total de carpetas:",
-    "statsTotalFiles": "Archivos totales:"
+    "statsTotalFiles": "Archivos totales:",
+    "systemBadge": "Sistema",
+    "systemFolderTooltip": "Esta carpeta es administrada por el catálogo de productos/servicios"
+  },
+  "systemFolder": {
+    "notice": "Esta carpeta es administrada por el catálogo. Para añadir o eliminar medios, acceda al producto o servicio correspondiente.",
+    "actionsNotice": "Los archivos de carpetas del sistema no pueden eliminarse aquí. Adminístrelos desde el producto o servicio correspondiente."
   },
   "fileGrid": {
     "loading": "Cargando archivos...",

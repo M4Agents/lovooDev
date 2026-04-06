@@ -43,13 +43,19 @@ export function validateCatalogMediaFile(file: File): { ok: true } | { ok: false
   return { ok: true }
 }
 
+/** Retorna o folder_path canônico da pasta de sistema de acordo com sourceType. */
+export function catalogFolderPath(sourceType: 'product' | 'service'): '/produtos' | '/servicos' {
+  return sourceType === 'product' ? '/produtos' : '/servicos'
+}
+
 /**
  * Upload S3 + save-metadata (mesmo pipeline da biblioteca).
+ * sourceType determina a pasta de sistema de destino (Produtos / Serviços).
  */
 export async function uploadCatalogMediaToLibrary(
   file: File,
   companyId: string,
-  folderId?: string | null
+  sourceType: 'product' | 'service' = 'product'
 ): Promise<{ ok: true; data: CatalogLibrarySavedAsset } | { ok: false; error: string }> {
   const v = validateCatalogMediaFile(file)
   if (!v.ok) return { ok: false, error: v.message }
@@ -95,6 +101,7 @@ export async function uploadCatalogMediaToLibrary(
       file_size: file.size,
       s3_key: uploadResult.data.s3Key,
       preview_url: signedUrlResult.data,
+      folder_path: catalogFolderPath(sourceType),
     }
 
     const metadataResponse = await fetch('/api/media-library/save-catalog-metadata', {

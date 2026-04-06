@@ -15,6 +15,7 @@
     "upload": "Upload",
     "uploadDisabledTitle": "Selecione uma pasta para fazer upload",
     "uploadEnabledTitle": "Fazer upload de arquivos",
+    "uploadSystemFolderTitle": "Esta pasta é gerenciada pelo catálogo — use o módulo de produtos ou serviços para adicionar mídias",
     "deselectAll": "Desmarcar todos",
     "bulkActions": "Ações em lote",
     "preview": "Ver",
@@ -57,7 +58,13 @@
     "emptyTitle": "Nenhuma pasta criada",
     "emptyHint": "Clique em \"Nova Pasta\" para começar",
     "statsTotalFolders": "Total de pastas:",
-    "statsTotalFiles": "Arquivos totais:"
+    "statsTotalFiles": "Arquivos totais:",
+    "systemBadge": "Sistema",
+    "systemFolderTooltip": "Esta pasta é gerenciada pelo catálogo de produtos/serviços"
+  },
+  "systemFolder": {
+    "notice": "Esta pasta é gerenciada pelo catálogo. Para adicionar ou remover mídias, acesse o produto ou serviço correspondente.",
+    "actionsNotice": "Arquivos de pastas do sistema não podem ser excluídos por aqui. Gerencie-os no produto ou serviço correspondente."
   },
   "fileGrid": {
     "loading": "Carregando arquivos...",

@@ -206,7 +206,7 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
         continue
       }
 
-      const up = await uploadCatalogMediaToLibrary(file, companyId)
+      const up = await uploadCatalogMediaToLibrary(file, companyId, sourceType)
       if (!up.ok) {
         results.push({ fileName: file.name, status: 'upload_fail', detail: up.error })
         fail++

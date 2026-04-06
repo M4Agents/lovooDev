@@ -25,6 +25,7 @@ interface MediaActionsProps {
   companyId: string
   selectedFileIds: string[]
   folders: MediaFolder[]
+  isSystemFolder?: boolean
   onClose: () => void
   onComplete: () => void
 }
@@ -39,6 +40,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
   companyId,
   selectedFileIds,
   folders,
+  isSystemFolder = false,
   onClose,
   onComplete
 }) => {
@@ -198,19 +200,29 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
           </div>
         </button>
 
-        {/* Excluir */}
-        <button
-          onClick={() => setSelectedAction('delete')}
-          className="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors"
-        >
-          <Trash2 className="w-6 h-6 text-red-600" />
-          <div className="text-left">
-            <div className="font-medium text-gray-900">{t('mediaActions.deleteTitle')}</div>
-            <div className="text-sm text-gray-600">
-              {t('mediaActions.deleteDescription')}
+        {/* Excluir — oculto em pastas de sistema */}
+        {!isSystemFolder && (
+          <button
+            onClick={() => setSelectedAction('delete')}
+            className="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="w-6 h-6 text-red-600" />
+            <div className="text-left">
+              <div className="font-medium text-gray-900">{t('mediaActions.deleteTitle')}</div>
+              <div className="text-sm text-gray-600">
+                {t('mediaActions.deleteDescription')}
+              </div>
             </div>
+          </button>
+        )}
+
+        {/* Aviso quando em pasta de sistema */}
+        {isSystemFolder && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <span className="text-lg flex-shrink-0">🔒</span>
+            <p className="text-sm text-amber-800">{t('systemFolder.actionsNotice')}</p>
           </div>
-        </button>
+        )}
       </div>
     </div>
   )
