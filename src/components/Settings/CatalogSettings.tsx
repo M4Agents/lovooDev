@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Package, Plus, Pencil, RefreshCw } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
+import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
 import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
 import { formatMoney } from '../../lib/formatMoney'
@@ -414,6 +415,9 @@ const ProductForm: React.FC<{
         </div>
       </div>
       {initial && (
+        <CatalogItemMediaEditor companyId={companyId} sourceType="product" sourceId={initial.id} />
+      )}
+      {initial && (
         <CatalogItemRelationsEditor
           companyId={companyId}
           sourceType="product"
@@ -658,6 +662,9 @@ const ServiceForm: React.FC<{
           />
         </div>
       </div>
+      {initial && (
+        <CatalogItemMediaEditor companyId={companyId} sourceType="service" sourceId={initial.id} />
+      )}
       {initial && (
         <CatalogItemRelationsEditor
           companyId={companyId}
