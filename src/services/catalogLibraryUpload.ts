@@ -95,10 +95,9 @@ export async function uploadCatalogMediaToLibrary(
       file_size: file.size,
       s3_key: uploadResult.data.s3Key,
       preview_url: signedUrlResult.data,
-      folder_id: folderId || null,
     }
 
-    const metadataResponse = await fetch('/api/media-library/save-metadata', {
+    const metadataResponse = await fetch('/api/media-library/save-catalog-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(metadataPayload),
