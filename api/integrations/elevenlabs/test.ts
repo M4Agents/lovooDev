@@ -36,6 +36,17 @@ export default async function handler(req: any, res: any) {
     return
   }
 
+  // #region agent log
+  console.log(
+    JSON.stringify({
+      hypothesisId: 'H3-key-shape',
+      message: 'elevenlabs_key_meta',
+      data: { keyLength: key.length },
+      timestamp: Date.now(),
+    })
+  )
+  // #endregion
+
   const ac = new AbortController()
   const t = setTimeout(() => ac.abort(), 25_000)
 
@@ -82,7 +93,7 @@ export default async function handler(req: any, res: any) {
       res.status(401).json({
         ok: false,
         error:
-          'A ElevenLabs recusou a chave (401). Confira se a chave está correta e ativa no painel ElevenLabs e se ELEVENLABS_API_KEY (ou XI_API_KEY) na Vercel corresponde a esse projeto.',
+          'A ElevenLabs recusou a chave (401). Na Vercel, cole o valor sem aspas; no painel ElevenLabs (Developers → API Keys) confira se a chave não foi revogada e gere uma nova se necessário. A variável ELEVENLABS_API_KEY deve ser a mesma chave exibida ao criar (não o nome do segredo).',
       })
       return
     }
