@@ -58,9 +58,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
   const [legacyInfo, setLegacyInfo] = useState<LegacyUserInfo | null>(null);
 
-  // 🔍 CONTADOR PARA RASTREAR CHAMADAS
-  const [fetchCompanyCallCount, setFetchCompanyCallCount] = useState(0);
-  
   // 🔧 FLAG PARA EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
   const [isFetchingCompany, setIsFetchingCompany] = useState(false);
 
@@ -110,694 +107,143 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // NOVA FUNÇÃO: Recuperação automática de usuários órfãos
-  const attemptOrphanUserRecovery = async (userId: string) => {
-    try {
-      console.log('🔍 AuthContext: ORPHAN RECOVERY CALLED:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        callStack: new Error().stack?.split('\n').slice(1, 4).join(' -> '),
-        timestamp: new Date().toISOString()
-      });
-      
-      // Buscar informações do usuário no auth.users
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser || authUser.id !== userId) {
-        console.log('AuthContext: Auth user mismatch, cannot recover');
-        return null;
-      }
-
-      // Buscar se existe registro em company_users (sistema novo)
-      const { data: companyUsers } = await supabase
-        .from('company_users')
-        .select('*, companies(*)')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (companyUsers && companyUsers.length > 0) {
-        console.log('AuthContext: Found company_users records, creating compatibility record');
-        const companyUser = companyUsers[0];
-        const targetCompany = companyUser.companies;
-
-        // Criar registro de compatibilidade no sistema antigo
-        try {
-          const { error: insertError } = await supabase
-            .from('companies')
-            .insert({
-              id: crypto.randomUUID(),
-              user_id: userId,
-              name: `${authUser.email} - ${targetCompany.name}`,
-              company_type: targetCompany.company_type,
-              parent_company_id: targetCompany.company_type === 'client' ? targetCompany.id : null,
-              is_super_admin: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-
-          if (!insertError) {
-            console.log('AuthContext: Compatibility record created during recovery');
-            return targetCompany;
-          }
-        } catch (insertError) {
-          console.warn('AuthContext: Could not create compatibility record during recovery:', insertError);
-        }
-
-        // Mesmo se não conseguir criar compatibilidade, retornar empresa encontrada
-        return targetCompany;
-      }
-
-      console.log('AuthContext: No recovery possible - user truly orphaned');
-      return null;
-    } catch (error) {
-      console.error('AuthContext: Error during orphan user recovery:', error);
-      return null;
-    }
-  };
-
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
-    // Capturar user_id no início para evitar timing issues
     const capturedUserId = userId;
-    
+
+    if (company && company.id && !forceSuper) {
+      return;
+    }
+
+    if (isFetchingCompany && !forceSuper) {
+      return;
+    }
+
+    setIsLoadingCompany(true);
+    setIsFetchingCompany(true);
+
     try {
-      // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA COM SUCESSO
-      if (company && company.id && !forceSuper) {
-        console.log('🔧 AuthContext: Company already loaded successfully, skipping call:', {
-          companyId: company.id,
-          companyName: company.name,
-          forceSuper
-        });
-        return;
-      }
-      
-      // 🔧 EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
-      if (isFetchingCompany && !forceSuper) {
-        console.log('🔧 AuthContext: fetchCompany already in progress, skipping call');
-        return;
-      }
-      
-      setIsLoadingCompany(true); // Iniciar loading
-      setIsFetchingCompany(true); // Marcar como em progresso
-      setFetchCompanyCallCount(prev => prev + 1);
-      
-      // 🔍 GERAR ID ÚNICO PARA RASTREAR ESTA CHAMADA
-      const callId = Math.random().toString(36).substr(2, 9);
-      const callerInfo = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
-      
-      console.log('🔍 AuthContext: fetchCompany called with:', {
-        callId,
-        callNumber: fetchCompanyCallCount + 1,
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        forceSuper,
-        isFetchingCompany,
-        callerInfo,
-        timestamp: new Date().toISOString()
-      });
-      
-      // ✅ NOVO: Verificar se há company_id do convite (primeira vez após ativação)
+      // 1. Convite pendente — empresa definida pelo fluxo de convite
       const invitedCompanyId = localStorage.getItem('invited_company_id');
       if (invitedCompanyId && !company) {
-        console.log('🎯 AuthContext: Loading invited company:', invitedCompanyId);
-        
         const { data: invitedCompany, error: invitedError } = await supabase
           .from('companies')
           .select('*')
           .eq('id', invitedCompanyId)
           .single();
-          
+
         if (!invitedError && invitedCompany) {
-          console.log('✅ AuthContext: Loaded invited company:', invitedCompany.name);
           setCompany(invitedCompany);
           setCompanyTimezone(invitedCompany.timezone || 'America/Sao_Paulo');
           localStorage.setItem('currentCompanyId', invitedCompany.id);
-          localStorage.removeItem('invited_company_id'); // Limpar após usar
-          return;
-        } else {
-          console.warn('⚠️ AuthContext: Invited company not found, continuing with normal flow');
           localStorage.removeItem('invited_company_id');
+          return;
         }
+        localStorage.removeItem('invited_company_id');
       }
-      
-      // Verificar localStorage primeiro para impersonation
+
+      // 2. Impersonação ativa — carregar empresa impersonada
       const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
       const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
-      const originalUserData = localStorage.getItem('lovoo_crm_original_user');
-      
-      console.log('🔍 AuthContext: Impersonation check:', {
-        isCurrentlyImpersonating,
-        impersonatedCompanyId,
-        originalUserData,
-        forceSuper,
-        willUseImpersonation: isCurrentlyImpersonating && !forceSuper
-      });
-      
-      // Se está impersonating e não é para forçar super admin, buscar empresa impersonada diretamente
-      if (isCurrentlyImpersonating && !forceSuper) {
-        console.log('AuthContext: Looking for impersonated company:', impersonatedCompanyId);
-        
-        if (impersonatedCompanyId) {
-          const { data: impersonatedCompany, error: impError } = await supabase
-            .from('companies')
-            .select('*')
-            .eq('id', impersonatedCompanyId)
-            .single();
-            
-          if (!impError && impersonatedCompany) {
-            console.log('AuthContext: Found impersonated company:', impersonatedCompany.name);
-            setCompany(impersonatedCompany);
-            setCompanyTimezone(impersonatedCompany.timezone || 'America/Sao_Paulo');
-            setIsImpersonating(true); // Garantir que o estado está correto
-            
-            // Sincronizar currentCompanyId no localStorage para analytics
-            localStorage.setItem('currentCompanyId', impersonatedCompany.id);
-            
-            // Recuperar originalUser do localStorage se não estiver definido
-            if (!originalUser) {
-              const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
-              if (storedOriginalUser) {
-                setOriginalUser(JSON.parse(storedOriginalUser));
-              }
-            }
-            return;
-          } else {
-            console.log('AuthContext: Impersonated company not found, clearing impersonation');
-            // Limpar impersonation se empresa não existe
-            localStorage.removeItem('lovoo_crm_impersonating');
-            localStorage.removeItem('lovoo_crm_impersonated_company_id');
-            localStorage.removeItem('lovoo_crm_original_user');
-            setIsImpersonating(false);
-            setOriginalUser(null);
+
+      if (isCurrentlyImpersonating && !forceSuper && impersonatedCompanyId) {
+        const { data: impersonatedCompany, error: impError } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', impersonatedCompanyId)
+          .single();
+
+        if (!impError && impersonatedCompany) {
+          setCompany(impersonatedCompany);
+          setCompanyTimezone(impersonatedCompany.timezone || 'America/Sao_Paulo');
+          setIsImpersonating(true);
+          localStorage.setItem('currentCompanyId', impersonatedCompany.id);
+          if (!originalUser) {
+            const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
+            if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
           }
+          return;
         }
+        // Impersonação inválida: limpar
+        localStorage.removeItem('lovoo_crm_impersonating');
+        localStorage.removeItem('lovoo_crm_impersonated_company_id');
+        localStorage.removeItem('lovoo_crm_original_user');
+        setIsImpersonating(false);
+        setOriginalUser(null);
       }
-      
-      // CORREÇÃO CRÍTICA: Verificar se é super admin em AMBOS os sistemas
-      console.log('AuthContext: Checking for super admin status, forceSuper:', forceSuper);
-      
-      // Verificar sistema antigo
-      const { data: legacySuperAdmin, error: legacyError } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_super_admin', true)
-        .single();
-        
-      console.log('AuthContext: Legacy super admin check:', { data: legacySuperAdmin, error: legacyError });
-      
-      // Verificar sistema novo
-      const { data: newSystemSuperAdmin, error: newSystemError } = await supabase
+
+      // 3. Fonte única de verdade: company_users JOIN companies
+      const { data: companyUserRows, error: cuError } = await supabase
         .from('company_users')
-        .select('*, companies(*)')
+        .select('role, companies(*)')
         .eq('user_id', userId)
-        .eq('role', 'super_admin')
-        .eq('is_active', true)
-        .single();
-        
-      console.log('AuthContext: New system super admin check:', { data: newSystemSuperAdmin, error: newSystemError });
-      
-      // Se é super admin em QUALQUER sistema OU forceSuper está ativo, carregar TODAS as empresas
-      if ((!legacyError && legacySuperAdmin) || (!newSystemError && newSystemSuperAdmin) || forceSuper) {
-        console.log('AuthContext: User is LEGACY SUPER ADMIN - loading ALL companies');
-        
-        const { data: allCompanies, error: allCompaniesError } = await supabase
+        .eq('is_active', true);
+
+      if (cuError || !companyUserRows || companyUserRows.length === 0) {
+        console.warn('AuthContext: No active company_users found for user:', userId);
+        setAvailableCompanies([]);
+        setCompany(null);
+        return;
+      }
+
+      // Verificar super admin: role explícito em empresa do tipo parent
+      const isSuperAdmin = companyUserRows.some(
+        r => r.role === 'super_admin' && (r.companies as any)?.company_type === 'parent'
+      );
+
+      if (isSuperAdmin || forceSuper) {
+        // Super admin: carrega todas as empresas e seleciona a empresa pai
+        const { data: allCompanies, error: allError } = await supabase
           .from('companies')
           .select('*')
           .order('name');
-          
-        console.log('AuthContext: All companies loaded for super admin:', { count: allCompanies?.length, error: allCompaniesError });
-        
-        if (!allCompaniesError && allCompanies && allCompanies.length > 0) {
-          // Armazenar todas as empresas disponíveis
+
+        if (!allError && allCompanies && allCompanies.length > 0) {
           setAvailableCompanies(allCompanies);
-          
-          // Selecionar a empresa super admin como principal
-          const superAdminCompany = legacySuperAdmin || 
-                                   (newSystemSuperAdmin?.companies) || 
-                                   allCompanies.find(c => c.is_super_admin) || 
-                                   allCompanies[0];
-          setCompany(superAdminCompany);
-          setCompanyTimezone(superAdminCompany.timezone || 'America/Sao_Paulo');
-          
-          // Sincronizar currentCompanyId no localStorage para analytics
-          localStorage.setItem('currentCompanyId', superAdminCompany.id);
-          
-          console.log('AuthContext: Super admin setup completed - Company:', superAdminCompany.name, 'Available companies:', allCompanies.length);
-          return; // Sair da função - super admin configurado com sucesso
+          const parentCompany = allCompanies.find(c => c.company_type === 'parent') || allCompanies[0];
+          setCompany(parentCompany);
+          setCompanyTimezone(parentCompany.timezone || 'America/Sao_Paulo');
+          localStorage.setItem('currentCompanyId', parentCompany.id);
         }
-      }
-      
-      // SISTEMA HÍBRIDO: Tentar buscar no sistema novo primeiro
-      console.log('AuthContext: Trying NEW system first (company_users)');
-      console.log('🔍 AuthContext: About to query with userId:', {
-        userId,
-        userIdType: typeof userId,
-        userIdLength: userId?.length,
-        userIdString: String(userId),
-        userIdJSON: JSON.stringify(userId)
-      });
-      
-      // CORREÇÃO: Usar abordagem mais robusta - buscar company_users primeiro
-      const { data: companyUsersData, error: companyUsersError } = await supabase
-        .from('company_users')
-        .select('company_id, role, is_active')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-        
-      console.log('🔍 AuthContext: NEW system company_users query:', { 
-        data: companyUsersData, 
-        error: companyUsersError,
-        userId: userId,
-        queryDetails: {
-          hasData: !!companyUsersData,
-          dataLength: companyUsersData?.length,
-          hasError: !!companyUsersError,
-          errorMessage: companyUsersError?.message
-        }
-      });
-      
-      let { data, error }: { data: any[] | null, error: any } = { data: null, error: companyUsersError };
-      
-      if (!companyUsersError && companyUsersData && companyUsersData.length > 0) {
-        console.log('AuthContext: Found user in company_users, fetching companies...');
-        console.log('AuthContext: Company IDs from NEW system:', companyUsersData.map(cu => cu.company_id));
-        
-        // Buscar empresas correspondentes
-        const companyIds = companyUsersData.map(cu => cu.company_id);
-        const { data: companiesData, error: companiesError } = await supabase
-          .from('companies')
-          .select('*')
-          .in('id', companyIds);
-          
-        console.log('🔍 AuthContext: Companies query for NEW system:', { 
-          data: companiesData, 
-          error: companiesError,
-          companyIds: companyIds,
-          queryDetails: {
-            hasData: !!companiesData,
-            dataLength: companiesData?.length,
-            hasError: !!companiesError,
-            errorMessage: companiesError?.message,
-            companiesFound: companiesData?.map(c => ({ id: c.id, name: c.name, status: c.status }))
-          }
-        });
-        
-        if (!companiesError && companiesData && companiesData.length > 0) {
-          console.log('🔧 AuthContext: SUCCESS - Found companies in NEW system, PROCESSING IMMEDIATELY');
-          console.log('🔧 AuthContext: NEW system companies found:', companiesData.map(c => ({ id: c.id, name: c.name })));
-          
-          // 🔧 PROCESSAR IMEDIATAMENTE - NÃO ESPERAR CONDIÇÃO POSTERIOR
-          setAvailableCompanies(companiesData as any);
-          
-          // Priorizar empresa super admin se existir
-          const superAdminCompany = (companiesData as any).find((comp: any) => comp.is_super_admin);
-          const selectedCompany = superAdminCompany || companiesData[0];
-          
-          console.log('🔧 AuthContext: IMMEDIATE SUCCESS (NEW system) - Setting company:', selectedCompany.name);
-          console.log('🔧 AuthContext: Selected company details:', {
-            id: selectedCompany.id,
-            name: selectedCompany.name,
-            is_super_admin: selectedCompany.is_super_admin,
-            company_type: selectedCompany.company_type
-          });
-          
-          setCompany(selectedCompany as any);
-          setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
-          localStorage.setItem('currentCompanyId', selectedCompany.id);
-          
-          // CRÍTICO: Verificar se é empresa do sistema antigo
-          if (selectedCompany.id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-            console.warn('🔧 AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          } else {
-            console.log('🔧 AuthContext: SUCCESS - Using NEW system company ID');
-          }
-          
-          return; // SAIR IMEDIATAMENTE - NÃO FAZER FALLBACK
-          
-          // CÓDIGO ANTIGO (REMOVIDO):
-          // data = companiesData;
-          // error = null;
-          // console.log('AuthContext: SUCCESS - Found companies in NEW system:', companiesData.length);
-          // console.log('AuthContext: NEW system company details:', companiesData.map(c => ({ id: c.id, name: c.name })));
-          // console.log('AuthContext: FORCING use of NEW system data - will NOT fallback to old system');
-        } else {
-          // CORREÇÃO CRÍTICA: Só definir error se realmente houver erro
-          if (companiesError) {
-            error = companiesError;
-            console.error('AuthContext: Failed to fetch companies for NEW system IDs:', companiesError);
-          } else {
-            // Dados vazios mas sem erro - manter error como null para não contaminar
-            error = null;
-            console.warn('AuthContext: NEW system returned empty data but no error - keeping error as null');
-          }
-        }
-      }
-      
-      console.log('AuthContext: NEW system final result:', { data, error, dataLength: data?.length });
-      console.log('AuthContext: Final condition check:', { 
-        errorIsNull: error === null,
-        errorIsFalsy: !error,
-        dataExists: !!data,
-        dataLength: data?.length,
-        finalCondition: (!error && data && data.length > 0)
-      });
-      
-      // 🔧 CORREÇÃO: REESTRUTURAR LÓGICA PARA EVITAR DUPLICAÇÃO
-      if (!error && data && data.length > 0) {
-        console.log('AuthContext: SUCCESS - Using companies from NEW system:', data.length);
-        console.log('AuthContext: NEW system companies:', data.map(c => ({ id: c.id, name: c.name })));
-        
-        // 🔧 PROCESSAR DADOS DO SISTEMA NOVO DIRETAMENTE AQUI
-        console.log('AuthContext: ENTERING final company selection logic');
-        
-        // Armazenar todas as empresas disponíveis
-        setAvailableCompanies(data as any);
-        
-        // Priorizar empresa super admin se existir
-        const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
-        const selectedCompany = superAdminCompany || data[0];
-        
-        console.log('AuthContext: Company selection details:', {
-          totalCompanies: data.length,
-          superAdminFound: !!superAdminCompany,
-          selectedCompanyId: (selectedCompany as any).id,
-          selectedCompanyName: (selectedCompany as any).name
-        });
-        
-        console.log('AuthContext: Setting company:', (selectedCompany as any).name);
-        console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
-        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ id: c.id, name: c.name, is_super_admin: c.is_super_admin })));
-        
-        // CRÍTICO: Garantir que está usando empresa do sistema novo
-        if ((selectedCompany as any).id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-          console.warn('AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          console.warn('AuthContext: Company details:', selectedCompany);
-        } else {
-          console.log('AuthContext: SUCCESS - Using NEW system company ID');
-        }
-        
-        setCompany(selectedCompany as any);
-        
-        // Sincronizar currentCompanyId no localStorage para analytics
-        localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
-        
-        // 🔧 RETORNAR AQUI PARA EVITAR EXECUÇÃO DO ELSE
         return;
-        
-      } else {
-        console.log('AuthContext: Not found in NEW system, trying OLD system as fallback');
-        console.log('AuthContext: NEW system error details:', error);
-        console.log('AuthContext: NEW system data:', data);
-        
-        // IMPORTANTE: Só usar sistema antigo se realmente não encontrou no novo
-        if (!data || data.length === 0) {
-          console.log('AuthContext: Confirmed no data in NEW system, using OLD system fallback');
-          
-          // Fallback para sistema antigo
-          const result = await supabase
-            .from('companies')
-            .select('*')
-            .eq('user_id', userId);
-            
-          console.log('AuthContext: OLD system query result:', { data: result.data, error: result.error });
-          
-          // 🔧 PROTEÇÃO IMEDIATA: Se OLD system encontrou dados, forçar carregamento
-          if (!result.error && result.data && result.data.length > 0) {
-            console.log('🔧 AuthContext: OLD system found data - FORCING immediate load to avoid condition bug');
-            console.log('🔧 AuthContext: OLD system companies found:', result.data.map(c => ({ id: c.id, name: c.name })));
-            
-            // FORÇAR carregamento imediato
-            setAvailableCompanies(result.data as any);
-            
-            // Priorizar empresa super admin se existir
-            const superAdminCompany = (result.data as any).find((comp: any) => comp.is_super_admin);
-            const selectedCompany = superAdminCompany || result.data[0];
-            
-            console.log('🔧 AuthContext: IMMEDIATE FORCE LOAD SUCCESS (OLD system) - Setting company:', selectedCompany.name);
-            console.log('🔧 AuthContext: Selected company details:', {
-              id: selectedCompany.id,
-              name: selectedCompany.name,
-              is_super_admin: selectedCompany.is_super_admin
-            });
-            
-            setCompany(selectedCompany as any);
-            setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
-            localStorage.setItem('currentCompanyId', selectedCompany.id);
-            return; // SAIR IMEDIATAMENTE
-          }
-          
-          data = result.data;
-          error = result.error;
-        } else {
-          console.log('AuthContext: Actually found data in NEW system, keeping it');
-        }
       }
 
-      // 🔧 ESTA CONDIÇÃO AGORA SÓ EXECUTA PARA SISTEMA ANTIGO
-      console.log('🔍 AuthContext: About to check final condition for OLD system:', {
-        error: error,
-        data: data,
-        dataLength: data?.length,
-        dataType: typeof data,
-        isArray: Array.isArray(data),
-        conditionResult: (!error && data && data.length > 0)
-      });
-      
-      if (!error && data && data.length > 0) {
-        console.log('AuthContext: ENTERING final company selection logic (OLD system SUCCESS)');
-        
-        // Armazenar todas as empresas disponíveis
-        setAvailableCompanies(data as any);
-        
-        // Priorizar empresa super admin se existir
-        const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
-        const selectedCompany = superAdminCompany || data[0];
-        
-        console.log('AuthContext: Company selection details:', {
-          totalCompanies: data.length,
-          superAdminFound: !!superAdminCompany,
-          selectedCompanyId: (selectedCompany as any).id,
-          selectedCompanyName: (selectedCompany as any).name
-        });
-        
-        console.log('AuthContext: Setting company:', (selectedCompany as any).name);
-        console.log('AuthContext: Selected company ID:', (selectedCompany as any).id);
-        console.log('AuthContext: Available companies:', (data as any).map((c: any) => ({ id: c.id, name: c.name, is_super_admin: c.is_super_admin })));
-        
-        // CRÍTICO: Garantir que está usando empresa do sistema novo
-        if ((selectedCompany as any).id === '78ab1125-10ee-4881-9572-2b11813dacb2') {
-          console.warn('AuthContext: WARNING - Using OLD system company ID, this will cause empty user list!');
-          console.warn('AuthContext: Company details:', selectedCompany);
-        } else {
-          console.log('AuthContext: SUCCESS - Using NEW system company ID');
-        }
-        
-        setCompany(selectedCompany as any);
-        
-        // Sincronizar currentCompanyId no localStorage para analytics
-        localStorage.setItem('currentCompanyId', (selectedCompany as any).id);
-      } else {
-        console.log('AuthContext: FAILED final condition - No company found or error:', error);
-        console.log('AuthContext: Final condition failed with values:', { 
-          error, 
-          data, 
-          dataLength: data?.length,
-          currentState: {
-            user: !!user,
-            company: !!company,
-            loading,
-            isLoadingCompany,
-            isFetchingCompany
-          }
-        });
-        
-        // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA EM OUTRA CHAMADA
-        if (company && company.id) {
-          console.log('🔧 AuthContext: Company already loaded in another call, skipping orphan recovery');
-          console.log('🔧 AuthContext: Current company details:', {
-            id: company.id,
-            name: company.name,
-            loadedAt: new Date().toISOString()
-          });
-          return;
-        }
-        
-        // 🔧 PROTEÇÃO ADICIONAL: Verificar se dados foram encontrados mas condição falhou
-        if (companyUsersData && companyUsersData.length > 0) {
-          console.log('🔧 AuthContext: CRITICAL - Found company_users data (NEW system) but final condition failed!');
-          console.log('🔧 AuthContext: This indicates a logic bug in the condition check');
-          console.log('🔧 AuthContext: company_users data:', companyUsersData);
-          console.log('🔧 AuthContext: Final data variable:', data);
-          console.log('🔧 AuthContext: Final error variable:', error);
-          
-          // FORÇAR uso dos dados encontrados
-          if (companyUsersData.length > 0) {
-            console.log('🔧 AuthContext: FORCING company load with NEW system data');
-            
-            // Buscar empresa novamente com dados encontrados
-            const companyId = companyUsersData[0].company_id;
-            const { data: forceCompanyData, error: forceCompanyError } = await supabase
-              .from('companies')
-              .select('*')
-              .eq('id', companyId)
-              .single();
-              
-            if (!forceCompanyError && forceCompanyData) {
-              console.log('🔧 AuthContext: FORCE LOAD SUCCESS (NEW system) - Setting company:', forceCompanyData.name);
-              setCompany(forceCompanyData);
-              setCompanyTimezone(forceCompanyData.timezone || 'America/Sao_Paulo');
-              setAvailableCompanies([forceCompanyData]);
-              localStorage.setItem('currentCompanyId', forceCompanyData.id);
-              return;
-            }
-          }
-        }
-        
-        // 🔧 PROTEÇÃO PARA SISTEMA ANTIGO: Verificar se dados do OLD system existem mas condição falhou
-        if (data && Array.isArray(data) && data.length > 0) {
-          console.log('🔧 AuthContext: CRITICAL - Found OLD system data but final condition failed!');
-          console.log('🔧 AuthContext: This indicates the final condition logic has a bug');
-          console.log('🔧 AuthContext: OLD system data found:', data.length, 'companies');
-          console.log('🔧 AuthContext: OLD system companies:', data.map(c => ({ id: c.id, name: c.name })));
-          console.log('🔧 AuthContext: Final error variable:', error);
-          console.log('🔧 AuthContext: Final condition check: (!error && data && data.length > 0) =', (!error && data && data.length > 0));
-          
-          // FORÇAR uso dos dados do sistema antigo
-          console.log('🔧 AuthContext: FORCING company load with OLD system data');
-          
-          // Usar lógica similar à do sistema novo
-          setAvailableCompanies(data as any);
-          
-          // Priorizar empresa super admin se existir
-          const superAdminCompany = (data as any).find((comp: any) => comp.is_super_admin);
-          const selectedCompany = superAdminCompany || data[0];
-          
-          console.log('🔧 AuthContext: FORCE LOAD SUCCESS (OLD system) - Setting company:', selectedCompany.name);
-          console.log('🔧 AuthContext: Selected company details:', {
-            id: selectedCompany.id,
-            name: selectedCompany.name,
-            is_super_admin: selectedCompany.is_super_admin
-          });
-          
-          setCompany(selectedCompany as any);
-          setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
-          localStorage.setItem('currentCompanyId', selectedCompany.id);
-          return;
-        }
-        
-        const recoveredCompany = await attemptOrphanUserRecovery(userId);
-        
-        if (recoveredCompany) {
-          console.log('AuthContext: Orphan user recovered successfully:', recoveredCompany.name);
-          setCompany(recoveredCompany);
-          setCompanyTimezone(recoveredCompany.timezone || 'America/Sao_Paulo');
-          setAvailableCompanies([recoveredCompany]);
-        } else {
-          console.log('AuthContext: Could not recover orphan user');
-          setAvailableCompanies([]);
-          setCompany(null);
-        }
-      }
+      // Usuário comum: empresas limitadas aos registros de company_users
+      const companies = companyUserRows
+        .map(r => r.companies as unknown as Company)
+        .filter(Boolean);
+
+      setAvailableCompanies(companies);
+
+      // Tentar restaurar empresa da sessão anterior
+      const savedCompanyId = localStorage.getItem('currentCompanyId');
+      const savedCompany = savedCompanyId ? companies.find(c => c.id === savedCompanyId) : null;
+      const selectedCompany = savedCompany || companies[0];
+
+      setCompany(selectedCompany);
+      setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
+      localStorage.setItem('currentCompanyId', selectedCompany.id);
+
     } catch (error) {
       console.error('AuthContext: Error fetching company:', error);
       setCompany(null);
     } finally {
-      setIsLoadingCompany(false); // Finalizar loading sempre
-      
-      // Delay na limpeza da flag para evitar race conditions
+      setIsLoadingCompany(false);
       setTimeout(() => {
         setIsFetchingCompany(false);
-        
-        // Chamar refreshUserRoles com userId capturado
         if (capturedUserId) {
-          try {
-            refreshUserRoles(capturedUserId);
-          } catch (error) {
-            console.error('AuthContext: Erro ao chamar refreshUserRoles:', error);
-          }
+          refreshUserRoles(capturedUserId);
         }
       }, 500);
     }
   };
 
   const refreshCompany = async () => {
-    // 🔧 VERIFICAÇÕES PREVENTIVAS PARA EVITAR EXECUÇÃO DESNECESSÁRIA
-    if (!user) {
-      console.log('🔧 AuthContext: Skipping refreshCompany - no user');
-      return;
-    }
-    
-    if (isFetchingCompany) {
-      console.log('🔧 AuthContext: Skipping refreshCompany - fetchCompany already in progress');
-      return;
-    }
-    
-    console.log('AuthContext: Manual refresh company requested:', {
-      userId: user.id,
-      hasCompany: !!company,
-      companyId: company?.id,
-      companyName: company?.name
-    });
-    
-    // Se estiver impersonating, forçar recarregamento da empresa impersonada
-    const isCurrentlyImpersonating = localStorage.getItem('lovoo_crm_impersonating') === 'true';
-    if (isCurrentlyImpersonating) {
-      const impersonatedCompanyId = localStorage.getItem('lovoo_crm_impersonated_company_id');
-      console.log('AuthContext: Refreshing impersonated company:', impersonatedCompanyId);
-      
-      if (impersonatedCompanyId) {
-        const { data: impersonatedCompany, error } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', impersonatedCompanyId)
-          .single();
-          
-        if (!error && impersonatedCompany) {
-          console.log('AuthContext: Refreshed impersonated company:', impersonatedCompany.name);
-          setCompany(impersonatedCompany);
-          setCompanyTimezone(impersonatedCompany.timezone || 'America/Sao_Paulo');
-          setIsImpersonating(true);
-          
-          // Sincronizar currentCompanyId no localStorage para analytics
-          localStorage.setItem('currentCompanyId', impersonatedCompany.id);
-          
-          // Recuperar originalUser se necessário
-          if (!originalUser) {
-            const storedOriginalUser = localStorage.getItem('lovoo_crm_original_user');
-            if (storedOriginalUser) {
-              setOriginalUser(JSON.parse(storedOriginalUser));
-            }
-          }
-          return;
-        }
-      }
-    }
-    
-    // CORREÇÃO ADICIONAL: Se não está impersonando, verificar se é super admin em AMBOS sistemas
-    console.log('AuthContext: Refresh - checking if user is super admin');
-    
-    const { data: legacySuperAdminCheck } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_super_admin', true)
-      .single();
-      
-    const { data: newSystemSuperAdminCheck } = await supabase
-      .from('company_users')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('role', 'super_admin')
-      .eq('is_active', true)
-      .single();
-      
-    if (legacySuperAdminCheck || newSystemSuperAdminCheck) {
-      console.log('AuthContext: Refresh - User is super admin, forcing super admin mode');
-      await fetchCompany(user.id, true); // Forçar modo super admin
-    } else {
-      await fetchCompany(user.id, false); // Não forçar super admin no refresh normal
-    }
+    if (!user) return;
+    if (isFetchingCompany) return;
+
+    // Forçar recarregamento completo, limpando o guard de "já carregado"
+    setCompany(null);
+    await fetchCompany(user.id, false);
   };
 
   useEffect(() => {
@@ -890,15 +336,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    // Bypass temporário para debug
-    if (email === 'admin@debug.com' && password === 'debug123') {
-      // Simular login bem-sucedido
-      const mockUser = { id: 'abe5b85d-5193-404b-a27c-51754dcffce7', email: 'admin@debug.com' };
-      setUser(mockUser as any);
-      await fetchCompany('abe5b85d-5193-404b-a27c-51754dcffce7');
-      return;
-    }
-    
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       
@@ -1096,7 +533,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const impersonateUser = async (companyId: string) => {
-    if (!user || !company?.is_super_admin) {
+    if (!user || currentRole !== 'super_admin') {
       throw new Error('Only super admins can impersonate users');
     }
 
@@ -1245,18 +682,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Criar informações de compatibilidade
-      // @deprecated hasLegacyRole — usar currentRole === 'super_admin' (Etapa 5 removerá este bloco)
-      const hasLegacyRole = company?.is_super_admin || false;
-      const legacyRole = company?.is_super_admin ? 'super_admin' : 
-                        company?.company_type === 'parent' ? 'admin' : undefined;
-      
+      const isSuperAdminRole = roles?.some(r => r.role === 'super_admin') || false;
       setLegacyInfo({
-        hasLegacyRole,
-        legacyRole,
+        hasLegacyRole: isSuperAdminRole,
+        legacyRole: isSuperAdminRole ? 'super_admin' : undefined,
         newRoles: roles || [],
         primaryRole: roles?.[0]?.role || null,
-        canImpersonate: roles?.some(r => r.role === 'super_admin') || false
+        canImpersonate: isSuperAdminRole
       });
 
     } catch (error) {
