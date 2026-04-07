@@ -113,5 +113,66 @@
   "messages": {
     "agentSaved": "Agente guardado correctamente.",
     "agentDeleted": "Agente eliminado correctamente."
+  },
+  "tabs": {
+    "agents": "Agentes",
+    "logs": "Costos y Uso de IA"
+  },
+  "logs": {
+    "disclaimer": "Los costos mostrados son estimaciones operativas y no representan facturación oficial.",
+    "errors": {
+      "load": "Error al cargar ejecuciones."
+    },
+    "filters": {
+      "title": "Filtros",
+      "from": "Desde",
+      "to": "Hasta",
+      "status": "Estado",
+      "useId": "Uso funcional",
+      "consumerCompany": "Empresa consumidora (UUID)",
+      "consumerCompanyPlaceholder": "Pegue el UUID de la empresa...",
+      "all": "Todos",
+      "apply": "Aplicar filtros",
+      "clear": "Limpiar"
+    },
+    "cards": {
+      "totalExecutions": "Total de ejecuciones",
+      "totalTokens": "Total de tokens",
+      "estimatedCost": "Costo estimado (USD)",
+      "errorRate": "Tasa de error",
+      "fallbackRate": "Tasa de fallback"
+    },
+    "table": {
+      "createdAt": "Fecha/hora",
+      "useId": "Uso funcional",
+      "consumerCompany": "Empresa",
+      "status": "Estado",
+      "model": "Modelo",
+      "totalTokens": "Tokens",
+      "estimatedCost": "Costo est.",
+      "durationMs": "Duración",
+      "errorCode": "Error",
+      "empty": "No se encontraron ejecuciones para los filtros seleccionados."
+    },
+    "pagination": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "showing": "Mostrando {{from}}–{{to}} de {{total}}"
+    },
+    "detail": {
+      "title": "Detalle de ejecución",
+      "agentId": "ID del agente",
+      "knowledgeMode": "Modo de conocimiento",
+      "inputTokens": "Tokens de entrada",
+      "outputTokens": "Tokens de salida",
+      "pricingVersion": "Versión de precios",
+      "isFallback": "Respuesta fallback",
+      "errorCode": "Código de error",
+      "channel": "Canal",
+      "userId": "ID de usuario",
+      "yes": "Sí",
+      "no": "No",
+      "close": "Cerrar"
+    }
   }
 }

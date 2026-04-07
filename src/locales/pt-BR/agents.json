@@ -113,5 +113,66 @@
   "messages": {
     "agentSaved": "Agente salvo com sucesso.",
     "agentDeleted": "Agente excluído com sucesso."
+  },
+  "tabs": {
+    "agents": "Agentes",
+    "logs": "Custos e Uso de IA"
+  },
+  "logs": {
+    "disclaimer": "Os custos exibidos são estimativas operacionais e não representam faturamento oficial.",
+    "errors": {
+      "load": "Erro ao carregar execuções."
+    },
+    "filters": {
+      "title": "Filtros",
+      "from": "De",
+      "to": "Até",
+      "status": "Status",
+      "useId": "Uso funcional",
+      "consumerCompany": "Empresa consumidora (UUID)",
+      "consumerCompanyPlaceholder": "Cole o UUID da empresa...",
+      "all": "Todos",
+      "apply": "Aplicar filtros",
+      "clear": "Limpar"
+    },
+    "cards": {
+      "totalExecutions": "Total de execuções",
+      "totalTokens": "Total de tokens",
+      "estimatedCost": "Custo estimado (USD)",
+      "errorRate": "Taxa de erro",
+      "fallbackRate": "Taxa de fallback"
+    },
+    "table": {
+      "createdAt": "Data/hora",
+      "useId": "Uso funcional",
+      "consumerCompany": "Empresa",
+      "status": "Status",
+      "model": "Modelo",
+      "totalTokens": "Tokens",
+      "estimatedCost": "Custo est.",
+      "durationMs": "Duração",
+      "errorCode": "Erro",
+      "empty": "Nenhuma execução encontrada para os filtros selecionados."
+    },
+    "pagination": {
+      "previous": "Anterior",
+      "next": "Próxima",
+      "showing": "Exibindo {{from}}–{{to}} de {{total}}"
+    },
+    "detail": {
+      "title": "Detalhe da execução",
+      "agentId": "ID do agente",
+      "knowledgeMode": "Modo de conhecimento",
+      "inputTokens": "Tokens de entrada",
+      "outputTokens": "Tokens de saída",
+      "pricingVersion": "Versão de preços",
+      "isFallback": "Resposta fallback",
+      "errorCode": "Código de erro",
+      "channel": "Canal",
+      "userId": "ID do usuário",
+      "yes": "Sim",
+      "no": "Não",
+      "close": "Fechar"
+    }
   }
 }
