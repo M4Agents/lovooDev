@@ -13,9 +13,9 @@ export class CredentialsManager {
     try {
       console.log('🔐 Buscando credenciais AWS para company:', companyId);
 
-      // Usar função SECURITY DEFINER para contornar RLS (mesmo padrão do webhook_get_company_by_id)
+      // Usa webhook_resolve_aws_credentials: resolve credencial com fallback mãe → filha (SECURITY DEFINER)
       const { data, error } = await supabase
-        .rpc('webhook_get_aws_credentials', { p_company_id: companyId });
+        .rpc('webhook_resolve_aws_credentials', { p_company_id: companyId });
 
       if (error) {
         console.error('❌ Erro ao buscar credenciais AWS:', error);
