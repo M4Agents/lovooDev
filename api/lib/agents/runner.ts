@@ -4,8 +4,13 @@
 // Responsabilidade:
 //   1. Validar use_id e regras de segurança (requires_context)
 //   2. Resolver o agente vinculado ao uso
-//   3. Executar via OpenAI com o prompt configurado
-//   4. Retornar fallback se não houver agente ou OpenAI indisponível
+//   3. Montar system prompt conforme knowledge_mode do agente:
+//      - none    → prompt + contexto de execução
+//      - inline  → prompt + knowledge_base (texto livre)
+//      - rag     → prompt + contextText do retriever vetorial
+//      - hybrid  → prompt + knowledge_base + contextText do retriever
+//   4. Executar via OpenAI
+//   5. Retornar fallback se não houver agente ou OpenAI indisponível
 //
 // Features NÃO devem chamar OpenAI diretamente — devem usar runAgent().
 // Nunca importar no frontend — server-side exclusivo.
@@ -16,6 +21,7 @@ import { fetchParentOpenAISettingsForSystem } from '../openai/settingsDb.js'
 import { isOpenAIApiKeyConfigured } from '../openai/config.js'
 import { resolveAgent } from './resolver.js'
 import { getUseMeta, VALID_USE_IDS } from './uses.js'
+import { retrieveAgentContext } from './retriever.js'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -133,17 +139,44 @@ export async function runAgent(
 
   const { agent } = resolved
 
-  // 5. Monta system prompt
+  // 5. Monta system prompt conforme knowledge_mode
+  const knowledgeMode = agent.knowledge_mode ?? 'inline'
   const systemParts: string[] = []
 
+  // 5a. Prompt base do agente (sempre presente quando configurado)
   if (agent.prompt?.trim()) {
     systemParts.push(agent.prompt.trim())
   }
 
-  if (agent.knowledge_base?.trim()) {
+  // 5b. Base de conhecimento inline (modes: inline, hybrid)
+  if (
+    (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
+    agent.knowledge_base?.trim()
+  ) {
     systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
   }
 
+  // 5c. Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
+    // A query combina a mensagem do usuário com o extra_context, pois o
+    // embedding deve representar o mesmo conteúdo que será enviado ao LLM.
+    const ragQuery = [ctx.userMessage, ctx.extra_context?.trim()]
+      .filter(Boolean)
+      .join('\n\n')
+
+    const { contextText } = await retrieveAgentContext(
+      { id: agent.id, knowledge_base_config: agent.knowledge_base_config },
+      ragQuery
+    )
+
+    if (contextText) {
+      systemParts.push(`\n\n${contextText}`)
+    }
+    // Se o retriever não retornar chunks (sem documentos, embedding falhou, etc.)
+    // o runner continua normalmente sem injetar contexto RAG — sem erro.
+  }
+
+  // 5d. Contexto de execução (extra_context, ex.: tela atual para support_assistant)
   if (ctx.extra_context?.trim()) {
     systemParts.push(`\n\nContexto atual:\n${ctx.extra_context.trim()}`)
   }

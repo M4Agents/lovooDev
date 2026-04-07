@@ -42,12 +42,54 @@
       "temperature": "Temperature",
       "temperatureHint": "0 = deterministic, 2 = creative. Recommended: 0.7.",
       "maxTokens": "Max tokens",
-      "maxTokensHint": "Response token limit. Recommended: 1024."
+      "maxTokensHint": "Response token limit. Recommended: 1024.",
+      "knowledgeMode": "Knowledge mode",
+      "knowledgeModeHint": "Defines how the agent accesses knowledge during execution.",
+      "knowledgeModeOptions": {
+        "none": "None",
+        "inline": "Inline — free text",
+        "rag": "RAG — vector documents",
+        "hybrid": "Hybrid — free text + documents"
+      },
+      "ragConfig": "Retrieval configuration",
+      "topK": "Top K",
+      "topKHint": "Maximum number of retrieved passages. Default: 5.",
+      "minSimilarity": "Min similarity",
+      "minSimilarityHint": "Relevance filter between 0 and 1. Use 0 for no filter."
     },
     "actions": {
       "save": "Save agent",
       "cancel": "Cancel",
       "saving": "Saving..."
+    }
+  },
+  "documents": {
+    "title": "RAG Documents",
+    "empty": "No documents uploaded for this agent.",
+    "upload": "Upload document",
+    "uploading": "Uploading and processing...",
+    "uploadHint": "Formats: .txt and .md. Max: 1 MB per file.",
+    "reprocess": "Reprocess",
+    "delete": "Delete",
+    "confirmDelete": "Delete document \"{{name}}\"? This action cannot be undone.",
+    "saveFirst": "Save the agent before uploading documents.",
+    "staleWarning": "Processing started more than 15 min ago — may be stuck.",
+    "status": {
+      "pending": "Pending",
+      "processing": "Processing",
+      "ready": "Ready",
+      "error": "Error"
+    },
+    "fields": {
+      "version": "v{{version}}",
+      "chunks": "{{count}} chunks",
+      "lastProcessed": "Processed at {{date}}"
+    },
+    "errors": {
+      "load": "Error loading documents.",
+      "upload": "Error uploading document.",
+      "process": "Error reprocessing document.",
+      "delete": "Error deleting document."
     }
   },
   "bindings": {

@@ -1,12 +1,48 @@
 // =====================================================
 // TYPES: AGENTES LOVOO
 //
-// lovoo_agents        → cadastro de agentes (empresa pai)
-// agent_use_bindings  → vínculo global uso → agente
-// AGENT_FUNCTIONAL_USES → catálogo de usos funcionais (TypeScript const, não tabela)
+// lovoo_agents             → cadastro de agentes (empresa pai)
+// agent_use_bindings       → vínculo global uso → agente
+// lovoo_agent_documents    → documentos RAG por agente (empresa pai)
+// lovoo_agent_chunks       → chunks vetorizados — acesso apenas server-side
+// AGENT_FUNCTIONAL_USES    → catálogo de usos funcionais (TypeScript const, não tabela)
 // =====================================================
 
-// ── Tipos do banco ────────────────────────────────────────────────────────────
+// ── Tipos primitivos ──────────────────────────────────────────────────────────
+
+/**
+ * Modo de conhecimento do agente.
+ * Espelha o CHECK constraint da coluna knowledge_mode em lovoo_agents.
+ */
+export type KnowledgeMode = 'none' | 'inline' | 'rag' | 'hybrid'
+
+/**
+ * Status do ciclo de vida de um documento RAG.
+ * Espelha o CHECK constraint da coluna status em lovoo_agent_documents.
+ */
+export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'error'
+
+// ── Configurações tipadas ─────────────────────────────────────────────────────
+
+export interface LovooAgentModelConfig {
+  temperature?: number
+  max_tokens?: number
+  [key: string]: unknown
+}
+
+/**
+ * Configuração de retrieval RAG por agente.
+ * Armazenada em lovoo_agents.knowledge_base_config (JSONB).
+ * Ignorada quando knowledge_mode = 'none' | 'inline'.
+ */
+export interface LovooAgentKnowledgeBaseConfig {
+  top_k?: number
+  min_similarity?: number
+  embedding_model?: string
+  [key: string]: unknown
+}
+
+// ── Tipos do banco — lovoo_agents ─────────────────────────────────────────────
 
 export interface LovooAgent {
   id: string
@@ -16,17 +52,12 @@ export interface LovooAgent {
   is_active: boolean
   prompt: string | null
   knowledge_base: string | null
-  knowledge_base_config: Record<string, unknown>
+  knowledge_base_config: LovooAgentKnowledgeBaseConfig
+  knowledge_mode: KnowledgeMode
   model: string
   model_config: LovooAgentModelConfig
   created_at: string
   updated_at: string
-}
-
-export interface LovooAgentModelConfig {
-  temperature?: number
-  max_tokens?: number
-  [key: string]: unknown
 }
 
 export interface AgentUseBinding {
@@ -36,7 +67,48 @@ export interface AgentUseBinding {
   created_at: string
 }
 
-// ── Payload para criação / atualização ───────────────────────────────────────
+// ── Tipos do banco — lovoo_agent_documents ────────────────────────────────────
+
+/**
+ * Espelha a tabela lovoo_agent_documents (exceto embedding).
+ * Usado no frontend para listar e gerenciar documentos RAG.
+ */
+export interface LovooAgentDocument {
+  id: string
+  agent_id: string
+  name: string
+  storage_path: string
+  file_type: 'text/plain' | 'text/markdown'
+  file_size: number
+  status: DocumentStatus
+  error_message: string | null
+  chunk_count: number
+  version: number
+  pending_version: number | null
+  content_hash: string | null
+  processing_started_at: string | null
+  last_processed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Tipo mínimo de chunk — uso compartilhado backend/tipos.
+ * O campo embedding (vector) é omitido intencionalmente:
+ *   nunca deve ser transmitido ou exposto ao frontend.
+ */
+export interface LovooAgentChunk {
+  id: string
+  agent_id: string
+  document_id: string
+  doc_version: number
+  chunk_index: number
+  content: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+// ── Payloads de API — agentes ─────────────────────────────────────────────────
 
 export type CreateAgentPayload = {
   company_id: string
@@ -45,6 +117,8 @@ export type CreateAgentPayload = {
   is_active?: boolean
   prompt?: string | null
   knowledge_base?: string | null
+  knowledge_base_config?: LovooAgentKnowledgeBaseConfig
+  knowledge_mode?: KnowledgeMode
   model: string
   model_config?: LovooAgentModelConfig
 }
@@ -52,6 +126,50 @@ export type CreateAgentPayload = {
 export type UpdateAgentPayload = Partial<
   Omit<CreateAgentPayload, 'company_id'>
 >
+
+// ── Payloads de API — documentos RAG ─────────────────────────────────────────
+
+/**
+ * Enviado pelo frontend ao fazer upload de um documento.
+ * O arquivo em si é transmitido como FormData na rota de upload.
+ */
+export type UploadLovooAgentDocumentPayload = {
+  agent_id: string
+  name: string
+}
+
+/**
+ * Disparado após upload para iniciar o pipeline de processamento
+ * (extração → chunking → embedding → persistência).
+ */
+export type ProcessLovooAgentDocumentPayload = {
+  document_id: string
+}
+
+/**
+ * Payload para deletar um documento e seus chunks.
+ */
+export type DeleteLovooAgentDocumentPayload = {
+  document_id: string
+}
+
+/**
+ * Item retornado pela listagem de documentos de um agente.
+ * Idêntico a LovooAgentDocument — alias explícito para clareza de uso na UI.
+ */
+export type LovooAgentDocumentListItem = LovooAgentDocument
+
+/**
+ * Resultado retornado pelo endpoint de processamento.
+ * Inclui o estado final do documento após o pipeline.
+ */
+export type LovooAgentDocumentProcessingResult = {
+  document_id: string
+  status: DocumentStatus
+  chunk_count: number
+  version: number
+  error_message?: string | null
+}
 
 // ── Catálogo de usos funcionais ───────────────────────────────────────────────
 

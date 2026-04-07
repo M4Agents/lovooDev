@@ -42,12 +42,54 @@
       "temperature": "Temperatura",
       "temperatureHint": "0 = determinístico, 2 = criativo. Recomendado: 0.7.",
       "maxTokens": "Máximo de tokens",
-      "maxTokensHint": "Limite de tokens na resposta. Recomendado: 1024."
+      "maxTokensHint": "Limite de tokens na resposta. Recomendado: 1024.",
+      "knowledgeMode": "Modo de conhecimento",
+      "knowledgeModeHint": "Define como o agente acessa o conhecimento durante a execução.",
+      "knowledgeModeOptions": {
+        "none": "Nenhum",
+        "inline": "Inline — texto livre",
+        "rag": "RAG — documentos vetoriais",
+        "hybrid": "Híbrido — texto livre + documentos"
+      },
+      "ragConfig": "Configuração de retrieval",
+      "topK": "Top K",
+      "topKHint": "Número máximo de trechos recuperados. Padrão: 5.",
+      "minSimilarity": "Similaridade mínima",
+      "minSimilarityHint": "Filtro de relevância entre 0 e 1. Use 0 para sem filtro."
     },
     "actions": {
       "save": "Salvar agente",
       "cancel": "Cancelar",
       "saving": "Salvando..."
+    }
+  },
+  "documents": {
+    "title": "Documentos RAG",
+    "empty": "Nenhum documento enviado para este agente.",
+    "upload": "Enviar documento",
+    "uploading": "Enviando e processando...",
+    "uploadHint": "Formatos: .txt e .md. Máximo: 1 MB por arquivo.",
+    "reprocess": "Reprocessar",
+    "delete": "Excluir",
+    "confirmDelete": "Excluir o documento \"{{name}}\"? Esta ação não pode ser desfeita.",
+    "saveFirst": "Salve o agente antes de enviar documentos.",
+    "staleWarning": "Processamento iniciado há mais de 15 min — pode ter travado.",
+    "status": {
+      "pending": "Pendente",
+      "processing": "Processando",
+      "ready": "Pronto",
+      "error": "Erro"
+    },
+    "fields": {
+      "version": "v{{version}}",
+      "chunks": "{{count}} chunks",
+      "lastProcessed": "Processado em {{date}}"
+    },
+    "errors": {
+      "load": "Erro ao carregar documentos.",
+      "upload": "Erro ao enviar documento.",
+      "process": "Erro ao reprocessar documento.",
+      "delete": "Erro ao excluir documento."
     }
   },
   "bindings": {

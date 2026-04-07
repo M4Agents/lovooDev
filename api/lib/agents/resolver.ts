@@ -17,6 +17,10 @@ export type ResolvedAgent = {
   name: string
   prompt: string | null
   knowledge_base: string | null
+  /** Modo de uso da base de conhecimento. Default 'inline' para agentes legados. */
+  knowledge_mode: 'none' | 'inline' | 'rag' | 'hybrid'
+  /** Configuração de retrieval RAG (top_k, min_similarity, embedding_model). */
+  knowledge_base_config: Record<string, unknown>
   model: string
   model_config: Record<string, unknown>
 }
@@ -71,22 +75,30 @@ export async function resolveAgent(useId: string): Promise<ResolveAgentResult> {
   // 2. Busca a configuração do agente (service_role bypassa RLS)
   const { data: agent, error: agentErr } = await svc
     .from('lovoo_agents')
-    .select('id, name, is_active, prompt, knowledge_base, model, model_config')
+    .select('id, name, is_active, prompt, knowledge_base, knowledge_mode, knowledge_base_config, model, model_config')
     .eq('id', binding.agent_id)
     .maybeSingle()
 
   if (agentErr || !agent) return { found: false, reason: 'db_error' }
   if (!agent.is_active)   return { found: false, reason: 'agent_inactive' }
 
+  // knowledge_mode: agentes criados antes da migration têm o campo com DEFAULT 'inline'.
+  // Tratamos null/undefined defensivamente como 'inline' para garantir compatibilidade.
+  const knowledgeMode = (agent.knowledge_mode as string | null) ?? 'inline'
+  const validModes = new Set(['none', 'inline', 'rag', 'hybrid'])
+  const safeMode = validModes.has(knowledgeMode) ? knowledgeMode : 'inline'
+
   return {
     found: true,
     agent: {
-      id:             agent.id,
-      name:           agent.name,
-      prompt:         agent.prompt ?? null,
-      knowledge_base: agent.knowledge_base ?? null,
-      model:          agent.model,
-      model_config:   (agent.model_config ?? {}) as Record<string, unknown>,
+      id:                   agent.id,
+      name:                 agent.name,
+      prompt:               agent.prompt ?? null,
+      knowledge_base:       agent.knowledge_base ?? null,
+      knowledge_mode:       safeMode as ResolvedAgent['knowledge_mode'],
+      knowledge_base_config: (agent.knowledge_base_config ?? {}) as Record<string, unknown>,
+      model:                agent.model,
+      model_config:         (agent.model_config ?? {}) as Record<string, unknown>,
     },
   }
 }

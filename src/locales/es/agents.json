@@ -42,12 +42,54 @@
       "temperature": "Temperatura",
       "temperatureHint": "0 = determinístico, 2 = creativo. Recomendado: 0.7.",
       "maxTokens": "Máximo de tokens",
-      "maxTokensHint": "Límite de tokens en la respuesta. Recomendado: 1024."
+      "maxTokensHint": "Límite de tokens en la respuesta. Recomendado: 1024.",
+      "knowledgeMode": "Modo de conocimiento",
+      "knowledgeModeHint": "Define cómo el agente accede al conocimiento durante la ejecución.",
+      "knowledgeModeOptions": {
+        "none": "Ninguno",
+        "inline": "Inline — texto libre",
+        "rag": "RAG — documentos vectoriales",
+        "hybrid": "Híbrido — texto libre + documentos"
+      },
+      "ragConfig": "Configuración de retrieval",
+      "topK": "Top K",
+      "topKHint": "Número máximo de fragmentos recuperados. Por defecto: 5.",
+      "minSimilarity": "Similitud mínima",
+      "minSimilarityHint": "Filtro de relevancia entre 0 y 1. Use 0 para sin filtro."
     },
     "actions": {
       "save": "Guardar agente",
       "cancel": "Cancelar",
       "saving": "Guardando..."
+    }
+  },
+  "documents": {
+    "title": "Documentos RAG",
+    "empty": "No hay documentos enviados para este agente.",
+    "upload": "Enviar documento",
+    "uploading": "Enviando y procesando...",
+    "uploadHint": "Formatos: .txt y .md. Máximo: 1 MB por archivo.",
+    "reprocess": "Reprocesar",
+    "delete": "Eliminar",
+    "confirmDelete": "¿Eliminar el documento \"{{name}}\"? Esta acción no se puede deshacer.",
+    "saveFirst": "Guarde el agente antes de enviar documentos.",
+    "staleWarning": "Procesamiento iniciado hace más de 15 min — puede haberse bloqueado.",
+    "status": {
+      "pending": "Pendiente",
+      "processing": "Procesando",
+      "ready": "Listo",
+      "error": "Error"
+    },
+    "fields": {
+      "version": "v{{version}}",
+      "chunks": "{{count}} chunks",
+      "lastProcessed": "Procesado el {{date}}"
+    },
+    "errors": {
+      "load": "Error al cargar los documentos.",
+      "upload": "Error al enviar el documento.",
+      "process": "Error al reprocesar el documento.",
+      "delete": "Error al eliminar el documento."
     }
   },
   "bindings": {

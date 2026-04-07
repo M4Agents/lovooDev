@@ -1,13 +1,25 @@
 /**
  * Formulário de criação / edição de um agente Lovoo.
  * Exibido como slide-in inline (não modal) dentro do LovooAgentsPanel.
+ *
+ * Exibição condicional por knowledge_mode:
+ *   none   → sem knowledge_base, sem documentos
+ *   inline → com knowledge_base, sem documentos
+ *   rag    → sem knowledge_base, com documentos + config RAG
+ *   hybrid → com knowledge_base, com documentos + config RAG
  */
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Save, X } from 'lucide-react'
+import { BookOpen, Loader2, Save, X } from 'lucide-react'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
-import type { CreateAgentPayload, LovooAgent, UpdateAgentPayload } from '../../types/lovoo-agents'
+import { LovooAgentDocuments } from './LovooAgentDocuments'
+import type {
+  CreateAgentPayload,
+  KnowledgeMode,
+  LovooAgent,
+  UpdateAgentPayload,
+} from '../../types/lovoo-agents'
 
 type Props = {
   companyId: string
@@ -20,14 +32,17 @@ type Props = {
 }
 
 type FormState = {
-  name: string
-  description: string
-  is_active: boolean
-  model: string
-  prompt: string
+  name:           string
+  description:    string
+  is_active:      boolean
+  model:          string
+  prompt:         string
+  knowledge_mode: KnowledgeMode
   knowledge_base: string
-  temperature: string
-  max_tokens: string
+  top_k:          string
+  min_similarity: string
+  temperature:    string
+  max_tokens:     string
 }
 
 function toForm(agent?: LovooAgent, defaultModel = 'gpt-4.1-mini'): FormState {
@@ -37,11 +52,16 @@ function toForm(agent?: LovooAgent, defaultModel = 'gpt-4.1-mini'): FormState {
     is_active:      agent?.is_active ?? true,
     model:          agent?.model ?? defaultModel,
     prompt:         agent?.prompt ?? '',
+    knowledge_mode: agent?.knowledge_mode ?? 'inline',
     knowledge_base: agent?.knowledge_base ?? '',
+    top_k:          String(agent?.knowledge_base_config?.top_k ?? 5),
+    min_similarity: String(agent?.knowledge_base_config?.min_similarity ?? 0),
     temperature:    String(agent?.model_config?.temperature ?? 0.7),
     max_tokens:     String(agent?.model_config?.max_tokens ?? 1024),
   }
 }
+
+const KNOWLEDGE_MODE_OPTIONS: KnowledgeMode[] = ['none', 'inline', 'rag', 'hybrid']
 
 export const LovooAgentForm: React.FC<Props> = ({
   companyId,
@@ -53,9 +73,9 @@ export const LovooAgentForm: React.FC<Props> = ({
   const { t } = useTranslation('agents')
 
   const defaultModel = modelIds[0] ?? 'gpt-4.1-mini'
-  const [form, setForm] = useState<FormState>(() => toForm(agent, defaultModel))
+  const [form,   setForm]   = useState<FormState>(() => toForm(agent, defaultModel))
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error,  setError]  = useState<string | null>(null)
 
   useEffect(() => {
     setForm(toForm(agent, defaultModel))
@@ -67,32 +87,47 @@ export const LovooAgentForm: React.FC<Props> = ({
 
   const allModelOptions = (() => {
     const current = form.model.trim()
-    const set = new Set(modelIds)
-    if (current) set.add(current)
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    const seen = new Set(modelIds)
+    if (current) seen.add(current)
+    return Array.from(seen).sort((a, b) => a.localeCompare(b))
   })()
+
+  const showKnowledgeBase = form.knowledge_mode === 'inline' || form.knowledge_mode === 'hybrid'
+  const showRagConfig     = form.knowledge_mode === 'rag'    || form.knowledge_mode === 'hybrid'
+  const showDocuments     = showRagConfig
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    const temperature = parseFloat(form.temperature)
-    const max_tokens  = parseInt(form.max_tokens, 10)
-
     if (!form.name.trim()) return
+
+    const temperature  = parseFloat(form.temperature)
+    const max_tokens   = parseInt(form.max_tokens, 10)
+    const top_k        = parseInt(form.top_k, 10)
+    const minSimilarity = parseFloat(form.min_similarity)
 
     setSaving(true)
     try {
       let saved: LovooAgent
 
+      const knowledgeBaseConfig = showRagConfig
+        ? {
+            top_k:          Number.isFinite(top_k) && top_k > 0 ? top_k : 5,
+            min_similarity: Number.isFinite(minSimilarity) ? Math.min(1, Math.max(0, minSimilarity)) : 0,
+          }
+        : {}
+
       if (agent) {
         const patch: UpdateAgentPayload = {
-          name:           form.name,
-          description:    form.description || null,
-          is_active:      form.is_active,
-          model:          form.model,
-          prompt:         form.prompt || null,
-          knowledge_base: form.knowledge_base || null,
+          name:                  form.name,
+          description:           form.description || null,
+          is_active:             form.is_active,
+          model:                 form.model,
+          prompt:                form.prompt || null,
+          knowledge_mode:        form.knowledge_mode,
+          knowledge_base:        showKnowledgeBase ? (form.knowledge_base || null) : null,
+          knowledge_base_config: knowledgeBaseConfig,
           model_config: {
             temperature: Number.isFinite(temperature) ? temperature : 0.7,
             max_tokens:  Number.isFinite(max_tokens)  ? max_tokens  : 1024,
@@ -101,13 +136,15 @@ export const LovooAgentForm: React.FC<Props> = ({
         saved = await lovooAgentsApi.updateAgent(agent.id, patch)
       } else {
         const payload: CreateAgentPayload = {
-          company_id:     companyId,
-          name:           form.name,
-          description:    form.description || null,
-          is_active:      form.is_active,
-          model:          form.model,
-          prompt:         form.prompt || null,
-          knowledge_base: form.knowledge_base || null,
+          company_id:            companyId,
+          name:                  form.name,
+          description:           form.description || null,
+          is_active:             form.is_active,
+          model:                 form.model,
+          prompt:                form.prompt || null,
+          knowledge_mode:        form.knowledge_mode,
+          knowledge_base:        showKnowledgeBase ? (form.knowledge_base || null) : null,
+          knowledge_base_config: knowledgeBaseConfig,
           model_config: {
             temperature: Number.isFinite(temperature) ? temperature : 0.7,
             max_tokens:  Number.isFinite(max_tokens)  ? max_tokens  : 1024,
@@ -267,20 +304,98 @@ export const LovooAgentForm: React.FC<Props> = ({
           <p className="text-xs text-slate-400 mt-1">{t('form.fields.promptHint')}</p>
         </div>
 
-        {/* Knowledge base */}
+        {/* ── Modo de conhecimento ───────────────────────────────────────────── */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            {t('form.fields.knowledgeBase')}
+            {t('form.fields.knowledgeMode')}
           </label>
-          <textarea
-            rows={4}
-            value={form.knowledge_base}
-            onChange={(e) => set('knowledge_base', e.target.value)}
-            placeholder={t('form.fields.knowledgeBasePlaceholder')}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-y"
-          />
-          <p className="text-xs text-slate-400 mt-1">{t('form.fields.knowledgeBaseHint')}</p>
+          <select
+            value={form.knowledge_mode}
+            onChange={(e) => set('knowledge_mode', e.target.value as KnowledgeMode)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white"
+          >
+            {KNOWLEDGE_MODE_OPTIONS.map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`form.fields.knowledgeModeOptions.${mode}`)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 mt-1">{t('form.fields.knowledgeModeHint')}</p>
         </div>
+
+        {/* Base de conhecimento inline (visível em: inline, hybrid) */}
+        {showKnowledgeBase && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {t('form.fields.knowledgeBase')}
+            </label>
+            <textarea
+              rows={4}
+              value={form.knowledge_base}
+              onChange={(e) => set('knowledge_base', e.target.value)}
+              placeholder={t('form.fields.knowledgeBasePlaceholder')}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-y"
+            />
+            <p className="text-xs text-slate-400 mt-1">{t('form.fields.knowledgeBaseHint')}</p>
+          </div>
+        )}
+
+        {/* Configuração RAG (visível em: rag, hybrid) */}
+        {showRagConfig && (
+          <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50">
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen className="w-4 h-4 text-violet-600" />
+              <span className="text-sm font-medium text-slate-700">{t('form.fields.ragConfig')}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  {t('form.fields.topK')}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={form.top_k}
+                  onChange={(e) => set('top_k', e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white"
+                />
+                <p className="text-xs text-slate-400 mt-1">{t('form.fields.topKHint')}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  {t('form.fields.minSimilarity')}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={form.min_similarity}
+                  onChange={(e) => set('min_similarity', e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white"
+                />
+                <p className="text-xs text-slate-400 mt-1">{t('form.fields.minSimilarityHint')}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Seção de documentos RAG (visível em: rag, hybrid) */}
+        {showDocuments && (
+          <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+            <h4 className="text-sm font-medium text-slate-700">{t('documents.title')}</h4>
+
+            {agent?.id ? (
+              <LovooAgentDocuments agentId={agent.id} />
+            ) : (
+              <p className="text-sm text-slate-400 italic">{t('documents.saveFirst')}</p>
+            )}
+          </div>
+        )}
 
         {error && (
           <p className="text-sm text-red-600" role="alert">{error}</p>
