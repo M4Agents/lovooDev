@@ -4,7 +4,7 @@
  */
 
 export const CATALOG_MEDIA_MAX_IMAGE_BYTES = 5 * 1024 * 1024
-export const CATALOG_MEDIA_MAX_VIDEO_BYTES = 20 * 1024 * 1024
+export const CATALOG_MEDIA_MAX_VIDEO_BYTES = 30 * 1024 * 1024
 export const CATALOG_MEDIA_MAX_FILES_PER_BATCH = 10
 
 export type CatalogLibrarySavedAsset = {

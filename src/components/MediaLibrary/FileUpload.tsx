@@ -62,7 +62,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     // Tamanho máximo por tipo
     const maxSizes = {
       image: 10 * 1024 * 1024, // 10MB
-      video: 25 * 1024 * 1024, // 25MB
+      video: 30 * 1024 * 1024, // 30MB
       audio: 25 * 1024 * 1024, // 25MB
       document: 25 * 1024 * 1024 // 25MB
     }
@@ -386,7 +386,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               Suporte para imagens, vídeos, áudios e documentos
             </p>
             <p className="text-sm text-gray-500 mb-4">
-              📏 Limites: Fotos 10MB • Vídeos 25MB • Arquivos 25MB
+              📏 Limites: Fotos 10MB • Vídeos 30MB • Arquivos 25MB
             </p>
             
             <button

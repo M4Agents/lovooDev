@@ -393,7 +393,7 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
         </Link>
       </div>
       <p className="text-[11px] text-slate-500">
-        Imagens e vídeos apenas. Limites no catálogo: imagem até 5 MB, vídeo até 20 MB. Até{' '}
+        Imagens e vídeos apenas. Limites no catálogo: imagem até 5 MB, vídeo até 30 MB. Até{' '}
         {CATALOG_MEDIA_MAX_FILES_PER_BATCH} arquivos por envio em lote.
       </p>
       {error && <div className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">{error}</div>}
