@@ -20,7 +20,7 @@ import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
-import { useAuth } from '../../contexts/AuthContext'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
@@ -30,8 +30,6 @@ import {
   resolveOpportunityCompositionErrorMessage
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
-
-const MANAGEMENT_ROLES = ['super_admin', 'admin', 'partner', 'manager']
 
 type TabType = 'details' | 'journey' | 'status'
 
@@ -186,11 +184,8 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   onUpdate
 }) => {
   const { t } = useTranslation('funnel')
-  const { currentRole, company, userRoles } = useAuth()
-  const hasPlatformElevatedRole = userRoles.some(r => r.role === 'super_admin')
-  const isManager =
-    (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) ||
-    hasPlatformElevatedRole
+  const { hasPlatformElevatedRole, canViewAllLeads } = useAccessControl()
+  const isManager = canViewAllLeads || hasPlatformElevatedRole
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
   const [statusHistory, setStatusHistory] = useState<OpportunityStatusHistory[]>([])

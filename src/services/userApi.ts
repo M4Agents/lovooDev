@@ -141,26 +141,24 @@ export const getUserById = async (userId: string): Promise<CompanyUser | null> =
 // =====================================================
 
 /**
- * Valida se o usuário atual pode criar usuários na empresa
+ * Valida se o usuário atual pode criar usuários na empresa.
+ * Usa caller_has_permission (lê company_users.permissions do banco).
+ * Não depende do role — enforcement RBAC real.
  */
 export const canCreateUser = async (companyId: string): Promise<boolean> => {
   try {
-    const { data: currentUser } = await supabase.auth.getUser();
-    if (!currentUser.user) return false;
-
-    // Verificar se tem permissão através da função do banco
     const { data, error } = await supabase
-      .rpc('get_user_permissions', {
-        p_user_id: currentUser.user.id,
-        p_company_id: companyId
+      .rpc('caller_has_permission', {
+        p_company_id:     companyId,
+        p_permission_key: 'create_users',
       });
 
     if (error) {
-      console.warn('UserAPI: Error checking create permission:', error);
+      console.warn('UserAPI: Error checking create_users permission:', error);
       return false;
     }
 
-    return data?.create_users === true;
+    return data === true;
   } catch (error) {
     console.error('UserAPI: Error in canCreateUser:', error);
     return false;
@@ -461,79 +459,90 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
 };
 
 /**
- * Atualiza um usuário existente
+ * Atualiza um usuário existente.
+ * Usa update_company_user_safe (SECURITY DEFINER) para updates estruturais
+ * (role, permissions, is_active). Atualizações de foto continuam via RPC dedicada.
  */
 export const updateCompanyUser = async (request: UpdateUserRequest): Promise<CompanyUser> => {
   try {
+    const hasStructuralChange =
+      request.role !== undefined ||
+      request.permissions !== undefined ||
+      request.is_active !== undefined;
 
-    const updateData: any = {
-      updated_at: new Date().toISOString()
-    };
+    const hasPhotoChange = request.profile_picture_url !== undefined;
 
-    if (request.role !== undefined) {
-      updateData.role = request.role;
-      // Atualizar permissões baseadas no novo role
-      updateData.permissions = getDefaultPermissions(request.role);
-    }
+    // ── Atualização estrutural via RPC segura ────────────────────────────────
+    if (hasStructuralChange) {
+      let newPermissions: Record<string, unknown> | undefined;
 
-    if (request.permissions !== undefined) {
-      // Mesclar com permissões existentes
-      const currentUser = await getUserById(request.id);
-      if (currentUser) {
-        updateData.permissions = {
-          ...currentUser.permissions,
-          ...request.permissions
+      if (request.role !== undefined) {
+        // Role alterado: reset permissions para defaults do novo role
+        newPermissions = getDefaultPermissions(request.role);
+      }
+
+      if (request.permissions !== undefined) {
+        // Patch de permissions: mesclar com o estado atual
+        const currentUser = await getUserById(request.id);
+        newPermissions = {
+          ...(currentUser?.permissions ?? {}),
+          ...request.permissions,
         };
+      }
+
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'update_company_user_safe',
+        {
+          p_record_id:   request.id,
+          p_role:        request.role        ?? null,
+          p_permissions: newPermissions      ?? null,
+          p_is_active:   request.is_active   ?? null,
+        }
+      );
+
+      if (rpcError) {
+        console.error('UserAPI: RPC update_company_user_safe error:', rpcError);
+        throw rpcError;
+      }
+
+      if (!rpcResult?.success) {
+        console.error('UserAPI: update_company_user_safe retornou erro:', rpcResult?.error);
+        throw new Error(rpcResult?.error ?? 'Erro ao atualizar usuário');
       }
     }
 
-    if (request.is_active !== undefined) {
-      updateData.is_active = request.is_active;
+    // ── Atualização de foto (independente do update estrutural) ──────────────
+    if (hasPhotoChange) {
+      const { error: photoError } = await supabase.rpc(
+        'update_user_profile_picture_simple',
+        {
+          p_user_record_id:     request.id,
+          p_profile_picture_url: request.profile_picture_url,
+        }
+      );
+
+      if (photoError) {
+        console.error('UserAPI: Error updating profile picture:', photoError);
+        throw photoError;
+      }
     }
 
-    // 🔧 NOVO: Suporte para atualização de foto de perfil
-    if (request.profile_picture_url !== undefined) {
-      updateData.profile_picture_url = request.profile_picture_url;
-    }
-
-    // 🔧 CORREÇÃO: Para atualizações simples (apenas foto), usar função SECURITY DEFINER
-    const isSimplePhotoUpdate = Object.keys(updateData).length <= 2 && 
-                               updateData.profile_picture_url !== undefined &&
-                               !updateData.role && !updateData.permissions;
-    
-    let data, error;
-    
-    if (isSimplePhotoUpdate) {
-      // Usar função SECURITY DEFINER para atualização de foto (bypassa RLS)
-      const result = await supabase.rpc('update_user_profile_picture_simple', {
-        p_user_record_id: request.id,
-        p_profile_picture_url: updateData.profile_picture_url
-      });
-      
-      data = result.data;
-      error = result.error;
-    } else {
-      // Atualização completa com JOIN
-      const result = await supabase
-        .from('company_users')
-        .update(updateData)
-        .eq('id', request.id)
-        .select(`
-          *,
-          companies:company_id (
-            id,
-            name,
-            company_type
-          )
-        `)
-        .single();
-      
-      data = result.data;
-      error = result.error;
-    }
+    // ── Re-fetch do registro atualizado com join de empresa ──────────────────
+    const { data, error } = await supabase
+      .from('company_users')
+      .select(`
+        *,
+        companies:company_id (
+          id,
+          name,
+          company_type
+        )
+      `)
+      .eq('id', request.id)
+      .single();
 
     if (error) {
-      console.error('UserAPI: Error updating user:', error);
+      console.error('UserAPI: Error fetching updated user:', error);
       throw error;
     }
 
@@ -586,7 +595,10 @@ export const deactivateUser = async (userId: string): Promise<boolean> => {
 // =====================================================
 
 /**
- * Verifica se usuário tem acesso via sistema atual (compatibilidade)
+ * @deprecated Não usar em novos fluxos.
+ * Legado: verificação de acesso via companies.user_id / companies.is_super_admin.
+ * Substituir por caller_has_permission ou company_type === 'parent'.
+ * Remoção planejada no Ciclo RBAC 2 / Fase 4.
  */
 export const hasLegacyAccess = async (companyId: string): Promise<boolean> => {
   try {

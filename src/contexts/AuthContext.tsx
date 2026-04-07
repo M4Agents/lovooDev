@@ -3,6 +3,28 @@ import { User } from '@supabase/supabase-js';
 import { supabase, Company } from '../lib/supabase';
 import { UserRole, CompanyUser, UserPermissions, LegacyUserInfo } from '../types/user';
 
+// Permissões padrão do super_admin usadas como fallback quando o snapshot de
+// originalUserPermissions não está disponível (ex: refresh de página durante impersonação).
+// Deve cobrir todas as chaves obrigatórias de UserPermissions.
+const SUPER_ADMIN_DEFAULT_PERMISSIONS: UserPermissions = {
+  dashboard:      true,
+  leads:          true,
+  chat:           true,
+  analytics:      true,
+  settings:       true,
+  companies:      true,
+  users:          true,
+  financial:      true,
+  create_users:   true,
+  edit_users:     true,
+  delete_users:   true,
+  impersonate:    true,
+  view_all_leads: true,
+  edit_all_leads: true,
+  view_financial: true,
+  edit_financial: true,
+};
+
 type AuthContextType = {
   user: User | null;
   company: Company | null;
@@ -50,6 +72,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const stored = localStorage.getItem('lovoo_crm_original_user');
     return stored ? JSON.parse(stored) : null;
   });
+  // Snapshot imutável das permissões do super_admin no momento de impersonateUser.
+  // Usado por hasPermission durante impersonação para evitar bypass irrestrito.
+  // Não persistido em localStorage — após reload cai no fallback SUPER_ADMIN_DEFAULT_PERMISSIONS.
+  const [originalUserPermissions, setOriginalUserPermissions] = useState<UserPermissions | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   
   // Novos estados para sistema de usuários
@@ -554,7 +580,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       console.log('AuthContext: Starting impersonation for company:', companyId);
-      
+
+      // Capturar snapshot imutável das permissões atuais do super_admin
+      // antes de qualquer alteração de estado. O spread garante imutabilidade.
+      setOriginalUserPermissions(userPermissions ? { ...userPermissions } : null);
+
       // Store original user and company
       setOriginalUser(user);
       
@@ -611,6 +641,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('lovoo_crm_original_user');
       
       setIsImpersonating(false);
+      setOriginalUserPermissions(null);
       await fetchCompany(originalUser.id, true); // Forçar voltar para super admin
       setOriginalUser(null);
     } catch (error) {
@@ -716,23 +747,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    const isSuperAdmin = currentRole === 'super_admin' || 
-                        (isImpersonating && originalUser);
-    
-    if (isSuperAdmin) {
-      return true; // Super admin tem todas as permissões (mesmo impersonando)
+    // Impersonando: usar snapshot das permissões reais do super_admin capturado
+    // no momento de impersonateUser. Sem bypass irrestrito (sem return true).
+    if (isImpersonating && originalUser) {
+      if (originalUserPermissions) {
+        return originalUserPermissions[permission] === true;
+      }
+      // Snapshot ausente (reload de página durante impersonação): usar defaults explícitos.
+      // Não usa return true. Chaves ausentes retornam false por ?? false.
+      console.warn('[RBAC_IMPERSONATION] Snapshot de permissões ausente, usando SUPER_ADMIN_DEFAULT_PERMISSIONS:', {
+        permission,
+        userId: originalUser.id,
+      });
+      return SUPER_ADMIN_DEFAULT_PERMISSIONS[permission] ?? false;
     }
 
-    // Usar novo sistema de permissões se disponível
+    // RBAC real: ler da coluna permissions armazenada no banco
     if (userPermissions) {
       return userPermissions[permission] === true;
     }
 
-    // Fallback baseado no role atual
+    // Safety net: fallback por role — só acionado se banco falhou ou permissions ausente
+    // Após backfill completo (Fase 1B), este bloco não deve ser atingido em produção
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[RBAC_FALLBACK] userPermissions nulo, usando role fallback:', {
+        permission,
+        currentRole,
+      });
+    }
+
+    if (currentRole === 'super_admin') return true;
+
     if (currentRole) {
       switch (currentRole) {
         case 'admin':
-          // Admin pode gerenciar usuários, exceto financial e companies
           return permission !== 'financial' && permission !== 'companies';
         case 'partner':
           return ['dashboard', 'leads', 'chat', 'analytics'].includes(permission);
@@ -746,11 +794,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Fallback final para sistema legado
-    // 🔧 CORREÇÃO: Permitir gestão de usuários para admins de empresas filhas
     const isParentCompany = company?.company_type === 'parent';
-    const isClientAdminWithUserPermissions = company?.company_type === 'client' && 
-                                           ['users', 'create_users', 'edit_users', 'delete_users'].includes(permission);
-    
+    const isClientAdminWithUserPermissions = company?.company_type === 'client' &&
+      ['users', 'create_users', 'edit_users', 'delete_users'].includes(permission);
+
     return isParentCompany || isClientAdminWithUserPermissions;
   };
 

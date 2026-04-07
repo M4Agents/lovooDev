@@ -16,7 +16,7 @@ import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
-import { canManageOpenAIIntegration } from '../utils/openaiIntegrationAccess';
+import { useAccessControl } from '../hooks/useAccessControl';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -31,7 +31,8 @@ const BRAZIL_UF_CODES = [
 
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company, refreshCompany, hasPermission, currentRole, loading: authLoading, isLoadingCompany } = useAuth();
+  const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
+  const { canManageOpenAI, isSaaSAdmin } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [logs, setLogs] = useState<any[]>([]);
@@ -118,8 +119,6 @@ export const Settings: React.FC = () => {
       setActiveTab('tracking');
     }
   }, [searchParams]);
-
-  const canManageOpenAI = canManageOpenAIIntegration(company, currentRole);
 
   useEffect(() => {
     const integration = searchParams.get('integration');
@@ -2710,7 +2709,7 @@ export const Settings: React.FC = () => {
                     <div>
                       <span className="font-medium text-orange-800">{t('company.account.typeLabel')}</span>
                       <span className="ml-2 text-orange-700">
-                        {currentRole === 'super_admin' ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
+                        {isSaaSAdmin ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
                       </span>
                     </div>
                     <div>

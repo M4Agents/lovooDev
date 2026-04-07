@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
 import { MetricCard, Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -23,7 +24,8 @@ type DashboardStats = {
 
 export const ModernDashboard: React.FC = () => {
   const { t } = useTranslation('dashboard');
-  const { user, company, currentRole, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
+  const { user, company, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
+  const { isSaaSAdmin, canAccessSaaSAnalytics } = useAccessControl();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -33,7 +35,7 @@ export const ModernDashboard: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   
   // Analytics data hook - only for super admin
-  const shouldLoadAnalytics = currentRole === 'super_admin' && company?.company_type === 'parent';
+  const shouldLoadAnalytics = canAccessSaaSAnalytics;
   const { 
     data: analyticsData, 
     loading: analyticsLoading, 
@@ -230,10 +232,10 @@ export const ModernDashboard: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {currentRole === 'super_admin' ? t('header.titlePlatform') : t('header.titleDefault')}
+            {isSaaSAdmin ? t('header.titlePlatform') : t('header.titleDefault')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {currentRole === 'super_admin' 
+            {isSaaSAdmin 
               ? t('header.subtitlePlatform')
               : t('header.subtitleTenant')
             }
@@ -249,9 +251,9 @@ export const ModernDashboard: React.FC = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${currentRole === 'super_admin' ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-6`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${isSaaSAdmin ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-6`}>
         {/* Métricas para empresas normais */}
-        {currentRole !== 'super_admin' && (
+        {!isSaaSAdmin && (
           <>
             <MetricCard
               title={t('metrics.landingPages')}
@@ -296,7 +298,7 @@ export const ModernDashboard: React.FC = () => {
         )}
 
         {/* Métricas exclusivas para Super Admin (Empresa Pai) */}
-        {currentRole === 'super_admin' && (
+        {isSaaSAdmin && (
           <>
             <MetricCard
               title={t('metrics.clientCompanies')}
@@ -461,7 +463,7 @@ export const ModernDashboard: React.FC = () => {
               </div>
             </Button>
 
-            {currentRole === 'super_admin' && (
+            {isSaaSAdmin && (
               <Button 
                 variant="outline" 
                 className="justify-start h-auto p-4"

@@ -9,6 +9,7 @@ import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAccessControl } from '../../hooks/useAccessControl';
 import { InviteLink } from './InviteLink';
 import { DeleteUserModal } from './DeleteUserModal';
 import { supabase } from '../../lib/supabase';
@@ -26,7 +27,8 @@ export interface UsersListRef {
 
 export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUser, onEditUser }, ref) => {
   const { t } = useTranslation('settings.app');
-  const { company, hasPermission } = useAuth();
+  const { company } = useAuth();
+  const { canCreateUsers, canEditUsers, canDeleteUsers } = useAccessControl();
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -232,7 +234,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
           </p>
         </div>
         
-        {hasPermission('create_users') && (
+        {canCreateUsers && (
           <button
             onClick={onCreateUser}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
@@ -257,7 +259,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                 t('users.states.emptyGeneric')
               }
             </p>
-            {hasPermission('create_users') && (
+            {canCreateUsers && (
               <button
                 onClick={onCreateUser}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
@@ -345,7 +347,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center gap-2 justify-end">
-                        {hasPermission('create_users') && (
+                        {canCreateUsers && (
                           <button
                             onClick={() => handleShowInviteLink(user)}
                             className="text-green-600 hover:text-green-900 p-1 rounded transition-colors"
@@ -354,7 +356,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             <Mail className="w-4 h-4" />
                           </button>
                         )}
-                        {hasPermission('edit_users') && (
+                        {canEditUsers && (
                           <button
                             onClick={() => onEditUser(user)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded transition-colors"
@@ -363,7 +365,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             <Edit2 className="w-4 h-4" />
                           </button>
                         )}
-                        {hasPermission('delete_users') && (
+                        {canDeleteUsers && (
                           <>
                             {/* Botão Desativar/Reativar */}
                             {user.is_active ? (

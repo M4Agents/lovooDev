@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeAnalytics';
 import {
   LayoutDashboard,
@@ -21,7 +22,8 @@ type LayoutProps = {
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, company, currentRole, signOut } = useAuth();
+  const { user, company, signOut } = useAuth();
+  const { canAccessCompanies } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -36,7 +38,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
     { path: '/leads', icon: Users, label: 'Leads' },
-    ...(currentRole === 'super_admin' && company?.company_type === 'parent' ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
+    ...(canAccessCompanies ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];

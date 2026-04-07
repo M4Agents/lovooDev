@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
 import { LandingPage } from '../lib/supabase';
 import { Card } from '../components/ui/Card';
@@ -28,7 +29,8 @@ import {
 
 export const ModernLandingPages: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company, currentRole } = useAuth();
+  const { company } = useAuth();
+  const { canSeeLandingPageOwner } = useAccessControl();
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -234,7 +236,7 @@ export const ModernLandingPages: React.FC = () => {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{t('tracking.header.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {currentRole === 'super_admin' 
+            {canSeeLandingPageOwner 
               ? t('tracking.header.subtitle.superAdmin')
               : t('tracking.header.subtitle.company')
             }
@@ -345,7 +347,7 @@ export const ModernLandingPages: React.FC = () => {
                   </div>
                   
                   {/* Mostrar empresa para super admin */}
-                  {currentRole === 'super_admin' && (page as any).companies && (
+                  {canSeeLandingPageOwner && (page as any).companies && (
                     <div className="flex items-center gap-1 mb-2">
                       <Building2 className="w-3 h-3 text-purple-600" />
                       <span className="text-xs text-purple-600 font-medium">

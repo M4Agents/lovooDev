@@ -15,100 +15,77 @@ interface LeadPermissions {
 }
 
 /**
- * Hook para gerenciar permissões de leads baseado no role do usuário
- * 
- * Hierarquia de permissões:
- * - super_admin: Acesso total a tudo
- * - admin: Acesso total aos leads da empresa
- * - partner: Acesso total aos leads da empresa
- * - manager: Visualiza todos, edita apenas próprios
- * - seller: Visualiza e edita apenas próprios
+ * Hook para gerenciar permissões de leads.
+ *
+ * Permissões de visibilidade e edição leem company_users.permissions via hasPermission()
+ * (RBAC real, sem bypass por role).
+ *
+ * canDeleteLead permanece role-based pois não existe chave delete_leads em UserPermissions.
+ *
+ * Hierarquia resultante (equivalente ao comportamento anterior):
+ * - super_admin / admin / partner : view_all_leads + edit_all_leads = acesso total
+ * - manager  : view_all_leads = true, edit_all_leads = false → edita apenas próprios
+ * - seller   : view_all_leads = false → vê e edita apenas próprios
  */
 export const useLeadPermissions = (): LeadPermissions => {
-  const { currentRole, userRoles, company } = useAuth();
+  const { hasPermission, currentRole, userRoles, company } = useAuth();
 
-  // Pegar o role atual do usuário na empresa ativa
-  const currentUserRole = currentRole || userRoles.find(r => r.company_id === company?.id)?.role;
-
-  // Pegar o ID do usuário atual
+  // ID do registro company_users do usuário na empresa ativa
+  // (usado para comparar com lead.responsible_user_id)
   const currentUserId = userRoles.find(r => r.company_id === company?.id)?.id;
 
-  // Super admin e admin têm acesso total
-  const isAdmin = currentUserRole === 'super_admin' || currentUserRole === 'admin' || currentUserRole === 'partner';
-
-  // Manager pode ver todos mas editar apenas próprios
-  const isManager = currentUserRole === 'manager';
-
-  // Seller vê apenas próprios
-  const isSeller = currentUserRole === 'seller';
+  // Fallback para role (usado apenas em canDeleteLead, que não tem chave de permissão)
+  const currentUserRole =
+    currentRole || userRoles.find(r => r.company_id === company?.id)?.role;
 
   /**
-   * Verifica se usuário pode visualizar um lead
+   * Verifica se o usuário pode visualizar um lead.
+   * view_all_leads: true → acesso a qualquer lead da empresa.
+   * view_all_leads: false → apenas leads atribuídos ao próprio usuário.
    */
   const canViewLead = (lead: Lead): boolean => {
-    // Admin vê tudo
-    if (isAdmin) return true;
-
-    // Manager vê todos os leads da empresa
-    if (isManager) return true;
-
-    // Seller vê apenas leads atribuídos a ele
-    if (isSeller) {
-      return lead.responsible_user_id === currentUserId;
-    }
-
-    // Default: não pode ver
-    return false;
+    if (hasPermission('view_all_leads')) return true;
+    return lead.responsible_user_id === currentUserId;
   };
 
   /**
-   * Verifica se usuário pode editar um lead
+   * Verifica se o usuário pode editar um lead.
+   * edit_all_leads: true → pode editar qualquer lead.
+   * edit_all_leads: false → apenas leads próprios (manager e seller).
    */
   const canEditLead = (lead: Lead): boolean => {
-    // Admin pode editar tudo
-    if (isAdmin) return true;
-
-    // Manager e Seller podem editar apenas leads próprios
-    if (isManager || isSeller) {
-      return lead.responsible_user_id === currentUserId;
-    }
-
-    // Default: não pode editar
-    return false;
+    if (hasPermission('edit_all_leads')) return true;
+    return lead.responsible_user_id === currentUserId;
   };
 
   /**
-   * Verifica se usuário pode deletar um lead
+   * Verifica se o usuário pode deletar um lead.
+   * Mantido role-based: não existe chave delete_leads em UserPermissions.
    */
   const canDeleteLead = (): boolean => {
-    // Apenas admin pode deletar
-    if (isAdmin) return true;
-
-    // Outros roles não podem deletar
-    return false;
+    return (
+      currentUserRole === 'super_admin' ||
+      currentUserRole === 'admin' ||
+      currentUserRole === 'partner'
+    );
   };
 
   /**
-   * Verifica se usuário pode atribuir leads a outros usuários
+   * Verifica se o usuário pode atribuir leads a outros usuários.
+   * Equivalente a canViewAllLeads — quem vê tudo pode redistribuir.
    */
-  const canAssignLead = (): boolean => {
-    // Admin e Manager podem atribuir
-    return isAdmin || isManager;
-  };
+  const canAssignLead = (): boolean => hasPermission('view_all_leads');
 
   /**
-   * Verifica se usuário pode ver todos os leads (não apenas próprios)
+   * Verifica se o usuário pode ver todos os leads (não apenas próprios).
    */
-  const canViewAllLeads = (): boolean => {
-    // Admin e Manager veem todos
-    return isAdmin || isManager;
-  };
+  const canViewAllLeads = (): boolean => hasPermission('view_all_leads');
 
   return {
     canViewLead,
     canEditLead,
     canDeleteLead,
     canAssignLead,
-    canViewAllLeads
+    canViewAllLeads,
   };
 };

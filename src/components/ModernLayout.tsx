@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeAnalytics';
 import { supabase } from '../lib/supabase';
 import {
@@ -35,6 +36,7 @@ type ModernLayoutProps = {
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const { t } = useTranslation('layout');
   const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles, currentRole } = useAuth();
+  const { canAccessCompanies, canAccessPlans, isMaster } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -93,17 +95,17 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
       { path: '/leads', icon: Users, label: t('navigation.leads') },
       { path: '/calendar', icon: Calendar, label: t('navigation.calendar') },
       { path: '/automations', icon: Zap, label: t('navigation.automations') },
-      ...(currentRole === 'super_admin' && company?.company_type === 'parent'
+      ...(canAccessCompanies
         ? [{ path: '/companies', icon: Building2, label: t('navigation.companies') }]
         : []),
       { path: '/media-library', icon: FolderOpen, label: t('navigation.mediaLibrary') },
       { path: '/reports', icon: BarChart2, label: t('navigation.reports') },
-      ...(currentRole === 'super_admin' && company?.company_type === 'parent'
+      ...(canAccessPlans
         ? [{ path: '/plans', icon: Crown, label: t('navigation.plans') }]
         : []),
       { path: '/settings', icon: Settings, label: t('navigation.settings') },
     ],
-    [t, currentRole]
+    [t, canAccessCompanies, canAccessPlans]
   );
 
   const isActive = (path: string) => {
@@ -255,7 +257,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
               {/* Notificações */}
               <ActivityNotificationButton
-                isMaster={currentRole === 'super_admin' || currentRole === 'admin'}
+                isMaster={isMaster}
                 currentUserId={user?.id || ''}
                 companyId={company?.id || ''}
                 collapsed={false}

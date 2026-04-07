@@ -10,6 +10,7 @@ import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaul
 import { applyTemplateToPermissions } from '../../services/userTemplates';
 import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAccessControl } from '../../hooks/useAccessControl';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
 import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
@@ -28,6 +29,7 @@ interface UserModalProps {
 export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, preSelectedProfileId }) => {
   const { t } = useTranslation('settings.app');
   const { company } = useAuth();
+  const { isSaaSAdmin } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -324,11 +326,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         finalPermissions = { ...finalPermissions, ...customPermissions };
       }
 
-      // NOVO: Filtrar permissões críticas baseado no contexto de segurança
+      // Filtrar permissões críticas baseado no contexto de segurança
       const canAccessCritical = canAccessCriticalPermissions(
         company?.company_type,
         formData.role,
-        company?.is_super_admin
+        isSaaSAdmin
       );
 
       if (!canAccessCritical) {

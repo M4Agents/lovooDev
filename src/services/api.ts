@@ -65,13 +65,11 @@ export const api = {
 
   async getLandingPages(companyId: string) {
     
-    // Verificar se é super admin
     const { data: company, error: companyError } = await supabase
       .from('companies')
-      .select('is_super_admin, company_type, name')
+      .select('company_type, name')
       .eq('id', companyId)
       .single();
-
 
     if (companyError) {
       throw companyError;
@@ -85,8 +83,8 @@ export const api = {
       `)
       .order('created_at', { ascending: false });
 
-    // Se for super admin, mostrar todas as landing pages
-    if (company?.is_super_admin && company?.company_type === 'parent') {
+    // Empresa parent (SaaS) vê todas as landing pages da plataforma
+    if (company?.company_type === 'parent') {
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
@@ -233,17 +231,16 @@ export const api = {
   },
 
   async getDashboardStats(companyId: string) {
-    // Verificar se é super admin
     const { data: company } = await supabase
       .from('companies')
-      .select('is_super_admin, company_type')
+      .select('company_type')
       .eq('id', companyId)
       .single();
 
     let pagesQuery = supabase.from('landing_pages').select('id');
 
-    // Se for super admin, pegar todas as landing pages da plataforma
-    if (company?.is_super_admin && company?.company_type === 'parent') {
+    // Empresa parent (SaaS) agrega métricas de toda a plataforma
+    if (company?.company_type === 'parent') {
       // Super admin vê métricas de toda a plataforma
       const { data: pages } = await pagesQuery;
       const pageIds = pages?.map(p => p.id) || [];
@@ -377,8 +374,7 @@ export const api = {
         plan: data.plan,
         parent_company_id: parentCompanyId,
         company_type: 'client',
-        is_super_admin: false,
-        user_id: null, // 🔧 SEM dono inicial - cliente se tornará dono ao se registrar
+        user_id: null, // SEM dono inicial - cliente se tornará dono ao se registrar
         status: 'active'
       })
       .select()
@@ -1971,8 +1967,8 @@ export const api = {
         throw new Error('Erro ao buscar dados da empresa');
       }
 
-      if (!company?.is_super_admin || company?.company_type !== 'parent') {
-        throw new Error('Acesso negado: Apenas super administradores podem acessar analytics');
+      if (company?.company_type !== 'parent') {
+        throw new Error('Acesso negado: Apenas empresas SaaS podem acessar analytics');
       }
 
       const startDate = period.startDate?.toISOString();

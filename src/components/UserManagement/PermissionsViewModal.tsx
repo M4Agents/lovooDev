@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Eye, Shield, Check, X as XIcon, Crown, Briefcase, UserCheck, User, Settings } from 'lucide-react';
 import { UserProfile, UserTemplate, UserPermissions, UserRole } from '../../types/user';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAccessControl } from '../../hooks/useAccessControl';
 import { canAccessCriticalPermissions, filterCriticalPermissions } from '../../utils/permissionUtils';
 
 interface PermissionsViewModalProps {
@@ -21,6 +22,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
   profile 
 }) => {
   const { company } = useAuth();
+  const { isSaaSAdmin } = useAccessControl();
   const { t } = useTranslation('settings.app');
   
   if (!isOpen || !profile) return null;
@@ -56,20 +58,19 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
     ? (profile.baseRole || 'seller')
     : 'seller';
 
-  // NOVO: Filtrar permissões críticas baseado no contexto de segurança
+  // Filtrar permissões críticas baseado no contexto de segurança
   const canViewCritical = canAccessCriticalPermissions(
     company?.company_type,
     role,
-    company?.is_super_admin
+    isSaaSAdmin
   );
 
   if (!canViewCritical) {
-    // Filtrar permissões críticas para visualização
     permissions = filterCriticalPermissions(
       permissions,
       company?.company_type,
       role,
-      company?.is_super_admin
+      isSaaSAdmin
     );
   }
 

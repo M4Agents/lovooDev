@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import { useAccessControl } from '../hooks/useAccessControl'
 import { supabase } from '../lib/supabase'
 import { Bell, Check, Calendar, Clock, User, ChevronDown, Filter, Search } from 'lucide-react'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
@@ -40,7 +41,8 @@ type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'older'
 
 export const Notifications: React.FC = () => {
   const { t } = useTranslation('notifications')
-  const { user, company, currentRole } = useAuth()
+  const { user, company } = useAuth()
+  const { isMaster } = useAccessControl()
   const [selectedUserId, setSelectedUserId] = useState(user?.id || '')
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [notifications, setNotifications] = useState<ActivityNotification[]>([])
@@ -50,9 +52,6 @@ export const Notifications: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActivity, setSelectedActivity] = useState<LeadActivity | null>(null)
   const [showActivityModal, setShowActivityModal] = useState(false)
-
-  const isMaster = currentRole === 'super_admin' || 
-                   currentRole === 'admin'
 
   // Buscar usuários da empresa (apenas Master)
   const loadCompanyUsers = async () => {

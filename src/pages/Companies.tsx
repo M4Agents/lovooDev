@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
 import { Company } from '../lib/supabase';
 import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail } from 'lucide-react';
@@ -8,7 +9,8 @@ import { openDirectEditCompanyModal } from './companies/openDirectEditCompanyMod
 
 export const Companies: React.FC = () => {
   const { t } = useTranslation('companies');
-  const { company, currentRole, impersonateUser } = useAuth();
+  const { impersonateUser } = useAuth();
+  const { isSaaSAdmin } = useAccessControl();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -30,13 +32,13 @@ export const Companies: React.FC = () => {
   });
 
   useEffect(() => {
-    if (currentRole === 'super_admin' && company?.company_type === 'parent') {
+    if (isSaaSAdmin) {
       loadCompanies();
     }
-  }, [currentRole, company?.company_type]);
+  }, [isSaaSAdmin]);
 
   const loadCompanies = async () => {
-    if (!company || currentRole !== 'super_admin' || company.company_type !== 'parent') {
+    if (!isSaaSAdmin) {
       return;
     }
 
@@ -185,7 +187,7 @@ export const Companies: React.FC = () => {
     );
   }
 
-  if (currentRole !== 'super_admin' || company?.company_type !== 'parent') {
+  if (!isSaaSAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

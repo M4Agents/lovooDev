@@ -21,6 +21,7 @@ import {
 import { UserRole } from '../../types/user';
 import { getSystemTemplates } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAccessControl } from '../../hooks/useAccessControl';
 
 interface ProfileVisibilityConfig {
   profileId: string;
@@ -32,15 +33,15 @@ interface ProfileVisibilityConfig {
 }
 
 export const ProfileVisibilityManager: React.FC = () => {
-  const { company, hasPermission } = useAuth();
+  const { company } = useAuth();
+  const { canViewUsers } = useAccessControl();
   const [profiles, setProfiles] = useState<ProfileVisibilityConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Verificar se usuário tem permissão
-  const canManageVisibility = company?.company_type === 'parent' && 
-    hasPermission?.('users');
+  const canManageVisibility = company?.company_type === 'parent' && canViewUsers;
 
   // Carregar perfis do sistema
   useEffect(() => {

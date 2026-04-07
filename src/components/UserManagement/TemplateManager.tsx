@@ -8,6 +8,7 @@ import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, 
 import { UserTemplate, UserRole, CreateTemplateRequest } from '../../types/user';
 import { getCompanyTemplates, createUserTemplate, deactivateTemplate } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAccessControl } from '../../hooks/useAccessControl';
 import { TemplateModal } from './TemplateModal';
 import { PermissionsViewModal } from './PermissionsViewModal';
 
@@ -17,7 +18,8 @@ interface TemplateManagerProps {
 
 export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }) => {
   const { t } = useTranslation('settings.app');
-  const { company, currentRole } = useAuth();
+  const { company } = useAuth();
+  const { isSaaSAdmin } = useAccessControl();
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,9 +56,8 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
     loadTemplates();
   }, [company?.id]);
 
-  // NOVO: Verificar se usuário pode configurar visibilidade
-  const canConfigureVisibility = company?.company_type === 'parent' && 
-    currentRole === 'super_admin';
+  // Verificar se usuário pode configurar visibilidade
+  const canConfigureVisibility = isSaaSAdmin;
 
   // NOVO: Toggle de visibilidade
   const toggleVisibility = (templateId: string, currentVisibility: boolean) => {

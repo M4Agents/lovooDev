@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../contexts/AuthContext';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { supabase } from '../lib/supabase';
 import { 
   Plus, 
@@ -55,7 +55,7 @@ interface PlanFormData {
 
 export const PlansManagement: React.FC = () => {
   const { t } = useTranslation('plans');
-  const { company, currentRole } = useAuth();
+  const { isSaaSAdmin } = useAccessControl();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -313,10 +313,10 @@ export const PlansManagement: React.FC = () => {
   // EFFECTS
   // =====================================================
   useEffect(() => {
-    if (currentRole === 'super_admin' && company?.company_type === 'parent') {
+    if (isSaaSAdmin) {
       loadPlans();
     }
-  }, [currentRole, company?.company_type]);
+  }, [isSaaSAdmin]);
 
   // Auto-generate slug from name
   useEffect(() => {
@@ -331,7 +331,7 @@ export const PlansManagement: React.FC = () => {
   // =====================================================
   // VERIFICAR PERMISSÃO
   // =====================================================
-  if (currentRole !== 'super_admin' || company?.company_type !== 'parent') {
+  if (!isSaaSAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { X, Briefcase, DollarSign, Calendar, Percent, FileText, User, Trash2, Layers } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
@@ -31,8 +32,6 @@ import {
 import { estimateDraftLinesTotal } from '../../utils/opportunityDraftPricing'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { formatMoney } from '../../lib/formatMoney'
-
-const MANAGEMENT_ROLES = ['super_admin', 'admin', 'partner', 'manager']
 
 type DraftCompositionLine = OpportunityQuickAddPayload & { key: string }
 
@@ -64,11 +63,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   onSuccess
 }) => {
   const { t } = useTranslation('funnel')
-  const { company, user, currentRole, userRoles } = useAuth()
-  const hasPlatformElevatedRole = userRoles.some(r => r.role === 'super_admin')
-  const isManager =
-    (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) ||
-    hasPlatformElevatedRole
+  const { company, user } = useAuth()
+  const { hasPlatformElevatedRole, canViewAllLeads } = useAccessControl()
+  const isManager = canViewAllLeads || hasPlatformElevatedRole
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [valueDisplay, setValueDisplay] = useState('0,00')
