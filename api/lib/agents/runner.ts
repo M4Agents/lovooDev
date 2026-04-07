@@ -12,6 +12,15 @@
 //   4. Executar via OpenAI
 //   5. Retornar fallback se não houver agente ou OpenAI indisponível
 //
+// LOGGING:
+//   Cada execução é registrada via writeExecutionLog() (fire-and-forget).
+//   invalid_use_id não é logado — decisão de escopo do MVP.
+//   Ver docs/adr/ADR-001-ai-agent-logging-and-costs.md
+//
+// CUSTO ESTIMADO:
+//   estimated_cost_usd é estimativa operacional (não faturamento real).
+//   Calculado com base em pricing.ts — nunca dependente de chamada externa.
+//
 // Features NÃO devem chamar OpenAI diretamente — devem usar runAgent().
 // Nunca importar no frontend — server-side exclusivo.
 // =====================================================
@@ -22,6 +31,8 @@ import { isOpenAIApiKeyConfigured } from '../openai/config.js'
 import { resolveAgent } from './resolver.js'
 import { getUseMeta, VALID_USE_IDS } from './uses.js'
 import { retrieveAgentContext } from './retriever.js'
+import { writeExecutionLog, type ExecutionLogEntry } from './logger.js'
+import { estimateCost } from './pricing.js'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -41,6 +52,11 @@ export type AgentRunContext = {
   extra_context?: string
   /** company_id do consumidor (para log e rastreabilidade — não altera lógica). */
   company_id?: string
+  /**
+   * UUID do usuário que disparou a execução.
+   * NULL em contextos sem sessão: WhatsApp webhook, automações, etc.
+   */
+  user_id?: string
 }
 
 export type AgentRunSuccess = {
@@ -95,12 +111,38 @@ function getStaticFallback(useId: string): string {
  *   5. Se não há agente → fallback (static ou error)
  *   6. Monta system prompt e executa via OpenAI
  *   7. Retorna resultado ou fallback em caso de falha
+ *   8. Registra log de execução (fire-and-forget)
  */
 export async function runAgent(
   useId: string,
   ctx: AgentRunContext
 ): Promise<AgentRunResult> {
+  // Marca o início para cálculo de duration_ms no log
+  const startMs = Date.now()
+
+  // Contexto base de log (compartilhado em todos os pontos de saída)
+  const logBase = {
+    use_id:              useId,
+    consumer_company_id: ctx.company_id ?? null,
+    user_id:             ctx.user_id ?? null,
+    channel:             ctx.channel ?? null,
+  }
+
+  // Helper: envia o log fire-and-forget e retorna o resultado
+  function logAndReturn<T extends AgentRunResult>(
+    result: T,
+    entry: Omit<ExecutionLogEntry, 'use_id' | 'consumer_company_id' | 'user_id' | 'channel'>
+  ): T {
+    void writeExecutionLog({
+      ...logBase,
+      ...entry,
+      duration_ms: Date.now() - startMs,
+    } as ExecutionLogEntry)
+    return result
+  }
+
   // 1. Valida use_id
+  // invalid_use_id NÃO é logado — decisão de escopo do MVP
   if (!VALID_USE_IDS.has(useId)) {
     return { ok: false, errorCode: 'invalid_use_id', use_id: useId }
   }
@@ -109,22 +151,51 @@ export async function runAgent(
   const meta = getUseMeta(useId)
 
   if (meta.requires_context && !ctx.extra_context?.trim()) {
-    return { ok: false, errorCode: 'missing_required_context', use_id: useId }
+    const result: AgentRunError = { ok: false, errorCode: 'missing_required_context', use_id: useId }
+    return logAndReturn(result, {
+      status:      'error_missing_context',
+      error_code:  'missing_required_context',
+      is_fallback: false,
+    })
   }
 
   // 3. Verifica disponibilidade OpenAI
   if (!isOpenAIApiKeyConfigured()) {
-    return handleFallback(useId, meta.fallback_mode, 'openai_not_configured')
+    const isFallback = meta.fallback_mode === 'static'
+    return logAndReturn(
+      handleFallback(useId, meta.fallback_mode, 'openai_not_configured'),
+      {
+        status:      'fallback_openai_unavailable',
+        error_code:  'openai_not_configured',
+        is_fallback: isFallback,
+      }
+    )
   }
 
   const openaiSettings = await fetchParentOpenAISettingsForSystem()
   if (!openaiSettings.enabled) {
-    return handleFallback(useId, meta.fallback_mode, 'openai_disabled')
+    const isFallback = meta.fallback_mode === 'static'
+    return logAndReturn(
+      handleFallback(useId, meta.fallback_mode, 'openai_disabled'),
+      {
+        status:      'fallback_openai_unavailable',
+        error_code:  'openai_disabled',
+        is_fallback: isFallback,
+      }
+    )
   }
 
   const client = getOpenAIClient()
   if (!client) {
-    return handleFallback(useId, meta.fallback_mode, 'openai_client_null')
+    const isFallback = meta.fallback_mode === 'static'
+    return logAndReturn(
+      handleFallback(useId, meta.fallback_mode, 'openai_client_null'),
+      {
+        status:      'fallback_openai_unavailable',
+        error_code:  'openai_client_null',
+        is_fallback: isFallback,
+      }
+    )
   }
 
   // 4. Resolve agente
@@ -132,9 +203,22 @@ export async function runAgent(
 
   if (!resolved.found) {
     if (resolved.reason === 'no_binding' || resolved.reason === 'agent_inactive') {
-      return handleFallback(useId, meta.fallback_mode, resolved.reason)
+      const isFallback = meta.fallback_mode === 'static'
+      return logAndReturn(
+        handleFallback(useId, meta.fallback_mode, resolved.reason),
+        {
+          status:      'fallback_no_agent',
+          error_code:  resolved.reason,
+          is_fallback: isFallback,
+        }
+      )
     }
-    return { ok: false, errorCode: resolved.reason, use_id: useId }
+    const result: AgentRunError = { ok: false, errorCode: resolved.reason, use_id: useId }
+    return logAndReturn(result, {
+      status:      'error_db',
+      error_code:  'db_error',
+      is_fallback: false,
+    })
   }
 
   const { agent } = resolved
@@ -220,15 +304,39 @@ export async function runAgent(
 
     const result = completion.choices[0]?.message?.content?.trim() ?? ''
 
-    return {
-      ok:       true,
-      result,
-      agent_id: agent.id,
-      use_id:   useId,
-      fallback: false,
-    }
+    const usage       = completion.usage
+    const inputTokens  = usage?.prompt_tokens     ?? null
+    const outputTokens = usage?.completion_tokens ?? null
+    const totalTokens  = usage?.total_tokens      ?? null
+    const estimatedCost = estimateCost(agent.model, inputTokens, outputTokens)
+
+    return logAndReturn(
+      { ok: true, result, agent_id: agent.id, use_id: useId, fallback: false },
+      {
+        status:            'success',
+        agent_id:          agent.id,
+        model:             agent.model,
+        knowledge_mode:    knowledgeMode as 'none' | 'inline' | 'rag' | 'hybrid',
+        is_fallback:       false,
+        input_tokens:      inputTokens,
+        output_tokens:     outputTokens,
+        total_tokens:      totalTokens,
+        estimated_cost_usd: estimatedCost,
+      }
+    )
   } catch {
-    return handleFallback(useId, meta.fallback_mode, 'openai_execution_failed')
+    const isFallback = meta.fallback_mode === 'static'
+    return logAndReturn(
+      handleFallback(useId, meta.fallback_mode, 'openai_execution_failed'),
+      {
+        status:         isFallback ? 'fallback_openai_failed' : 'error_openai',
+        error_code:     'openai_execution_failed',
+        agent_id:       agent.id,
+        model:          agent.model,
+        knowledge_mode: knowledgeMode as 'none' | 'inline' | 'rag' | 'hybrid',
+        is_fallback:    isFallback,
+      }
+    )
   }
 }
 
