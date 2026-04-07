@@ -8,7 +8,7 @@ import { openDirectEditCompanyModal } from './companies/openDirectEditCompanyMod
 
 export const Companies: React.FC = () => {
   const { t } = useTranslation('companies');
-  const { company, impersonateUser } = useAuth();
+  const { company, currentRole, impersonateUser } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -30,13 +30,13 @@ export const Companies: React.FC = () => {
   });
 
   useEffect(() => {
-    if (company?.is_super_admin) {
+    if (currentRole === 'super_admin') {
       loadCompanies();
     }
-  }, [company]);
+  }, [currentRole]);
 
   const loadCompanies = async () => {
-    if (!company || !company.is_super_admin) {
+    if (!company || currentRole !== 'super_admin') {
       return;
     }
 
@@ -185,7 +185,7 @@ export const Companies: React.FC = () => {
     );
   }
 
-  if (!company?.is_super_admin) {
+  if (currentRole !== 'super_admin') {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

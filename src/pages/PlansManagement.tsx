@@ -55,7 +55,7 @@ interface PlanFormData {
 
 export const PlansManagement: React.FC = () => {
   const { t } = useTranslation('plans');
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -313,10 +313,10 @@ export const PlansManagement: React.FC = () => {
   // EFFECTS
   // =====================================================
   useEffect(() => {
-    if (company?.is_super_admin) {
+    if (currentRole === 'super_admin') {
       loadPlans();
     }
-  }, [company]);
+  }, [currentRole]);
 
   // Auto-generate slug from name
   useEffect(() => {
@@ -331,7 +331,7 @@ export const PlansManagement: React.FC = () => {
   // =====================================================
   // VERIFICAR PERMISSÃO
   // =====================================================
-  if (!company?.is_super_admin) {
+  if (currentRole !== 'super_admin') {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

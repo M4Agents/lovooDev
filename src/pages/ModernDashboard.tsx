@@ -23,7 +23,7 @@ type DashboardStats = {
 
 export const ModernDashboard: React.FC = () => {
   const { t } = useTranslation('dashboard');
-  const { user, company, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
+  const { user, company, currentRole, isImpersonating, isLoadingCompany, refreshCompany } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -33,7 +33,7 @@ export const ModernDashboard: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   
   // Analytics data hook - only for super admin
-  const shouldLoadAnalytics = company?.is_super_admin && company?.company_type === 'parent';
+  const shouldLoadAnalytics = currentRole === 'super_admin' && company?.company_type === 'parent';
   const { 
     data: analyticsData, 
     loading: analyticsLoading, 
@@ -230,10 +230,10 @@ export const ModernDashboard: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {company?.is_super_admin ? t('header.titlePlatform') : t('header.titleDefault')}
+            {currentRole === 'super_admin' ? t('header.titlePlatform') : t('header.titleDefault')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {company?.is_super_admin 
+            {currentRole === 'super_admin' 
               ? t('header.subtitlePlatform')
               : t('header.subtitleTenant')
             }
@@ -249,9 +249,9 @@ export const ModernDashboard: React.FC = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-6`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${currentRole === 'super_admin' ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-6`}>
         {/* Métricas para empresas normais */}
-        {!company?.is_super_admin && (
+        {currentRole !== 'super_admin' && (
           <>
             <MetricCard
               title={t('metrics.landingPages')}
@@ -296,7 +296,7 @@ export const ModernDashboard: React.FC = () => {
         )}
 
         {/* Métricas exclusivas para Super Admin (Empresa Pai) */}
-        {company?.is_super_admin && (
+        {currentRole === 'super_admin' && (
           <>
             <MetricCard
               title={t('metrics.clientCompanies')}
@@ -461,7 +461,7 @@ export const ModernDashboard: React.FC = () => {
               </div>
             </Button>
 
-            {company?.is_super_admin && (
+            {currentRole === 'super_admin' && (
               <Button 
                 variant="outline" 
                 className="justify-start h-auto p-4"

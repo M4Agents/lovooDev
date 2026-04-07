@@ -28,7 +28,7 @@ import {
 
 export const ModernLandingPages: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -234,7 +234,7 @@ export const ModernLandingPages: React.FC = () => {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{t('tracking.header.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {company?.is_super_admin 
+            {currentRole === 'super_admin' 
               ? t('tracking.header.subtitle.superAdmin')
               : t('tracking.header.subtitle.company')
             }
@@ -345,7 +345,7 @@ export const ModernLandingPages: React.FC = () => {
                   </div>
                   
                   {/* Mostrar empresa para super admin */}
-                  {company?.is_super_admin && (page as any).companies && (
+                  {currentRole === 'super_admin' && (page as any).companies && (
                     <div className="flex items-center gap-1 mb-2">
                       <Building2 className="w-3 h-3 text-purple-600" />
                       <span className="text-xs text-purple-600 font-medium">

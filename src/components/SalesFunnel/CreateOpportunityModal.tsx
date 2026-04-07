@@ -65,12 +65,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user, currentRole, userRoles } = useAuth()
-  const hasPlatformElevatedRole = userRoles.some(
-    r => r.role === 'super_admin' || r.role === 'support'
-  )
+  const hasPlatformElevatedRole = userRoles.some(r => r.role === 'super_admin')
   const isManager =
     (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) ||
-    company?.is_super_admin === true ||
     hasPlatformElevatedRole
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()

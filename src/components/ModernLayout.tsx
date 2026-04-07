@@ -93,15 +93,15 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
       { path: '/leads', icon: Users, label: t('navigation.leads') },
       { path: '/calendar', icon: Calendar, label: t('navigation.calendar') },
       { path: '/automations', icon: Zap, label: t('navigation.automations') },
-      ...(company?.is_super_admin
+      ...(currentRole === 'super_admin'
         ? [{ path: '/companies', icon: Building2, label: t('navigation.companies') }]
         : []),
       { path: '/media-library', icon: FolderOpen, label: t('navigation.mediaLibrary') },
       { path: '/reports', icon: BarChart2, label: t('navigation.reports') },
-      ...(company?.is_super_admin ? [{ path: '/plans', icon: Crown, label: t('navigation.plans') }] : []),
+      ...(currentRole === 'super_admin' ? [{ path: '/plans', icon: Crown, label: t('navigation.plans') }] : []),
       { path: '/settings', icon: Settings, label: t('navigation.settings') },
     ],
-    [t, company?.is_super_admin]
+    [t, currentRole]
   );
 
   const isActive = (path: string) => {

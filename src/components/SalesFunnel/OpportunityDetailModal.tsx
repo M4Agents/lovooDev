@@ -187,13 +187,9 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const { currentRole, company, userRoles } = useAuth()
-  // Legacy: company.is_super_admin. Em empresa filha, currentRole pode ser null — usar userRoles (super_admin/support).
-  const hasPlatformElevatedRole = userRoles.some(
-    r => r.role === 'super_admin' || r.role === 'support'
-  )
+  const hasPlatformElevatedRole = userRoles.some(r => r.role === 'super_admin')
   const isManager =
     (currentRole ? MANAGEMENT_ROLES.includes(currentRole) : false) ||
-    company?.is_super_admin === true ||
     hasPlatformElevatedRole
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)

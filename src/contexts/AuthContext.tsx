@@ -1246,6 +1246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Criar informações de compatibilidade
+      // @deprecated hasLegacyRole — usar currentRole === 'super_admin' (Etapa 5 removerá este bloco)
       const hasLegacyRole = company?.is_super_admin || false;
       const legacyRole = company?.is_super_admin ? 'super_admin' : 
                         company?.company_type === 'parent' ? 'admin' : undefined;
@@ -1255,7 +1256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         legacyRole,
         newRoles: roles || [],
         primaryRole: roles?.[0]?.role || null,
-        canImpersonate: hasLegacyRole || (roles?.some(r => r.role === 'super_admin') || false)
+        canImpersonate: roles?.some(r => r.role === 'super_admin') || false
       });
 
     } catch (error) {
@@ -1268,8 +1269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    const isSuperAdmin = company?.is_super_admin || 
-                        currentRole === 'super_admin' || 
+    const isSuperAdmin = currentRole === 'super_admin' || 
                         (isImpersonating && originalUser);
     
     if (isSuperAdmin) {
@@ -1311,12 +1311,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
 
     try {
-      // Verificar sistema atual (compatibilidade)
-      if (company?.is_super_admin) {
-        return true;
-      }
-
-      // Verificar novo sistema
       const { data, error } = await supabase
         .rpc('can_impersonate_company', {
           p_user_id: user.id,
@@ -1325,14 +1319,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.warn('AuthContext: Error checking impersonation permission:', error);
-        // Fallback para sistema atual
-        return company?.is_super_admin || false;
+        return false;
       }
 
       return data || false;
     } catch (error) {
       console.error('AuthContext: Error in canImpersonateCompany:', error);
-      return company?.is_super_admin || false;
+      return false;
     }
   };
 

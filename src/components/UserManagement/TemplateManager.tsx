@@ -17,7 +17,7 @@ interface TemplateManagerProps {
 
 export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }) => {
   const { t } = useTranslation('settings.app');
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
 
   // NOVO: Verificar se usuário pode configurar visibilidade
   const canConfigureVisibility = company?.company_type === 'parent' && 
-    (company?.is_super_admin || true); // TODO: Integrar com hasPermission quando disponível
+    currentRole === 'super_admin';
 
   // NOVO: Toggle de visibilidade
   const toggleVisibility = (templateId: string, currentVisibility: boolean) => {

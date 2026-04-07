@@ -12,7 +12,7 @@ type DashboardStats = {
 };
 
 export const Dashboard: React.FC = () => {
-  const { company, user, signOut, refreshCompany } = useAuth();
+  const { company, user, currentRole, signOut, refreshCompany } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -91,17 +91,17 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">
-          {company?.is_super_admin ? 'Dashboard da Plataforma' : 'Dashboard'}
+          {currentRole === 'super_admin' ? 'Dashboard da Plataforma' : 'Dashboard'}
         </h1>
         <p className="text-slate-600 mt-1">
-          {company?.is_super_admin 
+          {currentRole === 'super_admin' 
             ? 'Visão geral de toda a plataforma M4 Track' 
             : 'Visão geral das suas métricas'
           }
         </p>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${company?.is_super_admin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${currentRole === 'super_admin' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -145,7 +145,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Card de Empresas - apenas para Super Admin */}
-        {company?.is_super_admin && (
+        {currentRole === 'super_admin' && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-purple-100 rounded-lg">

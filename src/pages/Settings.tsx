@@ -2710,7 +2710,7 @@ export const Settings: React.FC = () => {
                     <div>
                       <span className="font-medium text-orange-800">{t('company.account.typeLabel')}</span>
                       <span className="ml-2 text-orange-700">
-                        {company?.is_super_admin ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
+                        {currentRole === 'super_admin' ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
                       </span>
                     </div>
                     <div>

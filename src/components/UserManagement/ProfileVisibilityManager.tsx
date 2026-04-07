@@ -40,7 +40,7 @@ export const ProfileVisibilityManager: React.FC = () => {
 
   // Verificar se usuário tem permissão
   const canManageVisibility = company?.company_type === 'parent' && 
-    (hasPermission?.('users') || company?.is_super_admin);
+    hasPermission?.('users');
 
   // Carregar perfis do sistema
   useEffect(() => {

@@ -5,7 +5,7 @@ import { LandingPage } from '../lib/supabase';
 import { Plus, ExternalLink, Code, Trash2, Edit2, Play, Pause } from 'lucide-react';
 
 export const LandingPages: React.FC = () => {
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -147,7 +147,7 @@ export const LandingPages: React.FC = () => {
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-slate-900 mb-1">{page.name}</h3>
                   {/* Mostrar empresa para super admin */}
-                  {company?.is_super_admin && (page as any).companies && (
+                  {currentRole === 'super_admin' && (page as any).companies && (
                     <p className="text-xs text-purple-600 font-medium mb-1">
                       📊 {(page as any).companies.name}
                     </p>

@@ -40,8 +40,7 @@ function getAuthorizationHeader(req: OpenAIRequestLike): string | undefined {
 }
 
 /**
- * Garante: usuário autenticado e (vínculo admin/super_admin em company_users na empresa Pai
- * OU dono legado: linha em companies com id = empresa Pai, user_id = auth e is_super_admin).
+ * Garante: usuário autenticado e vínculo admin/super_admin em company_users na empresa Pai.
  */
 export async function assertCanManageOpenAIIntegration(
   req: OpenAIRequestLike
@@ -80,18 +79,6 @@ export async function assertCanManageOpenAIIntegration(
   const role = membership?.role
   if (role && isManageOpenAIIntegrationRole(role)) {
     return { ok: true, userId: user.id, role, supabase }
-  }
-
-  const { data: legacyParentOwner } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('id', PARENT_COMPANY_ID)
-    .eq('user_id', user.id)
-    .eq('is_super_admin', true)
-    .maybeSingle()
-
-  if (legacyParentOwner) {
-    return { ok: true, userId: user.id, role: 'super_admin', supabase }
   }
 
   if (membershipErr) {
