@@ -30,13 +30,13 @@ export const Companies: React.FC = () => {
   });
 
   useEffect(() => {
-    if (currentRole === 'super_admin') {
+    if (currentRole === 'super_admin' && company?.company_type === 'parent') {
       loadCompanies();
     }
-  }, [currentRole]);
+  }, [currentRole, company?.company_type]);
 
   const loadCompanies = async () => {
-    if (!company || currentRole !== 'super_admin') {
+    if (!company || currentRole !== 'super_admin' || company.company_type !== 'parent') {
       return;
     }
 
@@ -185,7 +185,7 @@ export const Companies: React.FC = () => {
     );
   }
 
-  if (currentRole !== 'super_admin') {
+  if (currentRole !== 'super_admin' || company?.company_type !== 'parent') {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

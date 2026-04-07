@@ -36,7 +36,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/landing-pages', icon: FileText, label: 'Landing Pages' },
     { path: '/leads', icon: Users, label: 'Leads' },
-    ...(currentRole === 'super_admin' ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
+    ...(currentRole === 'super_admin' && company?.company_type === 'parent' ? [{ path: '/companies', icon: Building2, label: 'Empresas' }] : []),
     { path: '/media-library', icon: FolderOpen, label: 'Biblioteca' },
     { path: '/settings', icon: Settings, label: 'Configurações' },
   ];

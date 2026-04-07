@@ -313,10 +313,10 @@ export const PlansManagement: React.FC = () => {
   // EFFECTS
   // =====================================================
   useEffect(() => {
-    if (currentRole === 'super_admin') {
+    if (currentRole === 'super_admin' && company?.company_type === 'parent') {
       loadPlans();
     }
-  }, [currentRole]);
+  }, [currentRole, company?.company_type]);
 
   // Auto-generate slug from name
   useEffect(() => {
@@ -331,7 +331,7 @@ export const PlansManagement: React.FC = () => {
   // =====================================================
   // VERIFICAR PERMISSÃO
   // =====================================================
-  if (currentRole !== 'super_admin') {
+  if (currentRole !== 'super_admin' || company?.company_type !== 'parent') {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

@@ -61,6 +61,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔧 FLAG PARA EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
   const [isFetchingCompany, setIsFetchingCompany] = useState(false);
 
+  // Sincronizar currentRole sempre que company ou userRoles mudam.
+  // Corrige o problema de stale closure: refreshUserRoles pode ser chamado
+  // quando company ainda é null (closure capturada antes do setCompany).
+  useEffect(() => {
+    if (!company || !userRoles.length) return;
+    const companyRole = userRoles.find(r => r.company_id === company.id);
+    if (companyRole) {
+      setCurrentRole(companyRole.role as UserRole);
+      setUserPermissions(companyRole.permissions);
+    } else {
+      setCurrentRole(null);
+      setUserPermissions(null);
+    }
+  }, [company?.id, userRoles]);
+
   // 🔧 FUNÇÃO DE LIMPEZA DE DADOS DE IMPERSONAÇÃO INVÁLIDOS
   const cleanupInvalidImpersonationData = () => {
     try {
