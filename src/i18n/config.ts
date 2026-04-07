@@ -49,6 +49,9 @@ import funnelEs from '../locales/es/funnel.json'
 import chatPt from '../locales/pt-BR/chat.json'
 import chatEn from '../locales/en/chat.json'
 import chatEs from '../locales/es/chat.json'
+import agentsPt from '../locales/pt-BR/agents.json'
+import agentsEn from '../locales/en/agents.json'
+import agentsEs from '../locales/es/agents.json'
 import { LOCALE_STORAGE_KEY, parseStoredLocale, syncDocumentLang } from './supportedLocales'
 
 /** Idioma inicial: localStorage válido ou pt-BR (evita flicker se a chave já existir). */
@@ -83,6 +86,7 @@ void i18n.use(initReactI18next).init(
         'settings.app': settingsAppPt,
         funnel: funnelPt,
         chat: chatPt,
+        agents: agentsPt,
       },
       en: {
         'settings.system': settingsSystemEn,
@@ -100,6 +104,7 @@ void i18n.use(initReactI18next).init(
         'settings.app': settingsAppEn,
         funnel: funnelEn,
         chat: chatEn,
+        agents: agentsEn,
       },
       es: {
         'settings.system': settingsSystemEs,
@@ -117,6 +122,7 @@ void i18n.use(initReactI18next).init(
         'settings.app': settingsAppEs,
         funnel: funnelEs,
         chat: chatEs,
+        agents: agentsEs,
       },
     },
     ns: [
@@ -135,6 +141,7 @@ void i18n.use(initReactI18next).init(
       'periodFilter',
       'funnel',
       'chat',
+      'agents',
     ],
     defaultNS: 'settings.system',
     interpolation: {
