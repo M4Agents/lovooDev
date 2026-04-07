@@ -172,7 +172,7 @@ export const canCreateUser = async (companyId: string): Promise<boolean> => {
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
   // Empresas parent (super admin) podem criar qualquer tipo de usuário
-  const parentRoles: UserRole[] = ['super_admin', 'support', 'admin', 'partner', 'manager', 'seller'];
+  const parentRoles: UserRole[] = ['super_admin', 'admin', 'partner', 'manager', 'seller'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
   if (companyType === 'parent') {
@@ -205,25 +205,6 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         edit_all_leads: true,
         view_financial: true,
         edit_financial: true
-      };
-    case 'support':
-      return {
-        dashboard: true,
-        leads: true,
-        chat: true,
-        analytics: true,
-        settings: true,
-        companies: true,
-        users: true,
-        financial: false, // SEM ACESSO FINANCEIRO
-        create_users: true,
-        edit_users: true,
-        delete_users: true,
-        impersonate: true,
-        view_all_leads: true,
-        edit_all_leads: true,
-        view_financial: false, // SEM ACESSO FINANCEIRO
-        edit_financial: false  // SEM ACESSO FINANCEIRO
       };
     case 'admin':
       return {
@@ -426,49 +407,9 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     });
 
 
-    // TRATAMENTO INTELIGENTE DE ERRO - Verificar se usuário foi criado mesmo com erro
     if (error) {
       console.error('UserAPI: Error calling create_company_user_safe:', error);
-      
-      // Se erro relacionado a templates, verificar se usuário foi criado mesmo assim
-      if (error.message && error.message.includes('user_templates')) {
-        console.warn('UserAPI: Templates error detected, checking if user was actually created...');
-        
-        try {
-          // Verificar se usuário foi criado no banco
-          const { data: createdUser, error: checkError } = await supabase
-            .from('company_users')
-            .select('*')
-            .eq('user_id', finalUserId)
-            .eq('company_id', request.companyId)
-            .eq('is_active', true)
-            .single();
-            
-          if (!checkError && createdUser) {
-            // Simular resposta de sucesso
-            functionResult = {
-              success: true,
-              id: createdUser.id,
-              company_id: createdUser.company_id,
-              user_id: createdUser.user_id,
-              role: createdUser.role,
-              permissions: createdUser.permissions,
-              is_active: createdUser.is_active,
-              created_by: createdUser.created_by,
-              created_at: createdUser.created_at,
-              updated_at: createdUser.updated_at
-            };
-            // Limpar erro já que usuário foi criado
-            error = null;
-          } else {
-            throw error;
-          }
-        } catch (checkError) {
-          throw error; // Manter erro original
-        }
-      } else {
-        throw error; // Outros erros são válidos
-      }
+      throw error;
     }
 
     // Verificar se a função retornou sucesso

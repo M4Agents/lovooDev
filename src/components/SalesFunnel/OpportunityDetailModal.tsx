@@ -31,7 +31,7 @@ import {
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
 
-const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
+const MANAGEMENT_ROLES = ['super_admin', 'admin', 'partner', 'manager']
 
 type TabType = 'details' | 'journey' | 'status'
 

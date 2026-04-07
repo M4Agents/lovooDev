@@ -32,7 +32,7 @@ import { estimateDraftLinesTotal } from '../../utils/opportunityDraftPricing'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { formatMoney } from '../../lib/formatMoney'
 
-const MANAGEMENT_ROLES = ['super_admin', 'support', 'admin', 'partner', 'manager']
+const MANAGEMENT_ROLES = ['super_admin', 'admin', 'partner', 'manager']
 
 type DraftCompositionLine = OpportunityQuickAddPayload & { key: string }
 

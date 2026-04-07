@@ -387,14 +387,13 @@ export const api = {
     console.log('🔧 API: Company created without initial user_id:', { company, companyError });
     if (companyError) throw companyError;
 
-    // 🔧 SISTEMA UNIFICADO: Associar super admin via company_users (sistema NOVO)
-    const { error: associationError } = await supabase
-      .from('company_users')
-      .insert({
-        company_id: company.id,
-        user_id: parentCompany.user_id,
-        role: 'super_admin',
-        permissions: {
+    // Associar super admin via RPC segura (SECURITY DEFINER, valida permissões)
+    const { data: associationResult, error: associationError } = await supabase
+      .rpc('create_company_user_safe', {
+        p_company_id: company.id,
+        p_user_id: parentCompany.user_id,
+        p_role: 'super_admin',
+        p_permissions: {
           chat: true,
           leads: true,
           users: true,
@@ -402,23 +401,24 @@ export const api = {
           analytics: true,
           dashboard: true,
           financial: true,
+          companies: true,
           edit_users: true,
           create_users: true,
           delete_users: true,
+          impersonate: true,
           edit_all_leads: true,
           edit_financial: true,
           view_all_leads: true,
           view_financial: true
         },
-        created_by: parentCompany.user_id,
-        is_active: true
+        p_created_by: parentCompany.user_id
       });
 
-    if (associationError) {
-      console.error('🔧 API: Error associating super admin:', associationError);
+    if (associationError || !associationResult?.success) {
+      console.error('🔧 API: Error associating super admin:', associationError || associationResult?.error);
       // Tentar limpar empresa criada
       await supabase.from('companies').delete().eq('id', company.id);
-      throw new Error('Erro ao associar super admin à empresa: ' + associationError.message);
+      throw new Error('Erro ao associar super admin à empresa: ' + (associationError?.message || associationResult?.error));
     }
 
     console.log('🔧 API: Super admin associated via company_users (UNIFIED SYSTEM)');

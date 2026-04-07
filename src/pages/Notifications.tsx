@@ -52,7 +52,6 @@ export const Notifications: React.FC = () => {
   const [showActivityModal, setShowActivityModal] = useState(false)
 
   const isMaster = currentRole === 'super_admin' || 
-                   currentRole === 'support' || 
                    currentRole === 'admin'
 
   // Buscar usuários da empresa (apenas Master)

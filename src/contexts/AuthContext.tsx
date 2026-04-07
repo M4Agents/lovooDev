@@ -1255,7 +1255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         legacyRole,
         newRoles: roles || [],
         primaryRole: roles?.[0]?.role || null,
-        canImpersonate: hasLegacyRole || (roles?.some(r => ['super_admin', 'support'].includes(r.role)) || false)
+        canImpersonate: hasLegacyRole || (roles?.some(r => r.role === 'super_admin') || false)
       });
 
     } catch (error) {
@@ -1268,9 +1268,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (permission: keyof UserPermissions): boolean => {
-    // CORREÇÃO CRÍTICA: Verificar múltiplas condições de super admin e support
     const isSuperAdmin = company?.is_super_admin || 
-                        (currentRole && ['super_admin', 'support'].includes(currentRole)) || 
+                        currentRole === 'super_admin' || 
                         (isImpersonating && originalUser);
     
     if (isSuperAdmin) {

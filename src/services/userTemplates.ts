@@ -1,8 +1,9 @@
 // =====================================================
-// SISTEMA DE TEMPLATES DE USUÁRIO - COMPATÍVEL 100%
+// SISTEMA DE TEMPLATES DE USUÁRIO
+// CRUD de templates personalizados desativado: tabela user_templates
+// não existe no banco. Apenas system templates (em memória) estão ativos.
 // =====================================================
 
-import { supabase } from '../lib/supabase';
 import { 
   UserTemplate, 
   CreateTemplateRequest, 
@@ -226,227 +227,51 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
 };
 
 // =====================================================
-// CRUD DE TEMPLATES PERSONALIZADOS
+// TEMPLATES DISPONÍVEIS (apenas sistema — sem DB)
 // =====================================================
 
 /**
- * Buscar todos os templates disponíveis para uma empresa
+ * Retorna os templates disponíveis para uma empresa.
+ * Apenas system templates em memória; CRUD personalizado desativado.
  */
 export const getCompanyTemplates = async (
-  companyId: string, 
+  companyId: string,
   companyType?: 'parent' | 'client'
 ): Promise<UserTemplate[]> => {
-  try {
-    console.log('UserTemplates: Fetching templates for company:', companyId);
-    
-    // Buscar templates personalizados da empresa
-    const { data: customTemplates, error } = await supabase
-      .from('user_templates')
-      .select('*')
-      .eq('company_id', companyId)
-      .eq('is_active', true)
-      .order('name');
-    
-    if (error) {
-      console.warn('UserTemplates: Custom templates not available (this is normal if feature not configured):', error.message);
-      console.log('UserTemplates: Continuing with system templates only');
-      // Continuar mesmo com erro - retornar apenas templates do sistema
-    }
-    
-    // Combinar templates do sistema com personalizados (COM FILTRAGEM)
-    const systemTemplates = getSystemTemplates(companyType).map(template => ({
-      ...template,
-      companyId
-    }));
-    
-    const allTemplates = [
-      ...systemTemplates,
-      ...(customTemplates || [])
-    ];
-    
-    console.log('UserTemplates: Found templates:', allTemplates.length);
-    return allTemplates;
-    
-  } catch (error) {
-    console.error('UserTemplates: Error in getCompanyTemplates:', error);
-    // Fallback: retornar apenas templates do sistema (COM FILTRAGEM)
-    return getSystemTemplates(companyType).map(template => ({
-      ...template,
-      companyId
-    }));
-  }
+  return getSystemTemplates(companyType).map(template => ({
+    ...template,
+    companyId
+  }));
 };
 
 /**
- * Buscar template específico por ID
+ * Buscar template específico por ID (apenas system templates).
  */
 export const getTemplateById = async (templateId: string, companyId: string): Promise<UserTemplate | null> => {
-  try {
-    // Verificar se é template do sistema
-    const systemTemplate = getSystemTemplates().find(t => t.id === templateId);
-    if (systemTemplate) {
-      return { ...systemTemplate, companyId };
-    }
-    
-    // Buscar template personalizado
-    const { data, error } = await supabase
-      .from('user_templates')
-      .select('*')
-      .eq('id', templateId)
-      .eq('company_id', companyId)
-      .single();
-    
-    if (error || !data) {
-      console.error('UserTemplates: Template not found:', templateId);
-      return null;
-    }
-    
-    return data;
-    
-  } catch (error) {
-    console.error('UserTemplates: Error in getTemplateById:', error);
-    return null;
-  }
+  const systemTemplate = getSystemTemplates().find(t => t.id === templateId);
+  return systemTemplate ? { ...systemTemplate, companyId } : null;
 };
 
 /**
- * Criar novo template personalizado
+ * Criação de templates personalizados desativada.
+ * A tabela user_templates não existe no banco.
  */
-export const createUserTemplate = async (request: CreateTemplateRequest): Promise<UserTemplate> => {
-  try {
-    console.log('UserTemplates: Creating template:', request.name);
-    
-    const templateData = {
-      name: request.name,
-      description: request.description,
-      base_role: request.baseRole,
-      custom_permissions: request.customPermissions,
-      company_id: request.companyId,
-      created_by: (await supabase.auth.getUser()).data.user?.id,
-      is_active: true,
-      is_system: false,
-      tags: request.tags || []
-    };
-    
-    const { data, error } = await supabase
-      .from('user_templates')
-      .insert([templateData])
-      .select()
-      .single();
-    
-    if (error) {
-      throw new Error(`Erro ao criar template: ${error.message}`);
-    }
-    
-    console.log('UserTemplates: Template created successfully:', data.id);
-    return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      baseRole: data.base_role,
-      customPermissions: data.custom_permissions,
-      companyId: data.company_id,
-      createdBy: data.created_by,
-      isActive: data.is_active,
-      isSystem: data.is_system,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      tags: data.tags
-    };
-    
-  } catch (error) {
-    console.error('UserTemplates: Error creating template:', error);
-    throw error;
-  }
+export const createUserTemplate = async (_request: CreateTemplateRequest): Promise<UserTemplate> => {
+  throw new Error('Templates personalizados não estão disponíveis nesta versão.');
 };
 
 /**
- * Atualizar template existente
+ * Atualização de templates personalizados desativada.
  */
-export const updateUserTemplate = async (request: UpdateTemplateRequest): Promise<UserTemplate> => {
-  try {
-    console.log('UserTemplates: Updating template:', request.id);
-    
-    // Verificar se não é template do sistema
-    const systemTemplate = getSystemTemplates().find(t => t.id === request.id);
-    if (systemTemplate) {
-      throw new Error('Templates do sistema não podem ser editados');
-    }
-    
-    const updateData: any = {
-      updated_at: new Date().toISOString()
-    };
-    
-    if (request.name !== undefined) updateData.name = request.name;
-    if (request.description !== undefined) updateData.description = request.description;
-    if (request.customPermissions !== undefined) updateData.custom_permissions = request.customPermissions;
-    if (request.isActive !== undefined) updateData.is_active = request.isActive;
-    if (request.tags !== undefined) updateData.tags = request.tags;
-    
-    const { data, error } = await supabase
-      .from('user_templates')
-      .update(updateData)
-      .eq('id', request.id)
-      .select()
-      .single();
-    
-    if (error) {
-      throw new Error(`Erro ao atualizar template: ${error.message}`);
-    }
-    
-    console.log('UserTemplates: Template updated successfully');
-    return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      baseRole: data.base_role,
-      customPermissions: data.custom_permissions,
-      companyId: data.company_id,
-      createdBy: data.created_by,
-      isActive: data.is_active,
-      isSystem: data.is_system,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      tags: data.tags
-    };
-    
-  } catch (error) {
-    console.error('UserTemplates: Error updating template:', error);
-    throw error;
-  }
+export const updateUserTemplate = async (_request: UpdateTemplateRequest): Promise<UserTemplate> => {
+  throw new Error('Templates personalizados não estão disponíveis nesta versão.');
 };
 
 /**
- * Desativar template (soft delete)
+ * Desativação de templates personalizados desativada.
  */
-export const deactivateTemplate = async (templateId: string): Promise<void> => {
-  try {
-    console.log('UserTemplates: Deactivating template:', templateId);
-    
-    // Verificar se não é template do sistema
-    const systemTemplate = getSystemTemplates().find(t => t.id === templateId);
-    if (systemTemplate) {
-      throw new Error('Templates do sistema não podem ser desativados');
-    }
-    
-    const { error } = await supabase
-      .from('user_templates')
-      .update({ 
-        is_active: false,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', templateId);
-    
-    if (error) {
-      throw new Error(`Erro ao desativar template: ${error.message}`);
-    }
-    
-    console.log('UserTemplates: Template deactivated successfully');
-    
-  } catch (error) {
-    console.error('UserTemplates: Error deactivating template:', error);
-    throw error;
-  }
+export const deactivateTemplate = async (_templateId: string): Promise<void> => {
+  throw new Error('Templates personalizados não estão disponíveis nesta versão.');
 };
 
 // =====================================================

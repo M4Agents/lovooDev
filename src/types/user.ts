@@ -4,7 +4,6 @@
 
 export type UserRole = 
   | 'super_admin'  // Super usuário M4 Digital
-  | 'support'      // Suporte M4 Digital (novo perfil)
   | 'admin'        // Admin M4 Digital ou Cliente
   | 'partner'      // Partner M4 Digital
   | 'manager'      // Gerente Cliente

@@ -253,7 +253,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
               {/* Notificações */}
               <ActivityNotificationButton
-                isMaster={currentRole === 'super_admin' || currentRole === 'support' || currentRole === 'admin'}
+                isMaster={currentRole === 'super_admin' || currentRole === 'admin'}
                 currentUserId={user?.id || ''}
                 companyId={company?.id || ''}
                 collapsed={false}

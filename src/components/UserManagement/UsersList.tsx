@@ -157,8 +157,6 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     switch (role) {
       case 'super_admin':
         return <Crown className="w-4 h-4 text-purple-600" />;
-      case 'support':
-        return <Shield className="w-4 h-4 text-green-600" />;
       case 'admin':
         return <Shield className="w-4 h-4 text-blue-600" />;
       case 'partner':
@@ -179,8 +177,6 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     switch (role) {
       case 'super_admin':
         return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'support':
-        return 'bg-green-100 text-green-800 border-green-200';
       case 'admin':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'partner':
