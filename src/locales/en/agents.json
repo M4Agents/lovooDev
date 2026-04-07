@@ -113,5 +113,66 @@
   "messages": {
     "agentSaved": "Agent saved successfully.",
     "agentDeleted": "Agent deleted successfully."
+  },
+  "tabs": {
+    "agents": "Agents",
+    "logs": "Costs & AI Usage"
+  },
+  "logs": {
+    "disclaimer": "The costs shown are operational estimates and do not represent official billing.",
+    "errors": {
+      "load": "Error loading executions."
+    },
+    "filters": {
+      "title": "Filters",
+      "from": "From",
+      "to": "To",
+      "status": "Status",
+      "useId": "Functional use",
+      "consumerCompany": "Consumer company (UUID)",
+      "consumerCompanyPlaceholder": "Paste company UUID...",
+      "all": "All",
+      "apply": "Apply filters",
+      "clear": "Clear"
+    },
+    "cards": {
+      "totalExecutions": "Total executions",
+      "totalTokens": "Total tokens",
+      "estimatedCost": "Estimated cost (USD)",
+      "errorRate": "Error rate",
+      "fallbackRate": "Fallback rate"
+    },
+    "table": {
+      "createdAt": "Date/time",
+      "useId": "Functional use",
+      "consumerCompany": "Company",
+      "status": "Status",
+      "model": "Model",
+      "totalTokens": "Tokens",
+      "estimatedCost": "Est. cost",
+      "durationMs": "Duration",
+      "errorCode": "Error",
+      "empty": "No executions found for the selected filters."
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "showing": "Showing {{from}}–{{to}} of {{total}}"
+    },
+    "detail": {
+      "title": "Execution detail",
+      "agentId": "Agent ID",
+      "knowledgeMode": "Knowledge mode",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "pricingVersion": "Pricing version",
+      "isFallback": "Fallback response",
+      "errorCode": "Error code",
+      "channel": "Channel",
+      "userId": "User ID",
+      "yes": "Yes",
+      "no": "No",
+      "close": "Close"
+    }
   }
 }

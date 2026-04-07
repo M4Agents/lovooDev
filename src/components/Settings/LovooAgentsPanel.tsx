@@ -9,13 +9,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, Link2Off, Info,
+  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, Link2Off, Info, BarChart2,
 } from 'lucide-react'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { fetchOpenAIModels } from '../../services/openaiIntegrationApi'
 import type { AgentUseBinding, LovooAgent } from '../../types/lovoo-agents'
 import { AGENT_FUNCTIONAL_USES } from '../../types/lovoo-agents'
 import { LovooAgentForm } from './LovooAgentForm'
+import { AgentLogsPanel } from './AgentLogsPanel'
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -39,6 +40,9 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
 
   const [editingAgent, setEditingAgent] = useState<LovooAgent | null | undefined>(undefined)
   // undefined = form fechado | null = criação | LovooAgent = edição
+
+  // Sub-tab: 'agents' = gestão de agentes/bindings | 'logs' = Custos e Uso de IA
+  const [activeSubTab, setActiveSubTab] = useState<'agents' | 'logs'>('agents')
 
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [bindingLoading, setBindingLoading] = useState<string | null>(null)
@@ -206,7 +210,41 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
             <p className="text-sm text-slate-500 mt-1">{t('subtitle')}</p>
           </div>
         </div>
+
+        {/* Sub-navegação: Agentes | Custos e Uso de IA */}
+        <div className="flex gap-1 mt-5 border-b border-slate-200">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('agents')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeSubTab === 'agents'
+                ? 'border-violet-600 text-violet-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+            {t('tabs.agents')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('logs')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeSubTab === 'logs'
+                ? 'border-violet-600 text-violet-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4" />
+            {t('tabs.logs')}
+          </button>
+        </div>
       </div>
+
+      {/* ── Sub-tab: Custos e Uso de IA ── */}
+      {activeSubTab === 'logs' && <AgentLogsPanel />}
+
+      {/* ── Sub-tab: Agentes (conteúdo existente) ── */}
+      {activeSubTab === 'agents' && (<>
 
       {/* ── Seção 1: Agentes ── */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
@@ -401,6 +439,8 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
           </div>
         )}
       </div>
+
+      </>)}
     </div>
   )
 }
