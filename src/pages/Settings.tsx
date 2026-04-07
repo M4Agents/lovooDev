@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2 } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -12,6 +12,7 @@ import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
+import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -101,7 +102,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1089,6 +1090,21 @@ export const Settings: React.FC = () => {
               <SettingsIcon className="w-4 h-4" />
               {t('tabs.system')}
             </button>
+
+            {/* Aba Agentes (somente empresa pai - admin/super_admin) */}
+            {canManageOpenAI && (
+              <button
+                onClick={() => setActiveTab('agentes')}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'agentes'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                {t('tabs.agents')}
+              </button>
+            )}
 
             {/* Aba Catálogo (produtos/serviços) */}
             <button
@@ -3537,6 +3553,13 @@ export const Settings: React.FC = () => {
       {activeTab === 'sistema' && (
         <div className="space-y-6">
           <SystemSettings />
+        </div>
+      )}
+
+      {/* Aba Agentes Lovoo */}
+      {activeTab === 'agentes' && canManageOpenAI && company?.id && (
+        <div className="space-y-6">
+          <LovooAgentsPanel companyId={company.id} />
         </div>
       )}
 

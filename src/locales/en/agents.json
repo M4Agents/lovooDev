@@ -1,0 +1,75 @@
+{
+  "title": "Lovoo Agents",
+  "subtitle": "Manage reusable AI agents and link them to system features.",
+  "loading": "Loading agents...",
+  "errors": {
+    "load": "Error loading agents.",
+    "save": "Error saving agent.",
+    "delete": "Error deleting agent.",
+    "bind": "Error linking agent.",
+    "unbind": "Error removing link."
+  },
+  "agents": {
+    "title": "Registered agents",
+    "empty": "No agents registered. Create the first agent.",
+    "new": "New agent",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Delete agent \"{{name}}\"? This action cannot be undone.",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    }
+  },
+  "form": {
+    "titleCreate": "New agent",
+    "titleEdit": "Edit agent",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Sales assistant",
+      "description": "Description",
+      "descriptionPlaceholder": "Describe the purpose of this agent",
+      "isActive": "Agent active",
+      "isActiveHint": "Inactive agents do not run, even if linked to a use.",
+      "model": "OpenAI model",
+      "modelHint": "Select the model this agent will use.",
+      "prompt": "Prompt (system instruction)",
+      "promptPlaceholder": "Write the main agent instruction...",
+      "promptHint": "Defines the agent's behavior and personality.",
+      "knowledgeBase": "Knowledge base",
+      "knowledgeBasePlaceholder": "Insert texts, documents or rules the agent should know...",
+      "knowledgeBaseHint": "Free text made available to the agent as additional context.",
+      "temperature": "Temperature",
+      "temperatureHint": "0 = deterministic, 2 = creative. Recommended: 0.7.",
+      "maxTokens": "Max tokens",
+      "maxTokensHint": "Response token limit. Recommended: 1024."
+    },
+    "actions": {
+      "save": "Save agent",
+      "cancel": "Cancel",
+      "saving": "Saving..."
+    }
+  },
+  "bindings": {
+    "title": "Functional links",
+    "subtitle": "Select which agent will be activated for each system feature.",
+    "noAgent": "No agent",
+    "noAgentHint": "No agent selected — the system will use the default fallback.",
+    "confirmReplace": "This use already has a linked agent (\"{{current}}\"). Replace it with \"{{next}}\"?",
+    "saved": "Link updated.",
+    "removed": "Link removed.",
+    "requiresContext": "Requires context",
+    "riskHigh": "High risk",
+    "groups": {
+      "Chat": "Chat",
+      "Produtos": "Products",
+      "Serviços": "Services",
+      "Agentes": "Agents",
+      "Sistema": "System"
+    }
+  },
+  "messages": {
+    "agentSaved": "Agent saved successfully.",
+    "agentDeleted": "Agent deleted successfully."
+  }
+}

@@ -5,6 +5,7 @@
   },
   "tabs": {
     "integrations": "Integrations",
+    "agents": "Agents",
     "users": "Users",
     "trackingSite": "Tracking Site",
     "companyData": "Company data",

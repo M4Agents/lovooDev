@@ -1,0 +1,75 @@
+{
+  "title": "Agentes Lovoo",
+  "subtitle": "Gestione agentes de IA reutilizables y vincúlelos a las funcionalidades del sistema.",
+  "loading": "Cargando agentes...",
+  "errors": {
+    "load": "Error al cargar los agentes.",
+    "save": "Error al guardar el agente.",
+    "delete": "Error al eliminar el agente.",
+    "bind": "Error al vincular el agente.",
+    "unbind": "Error al eliminar el vínculo."
+  },
+  "agents": {
+    "title": "Agentes registrados",
+    "empty": "No hay agentes registrados. Cree el primer agente.",
+    "new": "Nuevo agente",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "confirmDelete": "¿Eliminar el agente \"{{name}}\"? Esta acción no se puede deshacer.",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    }
+  },
+  "form": {
+    "titleCreate": "Nuevo agente",
+    "titleEdit": "Editar agente",
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Ej.: Asistente de ventas",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Describa el objetivo de este agente",
+      "isActive": "Agente activo",
+      "isActiveHint": "Los agentes inactivos no se ejecutan, aunque estén vinculados a un uso.",
+      "model": "Modelo OpenAI",
+      "modelHint": "Seleccione el modelo que usará este agente.",
+      "prompt": "Prompt (instrucción del sistema)",
+      "promptPlaceholder": "Escriba la instrucción principal del agente...",
+      "promptHint": "Define el comportamiento y la personalidad del agente.",
+      "knowledgeBase": "Base de conocimiento",
+      "knowledgeBasePlaceholder": "Inserte textos, documentos o reglas que el agente debe conocer...",
+      "knowledgeBaseHint": "Texto libre disponible para el agente como contexto adicional.",
+      "temperature": "Temperatura",
+      "temperatureHint": "0 = determinístico, 2 = creativo. Recomendado: 0.7.",
+      "maxTokens": "Máximo de tokens",
+      "maxTokensHint": "Límite de tokens en la respuesta. Recomendado: 1024."
+    },
+    "actions": {
+      "save": "Guardar agente",
+      "cancel": "Cancelar",
+      "saving": "Guardando..."
+    }
+  },
+  "bindings": {
+    "title": "Vínculos funcionales",
+    "subtitle": "Seleccione qué agente se activará en cada funcionalidad del sistema.",
+    "noAgent": "Sin agente",
+    "noAgentHint": "Sin agente seleccionado — el sistema usará el fallback predeterminado.",
+    "confirmReplace": "Este uso ya tiene un agente vinculado (\"{{current}}\"). ¿Reemplazarlo por \"{{next}}\"?",
+    "saved": "Vínculo actualizado.",
+    "removed": "Vínculo eliminado.",
+    "requiresContext": "Requiere contexto",
+    "riskHigh": "Alto riesgo",
+    "groups": {
+      "Chat": "Chat",
+      "Produtos": "Productos",
+      "Serviços": "Servicios",
+      "Agentes": "Agentes",
+      "Sistema": "Sistema"
+    }
+  },
+  "messages": {
+    "agentSaved": "Agente guardado correctamente.",
+    "agentDeleted": "Agente eliminado correctamente."
+  }
+}
