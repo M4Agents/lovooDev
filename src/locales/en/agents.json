@@ -129,9 +129,10 @@
       "to": "To",
       "status": "Status",
       "useId": "Functional use",
-      "consumerCompany": "Consumer company (UUID)",
+      "consumerCompany": "Consumer company",
       "consumerCompanyPlaceholder": "Paste company UUID...",
       "all": "All",
+      "allCompanies": "All companies",
       "apply": "Apply filters",
       "clear": "Clear"
     },

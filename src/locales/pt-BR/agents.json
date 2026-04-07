@@ -129,9 +129,10 @@
       "to": "Até",
       "status": "Status",
       "useId": "Uso funcional",
-      "consumerCompany": "Empresa consumidora (UUID)",
+      "consumerCompany": "Empresa consumidora",
       "consumerCompanyPlaceholder": "Cole o UUID da empresa...",
       "all": "Todos",
+      "allCompanies": "Todas as empresas",
       "apply": "Aplicar filtros",
       "clear": "Limpar"
     },

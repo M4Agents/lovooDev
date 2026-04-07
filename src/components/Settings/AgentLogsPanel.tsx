@@ -9,6 +9,8 @@ import {
   type LogsSummaryResponse,
 } from '../../services/agentLogsApi'
 import { AGENT_FUNCTIONAL_USES } from '../../types/lovoo-agents'
+import { api } from '../../services/api'
+import { PARENT_COMPANY_ID } from '../../config/parentCompanyId'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -171,6 +173,19 @@ export function AgentLogsPanel() {
   // Modal
   const [selectedLog, setSelectedLog] = useState<AgentExecutionLog | null>(null)
 
+  // Lista de empresas clientes para o filtro
+  const [companies, setCompanies]             = useState<{ id: string; name: string }[]>([])
+  const [loadingCompanies, setLoadingCompanies] = useState(false)
+
+  // Carrega empresas clientes uma única vez ao montar o painel
+  useEffect(() => {
+    setLoadingCompanies(true)
+    api.getClientCompanies(PARENT_COMPANY_ID)
+      .then(data => setCompanies((data ?? []).map(c => ({ id: c.id, name: c.name }))))
+      .catch(() => setCompanies([]))
+      .finally(() => setLoadingCompanies(false))
+  }, [])
+
   // ── Carregamento ────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async (f: LogsFilters, p: number) => {
@@ -294,20 +309,23 @@ export function AgentLogsPanel() {
             </select>
           </div>
 
-          {/* Empresa consumidora (MVP: input manual de UUID) */}
-          {/* Futuro: substituir por selector amigável com nome/logo da empresa */}
+          {/* Empresa consumidora */}
           <div className="flex flex-col gap-1 sm:col-span-2">
             <label className="text-xs text-slate-500">{t('logs.filters.consumerCompany')}</label>
-            <input
-              type="text"
-              placeholder={t('logs.filters.consumerCompanyPlaceholder')}
+            <select
               value={filters.consumer_company_id ?? ''}
               onChange={e => setFilters(f => ({
                 ...f,
-                consumer_company_id: e.target.value.trim() || undefined,
+                consumer_company_id: e.target.value || undefined,
               }))}
-              className="border border-slate-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              disabled={loadingCompanies}
+              className="border border-slate-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">{t('logs.filters.allCompanies')}</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 
