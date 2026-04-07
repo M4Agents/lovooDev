@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, LinkOff, Info,
+  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, Link2Off, Info,
 } from 'lucide-react'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { fetchOpenAIModels } from '../../services/openaiIntegrationApi'
@@ -383,7 +383,7 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                                   title={t('bindings.removed')}
                                 >
-                                  <LinkOff className="w-3.5 h-3.5" />
+                                  <Link2Off className="w-3.5 h-3.5" />
                                 </button>
                               )}
                               {!boundAgentId && (
