@@ -33,7 +33,7 @@ export interface AuthUserResponse {
   user: any;
   success: boolean;
   error?: string;
-  inviteLink?: string;
+  inviteLink?: string | null;
 }
 
 // =====================================================

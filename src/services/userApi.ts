@@ -407,7 +407,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     let finalUserId: string;
     let isRealUser = false;
     let inviteData: any = null;
-    let capturedInviteLink: string | undefined;
+    let capturedInviteLink: string | null | undefined;
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
