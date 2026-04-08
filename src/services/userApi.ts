@@ -407,6 +407,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     let finalUserId: string;
     let isRealUser = false;
     let inviteData: any = null;
+    let capturedInviteLink: string | undefined;
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
@@ -444,6 +445,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
         finalUserId = newUserId;
         isRealUser = true;
         inviteData = inviteResult.user.app_metadata;
+        capturedInviteLink = inviteResult.inviteLink;
 
       } catch (authError) {
         console.error('UserAPI: Failed to create user in auth:', authError);
@@ -504,13 +506,13 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       },
       _isRealUser: isRealUser,
       _email: request.email,
+      _inviteLink: capturedInviteLink,
       // Incluir dados do convite se disponível
       ...(request.sendInvite && inviteData && {
         app_metadata: inviteData
       })
     };
 
-    
     return result;
   } catch (error) {
     console.error('UserAPI: Error in createCompanyUser:', error);

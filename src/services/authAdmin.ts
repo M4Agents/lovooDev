@@ -33,6 +33,7 @@ export interface AuthUserResponse {
   user: any;
   success: boolean;
   error?: string;
+  inviteLink?: string;
 }
 
 // =====================================================
@@ -103,7 +104,8 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     console.log('AuthAdmin: User invited successfully via API route');
     return {
       user: result.user,
-      success: true
+      success: true,
+      inviteLink: result.inviteLink
     };
   } catch (error) {
     console.error('AuthAdmin: Error in inviteUser:', error);
