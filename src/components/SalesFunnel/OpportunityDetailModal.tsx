@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User, Check
+  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -24,6 +24,7 @@ import { useAccessControl } from '../../hooks/useAccessControl'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
+import { InternalNotes } from '../InternalNotes'
 import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm } from '../../types/sales-funnel'
 import {
   parseOpportunityCompositionError,
@@ -31,7 +32,7 @@ import {
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
 
-type TabType = 'details' | 'journey' | 'status'
+type TabType = 'details' | 'journey' | 'status' | 'notes'
 
 interface OpportunityDetailModalProps {
   isOpen: boolean
@@ -361,7 +362,8 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
     { key: 'details', label: t('opportunityDetail.tabs.details'), icon: <FileText className="w-3.5 h-3.5" /> },
     { key: 'journey', label: t('opportunityDetail.tabs.journey'), icon: <Route className="w-3.5 h-3.5" /> },
-    { key: 'status', label: t('opportunityDetail.tabs.status'), icon: <Clock className="w-3.5 h-3.5" /> }
+    { key: 'status', label: t('opportunityDetail.tabs.status'), icon: <Clock className="w-3.5 h-3.5" /> },
+    { key: 'notes', label: 'Notas', icon: <StickyNote className="w-3.5 h-3.5" /> },
   ]
 
   if (!isOpen) return null
@@ -703,6 +705,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* ABA: Notas internas */}
+          {activeTab === 'notes' && (
+            <InternalNotes companyId={companyId} opportunityId={opportunity.id} />
           )}
 
           {/* ABA: Jornada */}

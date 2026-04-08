@@ -20,6 +20,7 @@ import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { ActivityModal } from '../../Calendar/ActivityModal'
 import { TagSelectorPopover } from '../../TagSelectorPopover'
+import { InternalNotes } from '../../InternalNotes'
 import type { 
   ChatContact, 
   ChatScheduledMessage, 
@@ -160,7 +161,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca' | 'notas'>('info')
   const [conversation, setConversation] = useState<any>(null)
   const [averageResponseTime, setAverageResponseTime] = useState<string>('--')
   const [associatedLead, setAssociatedLead] = useState<{id: number, name: string, phone?: string, email?: string} | null>(null)
@@ -343,6 +344,16 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           >
             {t('leadPanel.tabs.library')}
           </button>
+          <button
+            onClick={() => setActiveTab('notas')}
+            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
+              activeTab === 'notas'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Notas
+          </button>
         </div>
       </div>
 
@@ -390,6 +401,15 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             companyId={companyId}
             leadId={contact?.id}
           />
+        ) : activeTab === 'notas' ? (
+          associatedLead?.id ? (
+            <InternalNotes companyId={companyId} leadId={associatedLead.id} />
+          ) : (
+            <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-gray-400">
+              <p>Nenhum lead associado a esta conversa.</p>
+              <p className="text-xs">Associe um lead para adicionar notas internas.</p>
+            </div>
+          )
         ) : null}
       </div>
 
