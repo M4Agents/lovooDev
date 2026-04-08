@@ -124,12 +124,6 @@ export const useChatData = (
 
   // Listener para novas conversas criadas
   useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('💬 Nova conversa criada via Event Bus:', conversation)
-    }
-    
     if (conversation.company_id === companyId) {
       setConversations(prev => {
         // Evitar duplicatas
@@ -141,12 +135,6 @@ export const useChatData = (
 
   // Listener para conversas atualizadas
   useChatEvent('chat:conversation:updated', (payload: any) => {
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('🔄 Conversa atualizada via Event Bus:', payload)
-    }
-    
     if (payload.data && payload.data.company_id === companyId) {
       setConversations(prev => 
         prev.map(conv => 
@@ -158,12 +146,6 @@ export const useChatData = (
 
   // Listener para mensagens recebidas (atualizar última mensagem da conversa)
   useChatEvent('chat:message:received', (payload: any) => {
-    const debugLogs = ChatFeatureManager.shouldShowDebugLogs()
-    
-    if (debugLogs) {
-      console.log('📨 Mensagem recebida - atualizando conversa:', payload)
-    }
-    
     if (payload.data && payload.companyId === companyId) {
       const message = payload.data
       
@@ -305,14 +287,6 @@ export const useChatData = (
   useEffect(() => {
     if (!companyId) return
 
-    console.log('🚀 Iniciando subscriptions do chat:', { companyId, userId, selectedInstance })
-    console.log('🔍 Valores de debug:', {
-      companyIdExists: !!companyId,
-      companyIdValue: companyId,
-      userIdExists: !!userId,
-      selectedInstanceExists: !!selectedInstance
-    })
-
     // Subscrever mudanças nas conversas
     const conversationSubscription = supabase
       .channel(`chat_conversations_${companyId}`) // Channel único por empresa
@@ -325,8 +299,6 @@ export const useChatData = (
           filter: `company_id=eq.${companyId}`
         },
         (payload) => {
-          console.log('📋 Conversation change:', payload)
-          
           // Atualizar lista de conversas
           if (payload.eventType === 'INSERT') {
             const newConversation = payload.new as ChatConversation
@@ -361,10 +333,7 @@ export const useChatData = (
       }
     )
     .subscribe((status) => {
-      console.log('📡 Status subscription conversas:', status)
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Subscription de conversas ativa e funcionando')
-      } else if (status === 'CHANNEL_ERROR') {
+      if (status === 'CHANNEL_ERROR') {
         console.error('❌ Erro na subscription de conversas')
       } else if (status === 'TIMED_OUT') {
         console.error('⏰ Timeout na subscription de conversas')
@@ -374,32 +343,16 @@ export const useChatData = (
     // Função específica para buscar nova conversa (sem dependências circulares)
     const fetchSingleConversation = async (conversationId: string) => {
       try {
-        console.log('🔍 Buscando nova conversa:', conversationId)
-        console.log('📋 Parâmetros:', { companyId, userId, selectedInstance })
-        
-        // Validar parâmetros necessários
-        if (!companyId || !userId) {
-          console.log('⚠️ Parâmetros faltando:', { companyId: !!companyId, userId: !!userId })
-          return
-        }
+        if (!companyId || !userId) return
         
         const response = await chatApi.getConversations(companyId, userId, { type: 'all' }, selectedInstance)
         const newConversation = response.find(conv => conv.id === conversationId)
         
         if (newConversation) {
-          console.log('✅ Nova conversa encontrada:', newConversation.contact_name || newConversation.contact_phone)
           setConversations(prev => {
-            // Verificar se já existe para evitar duplicatas
-            const exists = prev.some(conv => conv.id === conversationId)
-            if (exists) {
-              console.log('⚠️ Conversa já existe na lista, ignorando')
-              return prev
-            }
-            console.log('📝 Adicionando nova conversa no topo da lista')
+            if (prev.some(conv => conv.id === conversationId)) return prev
             return [newConversation, ...prev]
           })
-        } else {
-          console.log('❌ Nova conversa não encontrada no servidor')
         }
       } catch (error) {
         console.error('❌ Erro ao buscar nova conversa:', error)
@@ -418,41 +371,18 @@ export const useChatData = (
           filter: `company_id=eq.${companyId}` // CORREÇÃO: Filtrar por empresa
         },
         (payload) => {
-          console.log('📨 Nova mensagem recebida via Realtime:', payload)
-          console.log('🔍 Payload detalhado:', {
-            eventType: payload.eventType,
-            table: payload.table,
-            schema: payload.schema,
-            new: payload.new,
-            old: payload.old
-          })
-          
-          // Atualizar conversa relacionada com atualização local otimista
           const newMessage = payload.new as any
           if (newMessage.conversation_id && newMessage.company_id === companyId) {
-            console.log('🎯 Processando mensagem para conversa:', newMessage.conversation_id)
-            console.log('📄 Conteúdo:', newMessage.content)
-            console.log('📞 Telefone:', newMessage.from_phone || 'N/A')
-            console.log('⬅️ Direção:', newMessage.direction)
+            // Ignorar mensagens outbound próprias (já estão no estado local do ChatArea)
+            if (newMessage.direction === 'outbound' && newMessage.sent_by === userId) return
             
-            // ✅ CORREÇÃO: Ignorar mensagens outbound próprias (já estão no estado local do ChatArea)
-            // Isso evita duplicação: mensagem local + mensagem do Realtime
-            if (newMessage.direction === 'outbound' && newMessage.sent_by === userId) {
-              console.log('⏭️ Mensagem outbound própria ignorada (já no estado local do ChatArea)')
-              console.log('💡 Evitando duplicação de mensagem')
-              return
-            }
-            
-            // 1. Primeiro: Atualização local otimista (instantânea)
+            // Atualização local otimista
             setConversations(prev => {
               const existingIndex = prev.findIndex(conv => conv.id === newMessage.conversation_id)
-              console.log('🔍 Conversa existente encontrada no índice:', existingIndex)
               
               if (existingIndex >= 0) {
-                // Conversa existe: atualizar e mover para o topo
                 const updated = [...prev]
                 const existingConv = updated[existingIndex]
-                
                 const updatedConv = {
                   ...existingConv,
                   last_message_at: new Date(newMessage.timestamp),
@@ -461,82 +391,34 @@ export const useChatData = (
                   unread_count: newMessage.direction === 'inbound' ? existingConv.unread_count + 1 : existingConv.unread_count,
                   updated_at: new Date(newMessage.timestamp)
                 }
-                
-                console.log('✅ Atualizando conversa existente:', {
-                  contact: existingConv.contact_name || existingConv.contact_phone,
-                  oldUnreadCount: existingConv.unread_count,
-                  newUnreadCount: updatedConv.unread_count,
-                  lastMessage: newMessage.content
-                })
-                
-                // Remover da posição atual e adicionar no topo
                 updated.splice(existingIndex, 1)
                 return [updatedConv, ...updated]
               } else {
-                // Conversa nova: buscar do servidor (sem dependência circular)
-                console.log('🆕 Nova conversa detectada, buscando do servidor...')
                 fetchSingleConversation(newMessage.conversation_id)
                 return prev
               }
             })
             
-            // 2. Emitir evento para consistência com outros sistemas
             ChatEventBus.emit('chat:message:received', {
               conversationId: newMessage.conversation_id,
               companyId: newMessage.company_id,
               message: newMessage,
               timestamp: new Date(newMessage.timestamp)
             })
-            
-            console.log('🚀 Evento emitido via ChatEventBus')
-          } else {
-            console.log('⚠️ Mensagem ignorada - não atende critérios:', {
-              hasConversationId: !!newMessage.conversation_id,
-              companyMatch: newMessage.company_id === companyId,
-              expectedCompany: companyId,
-              actualCompany: newMessage.company_id
-            })
           }
         }
       )
       .subscribe((status) => {
-        console.log('📡 Status subscription mensagens:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Subscription de mensagens ativa e funcionando')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           console.error('❌ Erro na subscription de mensagens')
         } else if (status === 'TIMED_OUT') {
           console.error('⏰ Timeout na subscription de mensagens')
         }
       })
 
-    // TESTE: Subscription sem filtro para debug
-    const testSubscription = supabase
-      .channel(`test_messages_${companyId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages'
-          // SEM FILTRO para capturar QUALQUER mensagem
-        },
-        (payload) => {
-          console.log('🧪 TESTE - Qualquer mensagem detectada:', payload)
-          const msg = payload.new as any
-          console.log('🧪 TESTE - Company ID da mensagem:', msg.company_id)
-          console.log('🧪 TESTE - Company ID esperado:', companyId)
-          console.log('🧪 TESTE - Match:', msg.company_id === companyId)
-        }
-      )
-      .subscribe((status) => {
-        console.log('🧪 TESTE - Status subscription:', status)
-      })
-
     return () => {
       conversationSubscription.unsubscribe()
       messageSubscription.unsubscribe()
-      testSubscription.unsubscribe()
     }
   }, [companyId, userId, selectedInstance]) // CORREÇÃO: Adicionar todas as dependências necessárias
 

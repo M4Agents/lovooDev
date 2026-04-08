@@ -63,8 +63,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   leadId
 }) => {
   const { t } = useTranslation('chat')
-  console.log('🔥🔥🔥 BIBLIOTECA V2 - COMPONENTE CARREGADO - 2026-02-20 22:22 🔥🔥🔥')
-  console.log('📊 Props:', { conversationId, companyId, leadId })
   
   // Estados
   const [loading, setLoading] = useState(true)
@@ -101,8 +99,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   const fetchData = async () => {
     try {
       setLoading(true)
-      console.log('📊 Carregando dados da Biblioteca V2...')
-      
       // Buscar arquivos do chat
       await fetchChatFiles()
       
@@ -118,10 +114,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   
   const fetchChatFiles = async () => {
     try {
-      console.log('🔥 BIBLIOTECA V2 - BUSCA DIRETA SUPABASE - 2026-02-21 09:59')
-      console.log('📱 Buscando arquivos do chat do lead/conversa selecionada...')
-      console.log('🎯 Conversation ID:', conversationId)
-      
       // Buscar DIRETO do Supabase filtrando por conversa específica
       // Apenas imagens, vídeos e documentos (sem áudios)
       const { data: messages, error } = await supabase
@@ -138,8 +130,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         console.error('❌ Erro ao buscar chat_messages:', error)
         return
       }
-      
-      console.log('✅ Mensagens WhatsApp encontradas:', messages?.length || 0)
       
       // Converter para formato esperado
       const files = (messages || []).map(msg => {
@@ -168,9 +158,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         return acc
       }, {})
       
-      console.log('✅ Arquivos processados:', files.length)
-      console.log('📊 Estatísticas:', stats)
-      
       setAllChatFiles(files) // Guardar todos os arquivos
       setChatFiles(files) // Inicialmente mostrar todos
       setChatStats({
@@ -187,8 +174,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   
   const fetchFolders = async () => {
     try {
-      console.log('📁 Buscando pastas via API...')
-      
       // Usar API (mesma que o menu principal usa - já funciona)
       const response = await fetch(`/api/media-library/company/folders?company_id=${companyId}`)
       
@@ -200,8 +185,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       const data = await response.json()
       const foldersList = data.data?.folders || []
       
-      console.log('✅ Pastas encontradas:', foldersList.length)
-      console.log('📂 Pastas:', foldersList)
       setFolders(foldersList)
     } catch (error) {
       console.error('❌ Erro ao buscar pastas:', error)
@@ -210,8 +193,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   
   const fetchFolderFiles = async (folderId: string) => {
     try {
-      console.log('📁 Buscando arquivos da pasta:', folderId)
-      
       const response = await fetch(
         `/api/media-management/files/list?company_id=${companyId}&folder_id=${folderId}`
       )
@@ -225,19 +206,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       const data = await response.json()
       const files = data.data?.files || []
       
-      console.log('📊 API retornou:', files.length, 'arquivos')
-      console.log('📁 Pasta solicitada:', folderId)
-      
-      // Debug: mostrar folder_id dos arquivos retornados
-      if (files.length > 0) {
-        console.log('📋 Primeiros arquivos:', files.slice(0, 3).map((f: any) => ({
-          filename: f.original_filename,
-          folder_id: f.folder_id,
-          folder_id_type: typeof f.folder_id,
-          match: String(f.folder_id) === String(folderId)
-        })))
-      }
-      
       // ✅ FILTRO CORRIGIDO: Converter ambos para string para comparação robusta
       // Trata null, undefined, e garante comparação correta
       const filteredFiles = files.filter((file: any) => {
@@ -245,9 +213,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         const targetFolderId = String(folderId || '')
         return fileFolderId === targetFolderId
       })
-      
-      console.log('✅ Após filtro frontend:', filteredFiles.length, 'arquivos')
-      console.log('✅ Arquivos encontrados para pasta', folderId, ':', filteredFiles.length)
       
       setFolderFiles(filteredFiles)
     } catch (error) {
@@ -258,11 +223,9 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   
   // Buscar arquivos quando pasta for selecionada
   useEffect(() => {
-    console.log('🔄 currentFolderId mudou:', currentFolderId)
     if (currentFolderId) {
       fetchFolderFiles(currentFolderId)
     } else {
-      console.log('🧹 Limpando folderFiles (nenhuma pasta selecionada)')
       setFolderFiles([])
     }
   }, [currentFolderId])
@@ -283,12 +246,8 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   }
   
   const handleFileClick = (file: MediaFile) => {
-    console.log('🎬 Click no arquivo:', file.original_filename)
-    console.log('📄 Tipo:', file.file_type)
-    console.log('🔗 URL:', file.preview_url)
     setPreviewFile(file)
     setShowPreviewModal(true)
-    console.log('✅ Modal deve abrir agora')
   }
   
   const closePreviewModal = () => {
@@ -297,7 +256,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   }
   
   const handleDeleteClick = (file: MediaFile) => {
-    console.log('🗑️ Solicitação de exclusão:', file.original_filename)
     setFileToDelete(file)
     setShowDeleteConfirmModal(true)
   }
@@ -306,8 +264,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     if (!fileToDelete) return
     
     try {
-      console.log('🗑️ Excluindo mídia:', fileToDelete.original_filename)
-      
       // Deletar do Supabase
       const { error } = await supabase
         .from('chat_messages')
@@ -320,8 +276,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         alert('Erro ao excluir mídia. Tente novamente.')
         return
       }
-      
-      console.log('✅ Mídia excluída com sucesso')
       
       // Atualizar lista local
       setChatFiles(prev => prev.filter(f => f.id !== fileToDelete.id))
@@ -355,16 +309,9 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   
   const handleDownload = async (file: MediaFile) => {
     try {
-      console.log('📥 Iniciando download:', file.original_filename)
-      console.log('🔗 URL:', file.preview_url)
-      console.log('📦 Tipo:', file.file_type)
-      
       // Para imagens, usar API proxy (bypass CORS)
       if (file.file_type === 'image') {
-        console.log('🖼️ Imagem detectada - usando API proxy...')
-        
         const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(file.preview_url)}`
-        console.log('📡 Chamando proxy:', proxyUrl.substring(0, 50) + '...')
         
         const response = await fetch(proxyUrl)
         
@@ -373,7 +320,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         }
         
         const blob = await response.blob()
-        console.log('✅ Imagem baixada via proxy, tamanho:', blob.size)
         
         // Criar URL e download
         const blobUrl = window.URL.createObjectURL(blob)
@@ -387,14 +333,12 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
         setTimeout(() => {
           document.body.removeChild(a)
           window.URL.revokeObjectURL(blobUrl)
-          console.log('✅ Download de imagem concluído')
         }, 100)
         
         return
       }
       
       // Para vídeos e documentos, usar fetch direto (funciona)
-      console.log('⏳ Baixando arquivo via fetch...')
       const response = await fetch(file.preview_url)
       
       if (!response.ok) {
@@ -403,7 +347,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       
       // Converter para blob
       const blob = await response.blob()
-      console.log('✅ Arquivo baixado, tamanho:', blob.size)
       
       // Criar URL temporária do blob
       const blobUrl = window.URL.createObjectURL(blob)
@@ -419,7 +362,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       setTimeout(() => {
         document.body.removeChild(a)
         window.URL.revokeObjectURL(blobUrl)
-        console.log('✅ Download concluído')
       }, 100)
       
     } catch (error) {
@@ -439,8 +381,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     }
     
     try {
-      console.log('📁 Criando pasta:', newFolderName)
-      
       const response = await fetch(`/api/media-library/company/folders?company_id=${companyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -455,7 +395,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       const data = await response.json()
       
       if (data.success) {
-        console.log('✅ Pasta criada:', data.data.id)
         setShowNewFolderModal(false)
         setNewFolderName('')
         setNewFolderIcon('📁')
@@ -481,8 +420,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     
     try {
       setUploading(true)
-      console.log('📤 Iniciando upload...')
-      
       const file = files[0]
       const formData = new FormData()
       formData.append('file', file)
@@ -502,9 +439,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       const data = await response.json()
       const uploadResult = data.data
       
-      console.log('✅ Upload concluído:', uploadResult.id)
-      console.log('📁 Arquivo salvo em:', uploadResult.s3_key)
-      console.log('📂 Pasta:', uploadResult.folder_name)
       alert(t('biblioteca.uploadSuccess'))
       // Recarregar arquivos da pasta
       await fetchData()
@@ -687,7 +621,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     key={file.id} 
                     draggable={true}
                     onDragStart={(e) => {
-                      console.log('🎯 Drag iniciado:', file.original_filename)
                       e.dataTransfer.setData('mediaFile', JSON.stringify({
                         preview_url: file.preview_url,
                         file_type: file.file_type,
@@ -697,9 +630,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                       }))
                       e.dataTransfer.effectAllowed = 'copy'
                     }}
-                    onDragEnd={(e) => {
-                      console.log('✅ Drag finalizado')
-                    }}
+                    onDragEnd={() => {}}
                     onClick={() => handleFileClick(file)}
                     className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-move active:opacity-50"
                   >
@@ -851,7 +782,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                           key={file.id}
                           draggable={true}
                           onDragStart={(e) => {
-                            console.log('🎯 Drag iniciado (Pasta):', file.original_filename)
                             e.dataTransfer.setData('mediaFile', JSON.stringify({
                               preview_url: file.preview_url,
                               file_type: file.file_type,
@@ -861,9 +791,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                             }))
                             e.dataTransfer.effectAllowed = 'copy'
                           }}
-                          onDragEnd={(e) => {
-                            console.log('✅ Drag finalizado (Pasta)')
-                          }}
+                          onDragEnd={() => {}}
                           onClick={() => {
                             setPreviewFile(file)
                             setShowPreviewModal(true)
@@ -915,8 +843,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     companyId={companyId}
                     folderId={currentFolderId}
                     onUploadComplete={(fileId) => {
-                      console.log('✅ Upload S3 completo! File ID:', fileId)
-                      console.log('🔄 Recarregando lista de arquivos...')
                       // Recarregar lista de arquivos da pasta atual
                       if (currentFolderId) {
                         fetchFolderFiles(currentFolderId)

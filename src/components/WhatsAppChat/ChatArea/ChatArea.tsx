@@ -70,7 +70,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (conversationId) {
       try {
         localStorage.removeItem(`sentMessages_${conversationId}`)
-        console.log('🧹 Cache limpo para resolver tela branca')
       } catch (error) {
         console.warn('Erro ao limpar cache:', error)
       }
@@ -302,25 +301,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           setContactPhotoUrl(null)
         }
 
-        // Usar lead_id direto da conversa
-        console.log('🔍 DEBUG - Conversa carregada:', {
-          id: conv.id,
-          contact_phone: conv.contact_phone,
-          contact_name: conv.contact_name,
-          lead_id: conv.lead_id,
-          company_id: conv.company_id
-        });
-        
-        console.log('🔍 DEBUG - Conversa COMPLETA (JSON):', JSON.stringify(conv, null, 2));
-        
         setLeadId(conv.lead_id || null)
-        
-        if (conv.lead_id) {
-          console.log('✅ lead_id encontrado:', conv.lead_id);
-        } else {
-          console.warn('⚠️ lead_id NULL na conversa - Badge/Banner não aparecerão');
-          console.warn('🔍 Verificar se RPC retorna lead_id. Objeto conv:', conv);
-        }
       } else {
         setContactPhotoUrl(null)
         setLeadId(null)
@@ -345,12 +326,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleSendMessage = async (messageForm: SendMessageForm) => {
     if (!messageForm.content.trim() && !messageForm.media_url) return
-
-    console.log('📤 handleSendMessage recebeu:', {
-      content: messageForm.content,
-      message_type: messageForm.message_type,
-      media_url: messageForm.media_url ? messageForm.media_url.substring(0, 50) + '...' : null
-    });
 
     // 1. Criar mensagem local imediatamente (UX instantâneo)
     const tempMessage: ChatMessage = {
@@ -705,10 +680,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       
       if (mediaFileData) {
         // Mídia arrastada da biblioteca
-        console.log('📚 Mídia da biblioteca detectada')
         const mediaFile = JSON.parse(mediaFileData)
-        
-        console.log('📥 Baixando mídia:', mediaFile.original_filename)
         
         let response: Response
         
@@ -718,12 +690,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         // Para imagens externas (AWS S3), usar API proxy (bypass CORS)
         // Para imagens locais (/api/s3-media/), fetch direto
         if (mediaFile.file_type === 'image' && !isLocalEndpoint) {
-          console.log('🖼️ Imagem externa - usando API proxy...')
           const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(mediaFile.preview_url)}`
           response = await fetch(proxyUrl)
         } else {
-          // Para vídeos, documentos e imagens locais, fetch direto
-          console.log('📹 Fetch direto:', mediaFile.preview_url)
           response = await fetch(mediaFile.preview_url)
         }
         
@@ -737,8 +706,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const file = new File([blob], mediaFile.original_filename, { 
           type: mediaFile.mime_type 
         })
-        
-        console.log('✅ Arquivo convertido, abrindo preview...')
         
         // Abrir modal de preview
         openPreviewModal(file)
@@ -794,13 +761,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const mimeType = previewFile.type || ''
       const isImage = mimeType.startsWith('image/')
       const isVideo = mimeType.startsWith('video/')
-      
-      // Enviar mensagem com legenda usando função existente
-      console.log('🔗 Enviando mensagem com media_url:', {
-        content: captionMessage.trim() || previewFile.name,
-        message_type: isVideo ? 'video' : (isImage ? 'image' : 'document'),
-        media_url: mediaUrl
-      });
       
       handleSendMessage({
         content: captionMessage.trim() || previewFile.name,
@@ -1596,7 +1556,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 alt={message.content || t('message.a11y.imageAltFallback')}
                 className="max-w-xs max-h-64 rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(message.media_url, '_blank')}
-                onLoad={() => console.log('✅ Imagem carregada:', message.media_url?.substring(0, 50) + '...')}
                 onError={(e) => {
                   console.error('❌ Erro ao carregar imagem:', {
                     url: message.media_url?.substring(0, 50) + '...',

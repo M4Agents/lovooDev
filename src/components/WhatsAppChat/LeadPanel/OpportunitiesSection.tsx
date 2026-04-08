@@ -59,8 +59,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   companyId,
   conversationId
 }) => {
-  console.log('💼 OpportunitiesSection - Rendered with:', { propLeadId, phoneNumber })
-  
   const [leadId, setLeadId] = useState<number | null>(propLeadId || null)
   const [loadingLeadId, setLoadingLeadId] = useState(!propLeadId)
   
@@ -77,8 +75,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   useEffect(() => {
     // Se lead_id foi passado como prop, usar diretamente
     if (propLeadId) {
-      console.log('✅ OpportunitiesSection - lead_id recebido via prop (conversation.lead_id):', propLeadId)
-      console.log('🎯 Sistema preparado para migração WhatsApp username - não depende de telefone')
       setLeadId(propLeadId)
       setLoadingLeadId(false)
       return
@@ -88,8 +84,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     const fetchOrCreateLead = async () => {
       try {
         setLoadingLeadId(true)
-        console.log('⚠️ OpportunitiesSection - FALLBACK: Buscando lead_id por telefone:', phoneNumber)
-        console.log('⚠️ Este método será descontinuado após migração WhatsApp para username')
         
         // Tentar buscar lead existente
         const { data: existingLead, error: searchError } = await supabase
@@ -100,13 +94,10 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           .maybeSingle()
         
         if (existingLead) {
-          console.log('✅ OpportunitiesSection - Lead encontrado, ID:', existingLead.id)
           setLeadId(existingLead.id)
           return
         }
         
-        // Se não encontrou, criar novo lead
-        console.log('📝 OpportunitiesSection - Lead não encontrado, criando novo...')
         const { data: newLead, error: createError } = await supabase
           .from('leads')
           .insert({
@@ -122,7 +113,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           console.error('❌ OpportunitiesSection - Erro ao criar lead:', createError)
           setLeadId(null)
         } else if (newLead) {
-          console.log('✅ OpportunitiesSection - Lead criado com sucesso, ID:', newLead.id)
           setLeadId(newLead.id)
         }
       } catch (err) {
@@ -212,8 +202,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     try {
       setDeletingOpportunity(opportunityId)
       
-      console.log('🗑️ OpportunitiesSection - Excluindo oportunidade:', opportunityId)
-      
       // Remover da posição do funil primeiro (se existir)
       if (positions[opportunityId]) {
         await funnelApi.removeOpportunityFromFunnel(opportunityId, positions[opportunityId].funnel_id)
@@ -226,8 +214,6 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         .eq('id', opportunityId)
       
       if (error) throw error
-      
-      console.log('✅ OpportunitiesSection - Oportunidade excluída com sucesso')
       
       // Atualizar lista
       refreshOpportunities()

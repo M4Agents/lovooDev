@@ -247,15 +247,6 @@ export class ChatApi {
   ): Promise<string> {
     const isAutomation = waitForSend;
     try {
-      console.log('💾 chatApi.sendMessage recebeu:', {
-        conversationId,
-        companyId,
-        content: message.content,
-        message_type: message.message_type,
-        media_url: message.media_url ? message.media_url.substring(0, 50) + '...' : null,
-        userId
-      });
-
       // CORREÇÃO CRÍTICA: Verificar se userId existe na tabela company_users
       const { data: userCheck } = await supabase
         .from('company_users')
@@ -279,21 +270,13 @@ export class ChatApi {
           throw new Error('Nenhum usuário válido encontrado para esta empresa');
         }
         
-        const fallbackUserId = validUsers[0].user_id;
-        console.log('🔧 Usando userId válido como fallback:', fallbackUserId);
-        userId = fallbackUserId;
+        userId = validUsers[0].user_id;
       }
 
       // CORREÇÃO CRÍTICA: Truncar content para evitar erro "value too long for character varying(500)"
       const truncatedContent = message.content.length > 450 
         ? message.content.substring(0, 447) + '...' 
         : message.content;
-
-      console.log('📝 Content truncado:', {
-        original: message.content.length,
-        truncated: truncatedContent.length,
-        content: truncatedContent
-      });
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
@@ -306,13 +289,6 @@ export class ChatApi {
         p_media_url: message.media_url || null
       })
 
-      console.log('💾 Resultado do chat_create_message:', {
-        success: !error,
-        data: data,
-        error: error
-      });
-
-      // Processando envio...
 
       if (error) {
         console.error('Erro no envio')
@@ -326,19 +302,12 @@ export class ChatApi {
 
       // CORREÇÃO CRÍTICA: Retornar message_id do RPC em vez de data vazio
       const messageId = data.message_id || `temp-${Date.now()}`;
-      console.log('✅ Mensagem criada com sucesso:', messageId);
-      // Mensagem criada no banco
 
       // PASSO 2: Enviar via Uazapi
       if (waitForSend) {
-        // AUTOMAÇÃO: Aguardar envio completo via ENDPOINT (ordem sequencial)
-        console.log('⏳ Aguardando envio via WhatsApp (automação - via endpoint)...')
-        await this.sendViaUazapiAsync(messageId, companyId, false) // false = usar endpoint
-        console.log('✅ Envio via WhatsApp concluído (automação)')
+        await this.sendViaUazapiAsync(messageId, companyId, false)
       } else {
-        // CHAT MANUAL: Envio DIRETO assíncrono (não bloqueia interface)
-        console.log('🚀 Iniciando envio DIRETO para Uazapi (chat manual)...')
-        this.sendViaUazapiAsync(messageId, companyId, true).catch(error => { // true = envio direto
+        this.sendViaUazapiAsync(messageId, companyId, true).catch(error => {
           console.error('❌ Erro no envio DIRETO via WhatsApp:', {
             message: error.message,
             stack: error.stack,
@@ -371,18 +340,7 @@ export class ChatApi {
     useDirectSend: boolean = true
   ): Promise<void> {
     try {
-      console.log('🚀 [sendViaUazapiAsync] Iniciando...', { 
-        messageId, 
-        companyId,
-        mode: useDirectSend ? 'DIRETO' : 'ENDPOINT'
-      });
-
-      // =====================================================
-      // OPÇÃO 1: ENVIO DIRETO (CHAT MANUAL)
-      // =====================================================
       if (useDirectSend) {
-        console.log('📤 Modo DIRETO: Enviando diretamente para Uazapi (sem endpoint intermediário)');
-        
         // =====================================================
         // ETAPA 1: Buscar mensagem com RETRY (resolve replication lag)
         // =====================================================
@@ -392,8 +350,6 @@ export class ChatApi {
         
         while (!messageData && attempts < maxAttempts) {
           attempts++;
-          console.log(`🔍 Tentativa ${attempts}/${maxAttempts} - Buscando mensagem...`);
-          
           const { data, error } = await supabase
             .from('chat_messages')
             .select(`
@@ -410,15 +366,11 @@ export class ChatApi {
           
           if (!error && data) {
             messageData = data;
-            console.log('✅ Mensagem encontrada!');
             break;
           }
           
-          // Aguardar antes de tentar novamente (exponential backoff)
           if (attempts < maxAttempts) {
-            const delay = 50 * attempts; // 50ms, 100ms, 150ms
-            console.log(`⏳ Aguardando ${delay}ms antes de tentar novamente...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise(resolve => setTimeout(resolve, 50 * attempts));
           }
         }
         
@@ -426,11 +378,6 @@ export class ChatApi {
           console.error('❌ Mensagem não encontrada após 3 tentativas');
           throw new Error('Mensagem não encontrada após múltiplas tentativas');
         }
-        
-        // =====================================================
-        // ETAPA 2: Buscar dados da conversa (SEM JOIN)
-        // =====================================================
-        console.log('🔍 Buscando dados da conversa...');
         
         const { data: conversationData, error: convError } = await supabase
           .from('chat_conversations')
@@ -453,20 +400,10 @@ export class ChatApi {
         const phone = (conversationData as any).contact_phone;
         const instanceId = (conversationData as any).instance_id;
         
-        console.log('✅ Conversa encontrada:', {
-          contact_phone: phone?.substring(0, 8) + '***',
-          instance_id: instanceId
-        });
-        
         if (!instanceId) {
           console.error('❌ Conversa sem instância associada');
           throw new Error('Conversa não tem instância associada');
         }
-        
-        // =====================================================
-        // ETAPA 3: Buscar instância DIRETAMENTE por ID
-        // =====================================================
-        console.log('🔍 Buscando instância por ID:', instanceId);
         
         const { data: instance, error: instanceError } = await supabase
           .from('whatsapp_life_instances')
@@ -483,12 +420,6 @@ export class ChatApi {
           });
           throw new Error('Instância não encontrada');
         }
-        
-        console.log('✅ Instância encontrada:', {
-          status: instance.status,
-          deleted: instance.deleted_at !== null,
-          has_token: !!instance.provider_token
-        });
         
         // Verificar se instância está ativa
         if (instance.deleted_at !== null) {
@@ -508,12 +439,6 @@ export class ChatApi {
           throw new Error('Token da instância não encontrado');
         }
         
-        console.log('✅ Todos os dados obtidos com sucesso:', {
-          phone: phone.substring(0, 8) + '***',
-          instance_status: instance.status,
-          has_token: !!token
-        });
-
         // 2. Preparar payload para Uazapi
         const endpoint = messageData.message_type === 'text'
           ? 'https://lovoo.uazapi.com/send/text'
@@ -534,9 +459,6 @@ export class ChatApi {
               delay: 1000
             };
 
-        // 3. Enviar para Uazapi DIRETAMENTE
-        console.log('📤 Enviando para Uazapi:', { endpoint, phone: phone.substring(0, 8) + '***' });
-        
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -546,13 +468,10 @@ export class ChatApi {
           body: JSON.stringify(payload)
         });
 
-        console.log('📥 Resposta recebida:', { status: response.status, ok: response.ok });
         const result = await response.json();
-        console.log('📊 Resultado parseado:', result);
 
         // 4. Atualizar status no banco
         if (response.ok) {
-          console.log('✅ Uazapi aceitou - atualizando status para SENT...');
           await supabase
             .from('chat_messages')
             .update({ 
@@ -562,7 +481,6 @@ export class ChatApi {
             })
             .eq('id', messageId);
           
-          console.log('✅ Mensagem enviada com sucesso via ENVIO DIRETO');
         } else {
           console.error('❌ Uazapi rejeitou mensagem:', result);
           await supabase
@@ -579,17 +497,11 @@ export class ChatApi {
         return;
       }
 
-      // =====================================================
-      // OPÇÃO 2: VIA ENDPOINT (AUTOMAÇÃO)
-      // =====================================================
-      console.log('📤 Modo ENDPOINT: Usando /api/uazapi-send-message (automação)');
-      
       const payload = {
         message_id: messageId,
         company_id: companyId
       }
 
-      console.log('🌐 Fazendo fetch para endpoint...');
       const response = await fetch('/api/uazapi-send-message', {
         method: 'POST',
         headers: {
@@ -598,40 +510,26 @@ export class ChatApi {
         body: JSON.stringify(payload)
       })
 
-      console.log('📥 Response do endpoint:', { status: response.status, ok: response.ok });
       const result = await response.json()
-      console.log('📊 Result do endpoint:', result);
 
       if (!response.ok || !result.success) {
         console.error('❌ Endpoint falhou:', result);
         throw new Error(result.error || 'Falha no envio via endpoint')
       }
 
-      console.log('✅ Endpoint aceitou a mensagem - processamento assíncrono iniciado')
-      
     } catch (error) {
-      console.error('💥 [sendViaUazapiAsync] ERRO CAPTURADO:', {
+      console.error('💥 [sendViaUazapiAsync] Erro no envio:', {
         message: error.message,
-        stack: error.stack,
-        name: error.name,
         messageId,
-        companyId,
-        mode: useDirectSend ? 'DIRETO' : 'ENDPOINT'
+        companyId
       });
       
-      // Atualizar status para failed
       try {
-        console.log('💾 Atualizando status para FAILED...');
         await supabase
           .from('chat_messages')
-          .update({ 
-            status: 'failed',
-            updated_at: new Date().toISOString()
-          })
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
           .eq('id', messageId)
           .eq('company_id', companyId)
-        
-        console.log('✅ Status atualizado para FAILED');
       } catch (updateError) {
         console.error('❌ Erro ao atualizar status:', updateError);
       }
@@ -864,9 +762,6 @@ export class ChatApi {
       }
 
       if (data?.synced_count > 0) {
-        console.log(`✅ [chatApi] ${data.synced_count} instâncias sincronizadas com uazapi`)
-        console.log('[chatApi] Instâncias atualizadas:', data.updated_instances)
-        
         // Notificar usuário sobre instâncias desconectadas
         data.updated_instances?.forEach((instance: any) => {
           if (instance.new_status === 'disconnected') {
@@ -1013,13 +908,6 @@ export class ChatApi {
     onProgress?: (progress: number) => void
   ): Promise<string> {
     try {
-      console.log('🚀 Uploading media directly to S3:', { 
-        fileName: file.name, 
-        size: file.size,
-        companyId,
-        conversationId 
-      });
-
       // Convert File to ArrayBuffer then to Buffer
       const arrayBuffer = await file.arrayBuffer();
       const buffer = new Uint8Array(arrayBuffer);
@@ -1029,13 +917,10 @@ export class ChatApi {
 
       // Detect content type
       const contentType = S3Storage.detectContentType(buffer, file.name);
-      console.log('🔍 Content type detected:', contentType);
 
       // Generate message ID
       const messageId = `frontend-${conversationId}-${Date.now()}`;
 
-      // Upload to S3 with progress callback
-      console.log('🚀 Starting S3 upload...');
       const uploadResult = await S3Storage.uploadToS3({
         companyId: companyId,
         messageId: messageId,
@@ -1051,8 +936,6 @@ export class ChatApi {
         throw new Error(uploadResult.error || 'S3 upload failed');
       }
 
-      // Generate signed URL for immediate use
-      console.log('🔗 Generating signed URL...');
       const signedUrlResult = await S3Storage.generateSignedUrl(
         companyId,
         uploadResult.data.s3Key,
@@ -1063,12 +946,6 @@ export class ChatApi {
         console.error('❌ Failed to generate signed URL:', signedUrlResult.error);
         throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
       }
-
-      console.log('✅ S3 upload successful:', {
-        s3Key: uploadResult.data.s3Key,
-        size: uploadResult.data.sizeBytes,
-        url: signedUrlResult.data.substring(0, 100) + '...'
-      });
 
       return signedUrlResult.data;
       

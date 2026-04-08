@@ -157,8 +157,6 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   userId
 }) => {
   const { t } = useTranslation('chat')
-  console.log('🔥🔥🔥 LEADPANEL - VERSÃO COM BIBLIOTECA V2 - 2026-02-20 22:31 🔥🔥🔥')
-  
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
   const [loading, setLoading] = useState(true)
@@ -166,8 +164,6 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [conversation, setConversation] = useState<any>(null)
   const [averageResponseTime, setAverageResponseTime] = useState<string>('--')
   const [associatedLead, setAssociatedLead] = useState<{id: number, name: string, phone?: string, email?: string} | null>(null)
-  
-  console.log('📊 LeadPanel - activeTab atual:', activeTab)
   
   // Estados para o LeadModal
   const [showLeadModal, setShowLeadModal] = useState(false)
@@ -264,10 +260,8 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           
           if (!leadError && leadData) {
             setAssociatedLead(leadData)
-            console.log('✅ Lead associado encontrado:', leadData)
           } else {
             setAssociatedLead(null)
-            console.warn('⚠️ Nenhum lead encontrado para telefone:', conv.contact_phone)
           }
         } catch (error) {
           console.error('Erro ao buscar lead associado:', error)
@@ -569,9 +563,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           setCurrentLeadId(matchingLead.id)
           setCurrentResponsibleId(matchingLead.responsible_user_id || '')
           setOriginalResponsibleId(matchingLead.responsible_user_id || null)
-          console.log('✅ Lead encontrado:', matchingLead.id, 'Responsável:', matchingLead.responsible_user_id)
         } else {
-          console.warn('⚠️ Lead não encontrado para telefone:', normalizedPhone)
           // Resetar estados se não encontrar lead
           setCurrentLeadId(null)
           setCurrentResponsibleId('')
@@ -662,18 +654,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
   // Função para trocar responsável
   const handleChangeResponsible = async (newResponsibleId: string) => {
-    console.log('🔵 INÍCIO handleChangeResponsible', {
-      newResponsibleId,
-      currentLeadId,
-      companyId,
-      contactPhone: conversation?.contact_phone,
-      contactName: contact?.name || conversation?.contact_name
-    })
-    
-    if (!companyId || !conversation?.contact_phone) {
-      console.warn('⚠️ Dados faltando:', { companyId, contactPhone: conversation?.contact_phone })
-      return
-    }
+    if (!companyId || !conversation?.contact_phone) return
     
     setChangingResponsible(true)
     setResponsibleChangeSuccess(false)
@@ -681,8 +662,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     try {
       // Se não tem lead, criar um novo
       if (!currentLeadId) {
-        console.log('🆕 Criando novo lead para atribuir responsável...')
-        
         const leadData: any = {
           company_id: companyId,
           name: contact?.name || conversation?.contact_name || t('conversationItem.leadNoName'),
@@ -697,38 +676,20 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           leadData.email = contact.email
         }
         
-        console.log('📋 Dados do novo lead:', leadData)
-        
         const newLead = await api.createLead(leadData)
-        
-        console.log('✅ Lead criado:', newLead)
         
         if (newLead && newLead.id) {
           setCurrentLeadId(newLead.id)
           setCurrentResponsibleId(newResponsibleId)
           setOriginalResponsibleId(newResponsibleId)
-          
-          console.log('✅ Lead criado e responsável atribuído:', newLead.id)
-          
-          // Feedback de sucesso
           setResponsibleChangeSuccess(true)
           setTimeout(() => setResponsibleChangeSuccess(false), 3000)
-          
-          // Recarregar dados
-          console.log('🔄 Chamando onUpdate...')
           await onUpdate()
-          console.log('✅ onUpdate concluído')
         }
       } else {
-        // Lead já existe, apenas atualizar
-        console.log('🔄 Atualizando lead existente:', currentLeadId)
-        
         const leadData = { id: currentLeadId, responsible_user_id: currentResponsibleId, company_id: companyId }
         
-        console.log('🔐 Verificando permissões...', leadData)
-        
         if (!canEditLead(leadData)) {
-          console.warn('❌ Sem permissão para editar')
           alert(t('leadPanel.contact.permissionDenied'))
           return
         }
@@ -738,11 +699,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           company_id: companyId
         }
         
-        console.log('📋 Dados de atualização:', updateData)
-        
         await api.updateLead(currentLeadId, updateData)
-        
-        console.log('✅ Lead atualizado com sucesso')
         
         // Atualizar estado local
         setCurrentResponsibleId(newResponsibleId)
@@ -765,7 +722,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       setCurrentResponsibleId(originalResponsibleId || '')
     } finally {
       setChangingResponsible(false)
-      console.log('🔵 FIM handleChangeResponsible')
     }
   }
 
@@ -1857,9 +1813,6 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
             phone: associatedLead.phone,
             email: associatedLead.email
           }
-          console.log('✅ Lead pré-selecionado para ActivityModal:', preSelectedLead)
-        } else {
-          console.warn('⚠️ Nenhum lead associado encontrado. Usuário precisará buscar manualmente.')
         }
         
         return (
