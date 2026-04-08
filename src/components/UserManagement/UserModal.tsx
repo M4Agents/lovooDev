@@ -9,6 +9,7 @@ import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTempla
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions, getAssignableRoles } from '../../services/userApi';
 import { applyTemplateToPermissions } from '../../services/userTemplates';
 import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
+import { TemplateSelector } from './TemplateSelector';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAccessControl } from '../../hooks/useAccessControl';
 import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/systemStatus';
@@ -320,8 +321,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       if (selectedProfile) {
         finalPermissions = selectedProfile.permissions;
       }
-      // Fallback: Sistema antigo (template + customizações)
-      else if (selectedTemplate) {
+      // Fallback: Aplicar template apenas se baseRole coincide com o role atual (segurança)
+      else if (selectedTemplate && selectedTemplate.baseRole === formData.role) {
         finalPermissions = applyTemplateToPermissions(selectedTemplate, finalPermissions);
       }
       
@@ -841,9 +842,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     const profile = availableProfiles.find(p => p.id === e.target.value);
                     setSelectedProfile(profile || null);
                     if (profile) {
-                      // Atualizar role do formulário para compatibilidade
                       const role = getProfileRole(profile);
                       setFormData(prev => ({ ...prev, role }));
+                      setSelectedTemplate(null);
                     }
                   }}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -854,34 +855,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                   disabled={loading || isRoleReadonly}
                 >
                   <option value="">{t('users.userModal.selectProfile')}</option>
-                  
-                  {/* Perfis do Sistema */}
-                  {availableProfiles.filter(p => p.isSystem).length > 0 && (
-                    <optgroup label={t('users.userModal.optgroupSystem')}>
-                      {availableProfiles
-                        .filter(p => p.isSystem)
-                        .map((profile) => (
-                          <option key={profile.id} value={profile.id}>
-                            {profile.name}
-                          </option>
-                        ))
-                      }
-                    </optgroup>
-                  )}
-                  
-                  {/* Perfis Personalizados */}
-                  {availableProfiles.filter(p => !p.isSystem).length > 0 && (
-                    <optgroup label={t('users.userModal.optgroupCustom')}>
-                      {availableProfiles
-                        .filter(p => !p.isSystem)
-                        .map((profile) => (
-                          <option key={profile.id} value={profile.id}>
-                            📋 {profile.name}
-                          </option>
-                        ))
-                      }
-                    </optgroup>
-                  )}
+                  {availableProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
                 </select>
                 
                 {/* Descrição do perfil selecionado */}
@@ -958,6 +936,17 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               </>
             )}
           </div>
+
+          {/* Modelo de permissões (TemplateSelector) */}
+          {availableProfiles.length > 0 && !isRoleReadonly && company?.id && (
+            <TemplateSelector
+              companyId={company.id}
+              selectedRole={formData.role}
+              selectedTemplate={selectedTemplate}
+              onSelectTemplate={setSelectedTemplate}
+              disabled={loading}
+            />
+          )}
 
           {/* Enviar convite (apenas para criação) */}
           {!isEditing && (

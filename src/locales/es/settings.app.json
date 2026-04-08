@@ -555,21 +555,21 @@
       "role": "Rol"
     },
     "templateSelector": {
-      "label": "Plantilla de perfil",
+      "label": "Modelo de permisos",
       "optional": "(Opcional)",
-      "loadError": "Error al cargar plantillas",
+      "loadError": "Error al cargar modelos",
       "defaultTitle": "{{role}} predeterminado",
-      "defaultHint": "Usar permisos predeterminados del rol {{role}}",
+      "defaultHint": "Usar permisos predeterminados del perfil {{role}}",
       "systemBadge": "Sistema",
       "basePrefix": "Base:",
       "usageCount": "{{count}} usos",
       "usedOn": "Usado el {{date}}",
-      "emptyTitle": "No hay plantilla disponible para el rol {{role}}",
-      "emptyHint": "Usa los permisos predeterminados o crea una plantilla personalizada",
-      "aboutTitle": "Sobre las plantillas:",
-      "aboutBullet1": "Las plantillas aplican permisos personalizados sobre el rol base",
-      "aboutBullet2": "Las plantillas del sistema no se pueden editar",
-      "aboutBullet3": "Puedes crear plantillas personalizadas para tu empresa"
+      "emptyTitle": "No hay modelo disponible para el perfil {{role}}",
+      "emptyHint": "Usa los permisos predeterminados del perfil seleccionado",
+      "aboutTitle": "Sobre los modelos de permisos:",
+      "aboutBullet1": "Los modelos aplican configuraciones de permisos predefinidas sobre el perfil base",
+      "aboutBullet2": "Los modelos del sistema no se pueden editar",
+      "aboutBullet3": "Seleccionar un modelo no cambia el perfil — solo sugiere permisos iniciales"
     },
     "table": {
       "columns": {

@@ -555,21 +555,21 @@
       "role": "Função"
     },
     "templateSelector": {
-      "label": "Template de Perfil",
+      "label": "Modelo de permissões",
       "optional": "(Opcional)",
-      "loadError": "Erro ao carregar templates",
+      "loadError": "Erro ao carregar modelos",
       "defaultTitle": "{{role}} Padrão",
-      "defaultHint": "Usar permissões padrão do role {{role}}",
+      "defaultHint": "Usar permissões padrão do perfil {{role}}",
       "systemBadge": "Sistema",
       "basePrefix": "Base:",
       "usageCount": "{{count}} usos",
       "usedOn": "Usado em {{date}}",
-      "emptyTitle": "Nenhum template disponível para o role {{role}}",
-      "emptyHint": "Use as permissões padrão ou crie um template personalizado",
-      "aboutTitle": "Sobre Templates:",
-      "aboutBullet1": "Templates aplicam permissões personalizadas sobre o role base",
-      "aboutBullet2": "Templates do sistema não podem ser editados",
-      "aboutBullet3": "Você pode criar templates personalizados para sua empresa"
+      "emptyTitle": "Nenhum modelo disponível para o perfil {{role}}",
+      "emptyHint": "Use as permissões padrão do perfil selecionado",
+      "aboutTitle": "Sobre modelos de permissões:",
+      "aboutBullet1": "Modelos aplicam configurações de permissão predefinidas sobre o perfil base",
+      "aboutBullet2": "Modelos do sistema não podem ser editados",
+      "aboutBullet3": "Selecionar um modelo não altera o perfil — apenas sugere permissões iniciais"
     },
     "table": {
       "columns": {

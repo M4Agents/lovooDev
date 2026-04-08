@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { UserTemplate, UserRole } from '../../types/user';
 import { getRecommendedTemplates } from '../../services/userTemplates';
-import { Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Users } from 'lucide-react';
+import { Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Users, Settings } from 'lucide-react';
 
 interface TemplateSelectorProps {
   companyId: string;
@@ -57,6 +57,8 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     switch (role) {
       case 'super_admin':
         return <Crown className="w-4 h-4 text-purple-600" />;
+      case 'system_admin':
+        return <Settings className="w-4 h-4 text-indigo-600" />;
       case 'admin':
         return <Shield className="w-4 h-4 text-blue-600" />;
       case 'partner':

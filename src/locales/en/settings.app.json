@@ -555,21 +555,21 @@
       "role": "Role"
     },
     "templateSelector": {
-      "label": "Profile template",
+      "label": "Permission model",
       "optional": "(Optional)",
-      "loadError": "Could not load templates",
+      "loadError": "Could not load models",
       "defaultTitle": "Default {{role}}",
-      "defaultHint": "Use default permissions for role {{role}}",
+      "defaultHint": "Use default permissions for profile {{role}}",
       "systemBadge": "System",
       "basePrefix": "Base:",
       "usageCount": "{{count}} uses",
       "usedOn": "Used on {{date}}",
-      "emptyTitle": "No template available for role {{role}}",
-      "emptyHint": "Use default permissions or create a custom template",
-      "aboutTitle": "About templates:",
-      "aboutBullet1": "Templates apply custom permissions on top of the base role",
-      "aboutBullet2": "System templates cannot be edited",
-      "aboutBullet3": "You can create custom templates for your company"
+      "emptyTitle": "No model available for profile {{role}}",
+      "emptyHint": "Use the default permissions for the selected profile",
+      "aboutTitle": "About permission models:",
+      "aboutBullet1": "Models apply predefined permission settings on top of the base profile",
+      "aboutBullet2": "System models cannot be edited",
+      "aboutBullet3": "Selecting a model does not change the profile — it only suggests initial permissions"
     },
     "table": {
       "columns": {
