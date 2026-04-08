@@ -302,20 +302,13 @@ export const applyTemplateToPermissions = (
 };
 
 /**
- * Validar se template pode ser usado para um role específico
+ * Validar se template pode ser usado para um role específico.
+ * Compatibilidade estrita: o baseRole do template deve ser exatamente o targetRole.
+ * Isso garante que apenas templates criados para o role apareçam na lista,
+ * evitando a exibição de templates de outros roles (ex: Parceiro Limitado para admin).
  */
 export const validateTemplateForRole = (template: UserTemplate, targetRole: UserRole): boolean => {
-  // Template deve ter role base compatível ou inferior
-  const roleHierarchy: Record<UserRole, number> = {
-    'seller': 1,
-    'manager': 2,
-    'partner': 3,
-    'admin': 4,
-    'system_admin': 5,
-    'super_admin': 6
-  };
-  
-  return roleHierarchy[template.baseRole] <= roleHierarchy[targetRole];
+  return template.baseRole === targetRole;
 };
 
 /**

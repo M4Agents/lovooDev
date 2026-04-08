@@ -560,7 +560,7 @@
       "defaultBadge": "Padrão do tipo",
       "customBadge": "Personalizado",
       "loadError": "Erro ao carregar modelos",
-      "defaultTitle": "{{role}} Padrão",
+      "defaultTitle": "Sem modelo de permissões",
       "defaultHint": "Usar permissões padrão do perfil {{role}}",
       "systemBadge": "Sistema",
       "basePrefix": "Base:",

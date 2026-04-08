@@ -211,14 +211,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedProfile(correctProfile);
       }
 
-      // Fase 2: ao trocar role em modo criação, auto-selecionar template padrão
-      // Respeita seleção manual: só troca se o template atual não pertence ao novo role
-      if (!isEditing) {
-        const templateMatchesRole = selectedTemplate && selectedTemplate.baseRole === formData.role;
-        if (!templateMatchesRole) {
-          const defaultTemplate = getDefaultTemplateForRole(formData.role);
-          setSelectedTemplate(defaultTemplate || null);
-        }
+      // Auto-selecionar template padrão ao trocar role (criação e edição).
+      // Respeita seleção manual: só substitui se o template atual não pertence ao novo role.
+      const templateMatchesRole = selectedTemplate && selectedTemplate.baseRole === formData.role;
+      if (!templateMatchesRole) {
+        const defaultTemplate = getDefaultTemplateForRole(formData.role);
+        setSelectedTemplate(defaultTemplate || null);
       }
     }
   }, [formData.role, availableProfiles, isOpen, company?.id]);
@@ -864,13 +862,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     if (profile) {
                       const role = getProfileRole(profile);
                       setFormData(prev => ({ ...prev, role }));
-                      // Fase 2: auto-selecionar template padrão do novo role (criação apenas)
-                      if (!isEditing) {
-                        const defaultTemplate = getDefaultTemplateForRole(role);
-                        setSelectedTemplate(defaultTemplate || null);
-                      } else {
-                        setSelectedTemplate(null);
-                      }
+                      // Auto-selecionar template padrão do novo role (criação e edição).
+                      const defaultTemplate = getDefaultTemplateForRole(role);
+                      setSelectedTemplate(defaultTemplate || null);
                     }
                   }}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${

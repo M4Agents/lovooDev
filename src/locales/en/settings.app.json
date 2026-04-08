@@ -560,7 +560,7 @@
       "defaultBadge": "Default",
       "customBadge": "Custom",
       "loadError": "Could not load models",
-      "defaultTitle": "Default {{role}}",
+      "defaultTitle": "No permission model",
       "defaultHint": "Use default permissions for profile {{role}}",
       "systemBadge": "System",
       "basePrefix": "Base:",
