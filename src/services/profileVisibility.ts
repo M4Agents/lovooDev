@@ -241,7 +241,6 @@ export const canConfigureVisibility = (
 export const getDefaultVisibilityConfig = (): Record<string, boolean> => {
   return {
     'system_super_admin': false,        // Apenas empresa pai
-    'system_admin': false,              // Apenas empresa pai
     'system_parceiro_limitado': false,  // Apenas empresa pai
     'system_admin_empresa': true,       // Visível para empresas filhas
     'system_gerente_vendas': true,      // Visível para empresas filhas

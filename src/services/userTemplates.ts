@@ -76,30 +76,6 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       updated_at: now,
       tags: ['sistema', 'system_admin', 'operação', 'empresa_pai']
     },
-    {
-      id: 'system_admin',
-      name: 'Administrador',
-      description: 'Gerencia empresas filhas e usuários - sem acesso financeiro',
-      baseRole: 'admin',
-      customPermissions: {
-        ...getDefaultPermissions('admin'),
-        // Permissões de administração geral
-        create_users: true,
-        edit_users: true,
-        companies: true,
-        settings: true,
-        analytics: true
-      },
-      companyId: '',
-      createdBy: 'system',
-      isActive: true,
-      isSystem: true,
-      visibleToChildCompanies: false, // APENAS empresa pai
-      created_at: now,
-      updated_at: now,
-      tags: ['sistema', 'admin', 'gestão', 'empresa_pai']
-    },
-    
     // PERFIS PARA VENDEDORES
     {
       id: 'system_vendedor_basico',
