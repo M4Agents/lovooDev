@@ -408,21 +408,18 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     let isRealUser = false;
     let inviteData: any = null;
 
-    // SEGUIR PADRÃO DE EMPRESAS: Usar user_id real obrigatório
-    // Buscar user_id do usuário atual (como faz createClientCompany)
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    
+
     if (!currentUser) {
       throw new Error('Usuário não autenticado');
     }
-    
-    // TENTAR CRIAR USUÁRIO REAL (com fallback seguro)
-    if (request.sendInvite && request.email) {
+
+    // Criar o usuário no Auth sempre que houver email — sendInvite controla apenas a UX
+    // (se o link de convite é exibido ao admin), não se o usuário é criado no sistema.
+    if (request.email) {
       try {
-        
-        // Importar authAdmin dinamicamente para evitar dependência circular
         const { inviteUser } = await import('./authAdmin');
-        
+
         const inviteResult = await inviteUser({
           email: request.email,
           redirectTo: `https://app.lovoocrm.com/accept-invite`,
@@ -433,31 +430,28 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           }
         });
 
-        if (inviteResult.success && inviteResult.user) {
-          // Se conseguiu criar usuário real, usar o ID real
-          if (inviteResult.user.id && !inviteResult.user.id.startsWith('invite_') && !inviteResult.user.id.startsWith('fallback_')) {
-            finalUserId = inviteResult.user.id;
-            isRealUser = true;
-            inviteData = inviteResult.user.app_metadata;
-          } else {
-            // Convite simulado - usar user_id atual temporariamente (como empresas)
-            finalUserId = currentUser.id;
-            isRealUser = false;
-            inviteData = inviteResult.user.app_metadata;
-          }
-          
-        } else {
-          throw new Error(inviteResult.error || 'Falha ao enviar convite');
+        if (!inviteResult.success || !inviteResult.user) {
+          throw new Error(inviteResult.error || 'Falha ao criar usuário no sistema de autenticação');
         }
+
+        const newUserId = inviteResult.user.id;
+
+        // Rejeitar pseudo-IDs legados — nunca aceitar como user_id real
+        if (!newUserId || newUserId.startsWith('invite_') || newUserId.startsWith('fallback_')) {
+          throw new Error('Não foi possível obter o UUID do novo usuário. Operação cancelada para evitar vínculo incorreto.');
+        }
+
+        finalUserId = newUserId;
+        isRealUser = true;
+        inviteData = inviteResult.user.app_metadata;
+
       } catch (authError) {
-        console.error('UserAPI: Failed to create user:', authError);
+        console.error('UserAPI: Failed to create user in auth:', authError);
         const originalMessage = authError instanceof Error ? authError.message : String(authError);
         throw new Error(originalMessage || 'Não foi possível criar usuário. Verifique os logs do servidor.');
       }
     } else {
-      // Não solicitou convite - usar user_id atual (como empresas)
-      finalUserId = currentUser.id;
-      isRealUser = false;
+      throw new Error('Email é obrigatório para criar um usuário');
     }
 
     // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
