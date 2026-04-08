@@ -117,41 +117,23 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
           <span className="text-xs text-slate-500 ml-2">{t('users.templateSelector.optional')}</span>
         )}
       </label>
-      
-      <div className="space-y-3">
-        {/* Opção: Sem template — oculta quando seleção é obrigatória */}
-        {!required && (
-          <div
-            className={`cursor-pointer border-2 rounded-lg p-4 transition-all ${
-              !selectedTemplate
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-slate-200 hover:border-slate-300'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => !disabled && onSelectTemplate(null)}
-          >
-            <div className="flex items-start space-x-3">
-              <div className="flex-shrink-0 mt-1">
-                {getRoleIcon(selectedRole)}
-              </div>
-              <div className="flex-1">
-                <h4 className="font-medium text-slate-900">
-                  {t('users.templateSelector.defaultTitle', { role: getRoleName(selectedRole) })}
-                </h4>
-                <p className="text-sm text-slate-600 mt-1">
-                  {t('users.templateSelector.defaultHint', { role: getRoleName(selectedRole).toLowerCase() })}
-                </p>
-                <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
-                  <span className="flex items-center space-x-1">
-                    <Tag className="w-3 h-3" />
-                    <span>{t('users.templateSelector.systemBadge')}</span>
-                  </span>
-                </div>
-              </div>
+
+      {/* Aviso informativo: sem match de perfil (apenas em edição, fora da lista) */}
+      {!required && !selectedTemplate && templates.length > 0 && (
+        <div className="flex items-start space-x-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex-shrink-0 mt-0.5">
+            <div className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
+              <span className="text-xs font-bold text-white">!</span>
             </div>
           </div>
-        )}
-
-        {/* Templates disponíveis */}
+          <p className="text-xs text-amber-700">
+            {t('users.templateSelector.customProfileNotice')}
+          </p>
+        </div>
+      )}
+      
+      <div className="space-y-3">
+        {/* Perfis reais — apenas templates retornados por getRecommendedTemplates */}
         {templates.map((template) => (
           <div
             key={template.id}
