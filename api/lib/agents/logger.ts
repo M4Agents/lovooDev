@@ -27,7 +27,7 @@
 // =============================================================================
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { getPricingRevision } from './pricing'
+import { getPricingRevision } from './pricing.js'
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 

@@ -254,8 +254,12 @@ export const lovooAgentsApi = {
       headers,
       body: JSON.stringify(params),
     })
-    const data = await res.json().catch(() => ({})) as { ok?: boolean; result?: string; error?: string }
-    if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao gerar texto com IA')
+    // #region agent log
+    const rawText = await res.text()
+    console.log('[field-writer] status:', res.status, '| body:', rawText)
+    // #endregion
+    const data = (() => { try { return JSON.parse(rawText) } catch { return {} } })() as { ok?: boolean; result?: string; error?: string; detail?: string; stack?: string }
+    if (!res.ok || !data.ok) throw new Error(data.detail ?? data.error ?? 'Erro ao gerar texto com IA')
     return data.result ?? ''
   },
 }

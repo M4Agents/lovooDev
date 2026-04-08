@@ -85,6 +85,9 @@ async function assertCompanyMember(
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export default async function handler(req: any, res: any): Promise<void> {
+  // #region agent log
+  try {
+  // #endregion
   res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') {
@@ -161,4 +164,12 @@ export default async function handler(req: any, res: any): Promise<void> {
   }
 
   res.status(200).json({ ok: true, result: agentResult.result })
+  // #region agent log
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
+    try { res.setHeader('Content-Type', 'application/json') } catch (_) { /* already set */ }
+    res.status(500).json({ ok: false, error: 'debug:unhandled_exception', detail: msg, stack })
+  }
+  // #endregion
 }
