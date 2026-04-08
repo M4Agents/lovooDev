@@ -2,9 +2,8 @@
 // SISTEMA UNIFICADO DE PERFIS DE USUÁRIO
 // =====================================================
 
-import { UserProfile, UserRole, UserTemplate, UserPermissions } from '../types/user';
+import { UserProfile, UserRole } from '../types/user';
 import { getDefaultPermissions, getAssignableRoles } from './userApi';
-import { getCompanyTemplates } from './userTemplates';
 
 // =====================================================
 // PERFIS DO SISTEMA (EX-ROLES)
@@ -21,6 +20,16 @@ export const getSystemProfiles = (): UserProfile[] => {
       isEditable: false,
       legacyRole: 'super_admin',
       tags: ['sistema', 'super_admin', 'total']
+    },
+    {
+      id: 'system_system_admin',
+      name: 'Administrador de Sistema',
+      description: 'Visão global operacional - sem acesso a páginas SaaS (empresas, planos)',
+      permissions: getDefaultPermissions('system_admin'),
+      isSystem: true,
+      isEditable: false,
+      legacyRole: 'system_admin',
+      tags: ['sistema', 'system_admin', 'operação']
     },
     {
       id: 'system_admin',
@@ -68,118 +77,19 @@ export const getSystemProfiles = (): UserProfile[] => {
 };
 
 // =====================================================
-// CONVERSÃO DE TEMPLATES EM PERFIS
-// =====================================================
-
-/**
- * Converter UserTemplate em UserProfile
- */
-export const templateToProfile = (template: UserTemplate): UserProfile => {
-  return {
-    id: template.id,
-    name: template.name,
-    description: template.description,
-    permissions: {
-      // Começar com permissões padrão do role base
-      ...getDefaultPermissions(template.baseRole),
-      // Aplicar customizações do template
-      ...template.customPermissions
-    } as UserPermissions,
-    isSystem: template.isSystem,
-    isEditable: !template.isSystem, // Templates do sistema não são editáveis
-    companyId: template.companyId,
-    createdBy: template.createdBy,
-    created_at: template.created_at,
-    updated_at: template.updated_at,
-    baseRole: template.baseRole,
-    usage_count: template.usage_count,
-    last_used: template.last_used,
-    tags: template.tags,
-    isActive: template.isActive
-  };
-};
-
-/**
- * Converter UserProfile em UserTemplate (para compatibilidade)
- */
-export const profileToTemplate = (profile: UserProfile): UserTemplate | null => {
-  // Apenas perfis personalizados podem ser convertidos em templates
-  if (profile.isSystem || !profile.baseRole || !profile.companyId) {
-    return null;
-  }
-
-  // Extrair apenas as permissões customizadas (diferentes do padrão)
-  const defaultPermissions = getDefaultPermissions(profile.baseRole);
-  const customPermissions: Partial<UserPermissions> = {};
-  
-  Object.entries(profile.permissions).forEach(([key, value]) => {
-    const defaultValue = defaultPermissions[key as keyof UserPermissions];
-    if (value !== defaultValue) {
-      (customPermissions as any)[key] = value;
-    }
-  });
-
-  return {
-    id: profile.id,
-    name: profile.name,
-    description: profile.description,
-    baseRole: profile.baseRole,
-    customPermissions,
-    companyId: profile.companyId,
-    createdBy: profile.createdBy || '',
-    isActive: profile.isActive ?? true,
-    isSystem: profile.isSystem,
-    created_at: profile.created_at || new Date().toISOString(),
-    updated_at: profile.updated_at || new Date().toISOString(),
-    usage_count: profile.usage_count,
-    last_used: profile.last_used,
-    tags: profile.tags
-  };
-};
-
-// =====================================================
 // FUNÇÃO PRINCIPAL - OBTER TODOS OS PERFIS
 // =====================================================
 
 /**
- * Obter todos os perfis disponíveis (sistema + personalizados)
+ * Obter todos os perfis disponíveis.
+ *
+ * Retorna apenas os 6 perfis oficiais do sistema (fonte canônica de RBAC).
+ * Presets de UI (userTemplates.ts) são uma camada separada — não são misturados aqui.
+ *
+ * @param _companyId  Mantido para compatibilidade com assinatura anterior.
  */
-export const getAllUserProfiles = async (companyId: string): Promise<UserProfile[]> => {
-  try {
-    console.log('UserProfiles: Fetching all profiles for company:', companyId);
-    
-    // Perfis do sistema (ex-roles)
-    const systemProfiles = getSystemProfiles();
-    
-    // Perfis personalizados (ex-templates convertidos)
-    let customProfiles: UserProfile[] = [];
-    
-    try {
-      const templates = await getCompanyTemplates(companyId);
-      customProfiles = templates
-        .filter(template => template.isActive !== false) // Apenas templates ativos
-        .map(templateToProfile);
-    } catch (error) {
-      console.warn('UserProfiles: Could not load custom profiles:', error);
-      // Continuar apenas com perfis do sistema
-    }
-    
-    // Combinar todos os perfis
-    const allProfiles = [...systemProfiles, ...customProfiles];
-    
-    console.log('UserProfiles: Found profiles:', {
-      system: systemProfiles.length,
-      custom: customProfiles.length,
-      total: allProfiles.length
-    });
-    
-    return allProfiles;
-    
-  } catch (error) {
-    console.error('UserProfiles: Error in getAllUserProfiles:', error);
-    // Fallback: retornar apenas perfis do sistema
-    return getSystemProfiles();
-  }
+export const getAllUserProfiles = async (_companyId: string): Promise<UserProfile[]> => {
+  return getSystemProfiles();
 };
 
 /**

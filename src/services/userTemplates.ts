@@ -1,7 +1,21 @@
 // =====================================================
-// SISTEMA DE TEMPLATES DE USUÁRIO
+// SISTEMA DE TEMPLATES DE USUÁRIO — CAMADA DE PRESETS DE UI
+//
+// Responsabilidade: oferecer configurações de permissão prontas
+// (modelos recomendados) para preenchimento no UserModal.
+//
+// NÃO é fonte de verdade de RBAC — essa função cabe a userProfiles.ts.
+// Presets não definem comportamento de segurança; apenas sugerem
+// combinações de permissões para uso como ponto de partida.
+//
 // CRUD de templates personalizados desativado: tabela user_templates
 // não existe no banco. Apenas system templates (em memória) estão ativos.
+//
+// Permissões presentes nos presets:
+//   - Permissões ATIVAS: verificadas em gates reais do sistema.
+//   - Permissões FUTURAS (opcionais, sufixo _own/_team/_all, granulares):
+//     tipo definido em UserPermissions, mas SEM enforcement atual.
+//     Serão ativadas no ciclo de permissões granulares.
 // =====================================================
 
 import { 
@@ -29,7 +43,6 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       baseRole: 'super_admin',
       customPermissions: {
         ...getDefaultPermissions('super_admin'),
-        // Todas as permissões possíveis
         impersonate: true,
         companies: true,
         users: true,
@@ -41,10 +54,27 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
-      visibleToChildCompanies: false, // APENAS empresa pai
+      visibleToChildCompanies: false,
       created_at: now,
       updated_at: now,
       tags: ['sistema', 'super_admin', 'total', 'empresa_pai']
+    },
+    {
+      id: 'system_admin_saas',
+      name: 'Administrador de Sistema',
+      description: 'Visão global operacional - sem acesso a páginas SaaS (empresas, planos)',
+      baseRole: 'system_admin',
+      customPermissions: {
+        ...getDefaultPermissions('system_admin')
+      },
+      companyId: '',
+      createdBy: 'system',
+      isActive: true,
+      isSystem: true,
+      visibleToChildCompanies: false,
+      created_at: now,
+      updated_at: now,
+      tags: ['sistema', 'system_admin', 'operação', 'empresa_pai']
     },
     {
       id: 'system_admin',
@@ -305,7 +335,8 @@ export const validateTemplateForRole = (template: UserTemplate, targetRole: User
     'manager': 2,
     'partner': 3,
     'admin': 4,
-    'super_admin': 5
+    'system_admin': 5,
+    'super_admin': 6
   };
   
   return roleHierarchy[template.baseRole] <= roleHierarchy[targetRole];
