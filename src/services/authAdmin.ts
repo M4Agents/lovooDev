@@ -149,6 +149,77 @@ export const generateMagicLink = async (email: string) => {
 };
 
 /**
+ * Atualiza display_name de um usuário via rota backend segura
+ */
+export const updateDisplayName = async (
+  targetUserId: string,
+  displayName: string,
+  companyId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { success: false, error: 'Não autenticado' };
+
+    const response = await fetch('/api/auth/update-display-name', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ targetUserId, displayName, companyId })
+    });
+
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      return { success: false, error: result.error || 'Erro ao atualizar nome' };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar nome'
+    };
+  }
+};
+
+/**
+ * Altera a senha de um usuário via rota backend segura
+ */
+export const changePassword = async (
+  targetUserId: string,
+  newPassword: string,
+  companyId: string,
+  forcePasswordChange: boolean
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { success: false, error: 'Não autenticado' };
+
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ targetUserId, newPassword, companyId, forcePasswordChange })
+    });
+
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      return { success: false, error: result.error || 'Erro ao alterar senha' };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao alterar senha'
+    };
+  }
+};
+
+/**
  * Confirma usuário manualmente (fallback quando email não chega)
  */
 export const confirmUserManually = async (email: string) => {

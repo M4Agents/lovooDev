@@ -16,6 +16,7 @@ import { getSystemStatus, getStatusMessage, SystemStatus } from '../../services/
 import { InviteSuccess } from './InviteSuccess';
 import { Toggle } from '../ui/Toggle';
 import { supabase } from '../../lib/supabase';
+import { generateMagicLink, updateDisplayName, changePassword } from '../../services/authAdmin';
 import { canAccessCriticalPermissions, CRITICAL_PERMISSIONS } from '../../utils/permissionUtils';
 import { Avatar } from '../Avatar';
 
@@ -527,26 +528,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
   // Função para atualizar display name
   const handleUpdateDisplayName = async () => {
-    if (!user?.user_id || !formData.displayName.trim()) return;
+    if (!user?.user_id || !formData.displayName.trim() || !company?.id) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      // Atualizar via Admin API
-      const { error } = await supabase.auth.admin.updateUserById(user.user_id, {
-        user_metadata: { 
-          display_name: formData.displayName.trim(),
-          name: formData.displayName.trim()
-        }
-      });
+      const result = await updateDisplayName(user.user_id, formData.displayName.trim(), company.id);
 
-      if (error) {
-        throw error;
+      if (!result.success) {
+        throw new Error(result.error || t('users.userModal.messages.displayNameError'));
       }
 
       setPasswordSuccess(t('users.userModal.messages.displayNameSuccess'));
-      onSave(); // Recarregar lista
+      onSave();
     } catch (err) {
       console.error('Error updating display name:', err);
       setError(err instanceof Error ? err.message : t('users.userModal.messages.displayNameError'));
@@ -564,17 +559,19 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       setPasswordSuccess(null);
       setError(null);
 
-      // Gerar novo link de convite
-      const { error } = await supabase.auth.admin.generateLink({
-        type: 'invite',
-        email: user.email
-      });
+      const result = await generateMagicLink(user.email);
 
-      if (error) {
-        throw error;
+      if (!result.success) {
+        throw new Error(result.error || t('users.userModal.messages.resendError'));
       }
 
-      setPasswordSuccess(t('users.userModal.messages.resendSuccess', { email: user.email }));
+      setInviteData({
+        email: user.email,
+        inviteUrl: result.magicLink,
+        mode: 'real',
+        message: t('users.userModal.messages.inviteMessage')
+      });
+      setShowInviteSuccess(true);
     } catch (err) {
       console.error('Error resending invite:', err);
       setError(err instanceof Error ? err.message : t('users.userModal.messages.resendError'));
@@ -595,41 +592,29 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       return;
     }
 
+    if (!company?.id) {
+      setError('Contexto de empresa não encontrado');
+      return;
+    }
+
     try {
       setDirectPasswordLoading(true);
       setPasswordSuccess(null);
       setError(null);
 
-      // Preparar metadata baseado no toggle
-      const metadata = {
-        password_changed_at: new Date().toISOString(),
-        password_changed_by: company?.user_id,
-        password_type: forcePasswordChange ? 'temporary' : 'permanent',
-        must_change_password: forcePasswordChange,
-        password_expires_at: forcePasswordChange 
-          ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dias
-          : null
-      };
+      const result = await changePassword(user.user_id, newPassword, company.id, forcePasswordChange);
 
-      // Alterar senha usando Admin API
-      const { error } = await supabase.auth.admin.updateUserById(user.user_id, {
-        password: newPassword,
-        app_metadata: metadata
-      });
-
-      if (error) {
-        throw error;
+      if (!result.success) {
+        throw new Error(result.error || t('users.userModal.messages.passwordChangeError'));
       }
 
-      // Feedback de sucesso
       const displayName = user.display_name || user.email || '';
       const successMessage = forcePasswordChange
         ? t('users.userModal.messages.passwordTempSuccess', { name: displayName })
         : t('users.userModal.messages.passwordChangedSuccess', { name: displayName });
 
       setPasswordSuccess(successMessage);
-      
-      // Limpar formulário
+
       setNewPassword('');
       setConfirmPassword('');
       setShowDirectPasswordForm(false);
