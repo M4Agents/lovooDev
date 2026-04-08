@@ -66,10 +66,11 @@ async function assertCompanyAdmin(
     .select('user_id')
     .eq('user_id', targetUserId)
     .eq('company_id', companyId)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (!targetMembership) {
-    return { ok: false, status: 403, message: 'Usuário alvo não pertence a esta empresa' };
+    return { ok: false, status: 403, message: 'Usuário alvo não pertence a esta empresa ou está inativo' };
   }
 
   return { ok: true, callerId: caller.id };
