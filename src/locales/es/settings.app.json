@@ -842,7 +842,7 @@
       "choosePhoto": "Elegir foto",
       "removePhoto": "Quitar",
       "photoFormatsHint": "Formatos aceptados: JPG, PNG, GIF. Máximo 2 MB.",
-      "accessProfile": "Perfil de acceso",
+      "accessProfile": "Tipo de usuario",
       "accessLevelRole": "Nivel de acceso (rol)",
       "selectProfile": "Selecciona un perfil...",
       "optgroupSystem": "Perfiles del sistema",

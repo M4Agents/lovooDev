@@ -135,7 +135,7 @@ export const getProfilesForCompanyType = async (
     // 1. Filtro por tipo de empresa
     const validForType =
       companyType === 'parent'
-        ? (['super_admin', 'system_admin', 'admin', 'partner'] as UserRole[]).includes(role)
+        ? (['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'] as UserRole[]).includes(role)
         : (['admin', 'manager', 'seller'] as UserRole[]).includes(role);
 
     if (!validForType) return false;

@@ -170,16 +170,38 @@ export const ROLE_TIER: Record<UserRole, number> = {
 };
 
 /**
- * Retorna os roles que um caller pode atribuir, considerando:
- *  - o próprio role do caller (tier)
- *  - o tipo de empresa (parent / client)
+ * Matriz explícita de roles atribuíveis por callerRole × companyType.
  *
- * Regra central: só pode atribuir roles com tier < próprio tier.
- * Exceção: super_admin pode atribuir qualquer role válido para o tipo.
+ * Regras de produto:
+ *  - super_admin pode atribuir qualquer role válido para o tipo de empresa
+ *  - system_admin pode atribuir até partner (nunca system_admin nem super_admin)
+ *  - partner e admin podem atribuir admin, manager, seller
+ *  - manager e seller não podem atribuir nenhum role
  *
- * @param callerRole  Role atual do usuário que fará a atribuição
- * @param companyType Tipo da empresa onde a atribuição ocorrerá
+ * Espelhada no backend via migrations de update_company_user_safe
+ * e create_company_user_safe.
  */
+const ASSIGNABLE_ROLES_MATRIX: Record<UserRole, Record<'parent' | 'client', UserRole[]>> = {
+  super_admin: {
+    parent: ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'],
+    client: ['admin', 'manager', 'seller'],
+  },
+  system_admin: {
+    parent: ['partner', 'admin', 'manager', 'seller'],
+    client: ['admin', 'manager', 'seller'],
+  },
+  partner: {
+    parent: ['admin', 'manager', 'seller'],
+    client: ['admin', 'manager', 'seller'],
+  },
+  admin: {
+    parent: ['admin', 'manager', 'seller'],
+    client: ['admin', 'manager', 'seller'],
+  },
+  manager: { parent: [], client: [] },
+  seller:  { parent: [], client: [] },
+};
+
 export const getAssignableRoles = (
   callerRole: UserRole | null | undefined,
   companyType: 'parent' | 'client',
@@ -189,31 +211,12 @@ export const getAssignableRoles = (
     return [];
   }
 
-  const callerTier = ROLE_TIER[callerRole];
+  const assignable = ASSIGNABLE_ROLES_MATRIX[callerRole]?.[companyType];
 
-  if (callerTier === undefined) {
+  if (!assignable) {
     console.warn('[UserAPI] getAssignableRoles: role desconhecido:', callerRole);
     return [];
   }
-
-  const allParentRoles: UserRole[] = ['super_admin', 'system_admin', 'partner', 'admin'];
-  const allClientRoles: UserRole[] = ['admin', 'manager', 'seller'];
-  const candidates = companyType === 'parent' ? allParentRoles : allClientRoles;
-
-  // super_admin pode atribuir qualquer role válido para o tipo de empresa
-  if (callerRole === 'super_admin') {
-    return candidates;
-  }
-
-  // demais callers: apenas roles com tier estritamente menor que o próprio
-  const assignable = candidates.filter(role => {
-    const roleTier = ROLE_TIER[role];
-    if (roleTier === undefined) {
-      console.warn('[UserAPI] getAssignableRoles: tier desconhecido para role candidato:', role);
-      return false;
-    }
-    return roleTier < callerTier;
-  });
 
   if (assignable.length === 0) {
     console.warn('[UserAPI] getAssignableRoles: nenhum role atribuível para', callerRole, 'em', companyType);
