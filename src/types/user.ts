@@ -11,7 +11,13 @@ export type UserRole =
   | 'seller';       // Vendedor (empresa client)
 
 export interface UserPermissions {
-  // Módulos principais (MANTIDOS - compatibilidade 100%)
+  // ─────────────────────────────────────────────────────────────
+  // PERMISSÕES ATIVAS
+  // Verificadas em gates reais (useAccessControl, RPCs, RLS).
+  // Alterar com cuidado: impacto direto em acesso.
+  // ─────────────────────────────────────────────────────────────
+
+  // Módulos principais
   dashboard: boolean;
   leads: boolean;
   chat: boolean;
@@ -21,22 +27,34 @@ export interface UserPermissions {
   users: boolean;
   financial: boolean;
   
-  // Ações específicas (MANTIDAS - compatibilidade 100%)
+  // Ações de usuários
   create_users: boolean;
   edit_users: boolean;
   delete_users: boolean;
   impersonate: boolean;
+
+  // Leads
   view_all_leads: boolean;
   edit_all_leads: boolean;
+
+  // Financeiro
   view_financial: boolean;
   edit_financial: boolean;
   
-  // Limitações (MANTIDAS - compatibilidade 100%)
+  // Limitações estruturais
   max_companies?: number;
   max_users?: number;
   restricted_companies?: string[];
-  
-  // NOVOS MÓDULOS (opcionais - não quebram sistema atual)
+
+  // ─────────────────────────────────────────────────────────────
+  // PERMISSÕES FUTURAS (opcionais)
+  // Tipo definido, aparecem nos presets (userTemplates.ts),
+  // mas SEM gate ativo no código atual.
+  // Serão ativadas incrementalmente no ciclo de permissões granulares.
+  // NÃO remover — a estrutura já está preparada.
+  // ─────────────────────────────────────────────────────────────
+
+  // Módulos adicionais (sem gate ativo)
   email_marketing?: boolean;
   sms_campaigns?: boolean;
   automations?: boolean;
@@ -45,7 +63,7 @@ export interface UserPermissions {
   api_access?: boolean;
   webhooks?: boolean;
   
-  // NOVAS AÇÕES GRANULARES (opcionais)
+  // Leads granular (sem gate ativo)
   create_leads?: boolean;
   edit_own_leads?: boolean;
   edit_team_leads?: boolean;
@@ -53,24 +71,24 @@ export interface UserPermissions {
   export_leads?: boolean;
   import_leads?: boolean;
   
-  // CHAT GRANULAR (opcional)
+  // Chat granular (sem gate ativo)
   chat_all_leads?: boolean;
   chat_own_leads?: boolean;
   chat_templates?: boolean;
   bulk_messaging?: boolean;
   
-  // ANALYTICS GRANULAR (opcional)
+  // Analytics granular (sem gate ativo)
   view_own_analytics?: boolean;
   view_team_analytics?: boolean;
   view_company_analytics?: boolean;
   export_reports?: boolean;
   
-  // CONFIGURAÇÕES GRANULARES (opcional)
+  // Configurações granulares (sem gate ativo)
   edit_company_settings?: boolean;
   edit_integrations?: boolean;
   edit_webhooks?: boolean;
   
-  // LIMITAÇÕES AVANÇADAS (opcionais)
+  // Limitações avançadas (sem gate ativo)
   max_leads_per_month?: number;
   max_exports_per_day?: number;
   allowed_lead_sources?: string[];

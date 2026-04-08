@@ -660,6 +660,7 @@
       "aboutBullet2": "• Custom templates can be edited and deactivated",
       "aboutBullet3": "• Using a template applies permissions on top of the base role",
       "aboutBullet4": "• Templates help onboard users consistently",
+      "customComingSoon": "Custom templates will be available soon. For now, use the predefined models above to streamline user creation.",
       "copySuffix": "Copy",
       "copyDescriptionPrefix": "Copy of:",
       "copyTag": "copy",

@@ -4,12 +4,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Edit2, Trash2, Copy, Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Clock, Eye, EyeOff, Settings, Save, CheckCircle, AlertTriangle } from 'lucide-react';
-import { UserTemplate, UserRole, CreateTemplateRequest } from '../../types/user';
-import { getCompanyTemplates, createUserTemplate, deactivateTemplate } from '../../services/userTemplates';
+import { Users, Crown, Shield, Briefcase, UserCheck, User, Tag, Eye, EyeOff, Settings, Save, CheckCircle, AlertTriangle } from 'lucide-react';
+import { UserTemplate, UserRole } from '../../types/user';
+import { getCompanyTemplates } from '../../services/userTemplates';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAccessControl } from '../../hooks/useAccessControl';
-import { TemplateModal } from './TemplateModal';
 import { PermissionsViewModal } from './PermissionsViewModal';
 
 interface TemplateManagerProps {
@@ -23,11 +22,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<UserTemplate | null>(null);
-  const [viewingTemplate, setViewingTemplate] = useState<UserTemplate | null>(null); // NOVO: Template sendo visualizado
+  const [viewingTemplate, setViewingTemplate] = useState<UserTemplate | null>(null);
   
-  // NOVO: Estados para controle de visibilidade integrado
+  // Estados para controle de visibilidade integrado
   const [pendingChanges, setPendingChanges] = useState<Record<string, boolean>>({});
   const [savingChanges, setSavingChanges] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -147,43 +144,8 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
     }
   };
 
-  // Duplicar template
-  const handleDuplicateTemplate = async (template: UserTemplate) => {
-    try {
-      const duplicateRequest: CreateTemplateRequest = {
-        name: `${template.name} (${t('users.templates.copySuffix')})`,
-        description: `${t('users.templates.copyDescriptionPrefix')} ${template.description}`,
-        baseRole: template.baseRole,
-        customPermissions: template.customPermissions,
-        companyId: company!.id,
-        tags: [...(template.tags || []), t('users.templates.copyTag')]
-      };
-
-      await createUserTemplate(duplicateRequest);
-      await loadTemplates();
-      
-    } catch (error) {
-      console.error('Error duplicating template:', error);
-      setError(t('users.states.duplicateError'));
-    }
-  };
-
-  // Desativar template
-  const handleDeactivateTemplate = async (templateId: string) => {
-    if (!confirm(t('users.confirm.deactivateTemplate'))) return;
-    
-    try {
-      await deactivateTemplate(templateId);
-      await loadTemplates();
-    } catch (error) {
-      console.error('Error deactivating template:', error);
-      setError(t('users.states.deactivateTemplateError'));
-    }
-  };
-
   // Separar templates por tipo
   const systemTemplates = templates.filter(t => t.isSystem);
-  const customTemplates = templates.filter(t => !t.isSystem);
 
   if (loading) {
     return (
@@ -231,14 +193,6 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
               </button>
             </>
           )}
-          
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            {t('users.actions.newTemplate')}
-          </button>
         </div>
       </div>
 
@@ -395,190 +349,22 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
                 >
                   <Eye className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => handleDuplicateTemplate(template)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                  title={t('users.actions.duplicateTemplate')}
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Templates Personalizados */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <h3 className="text-lg font-semibold text-slate-900">{t('users.sections.customTemplates')}</h3>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-              {t('users.templates.customCount', { count: customTemplates.length })}
-            </span>
+      {/* Nota informativa: templates personalizados */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <div className="flex items-start space-x-2">
+          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center">
+            <span className="text-xs font-medium text-slate-600">i</span>
           </div>
+          <p className="text-sm text-slate-600">
+            {t('users.templates.customComingSoon')}
+          </p>
         </div>
-
-        {customTemplates.length === 0 ? (
-          <div className="text-center py-12 bg-slate-50 rounded-lg border-2 border-dashed border-slate-300">
-            <Users className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-            <h3 className="text-lg font-medium text-slate-900 mb-2">{t('users.states.templatesEmpty')}</h3>
-            <p className="text-slate-600 mb-4">
-              {t('users.states.templatesEmptyHint')}
-            </p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              {t('users.actions.createFirstTemplate')}
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customTemplates.map((template) => (
-              <div key={template.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    {getRoleIcon(template.baseRole)}
-                    <h4 className="font-medium text-slate-900">{template.name}</h4>
-                  </div>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                    {t('users.templates.badgeCustom')}
-                  </span>
-                </div>
-                
-                <p className="text-sm text-slate-600 mb-3">{template.description}</p>
-                
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-                  <span className="flex items-center space-x-1">
-                    <Tag className="w-3 h-3" />
-                    <span>{t('users.templates.baseLabel', { role: getRoleName(template.baseRole) })}</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <Clock className="w-3 h-3" />
-                    <span>{new Date(template.created_at).toLocaleDateString('pt-BR')}</span>
-                  </span>
-                </div>
-
-                {/* Tags */}
-                {template.tags && template.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {template.tags.slice(0, 3).map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {template.tags.length > 3 && (
-                      <span className="text-xs text-slate-500">+{template.tags.length - 3}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Controle de Visibilidade - Apenas para Super Admin/Admin */}
-                {canConfigureVisibility && (
-                  <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Settings className="w-4 h-4 text-slate-500" />
-                        <span className="text-sm font-medium text-slate-700">
-                          {t('users.templates.visibilityForChildren')}
-                        </span>
-                        {pendingChanges.hasOwnProperty(template.id) && (
-                          <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded">
-                            {t('users.templates.badgeChanged')}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => toggleVisibility(template.id, 
-                          pendingChanges.hasOwnProperty(template.id) 
-                            ? pendingChanges[template.id] 
-                            : template.visibleToChildCompanies ?? false
-                        )}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                          (pendingChanges.hasOwnProperty(template.id) 
-                            ? pendingChanges[template.id] 
-                            : template.visibleToChildCompanies ?? false)
-                            ? 'bg-blue-600' : 'bg-slate-200'
-                        }`}
-                        title={(pendingChanges.hasOwnProperty(template.id) 
-                          ? pendingChanges[template.id] 
-                          : template.visibleToChildCompanies ?? false) 
-                          ? t('users.templates.visibilityOn') 
-                          : t('users.templates.visibilityOff')}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            (pendingChanges.hasOwnProperty(template.id) 
-                              ? pendingChanges[template.id] 
-                              : template.visibleToChildCompanies ?? false)
-                              ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      {(pendingChanges.hasOwnProperty(template.id) 
-                        ? pendingChanges[template.id] 
-                        : template.visibleToChildCompanies ?? false) ? (
-                        <span className="flex items-center space-x-1 text-green-600">
-                          <Eye className="w-3 h-3" />
-                          <span>{t('users.templates.visibilityHintOn')}</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center space-x-1 text-slate-500">
-                          <EyeOff className="w-3 h-3" />
-                          <span>{t('users.templates.visibilityHintOff')}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ações */}
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleCreateUserWithTemplate(template.id)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
-                  >
-                    {t('users.actions.useTemplate')}
-                  </button>
-                  <button
-                    onClick={() => setViewingTemplate(template)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title={t('users.actions.viewPermissions')}
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setEditingTemplate(template)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title={t('users.actions.editTemplate')}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDuplicateTemplate(template)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
-                    title={t('users.actions.duplicateTemplate')}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeactivateTemplate(template.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                    title={t('users.actions.deactivateTemplate')}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Informações */}
@@ -600,17 +386,6 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({ onCreateUser }
           </div>
         </div>
       </div>
-
-      {/* Modal de Template */}
-      <TemplateModal
-        isOpen={showCreateModal || !!editingTemplate}
-        onClose={() => {
-          setShowCreateModal(false);
-          setEditingTemplate(null);
-        }}
-        onSave={loadTemplates}
-        template={editingTemplate}
-      />
 
       {/* Modal de Visualização de Permissões */}
       <PermissionsViewModal

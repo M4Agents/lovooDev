@@ -660,6 +660,7 @@
       "aboutBullet2": "• Las plantillas personalizadas se pueden editar y desactivar",
       "aboutBullet3": "• Al usar una plantilla, los permisos se aplican sobre el rol base",
       "aboutBullet4": "• Las plantillas ayudan a crear usuarios de forma coherente",
+      "customComingSoon": "Las plantillas personalizadas estarán disponibles pronto. Por ahora, utiliza los modelos predefinidos arriba para agilizar la creación de usuarios.",
       "copySuffix": "Copia",
       "copyDescriptionPrefix": "Copia de:",
       "copyTag": "copia",
