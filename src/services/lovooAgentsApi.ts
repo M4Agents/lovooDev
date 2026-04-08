@@ -232,4 +232,30 @@ export const lovooAgentsApi = {
 
     if (error) throw error
   },
+
+  // ── Field Writer ──────────────────────────────────────────────────────────
+
+  /**
+   * Solicita ao agente de IA que gere o conteúdo de um campo (ai_notes ou ai_unavailable_guidance)
+   * para um produto ou serviço do catálogo.
+   *
+   * Endpoint: POST /api/agents/field-writer
+   */
+  async generateFieldText(params: {
+    use_id: string
+    item_type: 'product' | 'service'
+    item_name: string
+    item_description?: string
+    company_id: string
+  }): Promise<string> {
+    const headers = await getJsonAuthHeaders()
+    const res = await fetch('/api/agents/field-writer', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    })
+    const data = await res.json().catch(() => ({})) as { ok?: boolean; result?: string; error?: string }
+    if (!res.ok || !data.ok) throw new Error(data.error ?? 'Erro ao gerar texto com IA')
+    return data.result ?? ''
+  },
 }

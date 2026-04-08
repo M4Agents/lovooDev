@@ -57,6 +57,12 @@ export type AgentRunContext = {
    * NULL em contextos sem sessão: WhatsApp webhook, automações, etc.
    */
   user_id?: string
+  /**
+   * Variáveis de substituição aplicadas ao prompt do agente antes da execução.
+   * Tokens no formato {{chave}} no prompt são substituídos pelos valores informados.
+   * Ex.: { product_name: 'Notebook Pro', product_description: 'Ultra-slim laptop' }
+   */
+  variables?: Record<string, string>
 }
 
 export type AgentRunSuccess = {
@@ -96,6 +102,17 @@ function getStaticFallback(useId: string): string {
     STATIC_FALLBACKS[useId] ??
     'Recurso de IA não disponível no momento. Tente novamente em instantes.'
   )
+}
+
+// ── Substituição de variáveis ─────────────────────────────────────────────────
+
+/**
+ * Substitui tokens {{chave}} no texto pelos valores informados em `variables`.
+ * Tokens sem correspondência são mantidos literalmente.
+ */
+function substituteVariables(text: string, variables?: Record<string, string>): string {
+  if (!variables || Object.keys(variables).length === 0) return text
+  return text.replace(/\{\{(\w+)\}\}/g, (match, key) => variables[key] ?? match)
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
@@ -228,8 +245,9 @@ export async function runAgent(
   const systemParts: string[] = []
 
   // 5a. Prompt base do agente (sempre presente quando configurado)
+  // Variáveis do contexto ({{chave}}) são substituídas antes de montar o prompt.
   if (agent.prompt?.trim()) {
-    systemParts.push(agent.prompt.trim())
+    systemParts.push(substituteVariables(agent.prompt.trim(), ctx.variables))
   }
 
   // 5b. Base de conhecimento inline (modes: inline, hybrid)

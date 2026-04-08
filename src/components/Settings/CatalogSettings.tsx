@@ -7,9 +7,10 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Package, Plus, Pencil, RefreshCw, Tag, Trash2,
   ChevronDown, Search, SlidersHorizontal, X as XIcon,
-  Download, Upload,
+  Download, Upload, Sparkles,
 } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
+import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
 import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
 import type { CatalogCategory, CatalogProduct, CatalogService } from '../../types/sales-funnel'
@@ -532,6 +533,34 @@ const ProductForm: React.FC<{
     Boolean(initial?.external_source || initial?.external_id || initial?.external_reference)
   )
   const [saving, setSaving] = useState(false)
+  const [generatingNotes, setGeneratingNotes] = useState(false)
+  const [generatingGuidance, setGeneratingGuidance] = useState(false)
+  const [previewNotes, setPreviewNotes] = useState<string | null>(null)
+  const [previewGuidance, setPreviewGuidance] = useState<string | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  const handleGenerate = async (field: 'notes' | 'guidance') => {
+    const isNotes = field === 'notes'
+    const useId = isNotes
+      ? 'products:field_writer:internal_notes'
+      : 'products:field_writer:unavailable_behavior'
+    isNotes ? setGeneratingNotes(true) : setGeneratingGuidance(true)
+    setGenerateError(null)
+    try {
+      const result = await lovooAgentsApi.generateFieldText({
+        use_id: useId,
+        item_type: 'product',
+        item_name: name,
+        item_description: description,
+        company_id: companyId,
+      })
+      isNotes ? setPreviewNotes(result) : setPreviewGuidance(result)
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Erro ao gerar texto')
+    } finally {
+      isNotes ? setGeneratingNotes(false) : setGeneratingGuidance(false)
+    }
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -677,10 +706,25 @@ const ProductForm: React.FC<{
           <input type="checkbox" checked={availableAi} onChange={(e) => setAvailableAi(e.target.checked)} />
           Incluir este item no contexto do agente de IA
         </label>
+        {generateError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{generateError}</p>
+        )}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Notas internas (contexto geral para o agente)
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Notas internas (contexto geral para o agente)
+            </label>
+            <button
+              type="button"
+              onClick={() => handleGenerate('notes')}
+              disabled={generatingNotes || !name.trim()}
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title={!name.trim() ? 'Preencha o nome primeiro' : 'Gerar com IA'}
+            >
+              {generatingNotes ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Gerar com IA
+            </button>
+          </div>
           <textarea
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             rows={2}
@@ -688,13 +732,41 @@ const ProductForm: React.FC<{
             onChange={(e) => setAiNotes(e.target.value)}
             placeholder="Instruções gerais para o agente…"
           />
+          {previewNotes && (
+            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-indigo-700">Texto gerado:</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{previewNotes}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setAiNotes(previewNotes); setPreviewNotes(null) }}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors">
+                  Usar este texto
+                </button>
+                <button type="button" onClick={() => setPreviewNotes(null)}
+                  className="px-3 py-1 bg-white text-slate-600 border border-slate-300 rounded text-xs hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Quando indisponível ou descontinuado — como o agente deve agir
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm font-medium text-slate-700">
+              Quando indisponível ou descontinuado — como o agente deve agir
+            </label>
+            <button
+              type="button"
+              onClick={() => handleGenerate('guidance')}
+              disabled={generatingGuidance || !name.trim()}
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title={!name.trim() ? 'Preencha o nome primeiro' : 'Gerar com IA'}
+            >
+              {generatingGuidance ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Gerar com IA
+            </button>
+          </div>
           <p className="text-[11px] text-slate-500 mb-1">
-            Use quando a disponibilidade não for “disponível” (ex.: indisponível, descontinuado). O agente usa isto como
+            Use quando a disponibilidade não for "disponível" (ex.: indisponível, descontinuado). O agente usa isto como
             orientação interna; não é texto público automático.
           </p>
           <textarea
@@ -704,6 +776,22 @@ const ProductForm: React.FC<{
             onChange={(e) => setAiUnavailableGuidance(e.target.value)}
             placeholder="Ex.: explicar indisponibilidade, sugerir alternativa, oferecer lista de espera ou humano, evitar prazo…"
           />
+          {previewGuidance && (
+            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-indigo-700">Texto gerado:</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{previewGuidance}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setAiUnavailableGuidance(previewGuidance); setPreviewGuidance(null) }}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors">
+                  Usar este texto
+                </button>
+                <button type="button" onClick={() => setPreviewGuidance(null)}
+                  className="px-3 py-1 bg-white text-slate-600 border border-slate-300 rounded text-xs hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="rounded-lg border border-slate-200 overflow-hidden">
@@ -1067,6 +1155,34 @@ const ServiceForm: React.FC<{
     Boolean(initial?.external_source || initial?.external_id || initial?.external_reference)
   )
   const [saving, setSaving] = useState(false)
+  const [generatingNotes, setGeneratingNotes] = useState(false)
+  const [generatingGuidance, setGeneratingGuidance] = useState(false)
+  const [previewNotes, setPreviewNotes] = useState<string | null>(null)
+  const [previewGuidance, setPreviewGuidance] = useState<string | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  const handleGenerate = async (field: 'notes' | 'guidance') => {
+    const isNotes = field === 'notes'
+    const useId = isNotes
+      ? 'services:field_writer:internal_notes'
+      : 'services:field_writer:unavailable_behavior'
+    isNotes ? setGeneratingNotes(true) : setGeneratingGuidance(true)
+    setGenerateError(null)
+    try {
+      const result = await lovooAgentsApi.generateFieldText({
+        use_id: useId,
+        item_type: 'service',
+        item_name: name,
+        item_description: description,
+        company_id: companyId,
+      })
+      isNotes ? setPreviewNotes(result) : setPreviewGuidance(result)
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Erro ao gerar texto')
+    } finally {
+      isNotes ? setGeneratingNotes(false) : setGeneratingGuidance(false)
+    }
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1195,10 +1311,25 @@ const ServiceForm: React.FC<{
           <input type="checkbox" checked={availableAi} onChange={(e) => setAvailableAi(e.target.checked)} />
           Incluir este item no contexto do agente de IA
         </label>
+        {generateError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{generateError}</p>
+        )}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Notas internas (contexto geral para o agente)
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Notas internas (contexto geral para o agente)
+            </label>
+            <button
+              type="button"
+              onClick={() => handleGenerate('notes')}
+              disabled={generatingNotes || !name.trim()}
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title={!name.trim() ? 'Preencha o nome primeiro' : 'Gerar com IA'}
+            >
+              {generatingNotes ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Gerar com IA
+            </button>
+          </div>
           <textarea
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             rows={2}
@@ -1206,13 +1337,41 @@ const ServiceForm: React.FC<{
             onChange={(e) => setAiNotes(e.target.value)}
             placeholder="Instruções gerais para o agente…"
           />
+          {previewNotes && (
+            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-indigo-700">Texto gerado:</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{previewNotes}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setAiNotes(previewNotes); setPreviewNotes(null) }}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors">
+                  Usar este texto
+                </button>
+                <button type="button" onClick={() => setPreviewNotes(null)}
+                  className="px-3 py-1 bg-white text-slate-600 border border-slate-300 rounded text-xs hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Quando indisponível ou descontinuado — como o agente deve agir
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm font-medium text-slate-700">
+              Quando indisponível ou descontinuado — como o agente deve agir
+            </label>
+            <button
+              type="button"
+              onClick={() => handleGenerate('guidance')}
+              disabled={generatingGuidance || !name.trim()}
+              className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title={!name.trim() ? 'Preencha o nome primeiro' : 'Gerar com IA'}
+            >
+              {generatingGuidance ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Gerar com IA
+            </button>
+          </div>
           <p className="text-[11px] text-slate-500 mb-1">
-            Use quando a disponibilidade não for “disponível”. Orientação interna para o agente; não é texto público
+            Use quando a disponibilidade não for "disponível". Orientação interna para o agente; não é texto público
             automático.
           </p>
           <textarea
@@ -1222,6 +1381,22 @@ const ServiceForm: React.FC<{
             onChange={(e) => setAiUnavailableGuidance(e.target.value)}
             placeholder="Ex.: explicar indisponibilidade, sugerir alternativa, oferecer lista de espera ou humano, evitar prazo…"
           />
+          {previewGuidance && (
+            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-indigo-700">Texto gerado:</p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{previewGuidance}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setAiUnavailableGuidance(previewGuidance); setPreviewGuidance(null) }}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors">
+                  Usar este texto
+                </button>
+                <button type="button" onClick={() => setPreviewGuidance(null)}
+                  className="px-3 py-1 bg-white text-slate-600 border border-slate-300 rounded text-xs hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="rounded-lg border border-slate-200 overflow-hidden">
