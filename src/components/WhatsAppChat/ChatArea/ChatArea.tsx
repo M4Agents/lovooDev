@@ -296,6 +296,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         try {
           const contactInfo = await chatApi.getContactInfo(companyId, conv.contact_phone)
           setContactPhotoUrl(contactInfo?.profile_picture_url || null)
+          // #region agent log
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'ChatArea.tsx:getContactInfo',message:'[A/C] URL foto via getContactInfo',data:{phone:conv.contact_phone,photoUrl:contactInfo?.profile_picture_url,isWACdn:contactInfo?.profile_picture_url?.includes('pps.whatsapp.net')||contactInfo?.profile_picture_url?.includes('mmg.whatsapp.net'),convPhotoUrl:conv.profile_picture_url},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         } catch (error) {
           console.error('Erro ao carregar foto')
           setContactPhotoUrl(null)
@@ -963,6 +966,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   src={contactPhotoUrl}
                   alt={conversation?.contact_name || conversation?.contact_phone || t('chatArea.contactFallback')}
                   className="w-full h-full object-cover"
+                  // #region agent log
+                  onError={() => { fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'ChatArea.tsx:header-img',message:'[A] FOTO QUEBRADA no header do chat',data:{phone:conversation?.contact_phone,contactPhotoUrl,isWACdn:contactPhotoUrl?.includes('pps.whatsapp.net')||contactPhotoUrl?.includes('mmg.whatsapp.net')},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{}); }}
+                  // #endregion
                 />
               ) : (
                 <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
