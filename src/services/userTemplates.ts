@@ -319,6 +319,57 @@ export const validateTemplateForRole = (template: UserTemplate, targetRole: User
 };
 
 /**
+ * ID interno do template sintetizado para o role partner.
+ * Derivado de system_admin_empresa com baseRole sobrescrito para 'partner'.
+ * Não aparece em getSystemTemplates() — apenas em getDefaultTemplateForRole
+ * e getRecommendedTemplates quando role === 'partner'.
+ */
+export const PARTNER_DEFAULT_TEMPLATE_ID = 'system_parceiro_adm_empresa';
+
+/**
+ * Mapeamento fixo: role → ID do template padrão do sistema.
+ * Para partner: sintetizado em runtime (não está no catálogo permanente).
+ */
+const DEFAULT_TEMPLATE_IDS: Partial<Record<UserRole, string>> = {
+  super_admin:  'system_super_admin',
+  system_admin: 'system_admin_saas',
+  admin:        'system_admin_empresa',
+  manager:      'system_gerente_vendas',
+  seller:       'system_vendedor_basico',
+};
+
+/**
+ * Retorna o template padrão para um dado role.
+ *
+ * Para roles não-partner: busca no catálogo pelo ID fixo.
+ * Para partner: sintetiza em runtime um objeto derivado de system_admin_empresa
+ *   com baseRole: 'partner'. Esse objeto não faz parte de getSystemTemplates()
+ *   e não é persistido. Garante que o guard `selectedTemplate.baseRole === role`
+ *   seja satisfeito sem criar um novo preset fixo no catálogo.
+ */
+export const getDefaultTemplateForRole = (role: UserRole): UserTemplate | undefined => {
+  const now = new Date().toISOString();
+
+  if (role === 'partner') {
+    const adminEmpresa = getSystemTemplates().find(t => t.id === 'system_admin_empresa');
+    if (!adminEmpresa) return undefined;
+    return {
+      ...adminEmpresa,
+      id: PARTNER_DEFAULT_TEMPLATE_ID,
+      name: 'Administrador da Empresa',
+      baseRole: 'partner',
+      companyId: '',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  const templateId = DEFAULT_TEMPLATE_IDS[role];
+  if (!templateId) return undefined;
+  return getSystemTemplates().find(t => t.id === templateId);
+};
+
+/**
  * Obter templates recomendados para um role
  */
 export const getRecommendedTemplates = async (
@@ -327,14 +378,23 @@ export const getRecommendedTemplates = async (
 ): Promise<UserTemplate[]> => {
   const allTemplates = await getCompanyTemplates(companyId);
   
-  return allTemplates.filter(template => 
+  let result = allTemplates.filter(template =>
     validateTemplateForRole(template, role)
-  ).sort((a, b) => {
+  );
+
+  // Para partner: incluir o template sintetizado como primeira opção
+  // (system_admin_empresa com baseRole 'partner' não está em getSystemTemplates)
+  if (role === 'partner') {
+    const partnerDefault = getDefaultTemplateForRole('partner');
+    if (partnerDefault && !result.find(t => t.id === partnerDefault.id)) {
+      result = [{ ...partnerDefault, companyId }, ...result];
+    }
+  }
+
+  return result.sort((a, b) => {
     // Priorizar templates do sistema
     if (a.isSystem && !b.isSystem) return -1;
     if (!a.isSystem && b.isSystem) return 1;
-    
-    // Depois por nome
     return a.name.localeCompare(b.name);
   });
 };

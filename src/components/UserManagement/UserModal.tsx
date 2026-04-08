@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions, getAssignableRoles } from '../../services/userApi';
-import { applyTemplateToPermissions } from '../../services/userTemplates';
+import { applyTemplateToPermissions, getDefaultTemplateForRole } from '../../services/userTemplates';
 import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
 import { TemplateSelector } from './TemplateSelector';
 import { useAuth } from '../../contexts/AuthContext';
@@ -179,9 +179,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         });
         
         // NOVO: Resetar estados avançados para criação
-        setSelectedTemplate(null);
         setUseAdvancedPermissions(false);
         setCustomPermissions({});
+
+        // Fase 2: auto-selecionar template padrão para o role inicial (seller)
+        const defaultTemplate = getDefaultTemplateForRole('seller');
+        setSelectedTemplate(defaultTemplate || null);
       }
       setError(null);
       
@@ -206,6 +209,16 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       
       if (correctProfile && (!selectedProfile || selectedProfile.legacyRole !== formData.role)) {
         setSelectedProfile(correctProfile);
+      }
+
+      // Fase 2: ao trocar role em modo criação, auto-selecionar template padrão
+      // Respeita seleção manual: só troca se o template atual não pertence ao novo role
+      if (!isEditing) {
+        const templateMatchesRole = selectedTemplate && selectedTemplate.baseRole === formData.role;
+        if (!templateMatchesRole) {
+          const defaultTemplate = getDefaultTemplateForRole(formData.role);
+          setSelectedTemplate(defaultTemplate || null);
+        }
       }
     }
   }, [formData.role, availableProfiles, isOpen, company?.id]);
@@ -314,16 +327,23 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         return;
       }
 
-      // NOVO: Calcular permissões finais usando perfil selecionado
-      let finalPermissions = getDefaultPermissions(formData.role);
-      
-      // Prioridade 1: Usar perfil selecionado (sistema unificado)
-      if (selectedProfile) {
-        finalPermissions = selectedProfile.permissions;
+      // Fase 3: Perfil de permissão obrigatório na criação
+      if (!isEditing && !selectedTemplate) {
+        setError(t('users.userModal.messages.profileRequired'));
+        return;
       }
-      // Fallback: Aplicar template apenas se baseRole coincide com o role atual (segurança)
-      else if (selectedTemplate && selectedTemplate.baseRole === formData.role) {
-        finalPermissions = applyTemplateToPermissions(selectedTemplate, finalPermissions);
+
+      // Calcular permissões finais
+      let finalPermissions = getDefaultPermissions(formData.role);
+
+      // Prioridade 1: Template selecionado (modelo de permissões específico)
+      // Guard: baseRole deve coincidir com o role atual para segurança
+      if (selectedTemplate && selectedTemplate.baseRole === formData.role) {
+        finalPermissions = applyTemplateToPermissions(selectedTemplate, getDefaultPermissions(formData.role));
+      }
+      // Prioridade 2: Perfil canônico do role (fallback para edição sem template)
+      else if (selectedProfile) {
+        finalPermissions = selectedProfile.permissions;
       }
       
       // Aplicar customizações avançadas se configuradas
@@ -844,7 +864,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     if (profile) {
                       const role = getProfileRole(profile);
                       setFormData(prev => ({ ...prev, role }));
-                      setSelectedTemplate(null);
+                      // Fase 2: auto-selecionar template padrão do novo role (criação apenas)
+                      if (!isEditing) {
+                        const defaultTemplate = getDefaultTemplateForRole(role);
+                        setSelectedTemplate(defaultTemplate || null);
+                      } else {
+                        setSelectedTemplate(null);
+                      }
                     }
                   }}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -945,6 +971,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               selectedTemplate={selectedTemplate}
               onSelectTemplate={setSelectedTemplate}
               disabled={loading}
+              required={!isEditing}
+              defaultTemplateId={getDefaultTemplateForRole(formData.role)?.id}
             />
           )}
 

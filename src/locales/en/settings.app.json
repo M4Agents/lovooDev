@@ -557,6 +557,8 @@
     "templateSelector": {
       "label": "Permission model",
       "optional": "(Optional)",
+      "defaultBadge": "Default",
+      "customBadge": "Custom",
       "loadError": "Could not load models",
       "defaultTitle": "Default {{role}}",
       "defaultHint": "Use default permissions for profile {{role}}",
@@ -898,6 +900,7 @@
         "emailRequired": "Email is required",
         "companyUnknown": "Company not identified",
         "invalidRole": "Role {{role}} is not valid for this company type",
+        "profileRequired": "Please select a Permission Profile before continuing",
         "inviteLinkFailed": "User created, but the access link could not be generated. Open the user list and use \"Generate new link\" for this user.",
         "inviteMessage": "Access link generated — share it with the user",
         "compatMode": "User created in compatibility mode. Open the user list and use \"Generate new link\" to send access.",

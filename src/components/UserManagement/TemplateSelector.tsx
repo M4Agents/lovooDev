@@ -14,6 +14,10 @@ interface TemplateSelectorProps {
   selectedTemplate?: UserTemplate | null;
   onSelectTemplate: (template: UserTemplate | null) => void;
   disabled?: boolean;
+  /** Quando true: oculta a opção "Sem modelo" e torna a seleção obrigatória */
+  required?: boolean;
+  /** ID do template padrão do tipo — exibe badge "Padrão" no card correspondente */
+  defaultTemplateId?: string;
 }
 
 export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
@@ -21,7 +25,9 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
   selectedRole,
   selectedTemplate,
   onSelectTemplate,
-  disabled = false
+  disabled = false,
+  required = false,
+  defaultTemplateId,
 }) => {
   const { t } = useTranslation('settings.app');
   const [templates, setTemplates] = useState<UserTemplate[]>([]);
@@ -107,39 +113,43 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     <div className="space-y-3">
       <label className="block text-sm font-medium text-slate-700">
         {t('users.templateSelector.label')}
-        <span className="text-xs text-slate-500 ml-2">{t('users.templateSelector.optional')}</span>
+        {!required && (
+          <span className="text-xs text-slate-500 ml-2">{t('users.templateSelector.optional')}</span>
+        )}
       </label>
       
       <div className="space-y-3">
-        {/* Opção: Sem template (padrão) */}
-        <div
-          className={`cursor-pointer border-2 rounded-lg p-4 transition-all ${
-            !selectedTemplate
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-slate-200 hover:border-slate-300'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => !disabled && onSelectTemplate(null)}
-        >
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 mt-1">
-              {getRoleIcon(selectedRole)}
-            </div>
-            <div className="flex-1">
-              <h4 className="font-medium text-slate-900">
-                {t('users.templateSelector.defaultTitle', { role: getRoleName(selectedRole) })}
-              </h4>
-              <p className="text-sm text-slate-600 mt-1">
-                {t('users.templateSelector.defaultHint', { role: getRoleName(selectedRole).toLowerCase() })}
-              </p>
-              <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
-                <span className="flex items-center space-x-1">
-                  <Tag className="w-3 h-3" />
-                  <span>{t('users.templateSelector.systemBadge')}</span>
-                </span>
+        {/* Opção: Sem template — oculta quando seleção é obrigatória */}
+        {!required && (
+          <div
+            className={`cursor-pointer border-2 rounded-lg p-4 transition-all ${
+              !selectedTemplate
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-slate-200 hover:border-slate-300'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => !disabled && onSelectTemplate(null)}
+          >
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 mt-1">
+                {getRoleIcon(selectedRole)}
+              </div>
+              <div className="flex-1">
+                <h4 className="font-medium text-slate-900">
+                  {t('users.templateSelector.defaultTitle', { role: getRoleName(selectedRole) })}
+                </h4>
+                <p className="text-sm text-slate-600 mt-1">
+                  {t('users.templateSelector.defaultHint', { role: getRoleName(selectedRole).toLowerCase() })}
+                </p>
+                <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
+                  <span className="flex items-center space-x-1">
+                    <Tag className="w-3 h-3" />
+                    <span>{t('users.templateSelector.systemBadge')}</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Templates disponíveis */}
         {templates.map((template) => (
@@ -157,13 +167,27 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                 {getRoleIcon(template.baseRole)}
               </div>
               <div className="flex-1">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                   <h4 className="font-medium text-slate-900">
                     {template.name}
                   </h4>
                   {template.isSystem && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                       {t('users.templates.badgeSystem')}
+                    </span>
+                  )}
+                  {/* Badge: Padrão do tipo */}
+                  {defaultTemplateId && template.id === defaultTemplateId && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      {t('users.templateSelector.defaultBadge')}
+                    </span>
+                  )}
+                  {/* Badge: Personalizado — selecionado mas não é o padrão */}
+                  {selectedTemplate?.id === template.id &&
+                   defaultTemplateId &&
+                   template.id !== defaultTemplateId && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                      {t('users.templateSelector.customBadge')}
                     </span>
                   )}
                 </div>

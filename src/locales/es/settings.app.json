@@ -557,6 +557,8 @@
     "templateSelector": {
       "label": "Modelo de permisos",
       "optional": "(Opcional)",
+      "defaultBadge": "Por defecto",
+      "customBadge": "Personalizado",
       "loadError": "Error al cargar modelos",
       "defaultTitle": "{{role}} predeterminado",
       "defaultHint": "Usar permisos predeterminados del perfil {{role}}",
@@ -898,6 +900,7 @@
         "emailRequired": "El correo es obligatorio",
         "companyUnknown": "Empresa no identificada",
         "invalidRole": "El rol {{role}} no es válido para este tipo de empresa",
+        "profileRequired": "Seleccione un Perfil de Permisos antes de continuar",
         "inviteLinkFailed": "Usuario creado, pero no se pudo generar el enlace de acceso. Abre el listado de usuarios y usa \"Generar nuevo enlace\" para este usuario.",
         "inviteMessage": "Enlace de acceso generado — compártelo con el usuario",
         "compatMode": "Usuario creado en modo compatibilidad. Abre el listado de usuarios y usa \"Generar nuevo enlace\" para enviar el acceso.",
