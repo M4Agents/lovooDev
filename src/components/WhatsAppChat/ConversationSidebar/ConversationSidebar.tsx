@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
 import { InstanceSelector } from '../InstanceSelector'
+import { resolvePhotoUrl } from '../../../utils/imageUtils'
 
 // =====================================================
 // TIPOS DO COMPONENTE
@@ -298,10 +299,6 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   }
 
 
-  // #region agent log
-  if (conversation.contact_phone === '555196908349' || conversation.contact_phone === '5555196908349') { fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'ConversationSidebar.tsx:render',message:'[A/B] URL foto no render da sidebar',data:{phone:conversation.contact_phone,photoUrl,isNull:!photoUrl,isWACdn:photoUrl?.includes('pps.whatsapp.net')||photoUrl?.includes('mmg.whatsapp.net')},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{}); }
-  // #endregion
-
   return (
     <button
       onClick={onClick}
@@ -316,14 +313,11 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       <div className="flex items-start space-x-3">
         {/* Avatar */}
         <div className="flex-shrink-0">
-          {photoUrl ? (
+          {resolvePhotoUrl(photoUrl) ? (
             <img
-              src={photoUrl}
+              src={resolvePhotoUrl(photoUrl)}
               alt={conversation.contact_name || conversation.contact_phone || t('conversationItem.contactAlt')}
               className="w-12 h-12 rounded-xl object-cover shadow-sm bg-slate-200"
-              // #region agent log
-              onError={() => { fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'ConversationSidebar.tsx:img',message:'[A] FOTO QUEBRADA na sidebar',data:{phone:conversation.contact_phone,photoUrl,isWACdn:photoUrl?.includes('pps.whatsapp.net')||photoUrl?.includes('mmg.whatsapp.net')},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{}); }}
-              // #endregion
             />
           ) : (
             <div className="w-12 h-12 bg-gradient-to-br from-slate-300 to-slate-400 rounded-xl flex items-center justify-center shadow-sm">
