@@ -103,8 +103,8 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
     // PERFIS PARA VENDEDORES
     {
       id: 'system_vendedor_basico',
-      name: 'Vendedor Básico',
-      description: 'Perfil para vendedores iniciantes com permissões essenciais',
+      name: 'SDR',
+      description: 'Prospecção e qualificação de leads - foco em geração e primeiro contato',
       baseRole: 'seller',
       customPermissions: {
         ...getDefaultPermissions('seller'),
@@ -117,15 +117,15 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
-      visibleToChildCompanies: true, // VISÍVEL para empresas filhas
+      visibleToChildCompanies: true,
       created_at: now,
       updated_at: now,
-      tags: ['vendedor', 'básico', 'iniciante']
+      tags: ['SDR', 'prospecção', 'qualificação']
     },
     {
       id: 'system_vendedor_senior',
-      name: 'Vendedor Sênior',
-      description: 'Perfil para vendedores experientes com mais autonomia',
+      name: 'Closer',
+      description: 'Negociação e fechamento de deals - foco em conversão e autonomia operacional',
       baseRole: 'seller',
       customPermissions: {
         ...getDefaultPermissions('seller'),
@@ -144,10 +144,10 @@ export const getSystemTemplates = (companyType?: 'parent' | 'client'): UserTempl
       createdBy: 'system',
       isActive: true,
       isSystem: true,
-      visibleToChildCompanies: true, // VISÍVEL para empresas filhas
+      visibleToChildCompanies: true,
       created_at: now,
       updated_at: now,
-      tags: ['vendedor', 'sênior', 'experiente']
+      tags: ['Closer', 'negociação', 'fechamento']
     },
     {
       id: 'system_gerente_vendas',
