@@ -3,7 +3,7 @@
 // =====================================================
 
 import { UserProfile, UserRole, UserTemplate, UserPermissions } from '../types/user';
-import { getDefaultPermissions } from './userApi';
+import { getDefaultPermissions, getAssignableRoles } from './userApi';
 import { getCompanyTemplates } from './userTemplates';
 
 // =====================================================
@@ -196,34 +196,45 @@ export const getUserProfileById = async (profileId: string, companyId: string): 
 };
 
 /**
- * Obter perfis compatíveis com tipo de empresa
+ * Obter perfis compatíveis com tipo de empresa e, opcionalmente,
+ * filtrados pela hierarquia do caller (via getAssignableRoles).
+ *
+ * @param companyId   ID da empresa (para buscar perfis personalizados)
+ * @param companyType Tipo da empresa (parent | client)
+ * @param callerRole  Role do usuário que vai criar/editar — filtra perfis acima do tier do caller.
+ *                    Quando omitido, retorna todos os perfis compatíveis com o tipo de empresa.
  */
 export const getProfilesForCompanyType = async (
-  companyId: string, 
-  companyType: 'parent' | 'client'
+  companyId: string,
+  companyType: 'parent' | 'client',
+  callerRole?: UserRole
 ): Promise<UserProfile[]> => {
   const allProfiles = await getAllUserProfiles(companyId);
-  
+
+  // Roles atribuíveis pelo caller (espelha a lógica de getAvailableRoles no UserModal)
+  const assignableRoles: UserRole[] | null = callerRole
+    ? getAssignableRoles(callerRole, companyType)
+    : null;
+
   return allProfiles.filter(profile => {
-    // Para perfis do sistema, filtrar por role compatível
-    if (profile.isSystem && profile.legacyRole) {
-      if (companyType === 'parent') {
-        return ['super_admin', 'admin', 'partner'].includes(profile.legacyRole);
-      } else {
-        return ['admin', 'manager', 'seller'].includes(profile.legacyRole);
-      }
+    const role: UserRole | undefined = profile.isSystem ? profile.legacyRole : profile.baseRole;
+
+    // Se não conseguimos determinar o role, incluir (permissivo)
+    if (!role) return true;
+
+    // 1. Filtro por tipo de empresa
+    const validForType =
+      companyType === 'parent'
+        ? (['super_admin', 'system_admin', 'admin', 'partner'] as UserRole[]).includes(role)
+        : (['admin', 'manager', 'seller'] as UserRole[]).includes(role);
+
+    if (!validForType) return false;
+
+    // 2. Filtro por hierarquia do caller (quando callerRole foi fornecido)
+    if (assignableRoles !== null) {
+      return assignableRoles.includes(role);
     }
-    
-    // Para perfis personalizados, filtrar por role base
-    if (!profile.isSystem && profile.baseRole) {
-      if (companyType === 'parent') {
-        return ['super_admin', 'admin', 'partner'].includes(profile.baseRole);
-      } else {
-        return ['admin', 'manager', 'seller'].includes(profile.baseRole);
-      }
-    }
-    
-    // Se não conseguir determinar, incluir (melhor ser permissivo)
+
     return true;
   });
 };
@@ -266,7 +277,7 @@ export const validateProfileForCompany = (
   const role = getProfileRole(profile);
   
   if (companyType === 'parent') {
-    return ['super_admin', 'admin', 'partner'].includes(role);
+    return ['super_admin', 'system_admin', 'admin', 'partner'].includes(role);
   } else {
     return ['admin', 'manager', 'seller'].includes(role);
   }

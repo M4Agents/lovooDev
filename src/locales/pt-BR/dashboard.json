@@ -27,6 +27,12 @@
     "reloadCompany": "Recarregar Empresa",
     "clearAndReturnSuperAdmin": "Limpar e Voltar ao Super Admin"
   },
+  "partnerNoAssignments": {
+    "title": "Nenhuma empresa atribuída",
+    "description": "Você ainda não possui empresas atribuídas ao seu perfil de partner. Solicite ao administrador da plataforma que atribua uma ou mais empresas ao seu usuário.",
+    "contactAdmin": "Entre em contato com o administrador da plataforma para receber acesso.",
+    "logout": "Sair"
+  },
   "header": {
     "titlePlatform": "Dashboard da Plataforma",
     "titleDefault": "Dashboard",

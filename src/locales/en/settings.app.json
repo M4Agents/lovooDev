@@ -541,6 +541,7 @@
     },
     "roles": {
       "super_admin": "Super admin",
+      "system_admin": "System administrator",
       "support": "Support",
       "admin": "Admin",
       "partner": "Partner",
@@ -686,9 +687,10 @@
     },
     "roleDescriptions": {
       "parent": {
-        "super_admin": "Full system access",
+        "super_admin": "Full system access including SaaS pages",
+        "system_admin": "Full operational access, no SaaS pages",
         "admin": "Manages child companies",
-        "partner": "Manages own accounts"
+        "partner": "Manages assigned accounts"
       },
       "client": {
         "admin": "Company settings",
@@ -845,6 +847,7 @@
       "optgroupSystem": "System profiles",
       "optgroupCustom": "Custom profiles",
       "fallbackRolesWarning": "⚠️ Using basic roles. Custom profiles are temporarily unavailable.",
+      "roleReadonlyWarning": "You do not have permission to change this user's role.",
       "sendInvite": "Send email invite",
       "sendInviteHint": "The user will get instructions to access the system",
       "companySection": "Company",

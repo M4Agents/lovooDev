@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
-import { TrendingUp, Users, MousePointer, Target, Activity, Building2 } from 'lucide-react';
+import { TrendingUp, Users, MousePointer, Target, Activity, Building2, Link } from 'lucide-react';
 
 type DashboardStats = {
   totalPages: number;
@@ -13,8 +14,9 @@ type DashboardStats = {
 };
 
 export const Dashboard: React.FC = () => {
-  const { company, user, signOut, refreshCompany } = useAuth();
-  const { isSaaSAdmin } = useAccessControl();
+  const { t } = useTranslation('dashboard');
+  const { company, user, signOut, refreshCompany, partnerHasNoAssignments } = useAuth();
+  const { isSaaSAdmin, isPartner } = useAccessControl();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +49,41 @@ export const Dashboard: React.FC = () => {
   }
 
   if (!company) {
+    // Empty state semântico: partner autenticado, RPC respondeu, mas nenhuma empresa atribuída
+    if (isPartner && partnerHasNoAssignments) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center max-w-md">
+            <div className="flex justify-center mb-4">
+              <div className="p-4 bg-indigo-50 rounded-full">
+                <Link className="w-10 h-10 text-indigo-400" />
+              </div>
+            </div>
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">
+              {t('partnerNoAssignments.title')}
+            </h3>
+            <p className="text-slate-600 mb-3">
+              {t('partnerNoAssignments.description')}
+            </p>
+            <p className="text-sm text-slate-500 mb-6">
+              {t('partnerNoAssignments.contactAdmin')}
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                await signOut();
+                window.location.href = '/';
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors"
+            >
+              {t('partnerNoAssignments.logout')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Erro genérico: falha ao carregar empresa (não é partner sem atribuições)
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -55,26 +92,26 @@ export const Dashboard: React.FC = () => {
           <p className="text-gray-600 mb-4">Não foi possível carregar os dados da sua empresa.</p>
           <div className="space-y-2">
             <p className="text-sm text-gray-500">User ID: {user?.id}</p>
-            <button 
-              onClick={() => window.location.reload()} 
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               Recarregar Página
             </button>
-            <button 
-              onClick={async () => {
-                // Forçar refresh da empresa
-                await refreshCompany();
-              }} 
+            <button
+              type="button"
+              onClick={async () => { await refreshCompany(); }}
               className="ml-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
             >
               Recarregar Empresa
             </button>
-            <button 
+            <button
+              type="button"
               onClick={async () => {
                 await signOut();
                 window.location.href = '/';
-              }} 
+              }}
               className="ml-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
             >
               Fazer Logout

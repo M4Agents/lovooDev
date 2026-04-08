@@ -541,6 +541,7 @@
     },
     "roles": {
       "super_admin": "Superadministrador",
+      "system_admin": "Administrador de sistema",
       "support": "Soporte",
       "admin": "Administrador",
       "partner": "Socio",
@@ -686,9 +687,10 @@
     },
     "roleDescriptions": {
       "parent": {
-        "super_admin": "Acceso total al sistema",
+        "super_admin": "Acceso total al sistema y páginas SaaS",
+        "system_admin": "Acceso operativo total, sin páginas SaaS",
         "admin": "Administra empresas hijas",
-        "partner": "Administra sus propias cuentas"
+        "partner": "Administra cuentas asignadas"
       },
       "client": {
         "admin": "Configuración de la empresa",
@@ -845,6 +847,7 @@
       "optgroupSystem": "Perfiles del sistema",
       "optgroupCustom": "Perfiles personalizados",
       "fallbackRolesWarning": "⚠️ Usando roles básicos. Los perfiles personalizados no están disponibles temporalmente.",
+      "roleReadonlyWarning": "No tienes permiso para cambiar el rol de este usuario.",
       "sendInvite": "Enviar invitación por correo",
       "sendInviteHint": "El usuario recibirá instrucciones para acceder al sistema",
       "companySection": "Empresa",

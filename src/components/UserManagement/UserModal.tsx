@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
-import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions } from '../../services/userApi';
+import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions, getAssignableRoles } from '../../services/userApi';
 import { applyTemplateToPermissions } from '../../services/userTemplates';
 import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,7 +28,7 @@ interface UserModalProps {
 
 export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, preSelectedProfileId }) => {
   const { t } = useTranslation('settings.app');
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const { isSaaSAdmin } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -237,7 +237,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         return;
       }
 
-      const profiles = await getProfilesForCompanyType(company.id, company.company_type || 'client');
+      const profiles = await getProfilesForCompanyType(company.id, company.company_type || 'client', currentRole ?? undefined);
       setAvailableProfiles(profiles || []);
       
       // CORREÇÃO: Sempre tentar encontrar perfil correto baseado no role atual
@@ -267,24 +267,28 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   };
 
-  // Roles disponíveis baseados no tipo de empresa
+  // Roles atribuíveis pelo caller, filtrados por hierarquia (ROLE_TIER).
+  // Espelha exatamente a lógica do backend (update_company_user_safe).
+  const companyType = company?.company_type ?? 'client';
+  const assignableRoles = getAssignableRoles(currentRole, companyType);
+
   const getAvailableRoles = (): { value: UserRole; label: string; description: string }[] => {
-    const companyType = company?.company_type || 'client';
-    
-    if (companyType === 'parent') {
-      return [
-        { value: 'super_admin', label: t('users.roles.super_admin'), description: t('users.roleDescriptions.parent.super_admin') },
-        { value: 'admin', label: t('users.roles.admin'), description: t('users.roleDescriptions.parent.admin') },
-        { value: 'partner', label: t('users.roles.partner'), description: t('users.roleDescriptions.parent.partner') }
-      ];
-    } else {
-      return [
-        { value: 'admin', label: t('users.roles.admin'), description: t('users.roleDescriptions.client.admin') },
-        { value: 'manager', label: t('users.roles.manager'), description: t('users.roleDescriptions.client.manager') },
-        { value: 'seller', label: t('users.roles.seller'), description: t('users.roleDescriptions.client.seller') }
-      ];
-    }
+    return assignableRoles.map((role) => ({
+      value: role,
+      label: t(`users.roles.${role}`),
+      description: t(
+        companyType === 'parent'
+          ? `users.roleDescriptions.parent.${role}`
+          : `users.roleDescriptions.client.${role}`,
+        // i18next fallback: se a chave não existir, usa o label como descrição
+        { defaultValue: t(`users.roles.${role}`) }
+      ),
+    }));
   };
+
+  // Em modo edição: se o role atual do target não é atribuível pelo caller,
+  // o campo de role fica readonly — o submit não enviará alteração de role.
+  const isRoleReadonly = isEditing && !!user && !assignableRoles.includes(user.role);
 
   // Salvar usuário
   const handleSave = async () => {
@@ -362,24 +366,24 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           }
         }
 
-        // Atualizar usuário existente (EXPANDIDO)
+        // Atualizar usuário existente.
+        // Se role é readonly (caller não pode atribuir o role atual do target),
+        // o campo `role` é omitido do payload para evitar erro no backend.
         const updateRequest: UpdateUserRequest = {
           id: user.id,
-          role: formData.role,
-          permissions: finalPermissions, // Usar permissões calculadas
-          profile_picture_url: profilePictureUrl // 🔧 NOVO: Incluir URL da foto
+          ...(isRoleReadonly ? {} : { role: formData.role }),
+          permissions: finalPermissions,
+          profile_picture_url: profilePictureUrl
         };
 
-        // 🔧 CORREÇÃO: Se apenas atualizando foto, enviar request simplificado
+        // Se apenas atualizando foto, enviar request simplificado
         if (formData.profilePicture && formData.role === user.role) {
-          // Apenas atualização de foto - request simplificado
           const photoOnlyRequest: UpdateUserRequest = {
             id: user.id,
             profile_picture_url: profilePictureUrl
           };
           await updateCompanyUser(photoOnlyRequest);
         } else {
-          // Atualização completa
           await updateCompanyUser(updateRequest);
         }
 
@@ -822,9 +826,18 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             {/* SISTEMA NOVO: Seletor de Perfis (quando disponível) */}
             {availableProfiles.length > 0 ? (
               <>
+                {/* Aviso de role readonly: caller não pode alterar o role deste usuário */}
+                {isRoleReadonly && (
+                  <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-700">
+                      {t('users.userModal.roleReadonlyWarning')}
+                    </p>
+                  </div>
+                )}
                 <select
                   value={selectedProfile?.id || ''}
                   onChange={(e) => {
+                    if (isRoleReadonly) return;
                     const profile = availableProfiles.find(p => p.id === e.target.value);
                     setSelectedProfile(profile || null);
                     if (profile) {
@@ -833,8 +846,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                       setFormData(prev => ({ ...prev, role }));
                     }
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  disabled={loading}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    isRoleReadonly
+                      ? 'border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed'
+                      : 'border-slate-300'
+                  }`}
+                  disabled={loading || isRoleReadonly}
                 >
                   <option value="">{t('users.userModal.selectProfile')}</option>
                   
@@ -894,11 +911,26 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             ) : (
               /* FALLBACK: Seletor de Roles Antigo (quando perfis falham) */
               <>
+                {isRoleReadonly && (
+                  <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-700">
+                      {t('users.userModal.roleReadonlyWarning')}
+                    </p>
+                  </div>
+                )}
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserRole }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  disabled={loading}
+                  onChange={(e) => {
+                    if (!isRoleReadonly) {
+                      setFormData(prev => ({ ...prev, role: e.target.value as UserRole }));
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    isRoleReadonly
+                      ? 'border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed'
+                      : 'border-slate-300'
+                  }`}
+                  disabled={loading || isRoleReadonly}
                 >
                   {getAvailableRoles().map((role) => (
                     <option key={role.value} value={role.value}>

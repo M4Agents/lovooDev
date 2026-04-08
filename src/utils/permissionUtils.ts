@@ -19,40 +19,39 @@ export const CRITICAL_PERMISSIONS = [
 ] as const;
 
 /**
- * Verifica se o usuário pode acessar permissões críticas
- * 
- * REGRAS IMPLEMENTADAS:
- * - Empresa Pai: Apenas Super Admin e Admin
- * - Empresas Filhas: NUNCA
- * - Parceiros: NUNCA (implementação conservadora)
+ * Verifica se o usuário pode acessar permissões críticas na UI.
+ *
+ * REGRAS:
+ * - Empresa parent: super_admin e system_admin têm acesso completo;
+ *   admin tem acesso (para ver os toggles, mas o backend faz strip do impersonate).
+ * - Empresa client: NUNCA.
+ * - partner: NUNCA (opera apenas empresas atribuídas, sem gestão de plataforma).
+ *
+ * IMPORTANTE: esta função controla apenas visibilidade de toggles na UI.
+ * O backend (update_company_user_safe) é a autoridade final: strip de 'companies'
+ * e 'impersonate' para callers que não sejam super_admin, independente do que
+ * o frontend exibe.
  */
 export const canAccessCriticalPermissions = (
   companyType?: string,
   userRole?: UserRole | string,
   isSuperAdmin?: boolean
 ): boolean => {
-  // Se não temos informações suficientes, negar acesso
   if (!companyType || !userRole) {
     return false;
   }
 
-  // Empresas Filhas: NUNCA podem acessar permissões críticas
+  // Empresas client: NUNCA
   if (companyType === 'client') {
     return false;
   }
 
-  // Empresa Pai: Apenas Super Admin e Admin
+  // Empresa parent: super_admin, system_admin e admin
   if (companyType === 'parent') {
-    return isSuperAdmin || ['super_admin', 'admin'].includes(userRole);
+    return isSuperAdmin || ['super_admin', 'system_admin', 'admin'].includes(userRole);
   }
 
-  // Parceiros: NUNCA (implementação conservadora)
-  // TODO: Definir regra específica para parceiros no futuro
-  if (userRole === 'partner') {
-    return false;
-  }
-
-  // Por padrão, negar acesso
+  // partner e demais: negar
   return false;
 };
 
@@ -145,7 +144,7 @@ export const getCriticalPermissionMessage = (
   }
   
   if (companyType === 'parent') {
-    return 'Apenas Super Administradores e Administradores podem acessar permissões críticas.';
+    return 'Apenas Super Administradores, Administradores de Sistema e Administradores podem acessar permissões críticas.';
   }
   
   return 'Acesso a permissões críticas restrito por política de segurança.';

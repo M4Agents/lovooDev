@@ -27,6 +27,12 @@
     "reloadCompany": "Reload company",
     "clearAndReturnSuperAdmin": "Clear and return to super admin"
   },
+  "partnerNoAssignments": {
+    "title": "No companies assigned",
+    "description": "You don't have any companies assigned to your partner profile yet. Ask the platform administrator to assign one or more companies to your user.",
+    "contactAdmin": "Contact the platform administrator to get access.",
+    "logout": "Sign out"
+  },
   "header": {
     "titlePlatform": "Platform dashboard",
     "titleDefault": "Dashboard",

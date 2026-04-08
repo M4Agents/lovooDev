@@ -34,6 +34,8 @@ type AuthContextType = {
   isImpersonating: boolean;
   originalUser: User | null;
   availableCompanies: Company[];
+  // Flag: partner autenticado sem nenhuma empresa atribuída (lista vazia, sem erro de RPC)
+  partnerHasNoAssignments: boolean;
   // Novos campos para sistema de usuários
   userRoles: CompanyUser[];
   currentRole: UserRole | null;
@@ -77,7 +79,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Não persistido em localStorage — após reload cai no fallback SUPER_ADMIN_DEFAULT_PERMISSIONS.
   const [originalUserPermissions, setOriginalUserPermissions] = useState<UserPermissions | null>(null);
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
-  
+  // true apenas quando: caller é partner, RPC não retornou erro, mas lista de atribuições é vazia.
+  // Diferencia "erro de sistema" de "sem atribuições pendentes de configuração".
+  const [partnerHasNoAssignments, setPartnerHasNoAssignments] = useState(false);
+
   // Novos estados para sistema de usuários
   const [userRoles, setUserRoles] = useState<CompanyUser[]>([]);
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
@@ -226,13 +231,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Verificar super admin: role explícito em empresa do tipo parent
+      // Verificar papéis privilegiados em empresa parent
       const isSuperAdmin = companyUserRows.some(
         r => r.role === 'super_admin' && (r.companies as any)?.company_type === 'parent'
       );
+      const isSystemAdmin = companyUserRows.some(
+        r => r.role === 'system_admin' && (r.companies as any)?.company_type === 'parent'
+      );
+      const isPartner = companyUserRows.some(
+        r => r.role === 'partner' && (r.companies as any)?.company_type === 'parent'
+      );
 
-      if (isSuperAdmin || forceSuper) {
-        // Super admin: carrega todas as empresas e seleciona a empresa pai
+      if (isSuperAdmin || isSystemAdmin || forceSuper) {
+        // super_admin e system_admin: visão global — carrega todas as empresas
+        setPartnerHasNoAssignments(false);
         const { data: allCompanies, error: allError } = await supabase
           .from('companies')
           .select('*')
@@ -248,7 +260,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Usuário comum: empresas limitadas aos registros de company_users
+      if (isPartner) {
+        // Partner: visão restrita — apenas empresas explicitamente atribuídas
+        const { data: assignedRows, error: assignedError } = await supabase
+          .rpc('get_partner_assigned_companies');
+
+        if (assignedError) {
+          console.error('AuthContext [partner]: Error fetching assigned companies:', assignedError);
+        }
+
+        if (!assignedRows || assignedRows.length === 0) {
+          const isEmptyList = !assignedError && (!assignedRows || assignedRows.length === 0);
+          console.warn('AuthContext [partner]: No assigned companies found for user:', userId, {
+            userId,
+            isPartner: true,
+            detail: assignedError ? 'RPC error' : 'empty list — partner has no company assignments yet',
+          });
+          setAvailableCompanies([]);
+          setCompany(null);
+          // Sinaliza "sem atribuições" apenas quando a RPC respondeu com sucesso mas retornou vazio.
+          // Erro de RPC mantém false — pode ser falha de rede ou permissão, não ausência de dados.
+          setPartnerHasNoAssignments(isEmptyList);
+          return;
+        }
+
+        // Partner tem atribuições — garantir que o flag fique false
+        setPartnerHasNoAssignments(false);
+
+        // Buscar dados completos das empresas atribuídas
+        const assignedIds = (assignedRows as { company_id: string }[]).map(r => r.company_id);
+        const { data: partnerCompanies, error: partnerError } = await supabase
+          .from('companies')
+          .select('*')
+          .in('id', assignedIds)
+          .order('name');
+
+        if (partnerError || !partnerCompanies || partnerCompanies.length === 0) {
+          console.warn('AuthContext [partner]: Could not load assigned companies data:', partnerError);
+          setAvailableCompanies([]);
+          setCompany(null);
+          return;
+        }
+
+        setAvailableCompanies(partnerCompanies);
+        const savedCompanyId = localStorage.getItem('currentCompanyId');
+        const savedCompany = savedCompanyId ? partnerCompanies.find(c => c.id === savedCompanyId) : null;
+        const selectedCompany = savedCompany || partnerCompanies[0];
+        setCompany(selectedCompany);
+        setCompanyTimezone(selectedCompany.timezone || 'America/Sao_Paulo');
+        localStorage.setItem('currentCompanyId', selectedCompany.id);
+        return;
+      }
+
+      // Usuário comum (admin/manager/seller): empresas limitadas aos registros de company_users
       const companies = companyUserRows
         .map(r => r.companies as unknown as Company)
         .filter(Boolean);
@@ -574,8 +638,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const impersonateUser = async (companyId: string) => {
-    if (!user || currentRole !== 'super_admin') {
-      throw new Error('Only super admins can impersonate users');
+    const canImpersonate =
+      currentRole === 'super_admin' || currentRole === 'system_admin';
+
+    if (!user || !canImpersonate) {
+      throw new Error('Only super_admin or system_admin can impersonate users');
     }
 
     try {
@@ -780,6 +847,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (currentRole) {
       switch (currentRole) {
+        // system_admin: mesmo teto de super_admin no fallback.
+        // Restrição de páginas SaaS (/companies, /plans) é feita via
+        // useAccessControl (isSaaSAdmin), não via hasPermission.
+        case 'system_admin':
+          return true;
         case 'admin':
           return permission !== 'financial' && permission !== 'companies';
         case 'partner':
@@ -861,6 +933,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isImpersonating,
       originalUser,
       availableCompanies,
+      partnerHasNoAssignments,
       // Novos campos
       userRoles,
       currentRole,

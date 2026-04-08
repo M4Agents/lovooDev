@@ -10,33 +10,32 @@ import { CompanyUser, CreateUserRequest, UpdateUserRequest, UserRole, UserPermis
 // =====================================================
 
 /**
- * Busca todos os usuários de uma empresa
- * Usa RLS para garantir segurança
+ * Busca todos os usuários de uma empresa via RPC SECURITY DEFINER.
+ * A RPC valida se o caller tem permissão sobre a empresa.
+ * Retorna [] quando o acesso é negado (forbidden) — sem fallback direto em company_users,
+ * pois isso anularia a validação de autorização adicionada na RPC.
  */
 export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]> => {
   try {
-    
-    // Usar RPC para evitar problemas com RLS e joins complexos
     const { data, error } = await supabase
       .rpc('get_company_users_with_details', {
-        p_company_id: companyId
+        p_company_id: companyId,
       });
 
     if (error) {
-      console.error('UserAPI: Error fetching company users:', error);
-      // Fallback para consulta simples se RPC falhar
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('company_users')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-        
-      if (fallbackError) {
-        throw fallbackError;
+      // Erro de autorização (RPC lança 'forbidden') → retornar lista vazia de forma segura.
+      // Não usar fallback direto em company_users: bypassa a validação da RPC.
+      const isForbidden =
+        error.message?.toLowerCase().includes('forbidden') ||
+        error.code === 'P0001';
+
+      if (isForbidden) {
+        console.warn('UserAPI [getCompanyUsers]: access denied by RPC for company:', companyId);
+        return [];
       }
-      
-      return fallbackData || [];
+
+      console.error('UserAPI: Error fetching company users:', error);
+      throw error;
     }
 
     return data || [];
@@ -47,57 +46,29 @@ export const getCompanyUsers = async (companyId: string): Promise<CompanyUser[]>
 };
 
 /**
- * Busca usuários que o usuário atual pode gerenciar
- * Inclui validação de permissões e display_name
+ * Busca usuários que o usuário atual pode gerenciar.
+ * Usa RPC get_managed_users_with_details; retorna [] em caso de forbidden.
+ * Fallback direto em company_users foi removido: bypassa a autorização da RPC.
  */
 export const getManagedUsers = async (): Promise<CompanyUser[]> => {
   try {
-    
-    // Usar RPC para obter usuários com display_name
     const { data, error } = await supabase
       .rpc('get_managed_users_with_details');
 
     if (error) {
-      console.error('UserAPI: Error fetching managed users via RPC:', error);
-      
-      // Fallback para consulta simples se RPC falhar
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('company_users')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-        
-      if (fallbackError) {
-        throw fallbackError;
+      const isForbidden =
+        error.message?.toLowerCase().includes('forbidden') ||
+        error.code === 'P0001';
+
+      if (isForbidden) {
+        console.warn('UserAPI [getManagedUsers]: access denied by RPC');
+        return [];
       }
-      
-      return fallbackData || [];
+
+      console.error('UserAPI: Error fetching managed users via RPC:', error);
+      throw error;
     }
 
-    
-    // Se não encontrou dados, pode ser problema de RLS - tentar buscar da empresa atual
-    if (!data || data.length === 0) {
-      
-      // Buscar empresa atual do usuário
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: companies } = await supabase
-          .from('companies')
-          .select('id')
-          .eq('user_id', user.id);
-          
-        if (companies && companies.length > 0) {
-          // Usar função RPC para empresa específica
-          const { data: companyUsers } = await supabase
-            .rpc('get_company_users_with_details', {
-              p_company_id: companies[0].id
-            });
-            
-          return companyUsers || [];
-        }
-      }
-    }
-    
     return data || [];
   } catch (error) {
     console.error('UserAPI: Error in getManagedUsers:', error);
@@ -169,8 +140,7 @@ export const canCreateUser = async (companyId: string): Promise<boolean> => {
  * Valida se o role é válido para o tipo de empresa
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
-  // Empresas parent (super admin) podem criar qualquer tipo de usuário
-  const parentRoles: UserRole[] = ['super_admin', 'admin', 'partner', 'manager', 'seller'];
+  const parentRoles: UserRole[] = ['super_admin', 'system_admin', 'admin', 'partner'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
   if (companyType === 'parent') {
@@ -180,12 +150,105 @@ export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | '
   }
 };
 
+// =====================================================
+// HIERARQUIA DE ROLES
+// =====================================================
+
+/**
+ * Tier numérico de cada role.
+ * Espelha exatamente o ROLE_TIERS do backend (update_company_user_safe).
+ * Quanto maior o número, maior o privilégio.
+ * Usado para: bloquear atribuição de role >= próprio tier.
+ */
+export const ROLE_TIER: Record<UserRole, number> = {
+  seller:       1,
+  manager:      2,
+  admin:        3,
+  partner:      4,
+  system_admin: 5,
+  super_admin:  6,
+};
+
+/**
+ * Retorna os roles que um caller pode atribuir, considerando:
+ *  - o próprio role do caller (tier)
+ *  - o tipo de empresa (parent / client)
+ *
+ * Regra central: só pode atribuir roles com tier < próprio tier.
+ * Exceção: super_admin pode atribuir qualquer role válido para o tipo.
+ *
+ * @param callerRole  Role atual do usuário que fará a atribuição
+ * @param companyType Tipo da empresa onde a atribuição ocorrerá
+ */
+export const getAssignableRoles = (
+  callerRole: UserRole | null | undefined,
+  companyType: 'parent' | 'client',
+): UserRole[] => {
+  if (!callerRole) {
+    console.warn('[UserAPI] getAssignableRoles: callerRole is null/undefined — retornando lista vazia');
+    return [];
+  }
+
+  const callerTier = ROLE_TIER[callerRole];
+
+  if (callerTier === undefined) {
+    console.warn('[UserAPI] getAssignableRoles: role desconhecido:', callerRole);
+    return [];
+  }
+
+  const allParentRoles: UserRole[] = ['super_admin', 'system_admin', 'partner', 'admin'];
+  const allClientRoles: UserRole[] = ['admin', 'manager', 'seller'];
+  const candidates = companyType === 'parent' ? allParentRoles : allClientRoles;
+
+  // super_admin pode atribuir qualquer role válido para o tipo de empresa
+  if (callerRole === 'super_admin') {
+    return candidates;
+  }
+
+  // demais callers: apenas roles com tier estritamente menor que o próprio
+  const assignable = candidates.filter(role => {
+    const roleTier = ROLE_TIER[role];
+    if (roleTier === undefined) {
+      console.warn('[UserAPI] getAssignableRoles: tier desconhecido para role candidato:', role);
+      return false;
+    }
+    return roleTier < callerTier;
+  });
+
+  if (assignable.length === 0) {
+    console.warn('[UserAPI] getAssignableRoles: nenhum role atribuível para', callerRole, 'em', companyType);
+  }
+
+  return assignable;
+};
+
 /**
  * Gera permissões padrão baseadas no role
  */
 export const getDefaultPermissions = (role: UserRole): UserPermissions => {
   switch (role) {
     case 'super_admin':
+      return {
+        dashboard: true,
+        leads: true,
+        chat: true,
+        analytics: true,
+        settings: true,
+        companies: true,
+        users: true,
+        financial: true,
+        create_users: true,
+        edit_users: true,
+        delete_users: true,
+        impersonate: true,
+        view_all_leads: true,
+        edit_all_leads: true,
+        view_financial: true,
+        edit_financial: true
+      };
+    case 'system_admin':
+      // Acesso total como super_admin, mas sem acesso a páginas SaaS (companies, financial SaaS)
+      // O bloqueio das páginas SaaS é feito no frontend via isSystemAdmin flag.
       return {
         dashboard: true,
         leads: true,

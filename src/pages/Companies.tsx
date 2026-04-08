@@ -4,13 +4,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
 import { Company } from '../lib/supabase';
-import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail } from 'lucide-react';
+import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Link } from 'lucide-react';
 import { openDirectEditCompanyModal } from './companies/openDirectEditCompanyModal';
+import { PartnerAssignmentModal } from '../components/PartnerAssignmentModal';
 
 export const Companies: React.FC = () => {
   const { t } = useTranslation('companies');
-  const { impersonateUser } = useAuth();
-  const { isSaaSAdmin } = useAccessControl();
+  const { impersonateUser, company: currentCompany } = useAuth();
+  const { isSaaSAdmin, isSystemAdmin } = useAccessControl();
+  const canManagePartners = isSaaSAdmin || isSystemAdmin;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -18,6 +20,7 @@ export const Companies: React.FC = () => {
   const [createdCompany, setCreatedCompany] = useState<any>(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [managingCompany, setManagingCompany] = useState<Company | null>(null);
+  const [partnerModalCompany, setPartnerModalCompany] = useState<Company | null>(null);
   const [userFormData, setUserFormData] = useState({
     email: '',
     newPassword: ''
@@ -187,16 +190,6 @@ export const Companies: React.FC = () => {
     );
   }
 
-  if (!isSaaSAdmin) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">{t('accessDenied')}</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -257,6 +250,16 @@ export const Companies: React.FC = () => {
                 <LogIn className="w-4 h-4" />
                 {t('actions.enter')}
               </button>
+              {canManagePartners && comp.company_type === 'client' && (
+                <button
+                  type="button"
+                  aria-label={t('actions.managePartners')}
+                  onClick={() => setPartnerModalCompany(comp)}
+                  className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Link className="w-4 h-4" />
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={t('actions.manageUser')}
@@ -505,6 +508,14 @@ export const Companies: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {partnerModalCompany && currentCompany && (
+        <PartnerAssignmentModal
+          company={partnerModalCompany}
+          parentCompanyId={currentCompany.id}
+          onClose={() => setPartnerModalCompany(null)}
+        />
       )}
 
       {createdCompany && (

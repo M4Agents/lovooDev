@@ -349,87 +349,42 @@ export const api = {
     plan: 'basic' | 'pro' | 'enterprise';
     adminEmail: string;
     adminPassword: string;
-    sendInviteEmail?: boolean; // 🔧 NOVO: Opção de envio automático
+    sendInviteEmail?: boolean;
   }) {
-    console.log('🔧 API: Creating client company with UNIFIED SYSTEM approach:', data);
-    console.log('🔧 API: Parent company ID:', parentCompanyId);
-    
-    // Buscar o user_id do super admin (empresa pai)
-    const { data: parentCompany } = await supabase
-      .from('companies')
-      .select('user_id')
-      .eq('id', parentCompanyId)
-      .single();
-
-    if (!parentCompany?.user_id) {
-      throw new Error('Super admin user_id not found');
-    }
-
-    // 🔧 SISTEMA UNIFICADO: Criar empresa SEM user_id inicial (cliente se tornará dono)
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .insert({
-        name: data.name,
-        domain: data.domain,
-        plan: data.plan,
-        parent_company_id: parentCompanyId,
-        company_type: 'client',
-        user_id: null, // SEM dono inicial - cliente se tornará dono ao se registrar
-        status: 'active'
-      })
-      .select()
-      .single();
-
-    console.log('🔧 API: Company created without initial user_id:', { company, companyError });
-    if (companyError) throw companyError;
-
-    // Associar super admin via RPC segura (SECURITY DEFINER, valida permissões)
-    const { data: associationResult, error: associationError } = await supabase
-      .rpc('create_company_user_safe', {
-        p_company_id: company.id,
-        p_user_id: parentCompany.user_id,
-        p_role: 'super_admin',
-        p_permissions: {
-          chat: true,
-          leads: true,
-          users: true,
-          settings: true,
-          analytics: true,
-          dashboard: true,
-          financial: true,
-          companies: true,
-          edit_users: true,
-          create_users: true,
-          delete_users: true,
-          impersonate: true,
-          edit_all_leads: true,
-          edit_financial: true,
-          view_all_leads: true,
-          view_financial: true
-        },
-        p_created_by: parentCompany.user_id
+    // Criação atômica via RPC: cria company + company_users (super_admin) +
+    // auto-assignment em partner_company_assignments se caller for partner.
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('create_client_company_safe', {
+        p_parent_company_id: parentCompanyId,
+        p_name: data.name,
+        p_domain: data.domain ?? null,
+        p_plan: data.plan,
       });
 
-    if (associationError || !associationResult?.success) {
-      console.error('🔧 API: Error associating super admin:', associationError || associationResult?.error);
-      // Tentar limpar empresa criada
-      await supabase.from('companies').delete().eq('id', company.id);
-      throw new Error('Erro ao associar super admin à empresa: ' + (associationError?.message || associationResult?.error));
+    if (rpcError || !rpcResult?.success) {
+      throw new Error(
+        'Erro ao criar empresa: ' + (rpcError?.message ?? rpcResult?.error ?? 'unknown error')
+      );
     }
 
-    console.log('🔧 API: Super admin associated via company_users (UNIFIED SYSTEM)');
+    const companyId: string = rpcResult.company_id;
 
-    // 🔧 SISTEMA DE CONVITES: Enviar email automático se solicitado
+    // Buscar empresa criada para compor o retorno
+    const { data: company, error: fetchError } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', companyId)
+      .single();
+
+    if (fetchError || !company) throw fetchError ?? new Error('Company not found after creation');
+
+    // Envio de convite (independente da criação)
     let inviteResult = null;
     if (data.sendInviteEmail) {
       try {
-        console.log('🔧 API: Sending automatic invite email to:', data.adminEmail);
-        
-        // Usar mesmo sistema de convites dos usuários
         const { createCompanyUser } = await import('./userApi');
-        
         inviteResult = await createCompanyUser({
-          companyId: company.id,
+          companyId,
           email: data.adminEmail,
           role: 'admin',
           sendInvite: true,
@@ -443,44 +398,36 @@ export const api = {
             financial: false,
             edit_users: true,
             create_users: true,
-            delete_users: true, // 🔧 CORREÇÃO: Admin de empresa filha deve poder excluir usuários
+            delete_users: true,
             edit_all_leads: true,
             edit_financial: false,
             view_all_leads: true,
             view_financial: false
           }
         });
-        
-        console.log('🔧 API: Invite sent successfully:', inviteResult);
       } catch (inviteError) {
-        console.error('🔧 API: Failed to send invite, falling back to manual credentials:', inviteError);
-        // Não falhar a criação da empresa, apenas não enviar o convite
+        // Não falhar a criação — convite é opcional
       }
     }
 
-    // 🔧 SISTEMA UNIFICADO: Retorno baseado no modo selecionado
-    const result = { 
-      ...company, 
-      adminCredentials: {
-        email: data.adminEmail,
-        password: data.adminPassword,
-        companyId: company.id
-      },
-      managementNote: '🔧 SISTEMA UNIFICADO: Empresa criada sem dono inicial. Super admin acessa via company_users. Cliente se tornará dono ao se registrar.',
-      unifiedSystemNote: 'Super admin mantém acesso total via company_users. Cliente se tornará user_id ao fazer primeiro login.',
+    const result: Record<string, unknown> = {
+      ...company,
+      adminCredentials: { email: data.adminEmail, password: data.adminPassword, companyId },
       inviteMode: data.sendInviteEmail ? 'automatic' : 'manual',
-      inviteResult: inviteResult
+      inviteResult,
+      auto_assigned: rpcResult.auto_assigned ?? false,
     };
 
     if (data.sendInviteEmail && inviteResult) {
       result.inviteSuccess = true;
-      result.inviteUrl = inviteResult.app_metadata?.invite_url;
-      result.inviteNote = 'Convite enviado automaticamente por email. Cliente receberá link para definir senha.';
+      result.inviteUrl = (inviteResult as { app_metadata?: { invite_url?: string } })
+        ?.app_metadata?.invite_url;
+      result.inviteNote = 'Convite enviado automaticamente por email.';
     } else if (data.sendInviteEmail) {
       result.inviteSuccess = false;
       result.inviteNote = 'Falha no envio automático. Use as credenciais abaixo para envio manual.';
     } else {
-      result.inviteNote = 'Modo manual selecionado. Use as credenciais abaixo para enviar ao cliente.';
+      result.inviteNote = 'Modo manual selecionado.';
     }
 
     return result;

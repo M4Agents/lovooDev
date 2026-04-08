@@ -4,10 +4,10 @@
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, Settings } from 'lucide-react';
 import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
-import { getCompanyUsers, getManagedUsers, deactivateUser } from '../../services/userApi';
+import { getCompanyUsers, getManagedUsers, deactivateUser, ROLE_TIER } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAccessControl } from '../../hooks/useAccessControl';
 import { InviteLink } from './InviteLink';
@@ -27,8 +27,21 @@ export interface UsersListRef {
 
 export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUser, onEditUser }, ref) => {
   const { t } = useTranslation('settings.app');
-  const { company } = useAuth();
+  const { company, currentRole } = useAuth();
   const { canCreateUsers, canEditUsers, canDeleteUsers } = useAccessControl();
+
+  /**
+   * Verifica se o caller pode gerenciar (editar/desativar/excluir) o targetUser.
+   * Regra: caller só pode gerenciar usuários com tier ESTRITAMENTE menor que o seu.
+   * Se currentRole for null (não autenticado ou em carregamento), bloqueia tudo.
+   */
+  const canManageUser = (targetUser: CompanyUser): boolean => {
+    if (!currentRole) return false;
+    const callerTier = ROLE_TIER[currentRole];
+    const targetTier = ROLE_TIER[targetUser.role];
+    if (callerTier === undefined || targetTier === undefined) return false;
+    return callerTier > targetTier;
+  };
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +172,8 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     switch (role) {
       case 'super_admin':
         return <Crown className="w-4 h-4 text-purple-600" />;
+      case 'system_admin':
+        return <Settings className="w-4 h-4 text-indigo-600" />;
       case 'admin':
         return <Shield className="w-4 h-4 text-blue-600" />;
       case 'partner':
@@ -179,6 +194,8 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     switch (role) {
       case 'super_admin':
         return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'system_admin':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'admin':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'partner':
@@ -356,7 +373,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             <Mail className="w-4 h-4" />
                           </button>
                         )}
-                        {canEditUsers && (
+                        {canEditUsers && canManageUser(user) && (
                           <button
                             onClick={() => onEditUser(user)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded transition-colors"
@@ -365,7 +382,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             <Edit2 className="w-4 h-4" />
                           </button>
                         )}
-                        {canDeleteUsers && (
+                        {canDeleteUsers && canManageUser(user) && (
                           <>
                             {/* Botão Desativar/Reativar */}
                             {user.is_active ? (
@@ -385,7 +402,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                                 <UserCheck className="w-4 h-4" />
                               </button>
                             )}
-                            
+
                             {/* Botão Excluir Permanentemente (Hard Delete) */}
                             <button
                               onClick={() => handleDeleteUser(user)}

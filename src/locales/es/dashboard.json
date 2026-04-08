@@ -27,6 +27,12 @@
     "reloadCompany": "Recargar empresa",
     "clearAndReturnSuperAdmin": "Limpiar y volver al super admin"
   },
+  "partnerNoAssignments": {
+    "title": "Ninguna empresa asignada",
+    "description": "Todavía no tiene empresas asignadas a su perfil de partner. Solicite al administrador de la plataforma que asigne una o más empresas a su usuario.",
+    "contactAdmin": "Contacte al administrador de la plataforma para obtener acceso.",
+    "logout": "Cerrar sesión"
+  },
   "header": {
     "titlePlatform": "Panel de la plataforma",
     "titleDefault": "Panel",

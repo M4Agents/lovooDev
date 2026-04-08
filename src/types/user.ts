@@ -3,11 +3,12 @@
 // =====================================================
 
 export type UserRole = 
-  | 'super_admin'  // Super usuário M4 Digital
-  | 'admin'        // Admin M4 Digital ou Cliente
-  | 'partner'      // Partner M4 Digital
-  | 'manager'      // Gerente Cliente
-  | 'seller';      // Vendedor Cliente
+  | 'super_admin'   // Dono da plataforma (M4 Digital)
+  | 'system_admin'  // Administrador de sistema SaaS — acesso total, sem acesso a páginas SaaS
+  | 'partner'       // Parceiro com empresas atribuídas
+  | 'admin'         // Admin da empresa (parent ou client)
+  | 'manager'       // Gerente (empresa client)
+  | 'seller';       // Vendedor (empresa client)
 
 export interface UserPermissions {
   // Módulos principais (MANTIDOS - compatibilidade 100%)

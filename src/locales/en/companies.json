@@ -13,11 +13,24 @@
     "manageUser": "Manage user",
     "editCompany": "Edit company",
     "deleteCompany": "Delete company",
+    "managePartners": "Manage partners",
     "save": "Save",
     "createSubmit": "Create",
-    "cancel": "Cancel",
+    "cancel": "Close",
     "saveChanges": "Save changes",
     "gotIt": "Got it"
+  },
+  "partnerModal": {
+    "title": "Assigned partners",
+    "assignLabel": "Assign a partner to this company",
+    "selectPartner": "Select partner...",
+    "noPartnersAvailable": "No partners available",
+    "assignButton": "Assign",
+    "currentAssignments": "Partners with access",
+    "noAssignments": "No partners assigned to this company",
+    "assignedAt": "Assigned on: {{date}}",
+    "revokeButton": "Revoke access",
+    "confirmRevoke": "Revoke this partner's access to the company?"
   },
   "card": {
     "plan": "Plan: {{plan}}",

@@ -13,11 +13,24 @@
     "manageUser": "Gerenciar usuário",
     "editCompany": "Editar empresa",
     "deleteCompany": "Excluir empresa",
+    "managePartners": "Gerenciar partners",
     "save": "Salvar",
     "createSubmit": "Criar",
-    "cancel": "Cancelar",
+    "cancel": "Fechar",
     "saveChanges": "Salvar Alterações",
     "gotIt": "Entendi"
+  },
+  "partnerModal": {
+    "title": "Partners atribuídos",
+    "assignLabel": "Atribuir um partner a esta empresa",
+    "selectPartner": "Selecionar partner...",
+    "noPartnersAvailable": "Nenhum partner disponível",
+    "assignButton": "Atribuir",
+    "currentAssignments": "Partners com acesso",
+    "noAssignments": "Nenhum partner atribuído a esta empresa",
+    "assignedAt": "Atribuído em: {{date}}",
+    "revokeButton": "Revogar acesso",
+    "confirmRevoke": "Deseja revogar o acesso deste partner à empresa?"
   },
   "card": {
     "plan": "Plano: {{plan}}",

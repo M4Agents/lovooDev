@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 import i18n from './i18n/config';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAccessControl } from './hooks/useAccessControl';
 import { ModernLayout } from './components/ModernLayout';
 import { Login } from './pages/Login';
 import { ModernDashboard } from './pages/ModernDashboard';
@@ -45,6 +46,32 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <ModernLayout>{children}</ModernLayout>;
 };
 
+/**
+ * Protege rotas que exigem um papel específico além da autenticação.
+ * Aguarda o carregamento de company antes de avaliar o guard para
+ * evitar redirecionamentos incorretos durante a hidratação.
+ */
+const RoleProtectedRoute: React.FC<{
+  guard: boolean;
+  children: React.ReactNode;
+}> = ({ guard, children }) => {
+  const { isLoadingCompany } = useAuth();
+
+  if (isLoadingCompany) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!guard) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
 
@@ -64,6 +91,8 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function AppRoutes() {
+  const { isSaaSAdmin } = useAccessControl();
+
   return (
     <Routes>
       <Route
@@ -138,7 +167,9 @@ function AppRoutes() {
         path="/companies"
         element={
           <ProtectedRoute>
-            <Companies />
+            <RoleProtectedRoute guard={isSaaSAdmin}>
+              <Companies />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         }
       />
@@ -154,7 +185,9 @@ function AppRoutes() {
         path="/plans"
         element={
           <ProtectedRoute>
-            <PlansManagement />
+            <RoleProtectedRoute guard={isSaaSAdmin}>
+              <PlansManagement />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         }
       />
