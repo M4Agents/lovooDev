@@ -9,6 +9,13 @@
 //   ai_active   → ai_paused
 //   ai_paused   → ai_active
 //
+// HANDOFF:
+//   Após cada transição, INSERT imutável em agent_handoff_events.
+//   Handoff_type derivado da transição:
+//     ai_active   → ai_paused   => 'ai_to_human'
+//     ai_paused   → ai_active   => 'human_to_ai'
+//     ai_inactive → ai_active   => 'human_to_ai'
+//
 // MULTI-TENANT: company_id validado em todas as queries. Nunca confia no frontend.
 // =============================================================================
 
@@ -29,6 +36,13 @@ const ALLOWED_TRANSITIONS = {
 };
 
 const VALID_STATES = ['ai_inactive', 'ai_active', 'ai_paused'];
+
+// Handoff type por transição
+const HANDOFF_TYPE_MAP = {
+  'ai_active:ai_paused':   'ai_to_human',
+  'ai_paused:ai_active':   'human_to_ai',
+  'ai_inactive:ai_active': 'human_to_ai'
+};
 
 // ── Validação de caller (JWT + membership) ────────────────────────────────────
 
@@ -114,7 +128,7 @@ export default async function handler(req, res) {
 
   const { data: conversation, error: convErr } = await supabaseAdmin
     .from('chat_conversations')
-    .select('id, ai_state, company_id')
+    .select('id, ai_state, ai_assignment_id, company_id')
     .eq('id', conversation_id)
     .eq('company_id', company_id)
     .maybeSingle();
@@ -159,6 +173,46 @@ export default async function handler(req, res) {
     to:   new_state,
     by:   auth.callerId
   });
+
+  // ── Registrar handoff em agent_handoff_events ──────────────────────────────
+
+  const handoffType = HANDOFF_TYPE_MAP[`${currentState}:${new_state}`];
+
+  if (handoffType) {
+    // Buscar sessão mais recente da conversa (nullable — sem erro se não existir)
+    const { data: latestSession } = await supabaseAdmin
+      .from('agent_conversation_sessions')
+      .select('id')
+      .eq('conversation_id', conversation_id)
+      .eq('company_id', company_id)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { error: handoffErr } = await supabaseAdmin
+      .from('agent_handoff_events')
+      .insert({
+        company_id,
+        conversation_id,
+        assignment_id:        conversation.ai_assignment_id ?? null,
+        session_id:           latestSession?.id ?? null,
+        handoff_type:         handoffType,
+        triggered_by_user_id: auth.callerId
+      });
+
+    if (handoffErr) {
+      // Não bloqueia a resposta — handoff é auditoria, não bloqueia fluxo
+      console.error('[set-ai-state] Erro ao registrar handoff (não crítico):', handoffErr.message);
+    } else {
+      console.log('[set-ai-state] Handoff registrado:', {
+        handoff_type:    handoffType,
+        assignment_id:   conversation.ai_assignment_id ?? null,
+        session_id:      latestSession?.id ?? null,
+        triggered_by:    auth.callerId,
+        conversation_id
+      });
+    }
+  }
 
   return res.status(200).json({
     success:  true,
