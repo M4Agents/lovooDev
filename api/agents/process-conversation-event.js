@@ -123,15 +123,21 @@ export default async function handler(req, res) {
     const appBase      = process.env.APP_URL || 'https://app.lovoocrm.com';
     const executeUrl   = `${appBase}/api/agents/execute-agent`;
 
-    fetch(executeUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(decision)
-    }).catch(dispatchError => {
-      console.error('🤖 [EVENT] ❌ Falha ao disparar execute-agent:', dispatchError.message);
-    });
+    // IMPORTANTE: usar await (não fire-and-forget) para garantir que a função
+    // Vercel não seja congelada antes do request chegar ao execute-agent.
+    // process-conversation-event já é chamado fire-and-forget pelo webhook,
+    // portanto ninguém aguarda esta resposta — pode manter o await aqui.
+    try {
+      await fetch(executeUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(decision)
+      });
+    } catch (dispatchError) {
+      console.error('🤖 [EVENT] ❌ Falha ao chamar execute-agent:', dispatchError.message);
+    }
 
-    console.log('🤖 [EVENT] ✅ RouterDecision = processar → execute-agent disparado (fire-and-forget):', {
+    console.log('🤖 [EVENT] ✅ RouterDecision = processar → execute-agent concluído:', {
       assignment_id:   decision.assignment_id,
       agent_id:        decision.agent_id,
       conversation_id: event.conversation_id,
