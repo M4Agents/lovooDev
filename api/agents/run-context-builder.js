@@ -1,31 +1,31 @@
 // =====================================================
 // POST /api/agents/run-context-builder
 //
-// ContextBuilder — recebe OrchestratorContext e monta
-// o contexto completo para o AgentExecutor (LLM).
+// ContextBuilder — recebe OrchestratorContext, monta
+// ContextBuilderOutput e encaminha ao AgentExecutor.
 //
-// ESTADO ATUAL: Stub da Etapa 5 (aguardando Etapa 6)
-//   Valida e loga o OrchestratorContext recebido.
-//   Retorna { success: true } sem executar o LLM.
+// ESTADO ATUAL: Etapa 6 — ContextBuilder implementado
 //
-// PRÓXIMAS ETAPAS A IMPLEMENTAR AQUI:
+// FLUXO ATUAL (Etapa 6):
+//   1. Validar OrchestratorContext recebido
+//   2. Chamar contextBuilder.buildContext() para:
+//      a. Buscar configuração do agente (lovoo_agents)
+//      b. Buscar mensagens recentes (RPC chat_get_messages)
+//      c. Buscar contato/lead (chat_conversations → leads)
+//      d. Buscar catálogo (products + services, available_for_ai=true)
+//      e. Aplicar filtros de capabilities (ex: can_inform_prices)
+//      f. Montar ContextBuilderOutput estruturado
+//   3. Fire-and-forget → run-agent (Etapa 7 — stub)
+//   4. Responder 200 imediatamente
 //
-//   Etapa 6 — ContextBuilder:
-//     - Buscar system_prompt do agente (lovoo_agents.prompt)
-//     - Buscar histórico de mensagens via chat_get_messages
-//     - Buscar produtos/serviços da empresa (RAG)
-//     - Filtrar dados conforme capabilities:
-//         can_inform_prices → incluir/excluir preços
-//         can_send_media    → incluir/excluir mídias
-//     - Montar FullContext para o AgentExecutor
-//
+// ETAPAS FUTURAS:
 //   Etapa 7 — AgentExecutor:
-//     - Chamar OpenAI (runner.ts) com FullContext
+//     - Formatar extra_context a partir do ContextBuilderOutput
+//     - Chamar runner.ts (runAgent) com o contexto montado
 //     - Registrar execução em ai_agent_execution_logs
 //
 //   Etapa 8 — ResponseComposer:
-//     - Quebrar resposta do LLM em blocos tipados:
-//         text | media | question | cta | handoff_notice
+//     - Quebrar resposta do LLM em blocos tipados
 //
 //   Etapa 9 — WhatsAppGateway:
 //     - Enviar cada bloco via Uazapi (backend, service_role)
@@ -33,30 +33,22 @@
 //
 // ACESSO:
 //   Chamado internamente por execute-agent (fire-and-forget).
-//   Sem JWT de usuário — validar origin via secret header pós-MVP.
+//   Sem JWT de usuário.
 //
 // CORPO ESPERADO (OrchestratorContext):
 //   {
-//     run_id:               UUID,
-//     session_id:           UUID,
-//     is_new_session:       boolean,
-//     assignment_id:        UUID,
-//     agent_id:             UUID,
-//     rule_id:              UUID,
-//     capabilities:         { can_auto_reply, can_send_media, can_inform_prices, ... },
+//     run_id, session_id, is_new_session,
+//     assignment_id, agent_id, rule_id,
+//     capabilities: { can_auto_reply, can_send_media, can_inform_prices, ... },
 //     price_display_policy: 'disabled' | 'fixed_only' | 'range_allowed' | 'consult_only',
-//     conversation: {
-//       id:            UUID,
-//       contact_phone: string,
-//       ai_state:      'ai_active'
-//     },
-//     event: {
-//       event_type, channel, company_id, instance_id,
-//       conversation_id, uazapi_message_id, source_type,
-//       source_identifier, message_text, saved_message_id, timestamp
-//     }
+//     conversation: { id, contact_phone, ai_state },
+//     event: { event_type, channel, company_id, instance_id,
+//              conversation_id, uazapi_message_id, source_type,
+//              source_identifier, message_text, saved_message_id, timestamp }
 //   }
 // =====================================================
+
+import { buildContext } from '../lib/agents/contextBuilder.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -92,47 +84,93 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── 2. Log estruturado — observabilidade da Etapa 5 ─────────────────────
-  // Confirma que o Orchestrator está entregando contextos corretos.
+  // ── 2. ContextBuilder (Etapa 6) ───────────────────────────────────────────
 
-  console.log('🤖 [CTX] ─── ORCHESTRATOR CONTEXT RECEBIDO ──────────────────');
-  console.log('🤖 [CTX] run_id:               ', context.run_id);
-  console.log('🤖 [CTX] session_id:           ', context.session_id);
-  console.log('🤖 [CTX] is_new_session:        ', context.is_new_session);
-  console.log('🤖 [CTX] assignment_id:         ', context.assignment_id);
-  console.log('🤖 [CTX] agent_id:              ', context.agent_id);
-  console.log('🤖 [CTX] rule_id:               ', context.rule_id);
-  console.log('🤖 [CTX] price_display_policy:  ', context.price_display_policy);
-  console.log('🤖 [CTX] capabilities:          ', JSON.stringify(context.capabilities));
-  console.log('🤖 [CTX] conversation.id:       ', context.conversation?.id);
-  console.log('🤖 [CTX] conversation.ai_state: ', context.conversation?.ai_state);
-  console.log('🤖 [CTX] event.message_text:    ', context.event?.message_text?.substring(0, 80));
-  console.log('🤖 [CTX] event.company_id:      ', context.event?.company_id);
-  console.log('🤖 [CTX] ─── FIM DO CONTEXT ─────────────────────────────────');
+  let buildResult;
 
-  // ── 3. [STUB Etapa 5] Processamento futuro ────────────────────────────────
-  //
-  // TODO Etapa 6: ContextBuilder
-  //   - Buscar system_prompt do agente
-  //   - Buscar histórico de mensagens (chat_get_messages)
-  //   - Buscar produtos/serviços da empresa
-  //   - Filtrar dados por capabilities
-  //   - Montar FullContext para AgentExecutor
+  try {
+    buildResult = await buildContext(context);
+  } catch (buildError) {
+    // buildContext tem tratamento interno — re-throw indica falha grave
+    console.error('🤖 [CTX] ❌ Exceção propagada do ContextBuilder:', buildError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'context_builder_exception',
+      error:   buildError.message,
+      meta:    { run_id: context.run_id, conversation_id: context.event?.conversation_id }
+    });
+  }
 
-  console.log('🤖 [CTX] ✅ Stub Etapa 5: OrchestratorContext recebido, ContextBuilder pendente (Etapa 6)');
+  // ── 3. Verificar resultado do ContextBuilder ─────────────────────────────
 
-  // ── 4. Resposta ───────────────────────────────────────────────────────────
+  if (!buildResult.success) {
+    const reason = buildResult.skip_reason ?? 'unknown';
+
+    // agent_not_found é skip esperado (agente inativado entre Etapa 5 e 6)
+    const isExpectedSkip = ['agent_not_found'].includes(reason);
+
+    if (isExpectedSkip) {
+      console.log(`🤖 [CTX] ⏭️  ContextBuilder skip (${reason}):`, {
+        run_id:          context.run_id,
+        conversation_id: context.event?.conversation_id
+      });
+    } else {
+      console.error(`🤖 [CTX] ❌ ContextBuilder falhou (${reason}):`, {
+        error:           buildResult.error,
+        run_id:          context.run_id,
+        conversation_id: context.event?.conversation_id
+      });
+    }
+
+    return res.status(200).json({
+      success: false,
+      status:  reason,
+      meta:    { run_id: context.run_id, conversation_id: context.event?.conversation_id }
+    });
+  }
+
+  const { output } = buildResult;
+
+  // ── 4. Dispatch fire-and-forget → run-agent (Etapa 7 — stub) ─────────────
+  // O AgentExecutor receberá o ContextBuilderOutput e montará o prompt para o LLM.
+  // Fire-and-forget: responde 200 sem bloquear no processamento.
+
+  const appBase    = process.env.APP_URL || 'https://app.lovoocrm.com';
+  const runAgentUrl = `${appBase}/api/agents/run-agent`;
+
+  fetch(runAgentUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(output)
+  }).catch(dispatchError => {
+    console.error('🤖 [CTX] ❌ Falha ao disparar run-agent:', dispatchError.message);
+  });
+
+  console.log('🤖 [CTX] ✅ ContextBuilderOutput → run-agent (fire-and-forget):', {
+    run_id:           output.run_id,
+    session_id:       output.session_id,
+    agent_id:         output.agent.id,
+    knowledge_mode:   output.agent.knowledge_mode,
+    messages_count:   output.conversation.recent_messages.length,
+    has_lead:         !!output.contact.lead_id,
+    products_count:   output.catalog.products.length,
+    services_count:   output.catalog.services.length,
+    conversation_id:  output.conversation.id
+  });
+
+  // ── 5. Resposta ───────────────────────────────────────────────────────────
 
   return res.status(200).json({
     success: true,
-    status:  'received',
-    message: 'OrchestratorContext recebido. ContextBuilder pendente (Etapa 6).',
-    context: {
-      run_id:          context.run_id,
-      session_id:      context.session_id,
-      assignment_id:   context.assignment_id,
-      agent_id:        context.agent_id,
-      conversation_id: context.event?.conversation_id
+    status:  'context_built',
+    meta: {
+      run_id:           output.run_id,
+      session_id:       output.session_id,
+      agent_id:         output.agent.id,
+      messages_count:   output.conversation.recent_messages.length,
+      products_count:   output.catalog.products.length,
+      services_count:   output.catalog.services.length,
+      conversation_id:  output.conversation.id
     }
   });
 }

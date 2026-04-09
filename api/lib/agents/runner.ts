@@ -376,3 +376,140 @@ function handleFallback(
   }
   return { ok: false, errorCode, use_id: useId }
 }
+
+// ── Runner com agente pré-resolvido (agentes conversacionais) ─────────────────
+
+/**
+ * Executa um agente já resolvido externamente, bypasando o resolveAgent().
+ *
+ * USO EXCLUSIVO: agentes conversacionais onde o agente é determinado por
+ * company_agent_assignments (multi-tenant por empresa), não por agent_use_bindings
+ * (global). O caller (agentExecutor.js) é responsável pelo log completo,
+ * incluindo os campos conversacionais (conversation_id, session_id, etc.)
+ * que writeExecutionLog() do logger.ts não suporta.
+ *
+ * Reusa toda a lógica de: montagem de system prompt, knowledge_mode (inline/rag/hybrid),
+ * substituição de variáveis, call OpenAI, token counting e estimativa de custo.
+ *
+ * NÃO chama writeExecutionLog() internamente — log é responsabilidade do caller.
+ * NÃO valida VALID_USE_IDS — agente já foi validado pelo ContextBuilder.
+ * NÃO usa fallback estático — sem fallback para agentes conversacionais no MVP.
+ *
+ * @param agent  Agente já resolvido (vem do ContextBuilderOutput.agent)
+ * @param useId  Use-id para rastreabilidade de logs (não é validado aqui)
+ * @param ctx    Contexto de execução (userMessage, extra_context, etc.)
+ */
+export async function runAgentWithConfig(
+  agent: ResolvedAgent,
+  useId: string,
+  ctx: AgentRunContext
+): Promise<AgentRunResult & { input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null; estimated_cost_usd?: number | null }> {
+  // Verifica disponibilidade da OpenAI (mesma lógica do runAgent)
+  if (!isOpenAIApiKeyConfigured()) {
+    return { ok: false, errorCode: 'openai_not_configured', use_id: useId }
+  }
+
+  const openaiSettings = await fetchParentOpenAISettingsForSystem()
+  if (!openaiSettings.enabled) {
+    return { ok: false, errorCode: 'openai_disabled', use_id: useId }
+  }
+
+  const client = getOpenAIClient()
+  if (!client) {
+    return { ok: false, errorCode: 'openai_client_null', use_id: useId }
+  }
+
+  // Monta system prompt conforme knowledge_mode (lógica extraída do runAgent)
+  const knowledgeMode = agent.knowledge_mode ?? 'inline'
+  const systemParts: string[] = []
+
+  // Prompt base com substituição de variáveis ({{chave}})
+  if (agent.prompt?.trim()) {
+    systemParts.push(substituteVariables(agent.prompt.trim(), ctx.variables))
+  }
+
+  // Base de conhecimento inline (modes: inline, hybrid)
+  if (
+    (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
+    agent.knowledge_base?.trim()
+  ) {
+    systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
+  }
+
+  // Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
+    const ragQuery = [ctx.userMessage, ctx.extra_context?.trim()]
+      .filter(Boolean)
+      .join('\n\n')
+
+    const { contextText } = await retrieveAgentContext(
+      { id: agent.id, knowledge_base_config: agent.knowledge_base_config },
+      ragQuery
+    )
+
+    if (contextText) {
+      systemParts.push(`\n\n${contextText}`)
+    }
+  }
+
+  // Contexto de execução (histórico, contato, catálogo — montado pelo agentExecutor)
+  if (ctx.extra_context?.trim()) {
+    systemParts.push(`\n\nContexto atual:\n${ctx.extra_context.trim()}`)
+  }
+
+  const systemPrompt = systemParts.join('').trim() || 'Você é um assistente útil.'
+
+  // Parâmetros do modelo
+  const modelConfig = agent.model_config as { temperature?: number; max_tokens?: number }
+
+  const temperature =
+    typeof modelConfig.temperature === 'number' &&
+    modelConfig.temperature >= 0 &&
+    modelConfig.temperature <= 2
+      ? modelConfig.temperature
+      : 0.7
+
+  const maxTokens =
+    typeof modelConfig.max_tokens === 'number' && modelConfig.max_tokens >= 64
+      ? modelConfig.max_tokens
+      : 1024
+
+  // Executa via OpenAI
+  try {
+    const signal = AbortSignal.timeout(openaiSettings.timeout_ms)
+
+    const completion = await client.chat.completions.create(
+      {
+        model:       agent.model,
+        temperature,
+        max_tokens:  maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: ctx.userMessage },
+        ],
+      },
+      { signal }
+    )
+
+    const result       = completion.choices[0]?.message?.content?.trim() ?? ''
+    const usage        = completion.usage
+    const inputTokens  = usage?.prompt_tokens     ?? null
+    const outputTokens = usage?.completion_tokens ?? null
+    const totalTokens  = usage?.total_tokens      ?? null
+    const estimatedCost = estimateCost(agent.model, inputTokens, outputTokens)
+
+    return {
+      ok:                true,
+      result,
+      agent_id:          agent.id,
+      use_id:            useId,
+      fallback:          false,
+      input_tokens:      inputTokens,
+      output_tokens:     outputTokens,
+      total_tokens:      totalTokens,
+      estimated_cost_usd: estimatedCost,
+    }
+  } catch {
+    return { ok: false, errorCode: 'openai_execution_failed', use_id: useId }
+  }
+}
