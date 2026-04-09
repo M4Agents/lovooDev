@@ -868,12 +868,10 @@ async function processMessage(payload) {
           timestamp:           new Date().toISOString()
         };
 
-        // Resolução da URL sem hardcode:
-        //   - process.env.APP_URL: variável configurada por ambiente (dev/prod)
-        //   - process.env.VERCEL_URL: injetado automaticamente pelo Vercel em cada deploy
-        //   - Fallback final: domínio de produção oficial
-        const appBase = process.env.APP_URL
-          || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://app.lovoocrm.com');
+        // Resolução da URL:
+        //   - process.env.APP_URL: variável de ambiente configurada por deployment
+        //   - Fallback fixo: domínio oficial de produção
+        const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
         const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
 
         // fire-and-forget — mesmo padrão de automations/resume-execution
