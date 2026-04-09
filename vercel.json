@@ -1,6 +1,10 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/agents/execute-agent.js": { "maxDuration": 60 },
+    "api/agents/process-conversation-event.js": { "maxDuration": 60 }
+  },
   "crons": [
     {
       "path": "/api/cron/process-scheduled-messages",

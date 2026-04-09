@@ -2,45 +2,31 @@
 // POST /api/agents/execute-agent
 //
 // Ponto de entrada do pipeline de execução do agente.
-// Recebe RouterDecision e delega ao ConversationOrchestrator.
+// Recebe RouterDecision e executa o pipeline completo:
+//   Orchestrator → ContextBuilder → AgentExecutor → ResponseComposer → WhatsAppGateway
 //
-// ESTADO ATUAL: Etapa 5 — ConversationOrchestrator implementado
+// ARQUITETURA (pós-correção Vercel):
+//   Todas as etapas são executadas sequencialmente neste endpoint, sem HTTP
+//   dispatch chain. Isso evita o problema de freeze do Vercel serverless onde
+//   fetch() sem await é cancelado após res.end().
 //
-// FLUXO ATUAL (Etapa 5):
+//   process-conversation-event → (await) → execute-agent [pipeline completo]
+//
+// FLUXO:
 //   1. Validar RouterDecision recebida
-//   2. Chamar orchestrateExecution() para:
-//      a. Limpar stale lock (> 5 min)
-//      b. Adquirir lock atômico em agent_processing_locks
-//      c. Revalidar ai_state direto do banco
-//      d. Encontrar ou criar agent_conversation_sessions
-//      e. Montar OrchestratorContext
-//   3. Fire-and-forget → run-context-builder (Etapa 6 — stub)
-//   4. Responder 200 imediatamente
-//
-// ETAPAS FUTURAS:
-//   Etapa 6 — ContextBuilder:
-//     - Buscar histórico de mensagens (chat_get_messages)
-//     - Buscar produtos/serviços da empresa (RAG)
-//     - Filtrar dados conforme capabilities (preços, mídias)
-//     - Montar system_prompt + context para o LLM
-//
-//   Etapa 7 — AgentExecutor:
-//     - Chamar runner.ts com o contexto montado
-//     - Registrar em ai_agent_execution_logs
-//
-//   Etapa 8 — ResponseComposer:
-//     - Quebrar resposta do LLM em blocos (text, media, question, cta)
-//
-//   Etapa 9 — WhatsAppGateway:
-//     - Enviar cada bloco via Uazapi (backend, service_role)
-//     - Persistir cada bloco como chat_message (is_ai_generated = true)
-//     - Liberar lock após envio completo
-//     - Nota: Na Etapa 9, o lock será transferido para ser liberado APENAS
-//       após o envio completo ao WhatsApp. Hoje é liberado após o dispatch.
+//   2. Orchestrator: lock, revalidação de ai_state, sessão
+//   3. ContextBuilder: histórico, contato, catálogo, capabilities
+//   4. AgentExecutor: monta extra_context, chama runner.ts (LLM)
+//   5. ResponseComposer: quebra raw_response em blocos
+//   6. WhatsAppGateway: persiste + envia cada bloco via Uazapi
+//   7. Responde 200 com status final
 //
 // ACESSO:
-//   Chamado internamente por process-conversation-event (fire-and-forget).
+//   Chamado por process-conversation-event com await (não fire-and-forget).
 //   Sem JWT de usuário — validar origin via secret header pós-MVP.
+//
+// TIMEOUT:
+//   maxDuration: 60s configurado em vercel.json (pipeline pode levar ~30s com LLM)
 //
 // CORPO ESPERADO (RouterDecision):
 //   {
@@ -63,6 +49,10 @@
 // =====================================================
 
 import { orchestrateExecution } from '../lib/agents/conversationOrchestrator.js';
+import { buildContext }          from '../lib/agents/contextBuilder.js';
+import { executeAgent }          from '../lib/agents/agentExecutor.js';
+import { compose }               from '../lib/agents/responseComposer.js';
+import { sendBlocks }            from '../lib/agents/whatsappGateway.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -103,90 +93,208 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, status: 'skipped_by_router' });
   }
 
-  // ── 2. ConversationOrchestrator (Etapa 5) ─────────────────────────────────
+  const conversationId = decision.event?.conversation_id;
+
+  // ── 2. Orchestrator ───────────────────────────────────────────────────────
 
   let orchestratorResult;
 
   try {
     orchestratorResult = await orchestrateExecution(decision);
   } catch (orchError) {
-    // orchestrateExecution tem try/catch interno — re-throw indica falha grave
     console.error('🤖 [EXECUTE] ❌ Exceção propagada do Orchestrator:', orchError.message);
     return res.status(200).json({
-      success:     false,
-      status:      'orchestrator_exception',
-      error:       orchError.message,
-      context:     { conversation_id: decision.event?.conversation_id }
+      success: false,
+      status:  'orchestrator_exception',
+      error:   orchError.message,
+      meta:    { conversation_id: conversationId }
     });
   }
 
-  // ── 3. Verificar resultado do Orchestrator ───────────────────────────────
-
   if (!orchestratorResult.success) {
     const reason = orchestratorResult.skip_reason ?? 'unknown';
-
-    // skipped_lock_busy e ai_state_changed são comportamentos normais esperados
     const isExpectedSkip = ['skipped_lock_busy', 'ai_state_changed'].includes(reason);
 
     if (isExpectedSkip) {
-      console.log(`🤖 [EXECUTE] ⏭️  Orchestrator skip (${reason}):`, {
-        conversation_id: decision.event?.conversation_id
-      });
+      console.log(`🤖 [EXECUTE] ⏭️  Orchestrator skip (${reason}):`, { conversation_id: conversationId });
     } else {
       console.error(`🤖 [EXECUTE] ❌ Orchestrator falhou (${reason}):`, {
         error:           orchestratorResult.error,
-        conversation_id: decision.event?.conversation_id
+        conversation_id: conversationId
       });
     }
 
     return res.status(200).json({
-      success:     false,
-      status:      reason,
-      context:     { conversation_id: decision.event?.conversation_id }
+      success: false,
+      status:  reason,
+      meta:    { conversation_id: conversationId }
     });
   }
 
   const { context } = orchestratorResult;
 
-  // ── 4. Dispatch fire-and-forget → run-context-builder (Etapa 6 — stub) ───
-  // O ContextBuilder recebe o OrchestratorContext e montará o prompt para o LLM.
-  // Fire-and-forget: responde 200 imediatamente sem bloquear no processamento.
-  //
-  // IMPORTANTE: O lock é liberado pelo Orchestrator via `finally` ANTES de
-  // chegarmos aqui. Na Etapa 9 (WhatsAppGateway), o lock será realocado para
-  // cobrir todo o ciclo de envio.
-
-  const appBase       = process.env.APP_URL || 'https://app.lovoocrm.com';
-  const contextBuilderUrl = `${appBase}/api/agents/run-context-builder`;
-
-  fetch(contextBuilderUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(context)
-  }).catch(dispatchError => {
-    console.error('🤖 [EXECUTE] ❌ Falha ao disparar run-context-builder:', dispatchError.message);
-  });
-
-  console.log('🤖 [EXECUTE] ✅ OrchestratorContext → run-context-builder (fire-and-forget):', {
+  console.log('🤖 [EXECUTE] ✅ Orchestrator OK — iniciando ContextBuilder:', {
     run_id:          context.run_id,
     session_id:      context.session_id,
-    is_new_session:  context.is_new_session,
-    assignment_id:   context.assignment_id,
-    agent_id:        context.agent_id,
-    conversation_id: context.event?.conversation_id
+    conversation_id: conversationId
   });
 
-  // ── 5. Resposta ───────────────────────────────────────────────────────────
+  // ── 3. ContextBuilder ─────────────────────────────────────────────────────
+
+  let buildResult;
+
+  try {
+    buildResult = await buildContext(context);
+  } catch (buildError) {
+    console.error('🤖 [EXECUTE] ❌ Exceção propagada do ContextBuilder:', buildError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'context_builder_exception',
+      error:   buildError.message,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  if (!buildResult.success) {
+    const reason = buildResult.skip_reason ?? 'unknown';
+    console.error(`🤖 [EXECUTE] ❌ ContextBuilder falhou (${reason}):`, {
+      error:           buildResult.error,
+      run_id:          context.run_id,
+      conversation_id: conversationId
+    });
+    return res.status(200).json({
+      success: false,
+      status:  reason,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  const contextOutput = buildResult.output;
+
+  console.log('🤖 [EXECUTE] ✅ ContextBuilder OK — iniciando AgentExecutor:', {
+    run_id:          contextOutput.run_id,
+    messages_count:  contextOutput.conversation?.recent_messages?.length ?? 0,
+    products_count:  contextOutput.catalog?.products?.length ?? 0,
+    services_count:  contextOutput.catalog?.services?.length ?? 0,
+    conversation_id: conversationId
+  });
+
+  // ── 4. AgentExecutor (LLM) ────────────────────────────────────────────────
+
+  let execResult;
+
+  try {
+    execResult = await executeAgent(contextOutput);
+  } catch (execError) {
+    console.error('🤖 [EXECUTE] ❌ Exceção propagada do AgentExecutor:', execError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'agent_executor_exception',
+      error:   execError.message,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  if (!execResult.success) {
+    const reason = execResult.skip_reason ?? 'unknown';
+    console.error(`🤖 [EXECUTE] ❌ AgentExecutor falhou (${reason}):`, {
+      error:           execResult.error,
+      run_id:          context.run_id,
+      conversation_id: conversationId
+    });
+    return res.status(200).json({
+      success: false,
+      status:  reason,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  const executorOutput = execResult.output;
+
+  console.log('🤖 [EXECUTE] ✅ AgentExecutor OK — iniciando ResponseComposer:', {
+    run_id:               executorOutput.run_id,
+    raw_response_length:  executorOutput.raw_response?.length ?? 0,
+    conversation_id:      conversationId
+  });
+
+  // ── 5. ResponseComposer ───────────────────────────────────────────────────
+
+  let composerResult;
+
+  try {
+    composerResult = compose(executorOutput);
+  } catch (composeError) {
+    console.error('🤖 [EXECUTE] ❌ Exceção propagada do ResponseComposer:', composeError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'response_composer_exception',
+      error:   composeError.message,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  if (!composerResult.success) {
+    const reason = composerResult.skip_reason ?? 'unknown';
+    console.error(`🤖 [EXECUTE] ❌ ResponseComposer falhou (${reason}):`, {
+      error:           composerResult.error,
+      run_id:          context.run_id,
+      conversation_id: conversationId
+    });
+    return res.status(200).json({
+      success: false,
+      status:  reason,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  console.log('🤖 [EXECUTE] ✅ ResponseComposer OK — iniciando WhatsAppGateway:', {
+    run_id:          composerResult.run_id,
+    blocks_count:    composerResult.blocks?.length ?? 0,
+    conversation_id: conversationId
+  });
+
+  // ── 6. WhatsAppGateway ────────────────────────────────────────────────────
+
+  let gatewayResult;
+
+  try {
+    gatewayResult = await sendBlocks(composerResult);
+  } catch (gatewayError) {
+    console.error('🤖 [EXECUTE] ❌ Exceção propagada do WhatsAppGateway:', gatewayError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'whatsapp_gateway_exception',
+      error:   gatewayError.message,
+      meta:    { run_id: context.run_id, conversation_id: conversationId }
+    });
+  }
+
+  // ── 7. Resposta final ─────────────────────────────────────────────────────
+
+  const allSent   = gatewayResult.blocks_sent === (composerResult.blocks?.length ?? 0);
+  const finalStatus = allSent ? 'completed' : 'partial_send';
+
+  console.log(`🤖 [EXECUTE] ${allSent ? '✅' : '⚠️ '} Pipeline concluído (${finalStatus}):`, {
+    run_id:          context.run_id,
+    session_id:      context.session_id,
+    blocks_total:    composerResult.blocks?.length ?? 0,
+    blocks_sent:     gatewayResult.blocks_sent ?? 0,
+    blocks_failed:   gatewayResult.blocks_failed ?? 0,
+    abort_reason:    gatewayResult.abort_reason ?? null,
+    conversation_id: conversationId
+  });
 
   return res.status(200).json({
     success: true,
-    status:  'orchestrated',
-    context: {
-      run_id:          context.run_id,
-      session_id:      context.session_id,
-      assignment_id:   context.assignment_id,
-      agent_id:        context.agent_id,
-      conversation_id: context.event?.conversation_id
+    status:  finalStatus,
+    meta: {
+      run_id:        context.run_id,
+      session_id:    context.session_id,
+      blocks_total:  composerResult.blocks?.length ?? 0,
+      blocks_sent:   gatewayResult.blocks_sent ?? 0,
+      blocks_failed: gatewayResult.blocks_failed ?? 0,
+      abort_reason:  gatewayResult.abort_reason ?? null,
+      conversation_id: conversationId
     }
   });
 }
