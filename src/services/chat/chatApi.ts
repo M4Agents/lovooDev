@@ -289,7 +289,6 @@ export class ChatApi {
         p_media_url: message.media_url || null
       })
 
-
       if (error) {
         console.error('Erro no envio')
         throw error
@@ -438,7 +437,7 @@ export class ChatApi {
           console.error('❌ Token não encontrado na instância');
           throw new Error('Token da instância não encontrado');
         }
-        
+
         // 2. Preparar payload para Uazapi
         const endpoint = messageData.message_type === 'text'
           ? 'https://lovoo.uazapi.com/send/text'
