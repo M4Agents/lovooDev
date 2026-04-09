@@ -247,9 +247,13 @@ export default async function handler(req, res) {
     });
   }
 
+  // compose() retorna { success, output: ResponseComposerOutput }
+  // sendBlocks() espera o output diretamente (com run_id, session_id, blocks, metadata)
+  const composerOutput = composerResult.output;
+
   console.log('🤖 [EXECUTE] ✅ ResponseComposer OK — iniciando WhatsAppGateway:', {
-    run_id:          composerResult.run_id,
-    blocks_count:    composerResult.blocks?.length ?? 0,
+    run_id:          composerOutput.run_id,
+    blocks_count:    composerOutput.blocks?.length ?? 0,
     conversation_id: conversationId
   });
 
@@ -258,7 +262,7 @@ export default async function handler(req, res) {
   let gatewayResult;
 
   try {
-    gatewayResult = await sendBlocks(composerResult);
+    gatewayResult = await sendBlocks(composerOutput);
   } catch (gatewayError) {
     console.error('🤖 [EXECUTE] ❌ Exceção propagada do WhatsAppGateway:', gatewayError.message);
     return res.status(200).json({
@@ -271,13 +275,13 @@ export default async function handler(req, res) {
 
   // ── 7. Resposta final ─────────────────────────────────────────────────────
 
-  const allSent   = gatewayResult.blocks_sent === (composerResult.blocks?.length ?? 0);
+  const allSent   = gatewayResult.blocks_sent === (composerOutput.blocks?.length ?? 0);
   const finalStatus = allSent ? 'completed' : 'partial_send';
 
   console.log(`🤖 [EXECUTE] ${allSent ? '✅' : '⚠️ '} Pipeline concluído (${finalStatus}):`, {
     run_id:          context.run_id,
     session_id:      context.session_id,
-    blocks_total:    composerResult.blocks?.length ?? 0,
+    blocks_total:    composerOutput.blocks?.length ?? 0,
     blocks_sent:     gatewayResult.blocks_sent ?? 0,
     blocks_failed:   gatewayResult.blocks_failed ?? 0,
     abort_reason:    gatewayResult.abort_reason ?? null,
@@ -290,7 +294,7 @@ export default async function handler(req, res) {
     meta: {
       run_id:        context.run_id,
       session_id:    context.session_id,
-      blocks_total:  composerResult.blocks?.length ?? 0,
+      blocks_total:  composerOutput.blocks?.length ?? 0,
       blocks_sent:   gatewayResult.blocks_sent ?? 0,
       blocks_failed: gatewayResult.blocks_failed ?? 0,
       abort_reason:  gatewayResult.abort_reason ?? null,
