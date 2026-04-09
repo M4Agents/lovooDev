@@ -258,10 +258,11 @@ async function fetchConversationContext(svc, { conversation_id, company_id }) {
  * Queries independentes para compatibilidade com RLS e schema.
  */
 async function fetchProviderContext(svc, { instance_id, company_id }) {
-  // Buscar instance (provider_instance_id)
+  // Buscar provider_instance_id + provider_token da instância
+  // provider_token é o token de autenticação do Uazapi (não confundir com api_key da empresa)
   const { data: instance, error: instError } = await svc
     .from('whatsapp_life_instances')
-    .select('provider_instance_id')
+    .select('provider_instance_id, provider_token')
     .eq('id', instance_id)
     .eq('company_id', company_id)
     .single();
@@ -271,22 +272,19 @@ async function fetchProviderContext(svc, { instance_id, company_id }) {
     return { success: false, error: 'instance_not_found' };
   }
 
-  // Buscar api_key da empresa (token de autenticação Uazapi)
-  const { data: company, error: compError } = await svc
-    .from('companies')
-    .select('api_key')
-    .eq('id', company_id)
-    .single();
-
-  if (compError || !company?.api_key) {
-    console.error('🤖 [GATEWAY] ❌ api_key da empresa não encontrado:', { company_id, error: compError });
-    return { success: false, error: 'company_api_key_not_found' };
+  if (!instance?.provider_token) {
+    console.error('🤖 [GATEWAY] ❌ provider_token ausente na instância:', { instance_id });
+    return { success: false, error: 'missing_provider_token' };
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'whatsappGateway.js:fetchProviderContext',message:'provider token check',data:{instance_id,has_provider_token:!!instance.provider_token,token_length:instance.provider_token?.length,provider_instance_id:instance.provider_instance_id},hypothesisId:'H1-H3',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return {
     success:               true,
     provider_instance_id:  instance.provider_instance_id,
-    api_key:               company.api_key
+    api_key:               instance.provider_token  // provider_token = token Uazapi da instância
   };
 }
 
