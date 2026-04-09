@@ -74,3 +74,4 @@ backup/
 /p4a_args_oneline.json
 /p4b_args_oneline.json
 /p4b_full.json
+.snapshots/

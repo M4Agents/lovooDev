@@ -836,7 +836,69 @@ async function processMessage(payload) {
         // Não falhar o webhook por causa disso - apenas log
       }
     }
-    
+
+    // =====================================================
+    // 🤖 CONVERSATION EVENT EMITTER — Etapa 3 MVP Agentes
+    //
+    // Dispara evento 'conversation.message_received' para o
+    // endpoint de processamento de IA de forma fire-and-forget.
+    //
+    // Regras críticas:
+    //   - SOMENTE mensagens inbound (guard duplo)
+    //   - SOMENTE quando conversationId confirmado pelo banco
+    //   - SEM await — webhook retorna 200 antes de processar
+    //   - try/catch interno: erro no emitter nunca quebra o 200
+    //
+    // Processamento real (Router, Orchestrator, LLM) ocorre no
+    // endpoint /api/agents/process-conversation-event (Etapa 4+).
+    // =====================================================
+    if (direction === 'inbound' && conversationId) {
+      try {
+        const agentEventPayload = {
+          event_type:          'conversation.message_received',
+          channel:             'whatsapp',
+          company_id:          company.id,
+          instance_id:         instance.id,
+          conversation_id:     conversationId,
+          uazapi_message_id:   messageId,
+          source_type:         'whatsapp_message',
+          source_identifier:   instanceName,
+          message_text:        messageText,
+          saved_message_id:    savedMessageId,
+          timestamp:           new Date().toISOString()
+        };
+
+        // Resolução da URL sem hardcode:
+        //   - process.env.APP_URL: variável configurada por ambiente (dev/prod)
+        //   - process.env.VERCEL_URL: injetado automaticamente pelo Vercel em cada deploy
+        //   - Fallback final: domínio de produção oficial
+        const appBase = process.env.APP_URL
+          || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://app.lovoocrm.com');
+        const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
+
+        // fire-and-forget — mesmo padrão de automations/resume-execution
+        // NÃO usar await: o 200 do webhook não pode depender do agente
+        fetch(agentEventUrl, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(agentEventPayload)
+        }).catch(emitError => {
+          console.error('🤖 ❌ Falha ao emitir evento de conversação:', emitError.message);
+        });
+
+        console.log('🤖 ✅ Evento de conversação emitido (fire-and-forget):', {
+          conversation_id:   conversationId,
+          uazapi_message_id: messageId,
+          company_id:        company.id,
+          target_url:        agentEventUrl
+        });
+
+      } catch (emitterError) {
+        // Emitter nunca pode quebrar o fluxo do webhook
+        console.error('🤖 ❌ EXCEPTION no emitter de conversação:', emitterError.message);
+      }
+    }
+
     return { 
       success: true, 
       message_id: savedMessageId,
