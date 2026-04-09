@@ -19,7 +19,7 @@
 //      → falha de persistência: abortar (não enviar sem registro no banco)
 //   3. Enviar via Uazapi
 //      → POST https://lovoo.uazapi.com/send/text
-//      → Header: token = companies.api_key
+//      → Header: token = whatsapp_life_instances.provider_token
 //      → timeout: 30s
 //      → 4xx: abortar (erro de configuração — afeta todos os blocos)
 //      → 5xx: logar, continuar (erro temporário do provider)
@@ -27,8 +27,7 @@
 //
 // PREPARAÇÃO (feita uma vez antes do loop):
 //   - Buscar instance_id + contact_phone de chat_conversations
-//   - Buscar provider_instance_id de whatsapp_life_instances
-//   - Buscar api_key de companies
+//   - Buscar provider_instance_id + provider_token de whatsapp_life_instances
 //
 // PÓS-LOOP:
 //   - Atualizar agent_conversation_sessions.messages_sent += successCount
@@ -276,10 +275,6 @@ async function fetchProviderContext(svc, { instance_id, company_id }) {
     console.error('🤖 [GATEWAY] ❌ provider_token ausente na instância:', { instance_id });
     return { success: false, error: 'missing_provider_token' };
   }
-
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'whatsappGateway.js:fetchProviderContext',message:'provider token check',data:{instance_id,has_provider_token:!!instance.provider_token,token_length:instance.provider_token?.length,provider_instance_id:instance.provider_instance_id},hypothesisId:'H1-H3',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   return {
     success:               true,

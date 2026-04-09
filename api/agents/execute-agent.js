@@ -275,16 +275,20 @@ export default async function handler(req, res) {
 
   // ── 7. Resposta final ─────────────────────────────────────────────────────
 
-  const allSent   = gatewayResult.blocks_sent === (composerOutput.blocks?.length ?? 0);
-  const finalStatus = allSent ? 'completed' : 'partial_send';
+  const totalBlocks  = composerOutput.blocks?.length ?? 0;
+  const sentCount    = gatewayResult.successCount ?? 0;
+  const failedCount  = totalBlocks - sentCount;
+  const abortReason  = gatewayResult.abortReason ?? null;
+  const allSent      = sentCount === totalBlocks;
+  const finalStatus  = allSent ? 'completed' : 'partial_send';
 
   console.log(`🤖 [EXECUTE] ${allSent ? '✅' : '⚠️ '} Pipeline concluído (${finalStatus}):`, {
     run_id:          context.run_id,
     session_id:      context.session_id,
-    blocks_total:    composerOutput.blocks?.length ?? 0,
-    blocks_sent:     gatewayResult.blocks_sent ?? 0,
-    blocks_failed:   gatewayResult.blocks_failed ?? 0,
-    abort_reason:    gatewayResult.abort_reason ?? null,
+    blocks_total:    totalBlocks,
+    blocks_sent:     sentCount,
+    blocks_failed:   failedCount,
+    abort_reason:    abortReason,
     conversation_id: conversationId
   });
 
@@ -292,12 +296,12 @@ export default async function handler(req, res) {
     success: true,
     status:  finalStatus,
     meta: {
-      run_id:        context.run_id,
-      session_id:    context.session_id,
-      blocks_total:  composerOutput.blocks?.length ?? 0,
-      blocks_sent:   gatewayResult.blocks_sent ?? 0,
-      blocks_failed: gatewayResult.blocks_failed ?? 0,
-      abort_reason:  gatewayResult.abort_reason ?? null,
+      run_id:          context.run_id,
+      session_id:      context.session_id,
+      blocks_total:    totalBlocks,
+      blocks_sent:     sentCount,
+      blocks_failed:   failedCount,
+      abort_reason:    abortReason,
       conversation_id: conversationId
     }
   });
