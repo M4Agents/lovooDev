@@ -1,33 +1,29 @@
 // =====================================================
 // POST /api/agents/run-response-composer
 //
-// ResponseComposer — recebe AgentExecutorOutput e quebra
-// a resposta bruta do LLM em blocos para envio sequencial.
+// ResponseComposer — recebe AgentExecutorOutput e transforma
+// raw_response em blocos de texto para envio no WhatsApp.
 //
-// ESTADO ATUAL: Stub da Etapa 7 (aguardando Etapa 8)
-//   Valida e loga o AgentExecutorOutput recebido.
-//   Retorna { success: true } sem processar a resposta.
+// ESTADO ATUAL: Etapa 8 — ResponseComposer implementado
 //
-// PRÓXIMAS ETAPAS A IMPLEMENTAR AQUI:
+// FLUXO ATUAL (Etapa 8):
+//   1. Validar AgentExecutorOutput recebido
+//   2. Chamar responseComposer.compose() para:
+//      a. Validar raw_response (não vazio)
+//      b. Sanitizar texto (normalizar quebras de linha)
+//      c. Dividir por parágrafos (\n\n)
+//      d. Dividir blocos longos por sentenças / listas / vírgulas
+//      e. Filtrar e truncar blocos (MIN, HARD_LIMIT, MAX_BLOCKS)
+//      f. Montar ResponseComposerOutput com blocks[{index, type, content}]
+//   3. Fire-and-forget → run-whatsapp-gateway (Etapa 9 — stub)
+//   4. Responder 200 imediatamente
 //
-//   Etapa 8 — ResponseComposer:
-//     - Quebrar raw_response em blocos tipados:
-//         text       → mensagem de texto simples
-//         media      → envio de mídia (imagem, vídeo)
-//         question   → pergunta ao contato
-//         cta        → call-to-action
-//         handoff_notice → aviso de transferência para humano
-//     - Definir ordem e delay entre blocos
-//     - Validar capabilities antes de incluir bloco de mídia:
-//         can_send_media = false → remover blocos 'media'
-//     - Encaminhar lista de blocos para WhatsAppGateway (Etapa 9)
-//
+// ETAPA FUTURA:
 //   Etapa 9 — WhatsAppGateway:
-//     - Para cada bloco:
+//     - Para cada bloco em blocks[]:
 //       - Enviar via Uazapi (backend, service_role)
-//       - Persistir como chat_message (is_ai_generated = true, ai_block_index = N)
+//       - Persistir como chat_message (is_ai_generated=true, ai_block_index=index)
 //       - Aplicar delay entre mensagens para simular comportamento humano
-//     - Liberar lock após envio completo
 //     - Atualizar agent_conversation_sessions.messages_sent
 //
 // ACESSO:
@@ -38,17 +34,15 @@
 //   {
 //     run_id:       UUID,
 //     session_id:   UUID,
-//     raw_response: string,     // resposta bruta do LLM
+//     raw_response: string,
 //     agent_id:     UUID,
 //     ok:           boolean,
 //     fallback:     boolean,
-//     metadata: {
-//       company_id:      UUID,
-//       assignment_id:   UUID,
-//       conversation_id: UUID
-//     }
+//     metadata: { company_id, assignment_id, conversation_id }
 //   }
 // =====================================================
+
+import { compose } from '../lib/agents/responseComposer.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -84,42 +78,75 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── 2. Log estruturado — observabilidade da Etapa 7 ─────────────────────
-  // Confirma que o AgentExecutor está entregando respostas válidas do LLM.
+  // ── 2. ResponseComposer (Etapa 8) ─────────────────────────────────────────
 
-  console.log('🤖 [COMPOSE] ─── AGENT EXECUTOR OUTPUT RECEBIDO ─────────────');
-  console.log('🤖 [COMPOSE] run_id:            ', output.run_id);
-  console.log('🤖 [COMPOSE] session_id:        ', output.session_id);
-  console.log('🤖 [COMPOSE] agent_id:          ', output.agent_id);
-  console.log('🤖 [COMPOSE] ok:                ', output.ok);
-  console.log('🤖 [COMPOSE] fallback:          ', output.fallback);
-  console.log('🤖 [COMPOSE] response_length:   ', output.raw_response?.length ?? 0);
-  console.log('🤖 [COMPOSE] raw_response:      ', output.raw_response?.substring(0, 150));
-  console.log('🤖 [COMPOSE] company_id:        ', output.metadata?.company_id);
-  console.log('🤖 [COMPOSE] assignment_id:     ', output.metadata?.assignment_id);
-  console.log('🤖 [COMPOSE] conversation_id:   ', output.metadata?.conversation_id);
-  console.log('🤖 [COMPOSE] ─── FIM DO OUTPUT ──────────────────────────────');
+  let composeResult;
 
-  // ── 3. [STUB Etapa 7] Processamento futuro ────────────────────────────────
-  //
-  // TODO Etapa 8: ResponseComposer
-  //   - Quebrar raw_response em blocos tipados (text, media, question, cta)
-  //   - Validar capabilities (can_send_media)
-  //   - Encaminhar blocos ao WhatsAppGateway
+  try {
+    composeResult = compose(output);
+  } catch (composeError) {
+    // compose() é função pura — exceção indica bug interno
+    console.error('🤖 [COMPOSE] ❌ Exceção no ResponseComposer:', composeError.message);
+    return res.status(200).json({
+      success: false,
+      status:  'composer_exception',
+      error:   composeError.message,
+      meta:    { run_id: output.run_id, conversation_id: output.metadata?.conversation_id }
+    });
+  }
 
-  console.log('🤖 [COMPOSE] ✅ Stub Etapa 7: AgentExecutorOutput recebido, ResponseComposer pendente (Etapa 8)');
+  // ── 3. Verificar resultado ────────────────────────────────────────────────
 
-  // ── 4. Resposta ───────────────────────────────────────────────────────────
+  if (!composeResult.success) {
+    const reason = composeResult.skip_reason ?? 'unknown';
+
+    console.log(`🤖 [COMPOSE] ⏭️  ResponseComposer skip (${reason}):`, {
+      run_id:          output.run_id,
+      conversation_id: output.metadata?.conversation_id
+    });
+
+    return res.status(200).json({
+      success: false,
+      status:  reason,
+      meta:    { run_id: output.run_id, conversation_id: output.metadata?.conversation_id }
+    });
+  }
+
+  const { output: composerOutput } = composeResult;
+
+  // ── 4. Dispatch fire-and-forget → run-whatsapp-gateway (Etapa 9 — stub) ──
+  // O WhatsAppGateway enviará cada bloco via Uazapi e persistirá no banco.
+  // Fire-and-forget: responde 200 sem bloquear no envio.
+
+  const appBase           = process.env.APP_URL || 'https://app.lovoocrm.com';
+  const whatsappGatewayUrl = `${appBase}/api/agents/run-whatsapp-gateway`;
+
+  fetch(whatsappGatewayUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(composerOutput)
+  }).catch(dispatchError => {
+    console.error('🤖 [COMPOSE] ❌ Falha ao disparar run-whatsapp-gateway:', dispatchError.message);
+  });
+
+  console.log('🤖 [COMPOSE] ✅ ResponseComposerOutput → run-whatsapp-gateway (fire-and-forget):', {
+    run_id:          composerOutput.run_id,
+    session_id:      composerOutput.session_id,
+    blocks_count:    composerOutput.blocks.length,
+    block_lengths:   composerOutput.blocks.map(b => b.content.length),
+    conversation_id: composerOutput.metadata?.conversation_id
+  });
+
+  // ── 5. Resposta ───────────────────────────────────────────────────────────
 
   return res.status(200).json({
     success: true,
-    status:  'received',
-    message: 'AgentExecutorOutput recebido. ResponseComposer pendente (Etapa 8).',
+    status:  'composed',
     meta: {
-      run_id:           output.run_id,
-      agent_id:         output.agent_id,
-      response_length:  output.raw_response?.length ?? 0,
-      conversation_id:  output.metadata?.conversation_id
+      run_id:          composerOutput.run_id,
+      session_id:      composerOutput.session_id,
+      blocks_count:    composerOutput.blocks.length,
+      conversation_id: composerOutput.metadata?.conversation_id
     }
   });
 }
