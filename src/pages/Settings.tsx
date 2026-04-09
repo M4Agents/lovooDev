@@ -13,6 +13,7 @@ import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
+import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -32,7 +33,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [logs, setLogs] = useState<any[]>([]);
@@ -103,7 +104,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1090,7 +1091,7 @@ export const Settings: React.FC = () => {
               {t('tabs.system')}
             </button>
 
-            {/* Aba Agentes (somente empresa pai - admin/super_admin) */}
+            {/* Aba Agentes Globais (somente empresa pai - super_admin) */}
             {canManageOpenAI && (
               <button
                 onClick={() => setActiveTab('agentes')}
@@ -1101,7 +1102,22 @@ export const Settings: React.FC = () => {
                 }`}
               >
                 <Bot className="w-4 h-4" />
-                {t('tabs.agents')}
+                Agentes Globais
+              </button>
+            )}
+
+            {/* Aba Agentes (configuração por empresa — admin+) */}
+            {canManageConversationalAgents && (
+              <button
+                onClick={() => setActiveTab('agentes-empresa')}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'agentes-empresa'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                Agentes
               </button>
             )}
 
@@ -3555,10 +3571,17 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Agentes Lovoo */}
+      {/* Aba Agentes Globais */}
       {activeTab === 'agentes' && canManageOpenAI && company?.id && (
         <div className="space-y-6">
           <LovooAgentsPanel companyId={company.id} />
+        </div>
+      )}
+
+      {/* Aba Agentes — configuração por empresa */}
+      {activeTab === 'agentes-empresa' && canManageConversationalAgents && company?.id && (
+        <div className="space-y-6">
+          <CompanyAgentConfigPanel companyId={company.id} />
         </div>
       )}
 

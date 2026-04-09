@@ -64,6 +64,15 @@ export function useAccessControl() {
   const canManageElevenLabs = canManageOpenAI
   const canManageAgents     = canManageOpenAI
 
+  // ── Agentes conversacionais (por empresa) ──────────────────
+  // Permite admin, system_admin ou super_admin de qualquer empresa
+  // gerenciar assignments e routing rules da sua própria empresa.
+  // Independente de company_type — não restrito à empresa-pai.
+  const canManageConversationalAgents =
+    currentRole === 'admin' ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'
+
   // ── Impersonação ───────────────────────────────────────────
   // super_admin e system_admin podem impersonar empresas para suporte
   const canImpersonate = isSaaSAdmin || isSystemAdmin
@@ -107,6 +116,9 @@ export function useAccessControl() {
     canManageOpenAI,
     canManageElevenLabs,
     canManageAgents,
+
+    // Agentes conversacionais por empresa
+    canManageConversationalAgents,
 
     // Impersonação
     canImpersonate,
