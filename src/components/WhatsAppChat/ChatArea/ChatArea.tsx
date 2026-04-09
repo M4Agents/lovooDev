@@ -20,6 +20,7 @@ import { ActivityModal } from '../../Calendar/ActivityModal'
 import { InstanceAlert } from '../InstanceAlert/InstanceAlert'
 import { resolvePhotoUrl } from '../../../utils/imageUtils'
 import { supabase } from '../../../lib/supabase'
+import toast from 'react-hot-toast'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -84,6 +85,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     setAiState(conversation?.ai_state ?? null)
   }, [conversation])
+
+  // Escutar atualizações de ai_state via Realtime (outros operadores).
+  // Lógica de "próprio usuário": quando o operador clica no botão, o update otimista
+  // já define aiState para o novo valor. Quando o evento Realtime chega (para a mesma
+  // mudança), payload.data.ai_state === aiState → condição falsa → sem toast duplicado.
+  useChatEvent(
+    `chat:conversation:${conversationId}:updated`,
+    (payload: any) => {
+      const incoming = payload?.data?.ai_state
+      if (incoming === undefined || incoming === aiState) return
+
+      setAiState(incoming)
+
+      const labels: Record<string, string> = {
+        ai_active:   'IA ativada nesta conversa',
+        ai_paused:   'IA pausada — humano assumiu',
+        ai_inactive: 'IA desativada'
+      }
+      if (labels[incoming]) {
+        toast(labels[incoming], { duration: 3000 })
+      }
+    },
+    [conversationId, aiState]
+  )
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
