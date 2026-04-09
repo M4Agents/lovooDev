@@ -64,6 +64,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isUploading, setIsUploading] = useState(false)
   const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
   const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set())
+
+  // Controle de estado da IA na conversa
+  const [aiState, setAiState] = useState<string | null>(null)
+  const [aiStateLoading, setAiStateLoading] = useState(false)
   
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
@@ -75,6 +79,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       }
     }
   }, [conversationId])
+
+  // Sincronizar aiState com o objeto conversation quando carregado/alterado
+  useEffect(() => {
+    setAiState(conversation?.ai_state ?? null)
+  }, [conversation])
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
@@ -318,6 +328,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleOpenActivity = (activity?: any) => {
     setSelectedActivity(activity || null)
     setShowActivityModal(true)
+  }
+
+  // =====================================================
+  // CONTROLE DE ESTADO IA
+  // =====================================================
+
+  const handleAiStateChange = async (newState: 'ai_active' | 'ai_paused' | 'ai_inactive') => {
+    const previous = aiState
+    setAiState(newState)       // atualização otimista
+    setAiStateLoading(true)
+    try {
+      await chatApi.setAiState(conversationId, companyId, newState)
+    } catch (error) {
+      console.error('Erro ao alterar estado da IA:', error)
+      setAiState(previous)     // rollback em caso de erro
+    } finally {
+      setAiStateLoading(false)
+    }
   }
 
   // =====================================================
@@ -961,6 +989,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {t('chatArea.assignedBadge')}
               </span>
             )}
+
+            {/* Controle de estado IA — exibir somente se a conversa tiver agente atribuído */}
+            {conversation?.ai_assignment_id && aiState && (() => {
+              const badgeConfig: Record<string, { dot: string; label: string }> = {
+                ai_active:   { dot: 'bg-green-500',  label: 'IA Ativa'   },
+                ai_paused:   { dot: 'bg-yellow-400', label: 'IA Pausada' },
+                ai_inactive: { dot: 'bg-gray-400',   label: 'IA Inativa' }
+              }
+              const actionConfig: Record<string, { next: 'ai_active' | 'ai_paused' | 'ai_inactive'; label: string }> = {
+                ai_active:   { next: 'ai_paused',   label: 'Pausar IA'   },
+                ai_paused:   { next: 'ai_active',   label: 'Retomar IA'  },
+                ai_inactive: { next: 'ai_active',   label: 'Ativar IA'   }
+              }
+              const badge  = badgeConfig[aiState]
+              const action = actionConfig[aiState]
+              if (!badge || !action) return null
+              return (
+                <div className="flex items-center space-x-2">
+                  {/* Badge de estado */}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    <span className={`w-2 h-2 rounded-full ${badge.dot}`} />
+                    {badge.label}
+                  </span>
+                  {/* Botão de ação */}
+                  <button
+                    onClick={() => handleAiStateChange(action.next)}
+                    disabled={aiStateLoading}
+                    className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {aiStateLoading ? '...' : action.label}
+                  </button>
+                </div>
+              )
+            })()}
             
             {/* Botão de Reload para Mensagens */}
             <button 

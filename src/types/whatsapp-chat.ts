@@ -26,6 +26,8 @@ export interface ChatConversation {
   last_message_direction?: 'inbound' | 'outbound'
   unread_count: number
   status: 'active' | 'archived'
+  ai_state?: 'ai_inactive' | 'ai_active' | 'ai_paused' | 'ai_suggested'
+  ai_assignment_id?: string
   instance_name?: string
   instance_status?: string
   instance_deleted?: boolean

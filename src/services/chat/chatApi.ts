@@ -131,6 +131,34 @@ export class ChatApi {
   }
 
   // =====================================================
+  // CONTROLE DE ESTADO IA
+  // =====================================================
+
+  static async setAiState(
+    conversationId: string,
+    companyId: string,
+    newState: 'ai_active' | 'ai_paused' | 'ai_inactive'
+  ): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Sessão inválida')
+
+    const response = await fetch('/api/chat/set-ai-state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ conversation_id: conversationId, company_id: companyId, new_state: newState })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Erro ao alterar estado da IA')
+    }
+  }
+
+  // =====================================================
   // MENSAGENS
   // =====================================================
 
@@ -822,6 +850,8 @@ export class ChatApi {
       last_message_direction: raw.last_message_direction,
       unread_count: raw.unread_count || 0,
       status: raw.status,
+      ai_state: raw.ai_state ?? undefined,
+      ai_assignment_id: raw.ai_assignment_id ?? undefined,
       instance_name: raw.instance_name,
       instance_status: raw.instance_status,
       instance_deleted: raw.instance_deleted,
