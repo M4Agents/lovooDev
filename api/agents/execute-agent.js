@@ -1,20 +1,23 @@
 // =====================================================
 // POST /api/agents/execute-agent
 //
-// Executor do agente de conversação — recebe RouterDecision
-// e orquestra todo o processamento de IA.
+// Ponto de entrada do pipeline de execução do agente.
+// Recebe RouterDecision e delega ao ConversationOrchestrator.
 //
-// ESTADO ATUAL: Stub da Etapa 4 (aguardando Etapa 5)
-//   Valida e loga o RouterDecision recebido.
-//   Retorna { success: true } sem executar o agente ainda.
+// ESTADO ATUAL: Etapa 5 — ConversationOrchestrator implementado
 //
-// PRÓXIMAS ETAPAS A IMPLEMENTAR AQUI:
+// FLUXO ATUAL (Etapa 5):
+//   1. Validar RouterDecision recebida
+//   2. Chamar orchestrateExecution() para:
+//      a. Limpar stale lock (> 5 min)
+//      b. Adquirir lock atômico em agent_processing_locks
+//      c. Revalidar ai_state direto do banco
+//      d. Encontrar ou criar agent_conversation_sessions
+//      e. Montar OrchestratorContext
+//   3. Fire-and-forget → run-context-builder (Etapa 6 — stub)
+//   4. Responder 200 imediatamente
 //
-//   Etapa 5 — ConversationOrchestrator:
-//     - Adquirir lock em agent_processing_locks (idempotência por conversa)
-//     - Verificar/criar agent_conversation_sessions
-//     - Revalidar capabilities antes de prosseguir
-//
+// ETAPAS FUTURAS:
 //   Etapa 6 — ContextBuilder:
 //     - Buscar histórico de mensagens (chat_get_messages)
 //     - Buscar produtos/serviços da empresa (RAG)
@@ -27,12 +30,13 @@
 //
 //   Etapa 8 — ResponseComposer:
 //     - Quebrar resposta do LLM em blocos (text, media, question, cta)
-//     - Definir ordem e delay de cada bloco
 //
 //   Etapa 9 — WhatsAppGateway:
 //     - Enviar cada bloco via Uazapi (backend, service_role)
 //     - Persistir cada bloco como chat_message (is_ai_generated = true)
 //     - Liberar lock após envio completo
+//     - Nota: Na Etapa 9, o lock será transferido para ser liberado APENAS
+//       após o envio completo ao WhatsApp. Hoje é liberado após o dispatch.
 //
 // ACESSO:
 //   Chamado internamente por process-conversation-event (fire-and-forget).
@@ -58,6 +62,8 @@
 //   }
 // =====================================================
 
+import { orchestrateExecution } from '../lib/agents/conversationOrchestrator.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -81,7 +87,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'RouterDecision inválido.' });
   }
 
-  // Campos obrigatórios que o Router garante quando should_process = true
   const requiredFields = ['assignment_id', 'agent_id', 'rule_id', 'conversation', 'event'];
   const missingFields  = requiredFields.filter(f => !decision[f]);
 
@@ -98,44 +103,90 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, status: 'skipped_by_router' });
   }
 
-  // ── 2. Log estruturado do RouterDecision recebido ─────────────────────────
-  // Ponto central de observabilidade da Etapa 4.
-  // Confirma que o Router está enviando decisões corretas antes da Etapa 5.
+  // ── 2. ConversationOrchestrator (Etapa 5) ─────────────────────────────────
 
-  console.log('🤖 [EXECUTE] ─── ROUTER DECISION RECEBIDA ─────────────────────');
-  console.log('🤖 [EXECUTE] assignment_id:        ', decision.assignment_id);
-  console.log('🤖 [EXECUTE] agent_id:             ', decision.agent_id);
-  console.log('🤖 [EXECUTE] rule_id:              ', decision.rule_id);
-  console.log('🤖 [EXECUTE] price_display_policy: ', decision.price_display_policy);
-  console.log('🤖 [EXECUTE] capabilities:         ', JSON.stringify(decision.capabilities));
-  console.log('🤖 [EXECUTE] conversation.id:      ', decision.conversation?.id);
-  console.log('🤖 [EXECUTE] conversation.ai_state:', decision.conversation?.ai_state);
-  console.log('🤖 [EXECUTE] event.conversation_id:', decision.event?.conversation_id);
-  console.log('🤖 [EXECUTE] event.message_text:   ', decision.event?.message_text?.substring(0, 80));
-  console.log('🤖 [EXECUTE] event.company_id:     ', decision.event?.company_id);
-  console.log('🤖 [EXECUTE] ─── FIM DA DECISION ──────────────────────────────');
+  let orchestratorResult;
 
-  // ── 3. [STUB Etapa 4] Processamento futuro ────────────────────────────────
+  try {
+    orchestratorResult = await orchestrateExecution(decision);
+  } catch (orchError) {
+    // orchestrateExecution tem try/catch interno — re-throw indica falha grave
+    console.error('🤖 [EXECUTE] ❌ Exceção propagada do Orchestrator:', orchError.message);
+    return res.status(200).json({
+      success:     false,
+      status:      'orchestrator_exception',
+      error:       orchError.message,
+      context:     { conversation_id: decision.event?.conversation_id }
+    });
+  }
+
+  // ── 3. Verificar resultado do Orchestrator ───────────────────────────────
+
+  if (!orchestratorResult.success) {
+    const reason = orchestratorResult.skip_reason ?? 'unknown';
+
+    // skipped_lock_busy e ai_state_changed são comportamentos normais esperados
+    const isExpectedSkip = ['skipped_lock_busy', 'ai_state_changed'].includes(reason);
+
+    if (isExpectedSkip) {
+      console.log(`🤖 [EXECUTE] ⏭️  Orchestrator skip (${reason}):`, {
+        conversation_id: decision.event?.conversation_id
+      });
+    } else {
+      console.error(`🤖 [EXECUTE] ❌ Orchestrator falhou (${reason}):`, {
+        error:           orchestratorResult.error,
+        conversation_id: decision.event?.conversation_id
+      });
+    }
+
+    return res.status(200).json({
+      success:     false,
+      status:      reason,
+      context:     { conversation_id: decision.event?.conversation_id }
+    });
+  }
+
+  const { context } = orchestratorResult;
+
+  // ── 4. Dispatch fire-and-forget → run-context-builder (Etapa 6 — stub) ───
+  // O ContextBuilder recebe o OrchestratorContext e montará o prompt para o LLM.
+  // Fire-and-forget: responde 200 imediatamente sem bloquear no processamento.
   //
-  // TODO Etapa 5: ConversationOrchestrator
-  //   - Adquirir lock em agent_processing_locks
-  //   - Verificar/criar agent_conversation_sessions
-  //   - Revalidar capabilities
-  //
-  // [Não implementar aqui — aguardar aprovação da Etapa 5]
+  // IMPORTANTE: O lock é liberado pelo Orchestrator via `finally` ANTES de
+  // chegarmos aqui. Na Etapa 9 (WhatsAppGateway), o lock será realocado para
+  // cobrir todo o ciclo de envio.
 
-  console.log('🤖 [EXECUTE] ✅ Stub Etapa 4: RouterDecision recebida, Orchestrator pendente (Etapa 5)');
+  const appBase       = process.env.APP_URL || 'https://app.lovoocrm.com';
+  const contextBuilderUrl = `${appBase}/api/agents/run-context-builder`;
 
-  // ── 4. Resposta ───────────────────────────────────────────────────────────
+  fetch(contextBuilderUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(context)
+  }).catch(dispatchError => {
+    console.error('🤖 [EXECUTE] ❌ Falha ao disparar run-context-builder:', dispatchError.message);
+  });
+
+  console.log('🤖 [EXECUTE] ✅ OrchestratorContext → run-context-builder (fire-and-forget):', {
+    run_id:          context.run_id,
+    session_id:      context.session_id,
+    is_new_session:  context.is_new_session,
+    assignment_id:   context.assignment_id,
+    agent_id:        context.agent_id,
+    conversation_id: context.event?.conversation_id
+  });
+
+  // ── 5. Resposta ───────────────────────────────────────────────────────────
 
   return res.status(200).json({
     success: true,
-    status:  'received',
-    message: 'RouterDecision recebida. Orchestrator pendente (Etapa 5).',
+    status:  'orchestrated',
     context: {
-      assignment_id:   decision.assignment_id,
-      agent_id:        decision.agent_id,
-      conversation_id: decision.event?.conversation_id
+      run_id:          context.run_id,
+      session_id:      context.session_id,
+      assignment_id:   context.assignment_id,
+      agent_id:        context.agent_id,
+      conversation_id: context.event?.conversation_id
     }
   });
 }
