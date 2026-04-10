@@ -93,25 +93,8 @@ export default async function handler(req, res) {
     .order('created_at', { ascending: true });
 
   if (agentsErr) {
-    // #region agent log
-    console.error('[company-agents] ERRO COMPLETO:', JSON.stringify({
-      code:    agentsErr.code,
-      message: agentsErr.message,
-      details: agentsErr.details,
-      hint:    agentsErr.hint,
-    }));
-    return res.status(500).json({
-      success: false,
-      error:   'Erro ao carregar agentes.',
-      // debug — remover após diagnóstico
-      _debug: {
-        code:    agentsErr.code,
-        message: agentsErr.message,
-        details: agentsErr.details,
-        hint:    agentsErr.hint,
-      }
-    });
-    // #endregion
+    console.error('[company-agents] Erro ao buscar agentes:', agentsErr.message);
+    return res.status(500).json({ success: false, error: 'Erro ao carregar agentes.' });
   }
 
   return res.status(200).json({
