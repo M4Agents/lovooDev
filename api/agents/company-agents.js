@@ -56,6 +56,9 @@ async function validateCaller(req, companyId) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  // #region agent log
+  try {
+  // #endregion
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -93,12 +96,29 @@ export default async function handler(req, res) {
     .order('created_at', { ascending: true });
 
   if (agentsErr) {
-    console.error('[company-agents] Erro ao buscar agentes:', agentsErr.message);
-    return res.status(500).json({ success: false, error: 'Erro ao carregar agentes.' });
+    // #region agent log
+    console.error('[company-agents] ERRO:', JSON.stringify({ code: agentsErr.code, message: agentsErr.message, details: agentsErr.details, hint: agentsErr.hint }));
+    return res.status(500).json({
+      success: false,
+      error:   'Erro ao carregar agentes.',
+      _debug:  { code: agentsErr.code, message: agentsErr.message, details: agentsErr.details, hint: agentsErr.hint }
+    });
+    // #endregion
   }
 
   return res.status(200).json({
     success: true,
     data:    agents ?? []
   });
+  // #region agent log
+  } catch (uncaught) {
+    console.error('[company-agents] EXCEÇÃO NÃO TRATADA:', uncaught?.message, uncaught?.stack);
+    return res.status(500).json({
+      success: false,
+      error:   'Exceção interna.',
+      _debug:  { uncaught_message: uncaught?.message, uncaught_stack: uncaught?.stack?.slice(0, 500) }
+    });
+  }
+  // #endregion
 }
+
