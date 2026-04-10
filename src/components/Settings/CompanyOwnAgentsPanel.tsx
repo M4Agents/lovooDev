@@ -14,6 +14,10 @@
  *   - RAG bloqueado (knowledge_mode: none | inline apenas)
  *   - agent_type sempre 'conversational' — forçado no backend
  *   - campos sensíveis ausentes do formulário
+ *
+ * Variáveis:
+ *   - PromptEditor exibe variáveis de Empresa + Lead + Oportunidade + Campos Personalizados
+ *   - Campos personalizados são carregados dinamicamente por empresa
  */
 
 import { useEffect, useState } from 'react'
@@ -24,6 +28,9 @@ import {
   type CreateCompanyAgentPayload,
   type UpdateCompanyAgentPayload
 } from '../../services/companyOwnAgentsApi'
+import { api } from '../../services/api'
+import { PromptEditor } from '../ui/PromptEditor'
+import { customFieldsToVariables, type PromptVariable } from '../../lib/promptVariables'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -72,17 +79,18 @@ function agentToForm(agent: CompanyAgent): FormState {
 // ── Sub-componente: formulário de criação/edição ──────────────────────────────
 
 type AgentFormProps = {
-  companyId: string
-  agent?:    CompanyAgent   // undefined = criação
-  onSaved:   (agent: CompanyAgent) => void
-  onCancel:  () => void
+  companyId:            string
+  agent?:               CompanyAgent
+  customFieldVariables: PromptVariable[]
+  onSaved:              (agent: CompanyAgent) => void
+  onCancel:             () => void
 }
 
-function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
-  const isEdit               = Boolean(agent)
-  const [form, setForm]      = useState<FormState>(agent ? agentToForm(agent) : emptyForm())
-  const [saving, setSaving]  = useState(false)
-  const [error, setError]    = useState<string | null>(null)
+function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }: AgentFormProps) {
+  const isEdit              = Boolean(agent)
+  const [form, setForm]     = useState<FormState>(agent ? agentToForm(agent) : emptyForm())
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
 
   function update(partial: Partial<FormState>) {
     setForm(prev => ({ ...prev, ...partial }))
@@ -154,7 +162,8 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
           value={form.name}
           onChange={e => update({ name: e.target.value })}
           placeholder="Ex: Atendente WhatsApp"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
       </div>
 
@@ -166,21 +175,27 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
           value={form.description}
           onChange={e => update({ description: e.target.value })}
           placeholder="Breve descrição do papel do agente"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
       </div>
 
-      {/* Prompt */}
+      {/* Prompt com PromptEditor */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">
           Prompt (system) <span className="text-red-500">*</span>
         </label>
-        <textarea
+        <PromptEditor
           value={form.prompt}
-          onChange={e => update({ prompt: e.target.value })}
-          rows={6}
-          placeholder="Você é um assistente de atendimento da empresa X. Seu objetivo é..."
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-y"
+          onChange={v => update({ prompt: v })}
+          rows={7}
+          placeholder={
+            'Ex: Você é o assistente da empresa {{nome_fantasia}}.\n' +
+            'Seu objetivo é atender clientes pelo WhatsApp.\n\n' +
+            'Ao iniciar: "Olá {{lead_nome}}, como posso ajudar?"\n' +
+            'Horário de atendimento: {{fuso_horario}}'
+          }
+          customFieldVariables={customFieldVariables}
         />
       </div>
 
@@ -191,7 +206,8 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
           <select
             value={form.model}
             onChange={e => update({ model: e.target.value })}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
           >
             {AVAILABLE_MODELS.map(m => (
               <option key={m.value} value={m.value}>{m.label}</option>
@@ -205,7 +221,8 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
           <select
             value={form.knowledge_mode}
             onChange={e => update({ knowledge_mode: e.target.value as 'none' | 'inline' })}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
           >
             <option value="none">Nenhum</option>
             <option value="inline">Inline (base de texto)</option>
@@ -236,14 +253,16 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 transition-colors"
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-600
+                     hover:bg-gray-50 transition-colors"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white
+                     rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
           {saving ? 'Salvando…' : 'Salvar'}
@@ -256,15 +275,16 @@ function AgentForm({ companyId, agent, onSaved, onCancel }: AgentFormProps) {
 // ── Sub-componente: card de agente ────────────────────────────────────────────
 
 type AgentCardProps = {
-  agent:     CompanyAgent
-  companyId: string
-  onUpdated: (agent: CompanyAgent) => void
+  agent:                CompanyAgent
+  companyId:            string
+  customFieldVariables: PromptVariable[]
+  onUpdated:            (agent: CompanyAgent) => void
 }
 
-function AgentCard({ agent, companyId, onUpdated }: AgentCardProps) {
-  const [expanded, setExpanded]   = useState(false)
-  const [editing, setEditing]     = useState(false)
-  const [toggling, setToggling]   = useState(false)
+function AgentCard({ agent, companyId, customFieldVariables, onUpdated }: AgentCardProps) {
+  const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing]   = useState(false)
+  const [toggling, setToggling] = useState(false)
 
   async function handleToggle() {
     setToggling(true)
@@ -287,6 +307,7 @@ function AgentCard({ agent, companyId, onUpdated }: AgentCardProps) {
       <AgentForm
         companyId={companyId}
         agent={agent}
+        customFieldVariables={customFieldVariables}
         onSaved={a => { onUpdated(a); setEditing(false) }}
         onCancel={() => setEditing(false)}
       />
@@ -324,7 +345,8 @@ function AgentCard({ agent, companyId, onUpdated }: AgentCardProps) {
 
           <button
             onClick={() => setEditing(true)}
-            className="text-xs px-2 py-0.5 rounded-full border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
+            className="text-xs px-2 py-0.5 rounded-full border border-blue-300
+                       text-blue-700 hover:bg-blue-50 transition-colors"
           >
             Editar
           </button>
@@ -359,10 +381,18 @@ type Props = {
 }
 
 export function CompanyOwnAgentsPanel({ companyId }: Props) {
-  const [agents, setAgents]         = useState<CompanyAgent[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState<string | null>(null)
-  const [showForm, setShowForm]     = useState(false)
+  const [agents, setAgents]                       = useState<CompanyAgent[]>([])
+  const [loading, setLoading]                     = useState(true)
+  const [error, setError]                         = useState<string | null>(null)
+  const [showForm, setShowForm]                   = useState(false)
+  const [customFieldVariables, setCustomFieldVars] = useState<PromptVariable[]>([])
+
+  // Carregar campos personalizados da empresa (para o PromptEditor)
+  useEffect(() => {
+    api.getCustomFields(companyId)
+      .then(fields => setCustomFieldVars(customFieldsToVariables(fields)))
+      .catch(() => setCustomFieldVars([]))
+  }, [companyId])
 
   async function load() {
     setLoading(true)
@@ -405,7 +435,8 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600
+                       text-white rounded-md hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Novo agente
@@ -417,6 +448,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
       {showForm && (
         <AgentForm
           companyId={companyId}
+          customFieldVariables={customFieldVariables}
           onSaved={handleCreated}
           onCancel={() => setShowForm(false)}
         />
@@ -447,6 +479,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
               key={agent.id}
               agent={agent}
               companyId={companyId}
+              customFieldVariables={customFieldVariables}
               onUpdated={handleUpdated}
             />
           ))}
@@ -463,7 +496,8 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
           </p>
           <button
             onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-blue-300
+                       text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Criar primeiro agente

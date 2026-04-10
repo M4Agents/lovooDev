@@ -5,7 +5,10 @@
  *
  * Permite que o super_admin defina as diretrizes que serão injetadas
  * automaticamente no topo do system prompt de TODOS os agentes
- * conversacionais do sistema, independentemente da empresa.
+ * conversacionais do sistema.
+ *
+ * As variáveis {{}} inseridas são resolvidas em runtime com os dados
+ * de cada empresa que executa o agente — nunca com dados desta plataforma.
  *
  * SEGURANÇA:
  *   - Acesso restrito: renderizado apenas quando canManageAiGovernance = true
@@ -13,29 +16,10 @@
  *   - Policy nunca é logada nem exposta a empresas filhas
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Copy, Loader2, Save, Shield } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Loader2, Save, Shield } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-
-// ── Catálogo de variáveis disponíveis ─────────────────────────────────────────
-// Espelhado de api/lib/utils/policyVariables.js — manter sincronizado.
-
-const VARIABLES_CATALOG = [
-  { group: 'Runtime',  variable: '{{data_atual}}',      description: 'Data atual no fuso horário da empresa',   example: '08/04/2026' },
-  { group: 'Runtime',  variable: '{{hora_atual}}',      description: 'Hora atual no fuso horário da empresa',   example: '14:30' },
-  { group: 'Runtime',  variable: '{{data_hora_atual}}', description: 'Data e hora atual completa',              example: '08/04/2026 14:30' },
-  { group: 'Empresa',  variable: '{{nome_empresa}}',    description: 'Nome oficial da empresa',                 example: 'M4 Digital' },
-  { group: 'Empresa',  variable: '{{nome_fantasia}}',   description: 'Nome fantasia',                           example: 'Lovoo CRM' },
-  { group: 'Empresa',  variable: '{{idioma}}',          description: 'Idioma derivado do país configurado',     example: 'Português (pt-BR)' },
-  { group: 'Empresa',  variable: '{{fuso_horario}}',    description: 'Fuso horário configurado',                example: 'America/Sao_Paulo' },
-  { group: 'Empresa',  variable: '{{moeda}}',           description: 'Moeda padrão',                           example: 'BRL' },
-  { group: 'Empresa',  variable: '{{pais}}',            description: 'País da empresa',                        example: 'Brasil' },
-  { group: 'Empresa',  variable: '{{cidade}}',          description: 'Cidade da empresa',                      example: 'São Paulo' },
-  { group: 'Empresa',  variable: '{{telefone}}',        description: 'Telefone principal',                     example: '+55 11 99999-9999' },
-  { group: 'Empresa',  variable: '{{email}}',           description: 'E-mail principal',                       example: 'contato@empresa.com' },
-  { group: 'Empresa',  variable: '{{site}}',            description: 'Site principal',                         example: 'https://empresa.com' },
-  { group: 'Empresa',  variable: '{{ramo_atividade}}',  description: 'Ramo de atividade',                      example: 'Tecnologia' },
-] as const
+import { PromptEditor } from '../ui/PromptEditor'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -44,90 +28,6 @@ interface PolicyData {
   is_active:  boolean
   created_at: string
   updated_at: string
-}
-
-// ── Sub-componente: painel de variáveis ───────────────────────────────────────
-
-function VariablesPanel({ textareaRef }: { textareaRef: React.RefObject<HTMLTextAreaElement> }) {
-  const [open, setOpen]       = useState(false)
-  const [copied, setCopied]   = useState<string | null>(null)
-
-  const groups = Array.from(new Set(VARIABLES_CATALOG.map(v => v.group)))
-
-  function handleInsert(variable: string) {
-    const ta = textareaRef.current
-    if (ta) {
-      const start  = ta.selectionStart
-      const end    = ta.selectionEnd
-      const before = ta.value.slice(0, start)
-      const after  = ta.value.slice(end)
-      const newVal = before + variable + after
-      // Disparar evento nativo para que o React state atualize
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-      nativeInputValueSetter?.call(ta, newVal)
-      ta.dispatchEvent(new Event('input', { bubbles: true }))
-      ta.focus()
-      ta.selectionStart = ta.selectionEnd = start + variable.length
-    } else {
-      // Fallback: copiar para área de transferência
-      navigator.clipboard.writeText(variable).catch(() => {})
-    }
-    setCopied(variable)
-    setTimeout(() => setCopied(null), 1500)
-  }
-
-  return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium text-gray-700"
-      >
-        <span className="flex items-center gap-2">
-          <Copy className="w-4 h-4 text-gray-500" />
-          Variáveis disponíveis
-          <span className="text-xs font-normal text-gray-400">
-            ({VARIABLES_CATALOG.length} — clique para inserir no texto)
-          </span>
-        </span>
-        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </button>
-
-      {open && (
-        <div className="divide-y divide-gray-100">
-          {groups.map(group => (
-            <div key={group} className="px-4 py-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{group}</p>
-              <div className="space-y-1.5">
-                {VARIABLES_CATALOG.filter(v => v.group === group).map(({ variable, description, example }) => (
-                  <div key={variable} className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleInsert(variable)}
-                      title="Clique para inserir no texto"
-                      className={`flex-shrink-0 font-mono text-xs px-2 py-0.5 rounded border transition-colors ${
-                        copied === variable
-                          ? 'bg-green-100 border-green-300 text-green-700'
-                          : 'bg-white border-gray-300 text-blue-700 hover:bg-blue-50 hover:border-blue-300'
-                      }`}
-                    >
-                      {copied === variable ? '✓ inserida' : variable}
-                    </button>
-                    <span className="text-xs text-gray-600 min-w-0">
-                      {description}
-                      {example && (
-                        <span className="text-gray-400 ml-1">— ex: <em>{example}</em></span>
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Helper de autenticação ────────────────────────────────────────────────────
@@ -145,7 +45,6 @@ type Props = {
 }
 
 export function AiGovernancePanel({ companyId }: Props) {
-  const textareaRef                      = useRef<HTMLTextAreaElement>(null)
   const [content, setContent]           = useState('')
   const [savedAt, setSavedAt]           = useState<string | null>(null)
   const [loading, setLoading]           = useState(true)
@@ -264,25 +163,20 @@ export function AiGovernancePanel({ companyId }: Props) {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Conteúdo das diretrizes
             </label>
-            <textarea
-              ref={textareaRef}
+
+            <PromptEditor
               value={content}
-              onChange={e => { setContent(e.target.value); setSaveError(null) }}
-              onInput={e => setContent((e.target as HTMLTextAreaElement).value)}
+              onChange={v => { setContent(v); setSaveError(null) }}
               rows={14}
               placeholder={
                 'Exemplos de diretrizes:\n\n' +
+                '- Você é o assistente da empresa {{nome_fantasia}}.\n' +
                 '- Nunca revelar informações internas da empresa\n' +
                 '- Não prometer prazos ou valores sem confirmação\n' +
                 '- Encaminhar para humano em casos de reclamação grave\n' +
-                '- Não responder a temas fora do escopo do negócio\n' +
-                '- Proteger dados pessoais dos clientes'
+                '- Ao se despedir, use: Att, equipe {{nome_fantasia}}'
               }
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y font-mono leading-relaxed"
             />
-
-            {/* Painel de variáveis disponíveis */}
-            <VariablesPanel textareaRef={textareaRef} />
           </div>
 
           {/* Feedback de erro ao salvar */}
@@ -300,18 +194,18 @@ export function AiGovernancePanel({ companyId }: Props) {
           )}
 
           <div className="flex items-center justify-between pt-1">
-            {/* Última atualização */}
             <p className="text-xs text-gray-400">
               {savedAt
                 ? `Última atualização: ${new Date(savedAt).toLocaleString('pt-BR')}`
                 : 'Nenhuma diretriz salva ainda'}
             </p>
 
-            {/* Botão salvar */}
             <button
               onClick={handleSave}
               disabled={saving || !content.trim()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-purple-600 text-white
+                         rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors"
             >
               {saving
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando…</>
