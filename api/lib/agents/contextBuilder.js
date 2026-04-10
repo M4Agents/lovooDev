@@ -7,16 +7,22 @@
 //   Buscar os dados necessários para o AgentExecutor (Etapa 7) e entregá-los
 //   estruturados e filtrados. Não monta prompt. Não chama LLM.
 //
-// FLUXO:
-//   1. Revalidar company_id (não confiar cegamente no OrchestratorContext)
-//   2. Buscar em paralelo (Promise.allSettled):
-//      a. Configuração do agente (lovoo_agents)
-//      b. Mensagens recentes (RPC chat_get_messages)
-//      c. Contato/Lead (chat_conversations → leads)
-//      d. Catálogo (products + services)
-//   3. Abortar apenas se o agente não for encontrado
-//   4. Aplicar filtros de capabilities (preço, etc.)
-//   5. Retornar ContextBuilderOutput estruturado
+// FLUXO (duas fases paralelas):
+//   Fase 1 — independentes (Promise.allSettled):
+//     a. Configuração do agente (lovoo_agents)
+//     b. Mensagens recentes (RPC chat_get_messages)
+//     c. Contato/Lead expandido (leads + custom fields)
+//     d. Catálogo (products + services)
+//     e. ID da empresa-pai (para buscar policy)
+//     f. Dados da empresa executora (para variáveis)
+//   Fase 2 — dependem de Fase 1 (Promise.allSettled):
+//     g. Policy de governança (usa ID da empresa-pai)
+//     h. Oportunidade ativa (usa lead_id do contato)
+//
+// VARIÁVEIS:
+//   - Resolvidas com dados da EMPRESA EXECUTORA (nunca da empresa-pai)
+//   - Aplicadas na policy de governança E no prompt do agente
+//   - Grupos: Runtime, Empresa, Lead, Oportunidade, Campos Personalizados (cp_*)
 //
 // MULTI-TENANT:
 //   company_id obrigatório em TODAS as queries. Nunca assume contexto global.
@@ -24,27 +30,16 @@
 // RETORNO:
 //   { success: true, output: ContextBuilderOutput }
 //   { success: false, skip_reason: string, error?: string }
-//
-// OBSERVAÇÕES DE SCHEMA:
-//   - lovoo_agents.prompt    → texto do system prompt (coluna 'prompt', não 'system_prompt')
-//   - lovoo_agents.knowledge_mode → 'none' | 'inline' | 'rag' | 'hybrid'
-//   - chat_conversations.lead_id  → INTEGER, nullable (não UUID)
-//   - chat_conversations.contact_name + contact_phone → sempre presentes
-//   - chat_get_messages com p_reverse_order=true → DESC (mais recentes primeiro)
-//     → reverter o array para ordem cronológica no output
-//   - products/services: available_for_ai (boolean) + is_active (boolean)
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
-import { buildPolicyVariables, applyPolicyVariables } from '../utils/policyVariables.js';
+import {
+  buildAllVariables,
+  applyPolicyVariables,
+} from '../utils/policyVariables.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-/**
- * Limite de mensagens recentes a incluir no contexto.
- * Equilibra qualidade do contexto com custo de tokens.
- * MVP = 20. Pode ser ajustado por assignment futuramente.
- */
 const MESSAGES_LIMIT = 20;
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
@@ -60,12 +55,6 @@ function getServiceSupabase() {
 
 // ── Função principal ──────────────────────────────────────────────────────────
 
-/**
- * Monta o ContextBuilderOutput para o AgentExecutor.
- *
- * @param {object} orchestratorContext - OrchestratorContext do Orchestrator (Etapa 5)
- * @returns {{ success: boolean, output?: ContextBuilderOutput, skip_reason?: string, error?: string }}
- */
 export async function buildContext(orchestratorContext) {
   const svc = getServiceSupabase();
 
@@ -74,92 +63,131 @@ export async function buildContext(orchestratorContext) {
     return { success: false, skip_reason: 'error', error: 'service_role_unavailable' };
   }
 
-  // Revalidar company_id — fonte de verdade é o evento original do webhook
   const companyId      = orchestratorContext.event?.company_id;
   const conversationId = orchestratorContext.event?.conversation_id;
   const agentId        = orchestratorContext.agent_id;
 
   if (!companyId || !conversationId || !agentId) {
-    console.error('🤖 [CTX] ❌ Campos obrigatórios ausentes no OrchestratorContext:', {
-      companyId, conversationId, agentId
-    });
+    console.error('🤖 [CTX] ❌ Campos obrigatórios ausentes:', { companyId, conversationId, agentId });
     return { success: false, skip_reason: 'error', error: 'missing_required_fields' };
   }
 
-  // ── Busca paralela ────────────────────────────────────────────────────────
-  // Promise.allSettled garante que falhas individuais não abortam as demais.
-  // Apenas falha no agente é bloqueante.
+  // ── Fase 1: busca paralela — todas as queries independentes ──────────────
 
-  // Busca a empresa-pai primeiro (necessária para policy + variáveis)
-  // Separada das demais porque o resultado é dependência de fetchActiveSystemPolicy.
-  let parentCompany = null;
-  try {
-    parentCompany = await fetchParentCompany(svc);
-  } catch (err) {
-    console.warn('🤖 [CTX] ⚠️  Falha ao buscar empresa-pai (policy não será aplicada):', err.message);
-  }
-
-  const [agentResult, messagesResult, contactResult, catalogResult, policyResult] = await Promise.allSettled([
-    fetchAgentConfig(svc, { agentId, companyId }),
-    fetchRecentMessages(svc, { conversationId, companyId }),
-    fetchContact(svc, { conversationId, companyId }),
-    fetchCatalog(svc, { companyId }),
-    fetchActiveSystemPolicy(svc, parentCompany)
-  ]);
+  const [agentResult, messagesResult, contactResult, catalogResult, parentIdResult, childCompanyResult] =
+    await Promise.allSettled([
+      fetchAgentConfig(svc, { agentId, companyId }),
+      fetchRecentMessages(svc, { conversationId, companyId }),
+      fetchContact(svc, { conversationId, companyId }),
+      fetchCatalog(svc, { companyId }),
+      fetchParentCompanyId(svc),
+      fetchChildCompanyData(svc, companyId),
+    ]);
 
   // ── Agente: bloqueante ────────────────────────────────────────────────────
+
   if (agentResult.status === 'rejected') {
-    console.error('🤖 [CTX] ❌ Falha ao buscar configuração do agente:', agentResult.reason?.message);
+    console.error('🤖 [CTX] ❌ Falha ao buscar agente:', agentResult.reason?.message);
     return { success: false, skip_reason: 'error', error: 'agent_fetch_failed' };
   }
 
   const agent = agentResult.value;
-
   if (!agent) {
     console.warn('🤖 [CTX] ⏭️  Agente não encontrado ou inativo:', { agentId, companyId });
     return { success: false, skip_reason: 'agent_not_found' };
   }
 
-  // ── Mensagens: não-bloqueante (pode retornar vazio) ───────────────────────
+  // ── Mensagens ─────────────────────────────────────────────────────────────
+
   let recentMessages = [];
   if (messagesResult.status === 'fulfilled') {
     recentMessages = messagesResult.value ?? [];
   } else {
-    console.error('🤖 [CTX] ⚠️  Falha ao buscar mensagens (continuando sem histórico):',
-      messagesResult.reason?.message);
+    console.error('🤖 [CTX] ⚠️  Falha ao buscar mensagens (continuando):', messagesResult.reason?.message);
   }
 
-  // ── Contato/Lead: não-bloqueante (pode retornar dados parciais) ───────────
-  let contact = { lead_id: null, name: null, phone: null };
+  // ── Contato / Lead ────────────────────────────────────────────────────────
+
+  const emptyContact = { lead_id: null, name: null, phone: null };
+  let contact = emptyContact;
   if (contactResult.status === 'fulfilled') {
-    contact = contactResult.value ?? contact;
+    contact = contactResult.value ?? emptyContact;
   } else {
-    console.error('🤖 [CTX] ⚠️  Falha ao buscar contato (continuando sem dados do lead):',
-      contactResult.reason?.message);
+    console.error('🤖 [CTX] ⚠️  Falha ao buscar contato (continuando):', contactResult.reason?.message);
   }
 
-  // ── Catálogo: não-bloqueante (pode retornar vazio) ────────────────────────
+  // ── Catálogo ──────────────────────────────────────────────────────────────
+
   let rawCatalog = { products: [], services: [] };
   if (catalogResult.status === 'fulfilled') {
     rawCatalog = catalogResult.value ?? rawCatalog;
   } else {
-    console.error('🤖 [CTX] ⚠️  Falha ao buscar catálogo (continuando sem produtos/serviços):',
-      catalogResult.reason?.message);
+    console.error('🤖 [CTX] ⚠️  Falha ao buscar catálogo (continuando):', catalogResult.reason?.message);
   }
 
-  // ── Policy global de governança: não-bloqueante ───────────────────────────
-  // Buscada pela empresa-pai (company_type='parent') — não filtrada por companyId do agente.
-  // Falha silenciosa: agentes continuam sem a policy (melhor do que bloquear execução).
-  // SEGURANÇA: conteúdo da policy NUNCA é logado.
-  let systemPolicy = null;
-  if (policyResult.status === 'fulfilled') {
-    systemPolicy = policyResult.value ?? null;
+  // ── Empresa executora (para variáveis) ────────────────────────────────────
+
+  let childCompany = null;
+  if (childCompanyResult.status === 'fulfilled') {
+    childCompany = childCompanyResult.value;
   } else {
-    console.warn('🤖 [CTX] ⚠️  Falha ao buscar policy de governança (continuando sem diretriz):',
-      policyResult.reason?.message);
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar empresa executora (variáveis ficam vazias):', childCompanyResult.reason?.message);
   }
+
+  // ── ID da empresa-pai (para buscar policy) ────────────────────────────────
+
+  const parentCompanyId = parentIdResult.status === 'fulfilled' ? parentIdResult.value : null;
+
+  // ── Fase 2: policy + oportunidade (dependem de Fase 1) ───────────────────
+
+  const [policyResult, opportunityResult] = await Promise.allSettled([
+    fetchActiveSystemPolicy(svc, parentCompanyId),
+    contact?.lead_id
+      ? fetchActiveOpportunity(svc, { lead_id: contact.lead_id, company_id: companyId })
+      : Promise.resolve(null),
+  ]);
+
+  // ── Policy global de governança ───────────────────────────────────────────
+  // SEGURANÇA: conteúdo da policy NUNCA é logado.
+
+  let rawSystemPolicy = null;
+  if (policyResult.status === 'fulfilled') {
+    rawSystemPolicy = policyResult.value ?? null;
+  } else {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar policy (continuando sem diretriz):', policyResult.reason?.message);
+  }
+
+  // ── Oportunidade ativa ────────────────────────────────────────────────────
+
+  let opportunity = null;
+  if (opportunityResult.status === 'fulfilled') {
+    opportunity = opportunityResult.value ?? null;
+  } else {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar oportunidade (continuando):', opportunityResult.reason?.message);
+  }
+
+  // ── Montar mapa de variáveis (empresa executora) ──────────────────────────
+  // Variáveis da EMPRESA EXECUTORA — nunca da empresa-pai.
+  // SEGURANÇA: policy e prompt do agente recebem dados da empresa atendendo o cliente.
+
+  const allVariables = buildAllVariables(
+    childCompany,
+    contact,                      // tem campos do lead (nome, email, etc.)
+    opportunity,                  // tem stage_name resolvido
+    contact?.custom_values ?? [], // lead_custom_values para cp_* variáveis
+  );
+
+  // Aplicar variáveis na policy (se existir)
+  // SEGURANÇA: variáveis substituídas nunca são logadas
+  const systemPolicy = rawSystemPolicy
+    ? applyPolicyVariables(rawSystemPolicy, allVariables)
+    : null;
+
+  // Aplicar variáveis no prompt do agente
+  const processedAgentPrompt = applyPolicyVariables(agent.prompt, allVariables);
 
   // ── Filtrar catálogo por capabilities ────────────────────────────────────
+
   const catalog = applyCapabilityFilters(
     rawCatalog,
     orchestratorContext.capabilities,
@@ -173,18 +201,18 @@ export async function buildContext(orchestratorContext) {
     session_id: orchestratorContext.session_id,
 
     agent: {
-      id:                  agent.id,
-      prompt:              agent.prompt,        // lovoo_agents.prompt (system prompt)
-      knowledge_mode:      agent.knowledge_mode, // 'none' | 'inline' | 'rag' | 'hybrid'
-      knowledge_base:      agent.knowledge_base, // texto livre (inline/hybrid)
-      model:               agent.model,
-      model_config:        agent.model_config
+      id:             agent.id,
+      prompt:         processedAgentPrompt, // variáveis já substituídas
+      knowledge_mode: agent.knowledge_mode,
+      knowledge_base: agent.knowledge_base,
+      model:          agent.model,
+      model_config:   agent.model_config
     },
 
     conversation: {
-      id:               conversationId,
-      contact_phone:    orchestratorContext.conversation.contact_phone,
-      recent_messages:  recentMessages
+      id:              conversationId,
+      contact_phone:   orchestratorContext.conversation.contact_phone,
+      recent_messages: recentMessages
     },
 
     contact: {
@@ -195,14 +223,11 @@ export async function buildContext(orchestratorContext) {
 
     catalog,
 
-    // Mensagem atual sendo respondida (foco principal do LLM)
     user_message: orchestratorContext.event.message_text ?? '',
 
-    // Capabilities e política de preços (para o AgentExecutor usar como defesa secundária)
     capabilities:         orchestratorContext.capabilities,
     price_display_policy: orchestratorContext.price_display_policy,
 
-    // Diretriz global de governança — null se não configurada
     // SEGURANÇA: nunca logada, nunca exposta em responses ou debug
     system_policy: systemPolicy,
 
@@ -214,32 +239,29 @@ export async function buildContext(orchestratorContext) {
   };
 
   console.log('🤖 [CTX] ✅ ContextBuilderOutput montado:', {
-    run_id:           output.run_id,
-    agent_id:         output.agent.id,
-    knowledge_mode:   output.agent.knowledge_mode,
-    messages_count:   output.conversation.recent_messages.length,
-    has_lead:         !!output.contact.lead_id,
-    products_count:   output.catalog.products.length,
-    services_count:   output.catalog.services.length,
-    conversation_id:  conversationId,
-    company_id:       companyId
+    run_id:          output.run_id,
+    agent_id:        output.agent.id,
+    knowledge_mode:  output.agent.knowledge_mode,
+    messages_count:  output.conversation.recent_messages.length,
+    has_lead:        !!output.contact.lead_id,
+    has_opportunity: !!opportunity,
+    products_count:  output.catalog.products.length,
+    services_count:  output.catalog.services.length,
+    conversation_id: conversationId,
+    company_id:      companyId,
   });
 
   return { success: true, output };
 }
 
-// ── Fetchers individuais ──────────────────────────────────────────────────────
+// ── Fetchers ──────────────────────────────────────────────────────────────────
 
-/**
- * Busca configuração do agente.
- * Retorna null se não encontrado ou inativo — buildContext trata como bloqueante.
- */
 async function fetchAgentConfig(svc, { agentId, companyId }) {
   const { data, error } = await svc
     .from('lovoo_agents')
     .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config')
     .eq('id', agentId)
-    .eq('company_id', companyId)  // isolamento multi-tenant obrigatório
+    .eq('company_id', companyId)
     .eq('is_active', true)
     .maybeSingle();
 
@@ -247,57 +269,40 @@ async function fetchAgentConfig(svc, { agentId, companyId }) {
   return data ?? null;
 }
 
-/**
- * Busca as últimas MESSAGES_LIMIT mensagens da conversa.
- *
- * Estratégia: p_reverse_order=true retorna DESC (mais recentes primeiro).
- * Revertemos o array para order cronológica (mais antigas → mais recentes),
- * que é o formato esperado pelo LLM para entender a progressão da conversa.
- *
- * Filtra mensagens com content vazio ou null.
- */
 async function fetchRecentMessages(svc, { conversationId, companyId }) {
   const { data: rpcResult, error } = await svc.rpc('chat_get_messages', {
     p_conversation_id: conversationId,
     p_company_id:      companyId,
     p_limit:           MESSAGES_LIMIT,
     p_offset:          0,
-    p_reverse_order:   true  // DESC: mais recentes primeiro
+    p_reverse_order:   true
   });
 
   if (error) throw new Error(`fetchRecentMessages RPC: ${error.message}`);
 
   if (!rpcResult?.success || !Array.isArray(rpcResult?.data)) {
-    console.warn('🤖 [CTX] ⚠️  chat_get_messages retornou sem dados:', rpcResult);
+    console.warn('🤖 [CTX] ⚠️  chat_get_messages sem dados:', rpcResult);
     return [];
   }
 
-  // Reverter para ordem cronológica (mais antigas → mais recentes)
-  const messages = [...rpcResult.data].reverse();
-
-  // Mapear para campos mínimos necessários (economia de tokens)
-  return messages
+  return [...rpcResult.data].reverse()
     .filter(m => m.content && m.content.trim() !== '')
     .map(m => ({
-      id:             m.id,
-      direction:      m.direction,    // 'inbound' | 'outbound'
-      content:        m.content,
-      created_at:     m.created_at,
-      is_ai_generated: m.is_ai_generated ?? false
+      id:               m.id,
+      direction:        m.direction,
+      content:          m.content,
+      created_at:       m.created_at,
+      is_ai_generated:  m.is_ai_generated ?? false
     }));
 }
 
 /**
- * Busca dados do contato associado à conversa.
- *
- * Ordem de prioridade para o nome:
- *   1. leads.name (se lead_id existir) — dado cadastral mais completo
- *   2. chat_conversations.contact_name — fallback (nome recebido via WhatsApp)
- *
- * lead_id em chat_conversations é INTEGER (não UUID).
+ * Busca dados do contato/lead da conversa — versão expandida.
+ * Inclui: campos de endereço, cargo, origem e campos personalizados.
+ * Retorna custom_values para buildCustomFieldVariables.
  */
 async function fetchContact(svc, { conversationId, companyId }) {
-  // Passo 1: buscar dados da conversa
+  // Passo 1: buscar conversa para obter lead_id e contato
   const { data: conv, error: convError } = await svc
     .from('chat_conversations')
     .select('lead_id, contact_phone, contact_name')
@@ -306,63 +311,80 @@ async function fetchContact(svc, { conversationId, companyId }) {
     .maybeSingle();
 
   if (convError) throw new Error(`fetchContact (conv): ${convError.message}`);
+  if (!conv) return { lead_id: null, name: null, phone: null, custom_values: [] };
 
-  if (!conv) {
-    return { lead_id: null, name: null, phone: null };
+  if (!conv.lead_id) {
+    return {
+      lead_id: null,
+      name:    conv.contact_name ?? null,
+      phone:   conv.contact_phone ?? null,
+      custom_values: [],
+    };
   }
 
-  let leadName = conv.contact_name ?? null;
+  // Passo 2: buscar lead completo com campos personalizados
+  const { data: lead, error: leadError } = await svc
+    .from('leads')
+    .select(`
+      name, email, phone, company_name, cargo,
+      cidade, estado, endereco, bairro, cep, numero, origin,
+      lead_custom_values(
+        value,
+        lead_custom_fields(field_name)
+      )
+    `)
+    .eq('id', conv.lead_id)
+    .eq('company_id', companyId)
+    .maybeSingle();
 
-  // Passo 2: se lead_id existir, buscar nome mais completo do cadastro
-  if (conv.lead_id) {
-    const { data: lead, error: leadError } = await svc
-      .from('leads')
-      .select('name, phone')
-      .eq('id', conv.lead_id)
-      .eq('company_id', companyId)  // isolamento multi-tenant obrigatório
-      .maybeSingle();
+  if (leadError) {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar lead completo (usando contact_name):', leadError.message);
+    return {
+      lead_id:       conv.lead_id,
+      name:          conv.contact_name ?? null,
+      phone:         conv.contact_phone ?? null,
+      custom_values: [],
+    };
+  }
 
-    if (leadError) {
-      // Não-bloqueante: log e continua com contact_name
-      console.warn('🤖 [CTX] ⚠️  Falha ao buscar dados do lead (usando contact_name):', leadError.message);
-    } else if (lead?.name) {
-      leadName = lead.name;
-    }
+  if (!lead) {
+    return {
+      lead_id:       conv.lead_id,
+      name:          conv.contact_name ?? null,
+      phone:         conv.contact_phone ?? null,
+      custom_values: [],
+    };
   }
 
   return {
-    lead_id: conv.lead_id ?? null,
-    name:    leadName,
-    phone:   conv.contact_phone ?? null
+    lead_id:      conv.lead_id,
+    // Campos para output.contact
+    name:         lead.name ?? conv.contact_name ?? null,
+    phone:        lead.phone ?? conv.contact_phone ?? null,
+    // Campos extras para variáveis (buildLeadVariables usa estes)
+    email:        lead.email        ?? null,
+    company_name: lead.company_name ?? null,
+    cargo:        lead.cargo        ?? null,
+    cidade:       lead.cidade       ?? null,
+    estado:       lead.estado       ?? null,
+    endereco:     lead.endereco     ?? null,
+    bairro:       lead.bairro       ?? null,
+    cep:          lead.cep          ?? null,
+    numero:       lead.numero       ?? null,
+    origin:       lead.origin       ?? null,
+    // Campos personalizados para buildCustomFieldVariables
+    custom_values: lead.lead_custom_values ?? [],
   };
 }
 
-/**
- * Busca catálogo (produtos + serviços) marcados para uso por IA.
- *
- * Filtros:
- *   - available_for_ai = true (flag explícita para IA)
- *   - is_active = true (apenas itens publicados)
- *   - company_id (isolamento multi-tenant)
- *
- * Inclui availability_status para que o agente saiba comunicar disponibilidade.
- * O filtro de preços é aplicado depois (applyCapabilityFilters).
- */
 async function fetchCatalog(svc, { companyId }) {
   const [productsResult, servicesResult] = await Promise.allSettled([
-    svc
-      .from('products')
+    svc.from('products')
       .select('id, name, description, default_price, ai_notes, ai_unavailable_guidance, availability_status')
-      .eq('company_id', companyId)
-      .eq('available_for_ai', true)
-      .eq('is_active', true),
-
-    svc
-      .from('services')
+      .eq('company_id', companyId).eq('available_for_ai', true).eq('is_active', true),
+    svc.from('services')
       .select('id, name, description, default_price, ai_notes, ai_unavailable_guidance, availability_status')
-      .eq('company_id', companyId)
-      .eq('available_for_ai', true)
-      .eq('is_active', true)
+      .eq('company_id', companyId).eq('available_for_ai', true).eq('is_active', true),
   ]);
 
   const products = productsResult.status === 'fulfilled'
@@ -376,76 +398,105 @@ async function fetchCatalog(svc, { companyId }) {
   return { products, services };
 }
 
-// ── Policy global de governança com substituição de variáveis ─────────────────
+/**
+ * Busca apenas o ID da empresa-pai (company_type='parent').
+ * Usado exclusivamente para localizar a policy de governança.
+ * Dados da empresa-pai NÃO são usados para resolver variáveis.
+ */
+async function fetchParentCompanyId(svc) {
+  const { data, error } = await svc
+    .from('companies')
+    .select('id')
+    .eq('company_type', 'parent')
+    .maybeSingle();
+
+  if (error) throw new Error(`fetchParentCompanyId: ${error.message}`);
+  return data?.id ?? null;
+}
 
 /**
- * Busca os dados da empresa-pai necessários para montar as variáveis da policy.
- *
- * @returns {Promise<object|null>} Dados da empresa-pai ou null se não encontrada
+ * Busca dados completos da empresa EXECUTORA (empresa-filha ou pai, conforme companyId do evento).
+ * Estes dados são usados para resolver todas as variáveis de empresa nos prompts.
+ * SEGURANÇA: nunca mistura dados de empresa diferente.
  */
-async function fetchParentCompany(svc) {
+async function fetchChildCompanyData(svc, companyId) {
   const { data, error } = await svc
     .from('companies')
     .select(`
       id, name, nome_fantasia, timezone, default_currency,
-      pais, cidade, country_code, telefone_principal,
+      pais, cidade, estado, cep, logradouro, bairro, numero,
+      country_code, telefone_principal,
       email_principal, site_principal, ramo_atividade
     `)
-    .eq('company_type', 'parent')
+    .eq('id', companyId)
     .maybeSingle();
 
-  if (error) throw new Error(`fetchParentCompany: ${error.message}`);
+  if (error) throw new Error(`fetchChildCompanyData: ${error.message}`);
   return data ?? null;
 }
 
 /**
- * Busca a policy ativa de governança de IA da empresa-pai e aplica substituição
- * de variáveis ({{fuso_horario}}, {{nome_fantasia}}, {{data_hora_atual}}, etc.)
+ * Busca a policy de governança da empresa-pai.
+ * Conteúdo nunca é logado.
  *
- * SEGURANÇA:
- *   - Sempre filtra por company_id explícito da empresa-pai — nunca depende
- *     de "existe apenas uma policy global"
- *   - Conteúdo da policy NUNCA é logado em nenhum momento
- *   - Falha silenciosa: retorna null sem abortar execução do agente
- *
- * @param {object} svc         - Cliente Supabase service_role
- * @param {object} parentCompany - Dados da empresa-pai (de fetchParentCompany)
- * @returns {Promise<string|null>} Policy com variáveis substituídas ou null
+ * @param {string|null} parentCompanyId - ID da empresa-pai
+ * @returns {Promise<string|null>} Conteúdo bruto da policy (antes da substituição de variáveis)
  */
-async function fetchActiveSystemPolicy(svc, parentCompany) {
-  if (!parentCompany) return null;
+async function fetchActiveSystemPolicy(svc, parentCompanyId) {
+  if (!parentCompanyId) return null;
 
   const { data: policy, error: policyErr } = await svc
     .from('ai_system_policies')
     .select('content')
-    .eq('company_id', parentCompany.id)
+    .eq('company_id', parentCompanyId)
     .eq('is_active', true)
     .maybeSingle();
 
-  if (policyErr) throw new Error(`fetchActiveSystemPolicy(policy): ${policyErr.message}`);
-  if (!policy?.content) return null;
+  if (policyErr) throw new Error(`fetchActiveSystemPolicy: ${policyErr.message}`);
+  return policy?.content ?? null;
+  // Nota: substituição de variáveis ocorre em buildContext() após obter allVariables
+}
 
-  // Substituir variáveis {{chave}} com dados reais da empresa-pai + runtime
-  const variables = buildPolicyVariables(parentCompany);
-  return applyPolicyVariables(policy.content, variables);
+/**
+ * Busca a oportunidade aberta mais recente vinculada ao lead.
+ * Resolve o nome da etapa via join com opportunity_funnel_positions → funnel_stages.
+ * Retorna null se não houver oportunidade.
+ */
+async function fetchActiveOpportunity(svc, { lead_id, company_id }) {
+  const { data, error } = await svc
+    .from('opportunities')
+    .select(`
+      title, value, currency, status, probability, expected_close_date,
+      opportunity_funnel_positions(
+        funnel_stages(name)
+      )
+    `)
+    .eq('lead_id', lead_id)
+    .eq('company_id', company_id)
+    .eq('status', 'open')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`fetchActiveOpportunity: ${error.message}`);
+  if (!data) return null;
+
+  // Resolver nome da etapa (primeiro position disponível)
+  const stageName = data.opportunity_funnel_positions?.[0]?.funnel_stages?.name ?? null;
+
+  return {
+    title:               data.title,
+    value:               data.value,
+    currency:            data.currency,
+    status:              data.status,
+    probability:         data.probability,
+    expected_close_date: data.expected_close_date,
+    stage_name:          stageName,
+  };
 }
 
 // ── Filtro de capabilities ────────────────────────────────────────────────────
 
-/**
- * Aplica filtros de capabilities no catálogo.
- *
- * Defesa primária: dados são removidos ANTES de chegar ao LLM.
- * O LLM nunca recebe dados que não deveria ver.
- *
- * Regras de preço:
- *   - can_inform_prices = false  → default_price = null em todos os itens
- *   - price_display_policy = 'disabled' → default_price = null (cobertura dupla)
- *   - price_display_policy = 'consult_only' → default_price = null
- *   - price_display_policy = 'fixed_only' | 'range_allowed' → mantém se can_inform_prices = true
- *
- * Ponto de extensão: adicionar novos filtros aqui (can_send_media, etc.)
- */
 function applyCapabilityFilters(catalog, capabilities, pricePolicy) {
   const canInformPrices = capabilities?.can_inform_prices === true;
   const isPriceHidden   = !canInformPrices
