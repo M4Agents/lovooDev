@@ -194,7 +194,7 @@ export function AiGovernancePanel({ companyId }: Props) {
 
     try {
       const auth = await getAuthHeader()
-      const res  = await fetch('/api/ai/policies/update', {
+      const res  = await fetch('/api/ai/policies-update', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
         body:    JSON.stringify({ company_id: companyId, content: trimmed })
