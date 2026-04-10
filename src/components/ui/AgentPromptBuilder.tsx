@@ -227,6 +227,7 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
   const [autocomplete, setAutocomplete]         = useState<AutocompleteState | null>(null)
   const activeTextareaRef                       = useRef<HTMLTextAreaElement | null>(null)
   const dropdownRef                             = useRef<HTMLDivElement | null>(null)
+  const overlayRefs                             = useRef<Partial<Record<SectionId, HTMLDivElement | null>>>({})
 
   const allVariables = [...PROMPT_VARIABLES, ...customFieldVariables]
 
@@ -375,6 +376,7 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
                     */}
                     <div
                       aria-hidden="true"
+                      ref={el => { overlayRefs.current[sectionId] = el }}
                       className="absolute inset-0 z-0 border border-transparent rounded-md
                                  px-3 py-2 text-sm font-mono leading-relaxed
                                  text-gray-800 overflow-hidden pointer-events-none select-none"
@@ -387,6 +389,17 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
                       onChange={e => {
                         handleContentChange(sectionId, e.target.value)
                         detectAutocomplete(e.target)
+                      }}
+                      onScroll={e => {
+                        const ta = e.target as HTMLTextAreaElement
+                        const ov = overlayRefs.current[sectionId]
+                        // #region agent log
+                        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',hypothesisId:'A',location:'AgentPromptBuilder.tsx:onScroll',message:'scroll event',data:{sectionId,scrollTop:ta.scrollTop,hasOverlayRef:Boolean(ov)},timestamp:Date.now()})}).catch(()=>{})
+                        // #endregion
+                        if (ov) {
+                          ov.scrollTop  = ta.scrollTop
+                          ov.scrollLeft = ta.scrollLeft
+                        }
                       }}
                       onFocus={e => handleTextareaFocus(e, sectionId)}
                       onKeyDown={e => {
