@@ -15,6 +15,7 @@ import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
 import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPanel';
+import { AiGovernancePanel } from '../components/Settings/AiGovernancePanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -34,7 +35,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [logs, setLogs] = useState<any[]>([]);
@@ -105,7 +106,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1119,6 +1120,21 @@ export const Settings: React.FC = () => {
               >
                 <Bot className="w-4 h-4" />
                 Agentes
+              </button>
+            )}
+
+            {/* Aba Diretrizes de IA (somente empresa-pai — super_admin) */}
+            {canManageAiGovernance && (
+              <button
+                onClick={() => setActiveTab('ia-governance')}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'ia-governance'
+                    ? 'border-purple-500 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                Diretrizes de IA
               </button>
             )}
 
@@ -3587,6 +3603,13 @@ export const Settings: React.FC = () => {
 
           {/* 2. Configuração de canal (assignments + routing) */}
           <CompanyAgentConfigPanel companyId={company.id} />
+        </div>
+      )}
+
+      {/* Aba Diretrizes de IA — governança global (somente empresa-pai) */}
+      {activeTab === 'ia-governance' && canManageAiGovernance && company?.id && (
+        <div className="space-y-6">
+          <AiGovernancePanel companyId={company.id} />
         </div>
       )}
 

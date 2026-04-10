@@ -73,6 +73,11 @@ export function useAccessControl() {
     currentRole === 'system_admin' ||
     currentRole === 'super_admin'
 
+  // ── Governança global de IA ────────────────────────────────
+  // Restrito à empresa-pai + super_admin.
+  // Permite criar e editar as diretrizes globais aplicadas a TODOS os agentes.
+  const canManageAiGovernance = isSaaSAdmin
+
   // ── Impersonação ───────────────────────────────────────────
   // super_admin e system_admin podem impersonar empresas para suporte
   const canImpersonate = isSaaSAdmin || isSystemAdmin
@@ -119,6 +124,9 @@ export function useAccessControl() {
 
     // Agentes conversacionais por empresa
     canManageConversationalAgents,
+
+    // Governança global de IA
+    canManageAiGovernance,
 
     // Impersonação
     canImpersonate,

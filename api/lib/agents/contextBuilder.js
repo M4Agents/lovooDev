@@ -89,11 +89,12 @@ export async function buildContext(orchestratorContext) {
   // Promise.allSettled garante que falhas individuais não abortam as demais.
   // Apenas falha no agente é bloqueante.
 
-  const [agentResult, messagesResult, contactResult, catalogResult] = await Promise.allSettled([
+  const [agentResult, messagesResult, contactResult, catalogResult, policyResult] = await Promise.allSettled([
     fetchAgentConfig(svc, { agentId, companyId }),
     fetchRecentMessages(svc, { conversationId, companyId }),
     fetchContact(svc, { conversationId, companyId }),
-    fetchCatalog(svc, { companyId })
+    fetchCatalog(svc, { companyId }),
+    fetchActiveSystemPolicy(svc)
   ]);
 
   // ── Agente: bloqueante ────────────────────────────────────────────────────
@@ -134,6 +135,18 @@ export async function buildContext(orchestratorContext) {
   } else {
     console.error('🤖 [CTX] ⚠️  Falha ao buscar catálogo (continuando sem produtos/serviços):',
       catalogResult.reason?.message);
+  }
+
+  // ── Policy global de governança: não-bloqueante ───────────────────────────
+  // Buscada pela empresa-pai (company_type='parent') — não filtrada por companyId do agente.
+  // Falha silenciosa: agentes continuam sem a policy (melhor do que bloquear execução).
+  // SEGURANÇA: conteúdo da policy NUNCA é logado.
+  let systemPolicy = null;
+  if (policyResult.status === 'fulfilled') {
+    systemPolicy = policyResult.value ?? null;
+  } else {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar policy de governança (continuando sem diretriz):',
+      policyResult.reason?.message);
   }
 
   // ── Filtrar catálogo por capabilities ────────────────────────────────────
@@ -178,6 +191,10 @@ export async function buildContext(orchestratorContext) {
     // Capabilities e política de preços (para o AgentExecutor usar como defesa secundária)
     capabilities:         orchestratorContext.capabilities,
     price_display_policy: orchestratorContext.price_display_policy,
+
+    // Diretriz global de governança — null se não configurada
+    // SEGURANÇA: nunca logada, nunca exposta em responses ou debug
+    system_policy: systemPolicy,
 
     metadata: {
       company_id:    companyId,
@@ -347,6 +364,45 @@ async function fetchCatalog(svc, { companyId }) {
     : (console.warn('🤖 [CTX] ⚠️  Falha ao buscar serviços:', servicesResult.reason?.message), []);
 
   return { products, services };
+}
+
+// ── Policy global de governança ───────────────────────────────────────────────
+
+/**
+ * Busca a policy ativa de governança de IA da empresa-pai.
+ *
+ * SEGURANÇA:
+ *   - Sempre filtra por company_id da empresa-pai (company_type='parent')
+ *   - Nunca depende de "existe apenas uma policy" — filtro explícito obrigatório
+ *   - Conteúdo da policy NUNCA é logado (nem em console.log)
+ *   - Falha silenciosa: retorna null sem abortar execução do agente
+ *
+ * @returns {Promise<string|null>} Conteúdo da policy ou null se não configurada
+ */
+async function fetchActiveSystemPolicy(svc) {
+  // Passo 1: identificar a empresa-pai
+  const { data: parentCompany, error: parentErr } = await svc
+    .from('companies')
+    .select('id')
+    .eq('company_type', 'parent')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (parentErr) throw new Error(`fetchActiveSystemPolicy(parent): ${parentErr.message}`);
+  if (!parentCompany) return null;  // empresa-pai não encontrada
+
+  // Passo 2: buscar policy ativa da empresa-pai por company_id explícito
+  const { data: policy, error: policyErr } = await svc
+    .from('ai_system_policies')
+    .select('content')
+    .eq('company_id', parentCompany.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (policyErr) throw new Error(`fetchActiveSystemPolicy(policy): ${policyErr.message}`);
+
+  // Retorna apenas o conteúdo — nunca o objeto completo com metadados
+  return policy?.content ?? null;
 }
 
 // ── Filtro de capabilities ────────────────────────────────────────────────────
