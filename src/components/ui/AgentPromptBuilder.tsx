@@ -46,7 +46,7 @@ function highlightVariables(text: string): string {
     .replace(/>/g, '&gt;')
   return escaped.replace(
     /\{\{(\w+)\}\}/g,
-    '<mark style="background:transparent;color:#2563EB;font-weight:600;font-style:normal">{{$1}}</mark>'
+    '<mark style="background:transparent;color:#2563EB;font-weight:normal;font-style:normal">{{$1}}</mark>'
   )
 }
 
