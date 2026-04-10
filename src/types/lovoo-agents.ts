@@ -42,15 +42,22 @@ export interface LovooAgentKnowledgeBaseConfig {
   [key: string]: unknown
 }
 
+// ── Tipos do prompt_config (builder estruturado) ──────────────────────────────
+
+export type { PromptConfig, PromptSection, SectionId, SectionMeta } from '../../api/lib/agents/variablesCatalog'
+
 // ── Tipos do banco — lovoo_agents ─────────────────────────────────────────────
 
 export interface LovooAgent {
   id: string
   company_id: string
+  agent_type: 'functional' | 'conversational'
   name: string
   description: string | null
   is_active: boolean
   prompt: string | null
+  prompt_config: import('../../api/lib/agents/variablesCatalog').PromptConfig | null
+  prompt_version: number
   knowledge_base: string | null
   knowledge_base_config: LovooAgentKnowledgeBaseConfig
   knowledge_mode: KnowledgeMode

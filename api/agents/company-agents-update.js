@@ -11,12 +11,28 @@
 //   - RAG bloqueado (knowledge_mode: apenas 'none' ou 'inline')
 //   - só os campos da whitelist são atualizados
 //
+// MODOS DE PROMPT:
+//   - structured: envia prompt_config + prompt_version
+//                 → backend valida + monta prompt
+//                 → UPDATE atômico com WHERE prompt_version = N
+//                 → 409 se rowsAffected = 0 (conflito de versão)
+//   - legacy:     envia prompt (string)
+//                 → salvo diretamente, prompt_config permanece NULL
+//                 → sem verificação de versão
+//   - metadata:   sem prompt nem prompt_config (ex: toggle is_active)
+//                 → sem verificação de versão
+//   - nunca aceitar prompt + prompt_config juntos
+//
+// prompt_version é incrementado em todo UPDATE (structured, legacy e metadata).
+//
 // OBRIGATÓRIO:
 //   - company_id (para lookup de membership)
 //   - agent_id
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { validatePromptConfig } from '../lib/agents/promptConfigValidator.js';
+import { assemblePrompt }        from '../lib/agents/promptAssembler.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -26,7 +42,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 const WRITE_ROLES           = ['admin', 'system_admin', 'super_admin'];
-const VALID_KNOWLEDGE_MODES  = ['none', 'inline']; // RAG bloqueado no MVP
+const VALID_KNOWLEDGE_MODES  = ['none', 'inline'];
 
 // ── Validação de caller (JWT + membership + role) ─────────────────────────────
 
@@ -40,7 +56,7 @@ async function validateCaller(req, companyId) {
 
   const callerClient = createClient(SUPABASE_URL, anonKey, {
     global: { headers: { Authorization: String(authHeader) } },
-    auth: { persistSession: false, autoRefreshToken: false }
+    auth:   { persistSession: false, autoRefreshToken: false }
   });
 
   const { data: { user }, error: authErr } = await callerClient.auth.getUser();
@@ -84,6 +100,8 @@ export default async function handler(req, res) {
     name,
     description,
     prompt,
+    prompt_config,
+    prompt_version,
     model,
     knowledge_mode,
     is_active,
@@ -96,6 +114,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'company_id e agent_id são obrigatórios.' });
   }
 
+  // Mutex: nunca aceitar prompt + prompt_config juntos
+  const hasPrompt       = typeof prompt === 'string' && prompt.trim().length > 0;
+  const hasPromptConfig = prompt_config !== undefined && prompt_config !== null;
+
+  if (hasPrompt && hasPromptConfig) {
+    return res.status(400).json({ success: false, error: 'prompt_and_config_conflict' });
+  }
+
+  // Structured requer prompt_version
+  if (hasPromptConfig && (typeof prompt_version !== 'number' || !Number.isInteger(prompt_version))) {
+    return res.status(400).json({ success: false, error: 'prompt_version é obrigatório para atualização estruturada.' });
+  }
+
   // ── Validar caller (JWT + membership + role) ──────────────────────────────
 
   const auth = await validateCaller(req, company_id);
@@ -106,15 +137,16 @@ export default async function handler(req, res) {
   if (!WRITE_ROLES.includes(auth.role)) {
     return res.status(403).json({
       success: false,
-      error: 'Permissão insuficiente. Requer role admin, system_admin ou super_admin.'
+      error:   'Permissão insuficiente. Requer role admin, system_admin ou super_admin.'
     });
   }
 
-  // ── Cross-tenant guard: agente deve pertencer à empresa do caller ─────────
+  // ── Cross-tenant guard ────────────────────────────────────────────────────
+  // Confirma que o agente pertence à empresa do caller antes de qualquer escrita.
 
   const { data: existing, error: fetchErr } = await supabaseAdmin
     .from('lovoo_agents')
-    .select('id, company_id, agent_type')
+    .select('id, company_id, agent_type, prompt_version')
     .eq('id', agent_id)
     .eq('company_id', auth.callerCompanyId)  // company_id do JWT, não do body
     .eq('agent_type', 'conversational')       // apenas agentes conversacionais
@@ -128,14 +160,47 @@ export default async function handler(req, res) {
   if (!existing) {
     return res.status(404).json({
       success: false,
-      error: 'Agente não encontrado ou não pertence a esta empresa.'
+      error:   'Agente não encontrado ou não pertence a esta empresa.'
     });
   }
 
-  // ── Montar payload — whitelist estrita ────────────────────────────────────
-  // agent_type e company_id são IMUTÁVEIS — nunca incluídos no update.
+  // ── Resolver campos de prompt ─────────────────────────────────────────────
 
-  const updatePayload = {};
+  let finalPrompt      = undefined;
+  let finalPromptConfig = undefined;  // undefined = não alterar
+
+  if (hasPromptConfig) {
+    // Modo structured: backend valida e monta o prompt
+    const validation = validatePromptConfig(prompt_config);
+    if (!validation.ok) {
+      return res.status(400).json({ success: false, ...validation.payload });
+    }
+
+    const assembly = assemblePrompt(prompt_config);
+    if (!assembly.ok) {
+      return res.status(400).json({ success: false, ...assembly.payload });
+    }
+
+    finalPrompt       = assembly.result.prompt;
+    finalPromptConfig = prompt_config;
+  } else if (hasPrompt) {
+    // Modo legacy: salvar prompt diretamente
+    finalPrompt = prompt.trim();
+    if (!finalPrompt) {
+      return res.status(400).json({ success: false, error: 'prompt não pode estar vazio.' });
+    }
+  }
+
+  // ── Montar updatePayload — whitelist estrita ──────────────────────────────
+  // agent_type e company_id são IMUTÁVEIS.
+
+  const updatePayload = {
+    prompt_version: supabaseAdmin.rpc ? undefined : undefined  // placeholder — ver abaixo
+  };
+  delete updatePayload.prompt_version;
+
+  // prompt_version sempre incrementado
+  // (para structured: será sobrescrito pelo UPDATE atômico abaixo)
 
   if (typeof name === 'string') {
     const trimmed = name.trim();
@@ -149,12 +214,12 @@ export default async function handler(req, res) {
     updatePayload.description = typeof description === 'string' ? description.trim() || null : null;
   }
 
-  if (typeof prompt === 'string') {
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      return res.status(400).json({ success: false, error: 'prompt não pode estar vazio.' });
-    }
-    updatePayload.prompt = trimmedPrompt;
+  if (finalPrompt !== undefined) {
+    updatePayload.prompt = finalPrompt;
+  }
+
+  if (finalPromptConfig !== undefined) {
+    updatePayload.prompt_config = finalPromptConfig;
   }
 
   if (typeof model === 'string' && model.trim()) {
@@ -177,27 +242,88 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'Nenhum campo válido para atualizar.' });
   }
 
-  // ── UPDATE ─────────────────────────────────────────────────────────────────
+  // Sempre incrementar prompt_version via expressão SQL
+  // Para structured: UPDATE WHERE prompt_version = N (optimistic lock)
+  // Para legacy/metadata: UPDATE sem restrição de versão
 
-  const { data: updated, error: updateErr } = await supabaseAdmin
-    .from('lovoo_agents')
-    .update(updatePayload)
-    .eq('id', agent_id)
-    .eq('company_id', auth.callerCompanyId)  // dupla proteção cross-tenant
-    .select('id, name, description, is_active, model, prompt, knowledge_mode, model_config, agent_type, company_id, updated_at')
-    .single();
+  let updatedAgent;
 
-  if (updateErr) {
-    console.error('[company-agents/update] Erro ao atualizar agente:', updateErr.message);
-    return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.' });
+  if (hasPromptConfig) {
+    // ── Structured update com optimistic lock atômico ─────────────────────
+    // Usa .eq('prompt_version', prompt_version) + .update({ prompt_version: supabase.rpc('+1') })
+    // Como o SDK não suporta incremento nativo, usamos rpc via SQL raw.
+    // Solução: update com .eq prompt_version + increment via update payload.
+    //
+    // NOTA: Supabase JS SDK não suporta SET col = col + 1 diretamente.
+    // Usamos uma RPC simples ou a abordagem de verificar rowsAffected via
+    // update com filtro de versão + SET prompt_version = prompt_version + 1
+    // via RPC do Postgres.
+    //
+    // Abordagem adotada: update com eq no prompt_version e um campo de versão
+    // calculado no payload. O SDK retorna os dados atualizados; se não retornar
+    // nada (data === null ou array vazio), foi conflito.
+
+    const { data: updatedData, error: updateErr } = await supabaseAdmin
+      .from('lovoo_agents')
+      .update({
+        ...updatePayload,
+        prompt_version: existing.prompt_version + 1,
+      })
+      .eq('id', agent_id)
+      .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
+      .eq('agent_type', 'conversational')
+      .eq('prompt_version', prompt_version)    // OPTIMISTIC LOCK
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
+      .maybeSingle();
+
+    if (updateErr) {
+      console.error('[company-agents/update] Erro ao atualizar agente:', updateErr.message);
+      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.' });
+    }
+
+    if (!updatedData) {
+      // rowsAffected = 0 → conflito de versão
+      return res.status(409).json({
+        success: false,
+        error:   'conflict',
+        message: 'Agente foi modificado por outra sessão. Recarregue e tente novamente.'
+      });
+    }
+
+    updatedAgent = updatedData;
+
+  } else {
+    // ── Legacy/metadata update — sem verificação de versão ────────────────
+    // Incrementa prompt_version para manter rastreabilidade.
+
+    const { data: updatedData, error: updateErr } = await supabaseAdmin
+      .from('lovoo_agents')
+      .update({
+        ...updatePayload,
+        prompt_version: existing.prompt_version + 1,
+      })
+      .eq('id', agent_id)
+      .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
+      .eq('agent_type', 'conversational')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
+      .single();
+
+    if (updateErr) {
+      console.error('[company-agents/update] Erro ao atualizar agente:', updateErr.message);
+      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.' });
+    }
+
+    updatedAgent = updatedData;
   }
 
   console.log('[company-agents/update] Agente atualizado:', {
-    agent_id:   updated.id,
-    company_id: updated.company_id,
-    fields:     Object.keys(updatePayload),
-    by:         auth.callerId
+    agent_id:        updatedAgent.id,
+    company_id:      updatedAgent.company_id,
+    fields:          Object.keys(updatePayload),
+    prompt_version:  updatedAgent.prompt_version,
+    mode:            hasPromptConfig ? 'structured' : 'legacy',
+    by:              auth.callerId
   });
 
-  return res.status(200).json({ success: true, data: updated });
+  return res.status(200).json({ success: true, data: updatedAgent });
 }

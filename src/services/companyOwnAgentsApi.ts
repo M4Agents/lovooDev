@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import type { PromptConfig } from '../../api/lib/agents/variablesCatalog'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,8 @@ export interface CompanyAgent {
   name:           string
   description:    string | null
   prompt:         string
+  prompt_config:  PromptConfig | null
+  prompt_version: number
   model:          string
   knowledge_mode: AgentKnowledgeMode
   model_config:   Record<string, unknown>
@@ -20,14 +23,16 @@ export interface CompanyAgent {
 }
 
 export interface CreateCompanyAgentPayload {
-  company_id:      string
-  name:            string
-  prompt:          string
-  description?:    string
-  model?:          string
+  company_id:     string
+  name:           string
+  description?:   string
+  // modo legacy: enviar prompt; modo structured: enviar prompt_config (nunca ambos)
+  prompt?:        string
+  prompt_config?: PromptConfig
+  model?:         string
   knowledge_mode?: AgentKnowledgeMode
-  is_active?:      boolean
-  model_config?:   Record<string, unknown>
+  is_active?:     boolean
+  model_config?:  Record<string, unknown>
 }
 
 export interface UpdateCompanyAgentPayload {
@@ -35,11 +40,22 @@ export interface UpdateCompanyAgentPayload {
   agent_id:        string
   name?:           string
   description?:    string
+  // modo legacy: enviar prompt; modo structured: enviar prompt_config + prompt_version (nunca ambos)
   prompt?:         string
+  prompt_config?:  PromptConfig
+  prompt_version?: number
   model?:          string
   knowledge_mode?: AgentKnowledgeMode
   is_active?:      boolean
   model_config?:   Record<string, unknown>
+}
+
+// Erro de conflito de versão (409)
+export class ConflictError extends Error {
+  constructor(message = 'Agente foi modificado por outra sessão. Recarregue e tente novamente.') {
+    super(message)
+    this.name = 'ConflictError'
+  }
 }
 
 // ── Helper de autenticação ────────────────────────────────────────────────────
@@ -52,6 +68,9 @@ async function getAuthHeader(): Promise<string> {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const json = await res.json()
+  if (res.status === 409) {
+    throw new ConflictError(json.message ?? 'Conflito de versão.')
+  }
   if (!res.ok || !json.success) {
     throw new Error(json.error ?? `Erro HTTP ${res.status}`)
   }
@@ -73,7 +92,7 @@ export const companyOwnAgentsApi = {
   async create(payload: CreateCompanyAgentPayload): Promise<CompanyAgent> {
     const auth = await getAuthHeader()
     const res  = await fetch('/api/agents/company-agents/create', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body:    JSON.stringify(payload)
     })
@@ -83,7 +102,7 @@ export const companyOwnAgentsApi = {
   async update(payload: UpdateCompanyAgentPayload): Promise<CompanyAgent> {
     const auth = await getAuthHeader()
     const res  = await fetch('/api/agents/company-agents/update', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body:    JSON.stringify(payload)
     })

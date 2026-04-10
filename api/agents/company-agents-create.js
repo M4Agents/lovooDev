@@ -11,12 +11,19 @@
 //   - RAG bloqueado (knowledge_mode: apenas 'none' ou 'inline')
 //   - campos sensíveis fora da whitelist são ignorados
 //
+// MODOS DE PROMPT:
+//   - structured: envia prompt_config (JSONB) — backend valida + monta prompt
+//   - legacy:     envia prompt (string)       — salvo diretamente
+//   - nunca aceitar prompt + prompt_config juntos
+//
 // OBRIGATÓRIO:
 //   - name (string não vazia)
-//   - prompt (string não vazia)
+//   - prompt (legacy) OU prompt_config (structured) — nunca ambos
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { validatePromptConfig } from '../lib/agents/promptConfigValidator.js';
+import { assemblePrompt }        from '../lib/agents/promptAssembler.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -25,9 +32,9 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-const WRITE_ROLES          = ['admin', 'system_admin', 'super_admin'];
-const VALID_KNOWLEDGE_MODES = ['none', 'inline']; // RAG bloqueado no MVP
-const DEFAULT_MODEL        = 'gpt-4.1-mini';
+const WRITE_ROLES           = ['admin', 'system_admin', 'super_admin'];
+const VALID_KNOWLEDGE_MODES  = ['none', 'inline'];
+const DEFAULT_MODEL          = 'gpt-4.1-mini';
 
 // ── Validação de caller (JWT + membership + role) ─────────────────────────────
 
@@ -41,7 +48,7 @@ async function validateCaller(req, companyId) {
 
   const callerClient = createClient(SUPABASE_URL, anonKey, {
     global: { headers: { Authorization: String(authHeader) } },
-    auth: { persistSession: false, autoRefreshToken: false }
+    auth:   { persistSession: false, autoRefreshToken: false }
   });
 
   const { data: { user }, error: authErr } = await callerClient.auth.getUser();
@@ -79,37 +86,39 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: 'Configuração interna inválida.' });
   }
 
-  // company_id vem do body apenas para identificar membership — será validado
-  // e substituído pelo company_id real do JWT no INSERT.
   const {
     company_id,
     name,
     description,
     prompt,
+    prompt_config,
     model,
     knowledge_mode,
     is_active,
     model_config
   } = req.body ?? {};
 
-  // ── Validação de entrada ───────────────────────────────────────────────────
+  // ── Validação básica ───────────────────────────────────────────────────────
 
   if (!company_id) {
     return res.status(400).json({ success: false, error: 'company_id é obrigatório.' });
   }
 
-  const trimmedName   = typeof name   === 'string' ? name.trim()   : '';
-  const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
-
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
   if (!trimmedName) {
     return res.status(400).json({ success: false, error: 'name é obrigatório e não pode estar vazio.' });
   }
 
-  if (!trimmedPrompt) {
-    return res.status(400).json({ success: false, error: 'prompt é obrigatório e não pode estar vazio.' });
-  }
+  // Mutex: nunca aceitar prompt + prompt_config juntos
+  const hasPrompt       = typeof prompt === 'string' && prompt.trim().length > 0;
+  const hasPromptConfig = prompt_config !== undefined && prompt_config !== null;
 
-  const resolvedKnowledgeMode = VALID_KNOWLEDGE_MODES.includes(knowledge_mode) ? knowledge_mode : 'none';
+  if (hasPrompt && hasPromptConfig) {
+    return res.status(400).json({ success: false, error: 'prompt_and_config_conflict' });
+  }
+  if (!hasPrompt && !hasPromptConfig) {
+    return res.status(400).json({ success: false, error: 'prompt ou prompt_config é obrigatório.' });
+  }
 
   // ── Validar caller (JWT + membership + role) ──────────────────────────────
 
@@ -121,8 +130,32 @@ export default async function handler(req, res) {
   if (!WRITE_ROLES.includes(auth.role)) {
     return res.status(403).json({
       success: false,
-      error: 'Permissão insuficiente. Requer role admin, system_admin ou super_admin.'
+      error:   'Permissão insuficiente. Requer role admin, system_admin ou super_admin.'
     });
+  }
+
+  // ── Resolver prompt final ─────────────────────────────────────────────────
+
+  let finalPrompt;
+  let finalPromptConfig = null;
+
+  if (hasPromptConfig) {
+    // Modo structured: backend valida e monta o prompt
+    const validation = validatePromptConfig(prompt_config);
+    if (!validation.ok) {
+      return res.status(400).json({ success: false, ...validation.payload });
+    }
+
+    const assembly = assemblePrompt(prompt_config);
+    if (!assembly.ok) {
+      return res.status(400).json({ success: false, ...assembly.payload });
+    }
+
+    finalPrompt       = assembly.result.prompt;
+    finalPromptConfig = prompt_config;
+  } else {
+    // Modo legacy: salvar prompt diretamente
+    finalPrompt = prompt.trim();
   }
 
   // ── Montar payload — company_id do JWT, agent_type forçado ────────────────
@@ -132,12 +165,13 @@ export default async function handler(req, res) {
     agent_type:     'conversational',        // SEMPRE forçado
     name:           trimmedName,
     description:    typeof description === 'string' ? description.trim() || null : null,
-    prompt:         trimmedPrompt,
+    prompt:         finalPrompt,
+    prompt_config:  finalPromptConfig,
+    prompt_version: 1,
     model:          typeof model === 'string' && model.trim() ? model.trim() : DEFAULT_MODEL,
-    knowledge_mode: resolvedKnowledgeMode,
+    knowledge_mode: VALID_KNOWLEDGE_MODES.includes(knowledge_mode) ? knowledge_mode : 'none',
     is_active:      is_active === false ? false : true,
     model_config:   (typeof model_config === 'object' && model_config !== null) ? model_config : {}
-    // knowledge_base e knowledge_base_config bloqueados no MVP (sem RAG)
   };
 
   // ── INSERT ─────────────────────────────────────────────────────────────────
@@ -145,7 +179,7 @@ export default async function handler(req, res) {
   const { data: agent, error: insertErr } = await supabaseAdmin
     .from('lovoo_agents')
     .insert(insertPayload)
-    .select('id, name, description, is_active, model, prompt, knowledge_mode, model_config, agent_type, company_id, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, created_at, updated_at')
     .single();
 
   if (insertErr) {
@@ -157,6 +191,7 @@ export default async function handler(req, res) {
     agent_id:   agent.id,
     company_id: agent.company_id,
     name:       agent.name,
+    mode:       finalPromptConfig ? 'structured' : 'legacy',
     by:         auth.callerId
   });
 
