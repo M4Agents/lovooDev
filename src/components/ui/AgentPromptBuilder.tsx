@@ -32,20 +32,23 @@ import {
 
 const SECTION_MAX_CHARS = 1500
 
-// ── Debug ─────────────────────────────────────────────────────────────────────
+// ── Highlight de variáveis ────────────────────────────────────────────────────
 
-// #region agent log
-const _DBG_ENDPOINT = 'http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c'
-const _DBG_SESSION  = '7a137a'
-function _dbg(hypothesisId: string, message: string, data?: Record<string, unknown>) {
-  console.log(`[debug:${hypothesisId}] ${message}`, data ?? '')
-  fetch(_DBG_ENDPOINT, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': _DBG_SESSION },
-    body:    JSON.stringify({ sessionId: _DBG_SESSION, hypothesisId, location: 'AgentPromptBuilder.tsx', message, data, timestamp: Date.now() }),
-  }).catch(() => {})
+/**
+ * Converte texto plano em HTML com variáveis {{token}} destacadas em azul.
+ * Escapa HTML antes de colorir para evitar XSS.
+ * Apenas tokens completos {{palavra}} são coloridos — tokens parciais ficam neutros.
+ */
+function highlightVariables(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped.replace(
+    /\{\{(\w+)\}\}/g,
+    '<mark style="background:transparent;color:#2563EB;font-weight:600;font-style:normal">{{$1}}</mark>'
+  )
 }
-// #endregion
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -151,17 +154,7 @@ function VariablesPanel({ customFieldVariables = [], onInsert, hasActiveSection 
     ...(customFieldVariables.length > 0 ? ['Campos Personalizados' as const] : []),
   ]
 
-  // #region agent log
-  useEffect(() => {
-    _dbg('A', 'VariablesPanel mounted', { varCount: allVars.length, groupCount: groups.length })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  // #endregion
-
   function handleVarClick(variable: string) {
-    // #region agent log
-    _dbg('C', 'VariablesPanel: handleVarClick', { variable, hasActiveSection })
-    // #endregion
     onInsert(variable)
     setInserted(variable)
     setTimeout(() => setInserted(null), 1500)
@@ -263,13 +256,6 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
     const cursor     = ta.selectionStart
     const textBefore = ta.value.slice(0, cursor)
     const match      = textBefore.match(/\{\{(\w*)$/)
-
-    // #region agent log
-    if (match) {
-      _dbg('D', 'detectAutocomplete: {{ encontrado', { query: match[1], insertStart: cursor - match[0].length })
-    }
-    // #endregion
-
     if (match) {
       setAutocomplete({ show: true, query: match[1], insertStart: cursor - match[0].length })
     } else {
@@ -280,11 +266,6 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
   function applyAutocomplete(variable: string) {
     const ta = activeTextareaRef.current
     if (!ta || !autocomplete) return
-
-    // #region agent log
-    _dbg('D', 'applyAutocomplete: inserindo variável', { variable, insertStart: autocomplete.insertStart })
-    // #endregion
-
     const cursor = ta.selectionStart
     insertAtCursor(ta, autocomplete.insertStart, cursor, variable)
     setAutocomplete(null)
@@ -292,11 +273,6 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
 
   function insertFromPanel(variable: string) {
     const ta = activeTextareaRef.current
-
-    // #region agent log
-    _dbg('C', 'insertFromPanel', { variable, hasRef: Boolean(ta), activeSectionId })
-    // #endregion
-
     if (ta) {
       const pos = ta.selectionStart
       insertAtCursor(ta, pos, pos, variable)
@@ -307,9 +283,6 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
   function handleTextareaFocus(e: React.FocusEvent<HTMLTextAreaElement>, sectionId: SectionId) {
     activeTextareaRef.current = e.target
     setActiveSectionId(sectionId)
-    // #region agent log
-    _dbg('C', 'textarea focado', { sectionId })
-    // #endregion
   }
 
   function handleToggleSection(sectionId: SectionId) {
@@ -390,6 +363,20 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
               {enabled && (
                 <div className="border-t border-blue-100 px-3 pb-3 pt-2 space-y-1.5">
                   <div className="relative">
+                    {/*
+                      Overlay: renderiza o texto com {{variáveis}} coloridas em azul.
+                      Fica atrás da textarea (z-0). CSS idêntico ao da textarea para
+                      alinhamento perfeito. Border transparent garante offset igual.
+                    */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 z-0 border border-transparent rounded-md
+                                 px-3 py-2 text-sm font-mono leading-relaxed
+                                 text-gray-800 overflow-hidden pointer-events-none select-none"
+                      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                      dangerouslySetInnerHTML={{ __html: highlightVariables(content) + '<br>' }}
+                    />
+
                     <textarea
                       value={content}
                       onChange={e => {
@@ -412,7 +399,7 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
                       disabled={disabled}
                       rows={4}
                       placeholder={SECTION_CATALOG[sectionId].placeholder}
-                      className={`w-full border rounded-md px-3 py-2 text-sm font-mono leading-relaxed resize-y
+                      className={`relative z-10 w-full border rounded-md px-3 py-2 text-sm font-mono leading-relaxed resize-y
                                   focus:outline-none focus:ring-2 transition-colors
                                   disabled:opacity-50 disabled:cursor-not-allowed ${
                         overLimit
@@ -421,6 +408,7 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
                           ? 'border-amber-300 focus:ring-amber-400'
                           : 'border-gray-300 focus:ring-blue-400'
                       }`}
+                      style={{ color: 'transparent', caretColor: '#1f2937', background: 'transparent' }}
                     />
 
                     {/* Dropdown autocomplete — exibido apenas na seção ativa */}
