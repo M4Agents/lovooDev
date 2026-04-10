@@ -64,6 +64,9 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ success: false, error: 'Método não permitido. Use GET.' });
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'company-agents.js:handler-start',message:'Handler iniciado',data:{hasServiceRoleKey:!!SERVICE_ROLE_KEY,method:req.method,company_id:req.query?.company_id},hypothesisId:'H3-H4',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!SERVICE_ROLE_KEY) {
     return res.status(500).json({ success: false, error: 'Configuração interna inválida.' });
   }
@@ -85,12 +88,20 @@ export default async function handler(req, res) {
   // Filtro duplo: company_id + agent_type — nunca expõe agentes de outra empresa
   // nem agentes funcionais (utilitários do SaaS).
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'company-agents.js:query-before',message:'Iniciando query lovoo_agents',data:{company_id,select_includes_allowed_tools:true},hypothesisId:'H1-H2',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   const { data: agents, error: agentsErr } = await supabaseAdmin
     .from('lovoo_agents')
     .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, created_at, updated_at')
     .eq('company_id', company_id)
     .eq('agent_type', 'conversational')
     .order('created_at', { ascending: true });
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'company-agents.js:query-after',message:'Resultado da query',data:{hasError:!!agentsErr,errorCode:agentsErr?.code,errorMessage:agentsErr?.message,errorDetails:agentsErr?.details,errorHint:agentsErr?.hint,rowCount:agents?.length??null},hypothesisId:'H1-H2-H5',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   if (agentsErr) {
     console.error('[company-agents] Erro ao buscar agentes:', agentsErr.message);
