@@ -91,21 +91,33 @@ export const companyOwnAgentsApi = {
 
   async create(payload: CreateCompanyAgentPayload): Promise<CompanyAgent> {
     const auth = await getAuthHeader()
-    const res  = await fetch('/api/agents/company-agents/create', {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'companyOwnAgentsApi.ts:create',message:'POST company-agents-create',data:{url:'/api/agents/company-agents-create',mode:payload.prompt_config?'structured':'legacy'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const res  = await fetch('/api/agents/company-agents-create', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body:    JSON.stringify(payload)
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'companyOwnAgentsApi.ts:create',message:'response create',data:{status:res.status,ok:res.ok},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return handleResponse<CompanyAgent>(res)
   },
 
   async update(payload: UpdateCompanyAgentPayload): Promise<CompanyAgent> {
     const auth = await getAuthHeader()
-    const res  = await fetch('/api/agents/company-agents/update', {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'companyOwnAgentsApi.ts:update',message:'POST company-agents-update',data:{url:'/api/agents/company-agents-update',agentId:payload.agent_id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const res  = await fetch('/api/agents/company-agents-update', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth },
       body:    JSON.stringify(payload)
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'companyOwnAgentsApi.ts:update',message:'response update',data:{status:res.status,ok:res.ok},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return handleResponse<CompanyAgent>(res)
   }
 }
