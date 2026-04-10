@@ -37,6 +37,7 @@
 
 import { createClient }         from '@supabase/supabase-js';
 import { runAgentWithConfig }   from './runner.js';
+import { evaluateTransition }   from './flowOrchestrator.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,10 @@ export async function executeAgent(output) {
     user_id:       undefined, // sem sessão de usuário humano neste fluxo
     entity_type:   output.contact?.lead_id ? 'lead' : undefined,
     entity_id:     output.contact?.lead_id ? String(output.contact.lead_id) : undefined,
+    // Contexto para toolExecutor — IDs de recursos validados pelo backend
+    lead_id:              output.contact?.lead_id ? String(output.contact.lead_id) : null,
+    conversation_id:      output.conversation?.id ?? null,
+    locked_opportunity_id: output.locked_opportunity_id ?? null, // Phase 3: vem do flow state
   };
 
   console.log('🤖 [EXEC] 🚀 Chamando runner.runAgentWithConfig:', {
@@ -173,6 +178,21 @@ export async function executeAgent(output) {
     company_id:      companyId
   });
 
+  // ── Avaliar transição de fluxo (Phase 3 — fire-and-forget) ──────────────────
+  // Executado após o LLM responder. Não bloqueia o retorno ao lead.
+  // runResult.tool_results contém os resultados das tools executadas nesta rodada.
+  if (output.conversation?.id && companyId) {
+    const toolResults = runResult.tool_results ?? []
+    void evaluateTransition(
+      output.conversation.id,
+      companyId,
+      toolResults,
+      { lead_id: output.contact?.lead_id ? String(output.contact.lead_id) : null }
+    ).catch(err => {
+      console.error('[EXEC] Erro ao avaliar transição de fluxo:', err.message)
+    })
+  }
+
   // ── Montar AgentExecutorOutput ───────────────────────────────────────────────
   const executorOutput = {
     run_id:       output.run_id,
@@ -184,7 +204,8 @@ export async function executeAgent(output) {
     metadata: {
       company_id:      companyId,
       assignment_id:   output.metadata.assignment_id,
-      conversation_id: output.conversation.id
+      conversation_id: output.conversation.id,
+      flow_state_id:   output.metadata.flow_state_id ?? null
     }
   };
 

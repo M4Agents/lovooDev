@@ -15,6 +15,14 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/process-agent-schedules",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/check-lead-absence",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/sync-whatsapp-status",
       "schedule": "*/10 * * * *"
     }

@@ -1,0 +1,698 @@
+// =============================================================================
+// api/lib/agents/toolExecutor.js
+//
+// Executor de tools para agentes conversacionais via function calling OpenAI.
+//
+// RESPONSABILIDADE:
+//   Receber tool_calls do LLM, validar segurança multi-tenant, executar a ação
+//   CRM correspondente e registrar o resultado no audit log.
+//
+// SEGURANÇA (INEGOCIÁVEL):
+//   - company_id vem EXCLUSIVAMENTE do contexto autenticado (nunca do LLM)
+//   - lead_id e opportunity_id vêm do contexto da conversa (nunca do LLM)
+//   - Qualquer campo de identificação nos args do LLM é ignorado + auditado
+//   - Ownership check obrigatório antes de qualquer mutação
+//   - Toda execução gravada em agent_tool_executions (sucesso e falha)
+//
+// CRITICIDADE DAS TOOLS:
+//   - Críticas: falha refletida na resposta ao lead (second turn)
+//   - Não-críticas: falha logada silenciosamente, fluxo continua
+//
+// CONTEXTO OBRIGATÓRIO:
+//   toolExecutorContext = {
+//     company_id:           string (do JWT autenticado — nunca do LLM)
+//     lead_id:              string | null
+//     conversation_id:      string
+//     agent_id:             string
+//     locked_opportunity_id: string | null (Phase 3: do conversation_flow_states)
+//     allowed_tools:        string[]
+//   }
+// =============================================================================
+
+import { createClient } from '@supabase/supabase-js'
+import { CRITICAL_TOOLS, FORBIDDEN_ARG_FIELDS } from './toolDefinitions.js'
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+/** Campos de lead permitidos para update_lead */
+const LEAD_UPDATE_WHITELIST = new Set([
+  'name', 'email', 'phone', 'company_name', 'cargo', 'notes',
+])
+
+/** Campos de oportunidade permitidos para update_opportunity */
+const OPPORTUNITY_UPDATE_WHITELIST = new Set([
+  'value', 'probability', 'expected_close_date', 'title',
+])
+
+// ── Cliente service_role ──────────────────────────────────────────────────────
+
+function getServiceSupabase() {
+  const url = process.env.VITE_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!url.trim() || !key.trim()) return null
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+/**
+ * Grava execução no audit log (fire-and-forget).
+ * Remove campos de identificação dos tool_input antes de persistir.
+ */
+async function auditToolExecution(svc, {
+  company_id,
+  conversation_id,
+  agent_id,
+  tool_name,
+  raw_tool_input,
+  tool_output,
+  success,
+  error_code,
+  error_message,
+  is_critical,
+}) {
+  if (!svc) return
+
+  // Remove campos proibidos do input antes de gravar
+  const sanitized_input = { ...raw_tool_input }
+  for (const field of FORBIDDEN_ARG_FIELDS) {
+    if (field in sanitized_input) {
+      delete sanitized_input[field]
+    }
+  }
+
+  const { error } = await svc
+    .from('agent_tool_executions')
+    .insert({
+      company_id,
+      conversation_id,
+      agent_id,
+      tool_name,
+      tool_input:   sanitized_input,
+      tool_output:  tool_output ?? null,
+      success,
+      error_code:   error_code ?? null,
+      error_message: error_message ?? null,
+      is_critical:  is_critical ?? false,
+    })
+
+  if (error) {
+    console.error('⚠️ [TOOL] Falha ao gravar audit log:', error.message)
+  }
+}
+
+// ── Validação de IDs proibidos nos args do LLM ───────────────────────────────
+
+/**
+ * Detecta se o LLM tentou passar IDs de recursos nos argumentos.
+ * Se sim, grava tentativa no audit log.
+ */
+async function detectAndAuditForbiddenIds(svc, rawArgs, ctx, toolName) {
+  const found = FORBIDDEN_ARG_FIELDS.filter(f => f in rawArgs)
+  if (found.length === 0) return
+
+  console.warn(`⚠️ [TOOL] LLM enviou campos proibidos em ${toolName}:`, found)
+
+  await auditToolExecution(svc, {
+    company_id:      ctx.company_id,
+    conversation_id: ctx.conversation_id,
+    agent_id:        ctx.agent_id,
+    tool_name:       toolName,
+    raw_tool_input:  rawArgs,
+    tool_output:     null,
+    success:         false,
+    error_code:      'cross_tenant_attempt',
+    error_message:   `LLM enviou campos de identificação proibidos: ${found.join(', ')}`,
+    is_critical:     false,
+  })
+}
+
+// ── Ownership checks ──────────────────────────────────────────────────────────
+
+async function validateLeadOwnership(svc, leadId, companyId) {
+  if (!leadId) return false
+  const { data } = await svc
+    .from('leads')
+    .select('id')
+    .eq('id', leadId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+  return !!data
+}
+
+async function validateOpportunityOwnership(svc, opportunityId, companyId) {
+  if (!opportunityId) return false
+  const { data } = await svc
+    .from('opportunities')
+    .select('id')
+    .eq('id', opportunityId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+  return !!data
+}
+
+/**
+ * Resolve a oportunidade ativa para o lead.
+ * Fase 1: busca a mais recente aberta.
+ * Fase 3: locked_opportunity_id do conversation_flow_states terá prioridade.
+ */
+async function resolveActiveOpportunity(svc, leadId, companyId, lockedOpportunityId) {
+  if (lockedOpportunityId) {
+    const valid = await validateOpportunityOwnership(svc, lockedOpportunityId, companyId)
+    if (valid) return lockedOpportunityId
+    console.warn('[TOOL] locked_opportunity_id inválido ou de outra empresa — buscando fallback')
+  }
+
+  const { data } = await svc
+    .from('opportunities')
+    .select('id')
+    .eq('lead_id', leadId)
+    .eq('company_id', companyId)
+    .eq('status', 'open')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return data?.id ?? null
+}
+
+// ── Implementações das tools ──────────────────────────────────────────────────
+
+async function execUpdateLead(svc, args, ctx) {
+  const fields = args.fields ?? {}
+  const filtered = {}
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (LEAD_UPDATE_WHITELIST.has(key)) {
+      filtered[key] = value
+    } else {
+      console.warn(`[TOOL] update_lead: campo ignorado (não whitelistado): ${key}`)
+    }
+  }
+
+  if (Object.keys(filtered).length === 0) {
+    return { success: false, error: 'Nenhum campo válido para atualizar' }
+  }
+
+  const { error } = await svc
+    .from('leads')
+    .update({ ...filtered, updated_at: new Date().toISOString() })
+    .eq('id', ctx.lead_id)
+    .eq('company_id', ctx.company_id)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, updated_fields: Object.keys(filtered) }
+}
+
+async function execAddTag(svc, args, ctx) {
+  const tagName = String(args.tag_name ?? '').trim().slice(0, 50)
+  if (!tagName) return { success: false, error: 'tag_name inválido' }
+
+  // Busca ou cria a tag na empresa
+  let { data: tag } = await svc
+    .from('tags')
+    .select('id')
+    .eq('company_id', ctx.company_id)
+    .ilike('name', tagName)
+    .maybeSingle()
+
+  if (!tag) {
+    const { data: newTag, error: createErr } = await svc
+      .from('tags')
+      .insert({ company_id: ctx.company_id, name: tagName })
+      .select('id')
+      .single()
+    if (createErr) return { success: false, error: createErr.message }
+    tag = newTag
+  }
+
+  // Vincula tag ao lead (ignora conflito se já existe)
+  const { error } = await svc
+    .from('lead_tags')
+    .upsert(
+      { lead_id: ctx.lead_id, tag_id: tag.id },
+      { onConflict: 'lead_id,tag_id', ignoreDuplicates: true }
+    )
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, tag_name: tagName }
+}
+
+async function execRemoveTag(svc, args, ctx) {
+  const tagName = String(args.tag_name ?? '').trim()
+  if (!tagName) return { success: false, error: 'tag_name inválido' }
+
+  const { data: tag } = await svc
+    .from('tags')
+    .select('id')
+    .eq('company_id', ctx.company_id)
+    .ilike('name', tagName)
+    .maybeSingle()
+
+  if (!tag) return { success: true, note: 'tag não encontrada, nada a remover' }
+
+  const { error } = await svc
+    .from('lead_tags')
+    .delete()
+    .eq('lead_id', ctx.lead_id)
+    .eq('tag_id', tag.id)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, tag_name: tagName }
+}
+
+async function execCreateActivity(svc, args, ctx) {
+  const title         = String(args.title ?? '').trim().slice(0, 120)
+  const activityType  = args.activity_type ?? 'call'
+  const scheduledDate = args.scheduled_date
+  const scheduledTime = args.scheduled_time ?? '09:00'
+  const description   = String(args.description ?? '').trim().slice(0, 500)
+
+  if (!title) return { success: false, error: 'title obrigatório' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+    return { success: false, error: 'scheduled_date inválido — use YYYY-MM-DD' }
+  }
+  if (!/^\d{2}:\d{2}$/.test(scheduledTime)) {
+    return { success: false, error: 'scheduled_time inválido — use HH:MM' }
+  }
+
+  const { data, error } = await svc
+    .from('lead_activities')
+    .insert({
+      company_id:     ctx.company_id,
+      lead_id:        ctx.lead_id,
+      title,
+      activity_type:  activityType,
+      scheduled_date: scheduledDate,
+      scheduled_time: scheduledTime,
+      description:    description || null,
+      status:         'pending',
+      priority:       'medium',
+      source:         'ai_agent',
+      created_at:     new Date().toISOString(),
+    })
+    .select('id')
+    .single()
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, activity_id: data.id, title, scheduled_date: scheduledDate }
+}
+
+async function execAddNote(svc, args, ctx) {
+  // Tabela real: internal_notes (XOR constraint: lead_id OU opportunity_id, nunca os dois)
+  // lead_id é INTEGER; created_by NOT NULL REFERENCES auth.users(id)
+  const entity = args.entity === 'opportunity' ? 'opportunity' : 'lead'
+  const text   = String(args.text ?? '').trim().slice(0, 1000)
+
+  if (!text) return { success: false, error: 'text obrigatório' }
+
+  // created_by é obrigatório (NOT NULL). Com service_role, auth.uid() = null.
+  // Busca o primeiro usuário ativo da empresa para usar como autor da nota.
+  const { data: companyUser } = await svc
+    .from('company_users')
+    .select('user_id')
+    .eq('company_id', ctx.company_id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (!companyUser?.user_id) {
+    return {
+      success:    false,
+      error:      'Sem usuário ativo na empresa para associar a nota',
+      error_code: 'no_active_user',
+    }
+  }
+
+  if (entity === 'lead') {
+    // lead_id é INTEGER — converte de string para número
+    const leadIdInt = parseInt(ctx.lead_id, 10)
+    if (isNaN(leadIdInt)) {
+      return { success: false, error: 'lead_id inválido para internal_notes (esperado INTEGER)' }
+    }
+
+    const { error } = await svc
+      .from('internal_notes')
+      .insert({
+        company_id: ctx.company_id,
+        lead_id:    leadIdInt,
+        content:    text,
+        created_by: companyUser.user_id,
+      })
+
+    if (error) return { success: false, error: error.message }
+    return { success: true, entity: 'lead' }
+  }
+
+  // Oportunidade — resolve a oportunidade ativa
+  const opportunityId = await resolveActiveOpportunity(
+    svc, ctx.lead_id, ctx.company_id, ctx.locked_opportunity_id
+  )
+  if (!opportunityId) {
+    return { success: false, error: 'Sem oportunidade aberta para adicionar nota' }
+  }
+
+  const { error } = await svc
+    .from('internal_notes')
+    .insert({
+      company_id:     ctx.company_id,
+      opportunity_id: opportunityId,
+      content:        text,
+      created_by:     companyUser.user_id,
+    })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, entity: 'opportunity', opportunity_id: opportunityId }
+}
+
+async function execMoveOpportunity(svc, args, ctx) {
+  const toStageId = args.stage_id
+  if (!toStageId) return { success: false, error: 'stage_id obrigatório' }
+
+  const opportunityId = await resolveActiveOpportunity(
+    svc, ctx.lead_id, ctx.company_id, ctx.locked_opportunity_id
+  )
+  if (!opportunityId) {
+    return { success: false, error: 'Sem oportunidade aberta para mover' }
+  }
+
+  // Valida que o stage_id pertence a um funil da empresa
+  const { data: stage } = await svc
+    .from('funnel_stages')
+    .select('id, funnel_id')
+    .eq('id', toStageId)
+    .maybeSingle()
+
+  if (!stage) {
+    return { success: false, error: 'Etapa não encontrada' }
+  }
+
+  // Busca posição atual
+  const { data: position } = await svc
+    .from('opportunity_funnel_positions')
+    .select('funnel_id, stage_id')
+    .eq('opportunity_id', opportunityId)
+    .maybeSingle()
+
+  if (!position) {
+    return { success: false, error: 'Oportunidade sem posição no funil' }
+  }
+
+  if (position.stage_id === toStageId) {
+    return { success: true, note: 'Oportunidade já está nesta etapa' }
+  }
+
+  // Usa RPC atômica (atualiza posição + histórico + status)
+  const { error } = await svc.rpc('move_opportunity', {
+    p_opportunity_id:    opportunityId,
+    p_funnel_id:         position.funnel_id,
+    p_from_stage_id:     position.stage_id,
+    p_to_stage_id:       toStageId,
+    p_position_in_stage: 0,
+  })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, opportunity_id: opportunityId, to_stage_id: toStageId }
+}
+
+async function execUpdateOpportunity(svc, args, ctx) {
+  const fields = args.fields ?? {}
+  const filtered = {}
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (OPPORTUNITY_UPDATE_WHITELIST.has(key)) {
+      filtered[key] = value
+    }
+  }
+
+  if (Object.keys(filtered).length === 0) {
+    return { success: false, error: 'Nenhum campo válido para atualizar' }
+  }
+
+  const opportunityId = await resolveActiveOpportunity(
+    svc, ctx.lead_id, ctx.company_id, ctx.locked_opportunity_id
+  )
+  if (!opportunityId) {
+    return { success: false, error: 'Sem oportunidade aberta para atualizar' }
+  }
+
+  const { error } = await svc
+    .from('opportunities')
+    .update({ ...filtered, updated_at: new Date().toISOString() })
+    .eq('id', opportunityId)
+    .eq('company_id', ctx.company_id)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, updated_fields: Object.keys(filtered) }
+}
+
+async function execScheduleContact(svc, args, ctx) {
+  const scheduledAt  = args.scheduled_at
+  const reason       = args.reason ?? 'follow_up'
+  const messageHint  = String(args.message_hint ?? '').trim().slice(0, 300)
+
+  if (!scheduledAt) return { success: false, error: 'scheduled_at obrigatório' }
+
+  const scheduledDate = new Date(scheduledAt)
+  if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+    return { success: false, error: 'scheduled_at deve ser uma data futura válida' }
+  }
+
+  // Verifica se já existe schedule pendente para esta conversa + reason
+  const { data: existing } = await svc
+    .from('agent_contact_schedules')
+    .select('id')
+    .eq('company_id', ctx.company_id)
+    .eq('conversation_id', ctx.conversation_id)
+    .eq('reason', reason)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  if (existing) {
+    return { success: false, error: `Já existe um agendamento pendente com reason=${reason}` }
+  }
+
+  const { data, error } = await svc
+    .from('agent_contact_schedules')
+    .insert({
+      company_id:       ctx.company_id,
+      lead_id:          ctx.lead_id,
+      conversation_id:  ctx.conversation_id,
+      source_agent_id:  ctx.agent_id,
+      reason,
+      scheduled_at:     scheduledDate.toISOString(),
+      attempt_number:   0,
+      max_attempts:     1,
+      interval_hours:   24,
+      status:           'pending',
+      created_by:       'agent',
+      message_hint:     messageHint || null,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    // Tabela pode não existir ainda (Phase 2) — retorna erro controlado
+    if (error.code === '42P01') {
+      return {
+        success: false,
+        error:   'Funcionalidade de agendamento ainda não habilitada neste ambiente',
+        error_code: 'table_not_found',
+      }
+    }
+    return { success: false, error: error.message }
+  }
+
+  return { success: true, schedule_id: data.id, scheduled_at: scheduledDate.toISOString(), reason }
+}
+
+async function execRequestHandoff(svc, args, ctx) {
+  const reason = String(args.reason ?? '').trim().slice(0, 300)
+
+  // Atualiza ai_state da conversa para ai_paused
+  const { error: convError } = await svc
+    .from('chat_conversations')
+    .update({ ai_state: 'ai_paused', updated_at: new Date().toISOString() })
+    .eq('id', ctx.conversation_id)
+    .eq('company_id', ctx.company_id)
+
+  if (convError) return { success: false, error: convError.message }
+
+  // Registra evento de handoff
+  const { error: handoffError } = await svc
+    .from('agent_handoff_events')
+    .insert({
+      company_id:      ctx.company_id,
+      conversation_id: ctx.conversation_id,
+      agent_id:        ctx.agent_id,
+      handoff_type:    'ai_to_human',
+      reason:          reason || 'Solicitação do agente IA',
+      initiated_by:    'ai',
+      created_at:      new Date().toISOString(),
+    })
+
+  if (handoffError) {
+    console.error('[TOOL] request_handoff: erro ao registrar evento:', handoffError.message)
+  }
+
+  return { success: true, handoff_type: 'ai_to_human', reason }
+}
+
+// ── Dispatcher principal ──────────────────────────────────────────────────────
+
+/** @type {Record<string, (svc: any, args: any, ctx: any) => Promise<any>>} */
+const TOOL_HANDLERS = {
+  update_lead:        execUpdateLead,
+  add_tag:            execAddTag,
+  remove_tag:         execRemoveTag,
+  create_activity:    execCreateActivity,
+  add_note:           execAddNote,
+  move_opportunity:   execMoveOpportunity,
+  update_opportunity: execUpdateOpportunity,
+  schedule_contact:   execScheduleContact,
+  request_handoff:    execRequestHandoff,
+}
+
+// ── API pública ───────────────────────────────────────────────────────────────
+
+/**
+ * Executa uma lista de tool_calls retornada pelo LLM.
+ *
+ * Validações obrigatórias (multi-tenant):
+ *   1. tool_name deve estar na allowlist do agente
+ *   2. Campos de identificação nos args são ignorados + auditados
+ *   3. Ownership check para lead_id e opportunity_id (do contexto, nunca do LLM)
+ *
+ * @param {import('openai').ChatCompletionMessageToolCall[]} toolCalls
+ * @param {{
+ *   company_id: string,
+ *   lead_id: string | null,
+ *   conversation_id: string,
+ *   agent_id: string,
+ *   locked_opportunity_id?: string | null,
+ *   allowed_tools: string[],
+ * }} context
+ * @returns {Promise<Array<{ tool_call_id: string, tool_name: string, result: any, success: boolean, is_critical: boolean }>>}
+ */
+export async function executeToolCalls(toolCalls, context) {
+  if (!toolCalls?.length) return []
+
+  const svc = getServiceSupabase()
+  const results = []
+
+  // Ownership do lead — validado uma vez, reutilizado por todas as tools
+  let leadOwnershipValid = null
+  if (context.lead_id) {
+    leadOwnershipValid = await validateLeadOwnership(svc, context.lead_id, context.company_id)
+    if (!leadOwnershipValid) {
+      console.error('[TOOL] ❌ Ownership do lead inválido — bloqueando todas as tools', {
+        lead_id:    context.lead_id,
+        company_id: context.company_id,
+      })
+      await auditToolExecution(svc, {
+        company_id:      context.company_id,
+        conversation_id: context.conversation_id,
+        agent_id:        context.agent_id,
+        tool_name:       '_all_blocked',
+        raw_tool_input:  {},
+        success:         false,
+        error_code:      'ownership_validation_failed',
+        error_message:   `lead_id ${context.lead_id} não pertence à empresa`,
+        is_critical:     false,
+      })
+      return toolCalls.map(tc => ({
+        tool_call_id: tc.id,
+        tool_name:    tc.function?.name ?? 'unknown',
+        result:       { success: false, error: 'Contexto inválido' },
+        success:      false,
+        is_critical:  CRITICAL_TOOLS.has(tc.function?.name),
+      }))
+    }
+  }
+
+  for (const toolCall of toolCalls) {
+    const toolName   = toolCall.function?.name ?? ''
+    const isCritical = CRITICAL_TOOLS.has(toolName)
+
+    let rawArgs = {}
+    try {
+      rawArgs = JSON.parse(toolCall.function?.arguments ?? '{}')
+    } catch {
+      rawArgs = {}
+    }
+
+    // Auditoria de campos proibidos nos args do LLM (não bloqueia execução)
+    await detectAndAuditForbiddenIds(svc, rawArgs, context, toolName)
+
+    // Verifica allowlist (defesa em profundidade — runner já filtra, mas toolExecutor também valida)
+    if (!context.allowed_tools.includes(toolName)) {
+      console.warn(`[TOOL] ⛔ Tool fora da allowlist do agente: ${toolName}`)
+      await auditToolExecution(svc, {
+        company_id:      context.company_id,
+        conversation_id: context.conversation_id,
+        agent_id:        context.agent_id,
+        tool_name:       toolName,
+        raw_tool_input:  rawArgs,
+        success:         false,
+        error_code:      'tool_not_in_allowlist',
+        error_message:   `Tool ${toolName} não está na allowlist do agente`,
+        is_critical:     isCritical,
+      })
+      results.push({
+        tool_call_id: toolCall.id,
+        tool_name:    toolName,
+        result:       { success: false, error: `Tool não permitida para este agente` },
+        success:      false,
+        is_critical:  isCritical,
+      })
+      continue
+    }
+
+    const handler = TOOL_HANDLERS[toolName]
+    if (!handler) {
+      console.warn(`[TOOL] Handler não encontrado para: ${toolName}`)
+      results.push({
+        tool_call_id: toolCall.id,
+        tool_name:    toolName,
+        result:       { success: false, error: 'Tool não implementada' },
+        success:      false,
+        is_critical:  isCritical,
+      })
+      continue
+    }
+
+    let toolResult
+    try {
+      toolResult = await handler(svc, rawArgs, context)
+    } catch (err) {
+      console.error(`[TOOL] ❌ Erro inesperado em ${toolName}:`, err.message)
+      toolResult = { success: false, error: err.message }
+    }
+
+    // Audit log de toda execução
+    await auditToolExecution(svc, {
+      company_id:      context.company_id,
+      conversation_id: context.conversation_id,
+      agent_id:        context.agent_id,
+      tool_name:       toolName,
+      raw_tool_input:  rawArgs,
+      tool_output:     toolResult,
+      success:         toolResult.success === true,
+      error_code:      toolResult.error_code ?? (toolResult.success ? null : 'crm_action_failed'),
+      error_message:   toolResult.error ?? null,
+      is_critical:     isCritical,
+    })
+
+    results.push({
+      tool_call_id: toolCall.id,
+      tool_name:    toolName,
+      result:       toolResult,
+      success:      toolResult.success === true,
+      is_critical:  isCritical,
+    })
+  }
+
+  return results
+}

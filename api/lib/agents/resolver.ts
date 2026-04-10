@@ -23,6 +23,12 @@ export type ResolvedAgent = {
   knowledge_base_config: Record<string, unknown>
   model: string
   model_config: Record<string, unknown>
+  /**
+   * Tools que este agente pode chamar via function calling OpenAI.
+   * Vazio ([]) = agente puramente conversacional sem ações CRM.
+   * Definidas em toolDefinitions.js; filtradas aqui antes de declarar ao OpenAI.
+   */
+  allowed_tools: string[]
 }
 
 export type ResolveAgentResult =
@@ -75,7 +81,7 @@ export async function resolveAgent(useId: string): Promise<ResolveAgentResult> {
   // 2. Busca a configuração do agente (service_role bypassa RLS)
   const { data: agent, error: agentErr } = await svc
     .from('lovoo_agents')
-    .select('id, name, is_active, prompt, knowledge_base, knowledge_mode, knowledge_base_config, model, model_config')
+    .select('id, name, is_active, prompt, knowledge_base, knowledge_mode, knowledge_base_config, model, model_config, allowed_tools')
     .eq('id', binding.agent_id)
     .maybeSingle()
 
@@ -99,6 +105,7 @@ export async function resolveAgent(useId: string): Promise<ResolveAgentResult> {
       knowledge_base_config: (agent.knowledge_base_config ?? {}) as Record<string, unknown>,
       model:                agent.model,
       model_config:         (agent.model_config ?? {}) as Record<string, unknown>,
+      allowed_tools:        Array.isArray(agent.allowed_tools) ? agent.allowed_tools as string[] : [],
     },
   }
 }

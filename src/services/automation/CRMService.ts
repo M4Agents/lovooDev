@@ -519,29 +519,51 @@ export class CRMService {
    */
   async moveOpportunity(opportunityId: string, stageId: string, companyId: string): Promise<any> {
     try {
-      console.log('🔄 CRMService: Movendo oportunidade', {
+      console.log('🔄 CRMService: Movendo oportunidade via RPC move_opportunity', {
         opportunityId,
         stageId
       })
 
-      const { data, error } = await supabase
-        .from('opportunities')
-        .update({
-          stage_id: stageId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', opportunityId)
-        .eq('company_id', companyId)
-        .select()
-        .single()
+      // Busca posição atual para obter funnel_id e from_stage_id
+      const { data: position, error: posError } = await supabase
+        .from('opportunity_funnel_positions')
+        .select('funnel_id, stage_id')
+        .eq('opportunity_id', opportunityId)
+        .maybeSingle()
+
+      if (posError) throw posError
+
+      if (!position) {
+        // Sem posição no funil — fallback: atualiza apenas stage_id na tabela
+        console.warn('⚠️ CRMService.moveOpportunity: sem posição no funil, aplicando fallback direto')
+        const { data, error } = await supabase
+          .from('opportunities')
+          .update({ stage_id: stageId, updated_at: new Date().toISOString() })
+          .eq('id', opportunityId)
+          .eq('company_id', companyId)
+          .select()
+          .single()
+        if (error) throw error
+        return { success: true, opportunity: data, method: 'fallback_direct' }
+      }
+
+      // Usa RPC atômica que atualiza opportunity_funnel_positions + histórico + status
+      const { data, error } = await supabase.rpc('move_opportunity', {
+        p_opportunity_id:    opportunityId,
+        p_funnel_id:         position.funnel_id,
+        p_from_stage_id:     position.stage_id,
+        p_to_stage_id:       stageId,
+        p_position_in_stage: 0
+      })
 
       if (error) throw error
 
-      console.log('✅ Oportunidade movida')
+      console.log('✅ Oportunidade movida via RPC')
 
       return {
         success: true,
-        opportunity: data
+        opportunity: data,
+        method: 'rpc'
       }
     } catch (error: any) {
       console.error('❌ Erro ao mover oportunidade:', error)

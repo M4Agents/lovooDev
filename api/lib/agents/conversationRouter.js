@@ -37,6 +37,7 @@
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { resolveFlowAgent } from './flowOrchestrator.js';
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 // Segue o mesmo padrão de api/lib/agents/logger.ts
@@ -140,6 +141,41 @@ export async function routeConversationEvent(event) {
     return buildDecision(false, SKIP.AI_INACTIVE, conversation, event);
   }
 
+  // ── PASSO 2.5: Verificar fluxo ativo (Phase 3) ───────────────────────────
+  // Se a conversa tem um conversation_flow_states ativo, o agent_id do estágio
+  // atual tem prioridade sobre as agent_routing_rules.
+  // locked_opportunity_id é propagado ao contexto para o toolExecutor.
+
+  const flowResult = await resolveFlowAgent(event.conversation_id, event.company_id);
+
+  if (flowResult) {
+    console.log('🤖 [ROUTER] 🔀 Fluxo ativo — usando agente do estágio:', {
+      agent_id:    flowResult.agent_id,
+      conversation_id: event.conversation_id,
+    });
+
+    await updateProcessedResult(svc, event.uazapi_message_id, null, conversation.ai_assignment_id);
+
+    return {
+      should_process:        true,
+      skip_reason:           null,
+      rule_id:               null,
+      assignment_id:         conversation.ai_assignment_id,
+      agent_id:              flowResult.agent_id,
+      flow_state_id:         flowResult.flow_state_id,
+      locked_opportunity_id: flowResult.locked_opportunity_id,
+      capabilities:          { can_auto_reply: true },
+      price_display_policy:  null,
+      conversation: {
+        id:               conversation.id,
+        ai_state:         conversation.ai_state,
+        ai_assignment_id: conversation.ai_assignment_id,
+        contact_phone:    conversation.contact_phone
+      },
+      event
+    };
+  }
+
   // ── PASSO 3: Resolver routing rule ────────────────────────────────────────
   // Busca todas as regras ativas da empresa para o canal do evento.
   // Inclui regras com channel = '*' (canal coringa).
@@ -234,13 +270,15 @@ export async function routeConversationEvent(event) {
   // ── RouterDecision final ──────────────────────────────────────────────────
 
   return {
-    should_process:       true,
-    skip_reason:          null,
-    rule_id:              matchedRule.id,
-    assignment_id:        assignment.id,
-    agent_id:             assignment.agent_id,
+    should_process:        true,
+    skip_reason:           null,
+    rule_id:               matchedRule.id,
+    assignment_id:         assignment.id,
+    agent_id:              assignment.agent_id,
+    flow_state_id:         null,
+    locked_opportunity_id: null,
     capabilities,
-    price_display_policy: assignment.price_display_policy,
+    price_display_policy:  assignment.price_display_policy,
     conversation: {
       id:               conversation.id,
       ai_state:         conversation.ai_state,

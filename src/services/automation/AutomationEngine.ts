@@ -751,7 +751,8 @@ export class AutomationEngine {
               opportunityId: context.opportunityId
             })
           }
-          case 'trigger_automation':
+          return { executed: true, action: 'send_notification', count: recipients.length }
+        case 'trigger_automation':
   const targetFlowId = node.data.config?.targetFlowId
   if (!targetFlowId) throw new Error('Automação não especificada')
   

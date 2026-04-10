@@ -206,7 +206,8 @@ export async function buildContext(orchestratorContext) {
       knowledge_mode: agent.knowledge_mode,
       knowledge_base: agent.knowledge_base,
       model:          agent.model,
-      model_config:   agent.model_config
+      model_config:   agent.model_config,
+      allowed_tools:  Array.isArray(agent.allowed_tools) ? agent.allowed_tools : [],
     },
 
     conversation: {
@@ -231,10 +232,14 @@ export async function buildContext(orchestratorContext) {
     // SEGURANÇA: nunca logada, nunca exposta em responses ou debug
     system_policy: systemPolicy,
 
+    // Phase 3: oportunidade travada pelo flowOrchestrator para esta conversa
+    locked_opportunity_id: orchestratorContext.locked_opportunity_id ?? null,
+
     metadata: {
       company_id:    companyId,
       assignment_id: orchestratorContext.assignment_id,
-      rule_id:       orchestratorContext.rule_id
+      rule_id:       orchestratorContext.rule_id,
+      flow_state_id: orchestratorContext.flow_state_id ?? null
     }
   };
 
@@ -257,16 +262,37 @@ export async function buildContext(orchestratorContext) {
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
 async function fetchAgentConfig(svc, { agentId, companyId }) {
+  // Tentativa 1: busca filtrando pelo company_id do evento (caminho normal)
   const { data, error } = await svc
     .from('lovoo_agents')
-    .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config')
+    .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config, allowed_tools')
     .eq('id', agentId)
     .eq('company_id', companyId)
     .eq('is_active', true)
     .maybeSingle();
 
   if (error) throw new Error(`fetchAgentConfig: ${error.message}`);
-  return data ?? null;
+  if (data) return data;
+
+  // Tentativa 2 (fallback para flow state): lovoo_agents.company_id pode ser a empresa pai,
+  // enquanto o evento tem company_id da empresa filha. Busca apenas por id e is_active.
+  // Nota: service_role bypassa RLS — este fallback é seguro pois não expõe dados ao cliente.
+  const { data: fallback, error: fallbackErr } = await svc
+    .from('lovoo_agents')
+    .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config, allowed_tools')
+    .eq('id', agentId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (fallbackErr) throw new Error(`fetchAgentConfig (fallback): ${fallbackErr.message}`);
+  if (fallback) {
+    console.warn('🤖 [CTX] ⚠️ Agente encontrado via fallback (company_id divergente):', {
+      agentId,
+      eventCompanyId: companyId,
+      agentCompanyId: fallback.company_id ?? 'desconhecido',
+    });
+  }
+  return fallback ?? null;
 }
 
 async function fetchRecentMessages(svc, { conversationId, companyId }) {

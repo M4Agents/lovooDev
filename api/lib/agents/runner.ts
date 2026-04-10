@@ -33,6 +33,8 @@ import { getUseMeta, VALID_USE_IDS } from './uses.js'
 import { retrieveAgentContext } from './retriever.js'
 import { writeExecutionLog, type ExecutionLogEntry } from './logger.js'
 import { estimateCost } from './pricing.js'
+import { getToolsForAgent, CRITICAL_TOOLS } from './toolDefinitions.js'
+import { executeToolCalls } from './toolExecutor.js'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -69,6 +71,30 @@ export type AgentRunContext = {
    * NUNCA logada, NUNCA exposta em responses ou debug.
    */
   system_policy?: string
+  /**
+   * ID do lead da conversa — vem do contexto autenticado do backend.
+   * Passado ao toolExecutor para ownership check e ações CRM.
+   * NUNCA aceitar do LLM diretamente.
+   */
+  lead_id?: string | null
+  /**
+   * ID da conversa WhatsApp — vem do contexto autenticado.
+   * Usado pelo toolExecutor para audit log de tool executions.
+   */
+  conversation_id?: string | null
+  /**
+   * ID da oportunidade travada para esta conversa (Phase 3: vem do flow state).
+   * null = toolExecutor busca a mais recente aberta do lead.
+   */
+  locked_opportunity_id?: string | null
+}
+
+export type ToolCallResult = {
+  tool_call_id: string
+  tool_name:    string
+  result:       Record<string, unknown>
+  success:      boolean
+  is_critical:  boolean
 }
 
 export type AgentRunSuccess = {
@@ -77,6 +103,8 @@ export type AgentRunSuccess = {
   agent_id: string
   use_id: string
   fallback: false
+  /** Resultados das tool calls executadas nesta rodada. Vazio se agente sem tools ou sem chamadas. */
+  tool_results: ToolCallResult[]
 }
 
 export type AgentRunFallback = {
@@ -486,39 +514,111 @@ export async function runAgentWithConfig(
       ? modelConfig.max_tokens
       : 1024
 
+  // Declara tools filtradas pela allowlist do agente
+  const agentAllowedTools: string[] = Array.isArray(agent.allowed_tools) ? agent.allowed_tools : []
+  const toolDefinitions = getToolsForAgent(agentAllowedTools)
+  const hasTools = toolDefinitions.length > 0
+
   // Executa via OpenAI
   try {
     const signal = AbortSignal.timeout(openaiSettings.timeout_ms)
 
-    const completion = await client.chat.completions.create(
+    const firstMessages: Parameters<typeof client.chat.completions.create>[0]['messages'] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: ctx.userMessage },
+    ]
+
+    const firstCompletion = await client.chat.completions.create(
       {
-        model:       agent.model,
+        model:        agent.model,
         temperature,
-        max_tokens:  maxTokens,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: ctx.userMessage },
-        ],
+        max_tokens:   maxTokens,
+        messages:     firstMessages,
+        ...(hasTools ? { tools: toolDefinitions as any, tool_choice: 'auto' } : {}),
       },
       { signal }
     )
 
-    const result       = completion.choices[0]?.message?.content?.trim() ?? ''
-    const usage        = completion.usage
-    const inputTokens  = usage?.prompt_tokens     ?? null
-    const outputTokens = usage?.completion_tokens ?? null
-    const totalTokens  = usage?.total_tokens      ?? null
-    const estimatedCost = estimateCost(agent.model, inputTokens, outputTokens)
+    const firstChoice = firstCompletion.choices[0]
+    const toolCalls   = firstChoice?.message?.tool_calls ?? []
+
+    let finalResult = firstChoice?.message?.content?.trim() ?? ''
+    let totalInputTokens  = firstCompletion.usage?.prompt_tokens     ?? null
+    let totalOutputTokens = firstCompletion.usage?.completion_tokens ?? null
+    let totalTokensCount  = firstCompletion.usage?.total_tokens      ?? null
+    // Hoistado para o escopo do try — acessível no return final
+    let toolResults: Awaited<ReturnType<typeof executeToolCalls>> = []
+
+    // Se o LLM retornou tool calls, executa e faz second turn
+    if (hasTools && toolCalls.length > 0) {
+      const toolContext = {
+        company_id:            ctx.company_id ?? '',
+        lead_id:               ctx.lead_id ?? null,
+        conversation_id:       ctx.conversation_id ?? '',
+        agent_id:              agent.id,
+        locked_opportunity_id: ctx.locked_opportunity_id ?? null,
+        allowed_tools:         agentAllowedTools,
+      }
+
+      toolResults = await executeToolCalls(toolCalls as any, toolContext)
+
+      // Monta mensagens para o second turn
+      const toolResultMessages: Parameters<typeof client.chat.completions.create>[0]['messages'] = [
+        firstChoice.message as any,
+        ...toolResults.map(tr => ({
+          role:         'tool' as const,
+          tool_call_id: tr.tool_call_id,
+          content:      JSON.stringify(tr.result),
+        })),
+      ]
+
+      // Verifica se alguma tool crítica falhou
+      const criticalFailed = toolResults.some(tr => tr.is_critical && !tr.success)
+
+      // Second turn: LLM gera resposta final com base nos resultados das tools
+      const secondSignal = AbortSignal.timeout(openaiSettings.timeout_ms)
+      const secondCompletion = await client.chat.completions.create(
+        {
+          model:       agent.model,
+          temperature,
+          max_tokens:  maxTokens,
+          messages: [
+            ...firstMessages,
+            ...toolResultMessages,
+          ],
+        },
+        { signal: secondSignal }
+      )
+
+      const secondChoice = secondCompletion.choices[0]
+      finalResult = secondChoice?.message?.content?.trim() ?? ''
+
+      // Acumula tokens dos dois turns
+      totalInputTokens  = (totalInputTokens  ?? 0) + (secondCompletion.usage?.prompt_tokens     ?? 0)
+      totalOutputTokens = (totalOutputTokens ?? 0) + (secondCompletion.usage?.completion_tokens ?? 0)
+      totalTokensCount  = (totalTokensCount  ?? 0) + (secondCompletion.usage?.total_tokens      ?? 0)
+
+      if (criticalFailed) {
+        console.warn('[RUNNER] Second turn gerado após falha em tool crítica', {
+          agent_id: agent.id,
+          failed_tools: toolResults.filter(tr => tr.is_critical && !tr.success).map(tr => tr.tool_name),
+        })
+      }
+    }
+
+    const estimatedCost = estimateCost(agent.model, totalInputTokens, totalOutputTokens)
 
     return {
-      ok:                true,
-      result,
-      agent_id:          agent.id,
-      use_id:            useId,
-      fallback:          false,
-      input_tokens:      inputTokens,
-      output_tokens:     outputTokens,
-      total_tokens:      totalTokens,
+      ok:                 true,
+      result:             finalResult,
+      agent_id:           agent.id,
+      use_id:             useId,
+      fallback:           false,
+      // Resultados das tools executadas — usados pelo agentExecutor para evaluateTransition
+      tool_results:       toolResults as ToolCallResult[],
+      input_tokens:       totalInputTokens,
+      output_tokens:      totalOutputTokens,
+      total_tokens:       totalTokensCount,
       estimated_cost_usd: estimatedCost,
     }
   } catch {
