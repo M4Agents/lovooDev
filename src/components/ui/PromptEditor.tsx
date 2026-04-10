@@ -35,6 +35,24 @@ interface AutocompleteState {
   insertStart: number    // posição do {{ no texto
 }
 
+// ── Highlight de variáveis ────────────────────────────────────────────────────
+
+/**
+ * Converte texto plano em HTML com variáveis {{token}} destacadas em azul.
+ * Escapa HTML antes de colorir para evitar XSS.
+ * Apenas tokens completos {{palavra}} são coloridos — tokens parciais ficam neutros.
+ */
+function highlightVariables(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped.replace(
+    /\{\{(\w+)\}\}/g,
+    '<mark style="background:transparent;color:#2563EB;font-weight:600;font-style:normal">{{$1}}</mark>'
+  )
+}
+
 interface Props {
   value:                  string
   onChange:               (val: string) => void
@@ -76,6 +94,7 @@ export function PromptEditor({
   visibleGroups,
 }: Props) {
   const textareaRef                    = useRef<HTMLTextAreaElement>(null)
+  const overlayRef                     = useRef<HTMLDivElement>(null)
   const dropdownRef                    = useRef<HTMLDivElement>(null)
   const [panelOpen, setPanelOpen]      = useState(false)
   const [copied, setCopied]            = useState<string | null>(null)
@@ -160,6 +179,15 @@ export function PromptEditor({
     }
   }
 
+  // ── Scroll sync (overlay acompanha textarea) ────────────────────────────
+
+  function syncScroll() {
+    if (overlayRef.current && textareaRef.current) {
+      overlayRef.current.scrollTop  = textareaRef.current.scrollTop
+      overlayRef.current.scrollLeft = textareaRef.current.scrollLeft
+    }
+  }
+
   // ── Inserção de variável ────────────────────────────────────────────────
 
   /** Inserção via autocomplete (substitui {{ + query parcial) */
@@ -190,20 +218,49 @@ export function PromptEditor({
   return (
     <div className={`space-y-2 ${className}`}>
 
-      {/* Textarea com dropdown de autocomplete */}
+      {/* Textarea com overlay de highlight + dropdown de autocomplete */}
       <div className="relative">
+
+        {/*
+          Overlay: renderiza o texto com variáveis coloridas em azul.
+          Fica atrás da textarea (z-0) com pointer-events: none.
+          CSS idêntico ao da textarea para alinhamento perfeito do texto.
+          O border transparent garante que o offset de padding seja igual.
+        */}
+        <div
+          ref={overlayRef}
+          aria-hidden="true"
+          className="absolute inset-0 z-0 border border-transparent rounded-lg
+                     px-3 py-2.5 text-sm font-mono leading-relaxed
+                     text-gray-800 overflow-hidden pointer-events-none select-none"
+          style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word' }}
+          dangerouslySetInnerHTML={{
+            // <br> final garante que a última linha não seja cortada
+            __html: highlightVariables(value) + '<br>'
+          }}
+        />
+
+        {/*
+          Textarea: fica na frente (z-10), recebe todos os eventos.
+          color: transparent → texto invisível (overlay mostra o texto colorido).
+          caretColor: #1f2937 → cursor permanece visível.
+          background: transparent → overlay aparece através da textarea.
+        */}
         <textarea
           ref={textareaRef}
           value={value}
           onChange={handleChange}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
+          onScroll={syncScroll}
           rows={rows}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-800
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 resize-y font-mono
-                     leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative z-10 w-full border border-gray-300 rounded-lg
+                     px-3 py-2.5 text-sm font-mono leading-relaxed resize-y
+                     focus:outline-none focus:ring-2 focus:ring-blue-400
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ color: 'transparent', caretColor: '#1f2937', background: 'transparent' }}
         />
 
         {/* Dropdown autocomplete {{ */}
