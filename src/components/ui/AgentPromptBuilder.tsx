@@ -30,7 +30,7 @@ import {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const SECTION_MAX_CHARS = 1500
+const SECTION_MAX_CHARS = 3000
 
 // ── Highlight de variáveis ────────────────────────────────────────────────────
 
