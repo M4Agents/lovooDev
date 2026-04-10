@@ -70,10 +70,6 @@ export default async function handler(req, res) {
 
   const company_id = req.query?.company_id;
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'company-agents.js:entry',message:'handler iniciado',data:{company_id,has_service_key:!!SERVICE_ROLE_KEY,has_auth:!!req.headers?.authorization},hypothesisId:'H-B/H-C/H-D',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (!company_id) {
     return res.status(400).json({ success: false, error: 'company_id é obrigatório.' });
   }
@@ -81,11 +77,6 @@ export default async function handler(req, res) {
   // ── Validar caller ────────────────────────────────────────────────────────
 
   const auth = await validateCaller(req, company_id);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'company-agents.js:post-auth',message:'resultado de validateCaller',data:{ok:auth.ok,status:auth.status,error:auth.error,role:auth.role},hypothesisId:'H-C',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (!auth.ok) {
     return res.status(auth.status).json({ success: false, error: auth.error });
   }
@@ -100,10 +91,6 @@ export default async function handler(req, res) {
     .eq('company_id', company_id)
     .eq('agent_type', 'conversational')
     .order('created_at', { ascending: true });
-
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'37d3c1'},body:JSON.stringify({sessionId:'37d3c1',location:'company-agents.js:post-query',message:'resultado da query lovoo_agents',data:{agents_count:agents?.length??null,error_msg:agentsErr?.message??null,error_code:agentsErr?.code??null,error_details:agentsErr?.details??null},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   if (agentsErr) {
     console.error('[company-agents] Erro ao buscar agentes:', agentsErr.message);
