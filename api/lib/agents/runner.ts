@@ -63,6 +63,12 @@ export type AgentRunContext = {
    * Ex.: { product_name: 'Notebook Pro', product_description: 'Ultra-slim laptop' }
    */
   variables?: Record<string, string>
+  /**
+   * Diretriz global de governança de IA, controlada exclusivamente pela empresa-pai.
+   * Injetada obrigatoriamente no TOPO do system prompt, antes do prompt do agente.
+   * NUNCA logada, NUNCA exposta em responses ou debug.
+   */
+  system_policy?: string
 }
 
 export type AgentRunSuccess = {
@@ -423,12 +429,18 @@ export async function runAgentWithConfig(
   const knowledgeMode = agent.knowledge_mode ?? 'inline'
   const systemParts: string[] = []
 
-  // Prompt base com substituição de variáveis ({{chave}})
+  // [1] Diretriz global de governança — sempre no TOPO, antes de tudo.
+  // Injetada apenas se presente; nunca logada ou exposta.
+  if (ctx.system_policy?.trim()) {
+    systemParts.push(ctx.system_policy.trim() + '\n\n---\n\n')
+  }
+
+  // [2] Prompt base do agente com substituição de variáveis ({{chave}})
   if (agent.prompt?.trim()) {
     systemParts.push(substituteVariables(agent.prompt.trim(), ctx.variables))
   }
 
-  // Base de conhecimento inline (modes: inline, hybrid)
+  // [3] Base de conhecimento inline (modes: inline, hybrid)
   if (
     (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
     agent.knowledge_base?.trim()
@@ -436,7 +448,7 @@ export async function runAgentWithConfig(
     systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
   }
 
-  // Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  // [4] Contexto RAG via retriever vetorial (modes: rag, hybrid)
   if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
     const ragQuery = [ctx.userMessage, ctx.extra_context?.trim()]
       .filter(Boolean)
@@ -452,7 +464,7 @@ export async function runAgentWithConfig(
     }
   }
 
-  // Contexto de execução (histórico, contato, catálogo — montado pelo agentExecutor)
+  // [5] Contexto de execução (histórico, contato, catálogo — montado pelo agentExecutor)
   if (ctx.extra_context?.trim()) {
     systemParts.push(`\n\nContexto atual:\n${ctx.extra_context.trim()}`)
   }

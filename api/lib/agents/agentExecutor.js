@@ -95,6 +95,9 @@ export async function executeAgent(output) {
   const agentRunCtx = {
     userMessage,
     extra_context: extraContext,
+    // Diretriz global de governança — injetada no topo do system prompt pelo runner
+    // NUNCA logada, NUNCA exposta em responses ou debug
+    system_policy: output.system_policy ?? undefined,
     company_id:    companyId,
     channel:       'whatsapp',
     user_id:       undefined, // sem sessão de usuário humano neste fluxo

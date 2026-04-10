@@ -36,6 +36,7 @@
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { buildPolicyVariables, applyPolicyVariables } from '../utils/policyVariables.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -89,11 +90,21 @@ export async function buildContext(orchestratorContext) {
   // Promise.allSettled garante que falhas individuais não abortam as demais.
   // Apenas falha no agente é bloqueante.
 
-  const [agentResult, messagesResult, contactResult, catalogResult] = await Promise.allSettled([
+  // Busca a empresa-pai primeiro (necessária para policy + variáveis)
+  // Separada das demais porque o resultado é dependência de fetchActiveSystemPolicy.
+  let parentCompany = null;
+  try {
+    parentCompany = await fetchParentCompany(svc);
+  } catch (err) {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar empresa-pai (policy não será aplicada):', err.message);
+  }
+
+  const [agentResult, messagesResult, contactResult, catalogResult, policyResult] = await Promise.allSettled([
     fetchAgentConfig(svc, { agentId, companyId }),
     fetchRecentMessages(svc, { conversationId, companyId }),
     fetchContact(svc, { conversationId, companyId }),
-    fetchCatalog(svc, { companyId })
+    fetchCatalog(svc, { companyId }),
+    fetchActiveSystemPolicy(svc, parentCompany)
   ]);
 
   // ── Agente: bloqueante ────────────────────────────────────────────────────
@@ -134,6 +145,18 @@ export async function buildContext(orchestratorContext) {
   } else {
     console.error('🤖 [CTX] ⚠️  Falha ao buscar catálogo (continuando sem produtos/serviços):',
       catalogResult.reason?.message);
+  }
+
+  // ── Policy global de governança: não-bloqueante ───────────────────────────
+  // Buscada pela empresa-pai (company_type='parent') — não filtrada por companyId do agente.
+  // Falha silenciosa: agentes continuam sem a policy (melhor do que bloquear execução).
+  // SEGURANÇA: conteúdo da policy NUNCA é logado.
+  let systemPolicy = null;
+  if (policyResult.status === 'fulfilled') {
+    systemPolicy = policyResult.value ?? null;
+  } else {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar policy de governança (continuando sem diretriz):',
+      policyResult.reason?.message);
   }
 
   // ── Filtrar catálogo por capabilities ────────────────────────────────────
@@ -178,6 +201,10 @@ export async function buildContext(orchestratorContext) {
     // Capabilities e política de preços (para o AgentExecutor usar como defesa secundária)
     capabilities:         orchestratorContext.capabilities,
     price_display_policy: orchestratorContext.price_display_policy,
+
+    // Diretriz global de governança — null se não configurada
+    // SEGURANÇA: nunca logada, nunca exposta em responses ou debug
+    system_policy: systemPolicy,
 
     metadata: {
       company_id:    companyId,
@@ -347,6 +374,60 @@ async function fetchCatalog(svc, { companyId }) {
     : (console.warn('🤖 [CTX] ⚠️  Falha ao buscar serviços:', servicesResult.reason?.message), []);
 
   return { products, services };
+}
+
+// ── Policy global de governança com substituição de variáveis ─────────────────
+
+/**
+ * Busca os dados da empresa-pai necessários para montar as variáveis da policy.
+ *
+ * @returns {Promise<object|null>} Dados da empresa-pai ou null se não encontrada
+ */
+async function fetchParentCompany(svc) {
+  const { data, error } = await svc
+    .from('companies')
+    .select(`
+      id, name, nome_fantasia, timezone, default_currency,
+      pais, cidade, country_code, telefone_principal,
+      email_principal, site_principal, ramo_atividade
+    `)
+    .eq('company_type', 'parent')
+    .maybeSingle();
+
+  if (error) throw new Error(`fetchParentCompany: ${error.message}`);
+  return data ?? null;
+}
+
+/**
+ * Busca a policy ativa de governança de IA da empresa-pai e aplica substituição
+ * de variáveis ({{fuso_horario}}, {{nome_fantasia}}, {{data_hora_atual}}, etc.)
+ *
+ * SEGURANÇA:
+ *   - Sempre filtra por company_id explícito da empresa-pai — nunca depende
+ *     de "existe apenas uma policy global"
+ *   - Conteúdo da policy NUNCA é logado em nenhum momento
+ *   - Falha silenciosa: retorna null sem abortar execução do agente
+ *
+ * @param {object} svc         - Cliente Supabase service_role
+ * @param {object} parentCompany - Dados da empresa-pai (de fetchParentCompany)
+ * @returns {Promise<string|null>} Policy com variáveis substituídas ou null
+ */
+async function fetchActiveSystemPolicy(svc, parentCompany) {
+  if (!parentCompany) return null;
+
+  const { data: policy, error: policyErr } = await svc
+    .from('ai_system_policies')
+    .select('content')
+    .eq('company_id', parentCompany.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (policyErr) throw new Error(`fetchActiveSystemPolicy(policy): ${policyErr.message}`);
+  if (!policy?.content) return null;
+
+  // Substituir variáveis {{chave}} com dados reais da empresa-pai + runtime
+  const variables = buildPolicyVariables(parentCompany);
+  return applyPolicyVariables(policy.content, variables);
 }
 
 // ── Filtro de capabilities ────────────────────────────────────────────────────
