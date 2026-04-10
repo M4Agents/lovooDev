@@ -14,6 +14,7 @@ import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
+import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -3578,9 +3579,13 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Agentes — configuração por empresa */}
+      {/* Aba Agentes — gerenciamento e configuração por empresa */}
       {activeTab === 'agentes-empresa' && canManageConversationalAgents && company?.id && (
         <div className="space-y-6">
+          {/* 1. CRUD de agentes próprios da empresa */}
+          <CompanyOwnAgentsPanel companyId={company.id} />
+
+          {/* 2. Configuração de canal (assignments + routing) */}
           <CompanyAgentConfigPanel companyId={company.id} />
         </div>
       )}

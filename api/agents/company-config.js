@@ -132,52 +132,22 @@ export default async function handler(req, res) {
   }
 
   // ── Buscar agentes disponíveis (para o select de troca) ───────────────────
-  // Usa service_role — lovoo_agents tem RLS restrita à empresa-pai,
-  // mas o admin de qualquer empresa precisa ver os agentes ao trocar o assignment.
-  //
-  // FILTRO: incluir apenas agentes conversacionais, ou seja, agentes que:
-  //   - NÃO possuem nenhum binding, OU
-  //   - possuem bindings EXCLUSIVAMENTE no namespace 'chat:'
-  // Agentes com bindings em 'products:' ou 'services:' são de governança SaaS
-  // e não devem aparecer no painel de configuração de empresa.
+  // FILTRO: agent_type='conversational' + company_id da empresa.
+  // Cada empresa enxerga apenas seus próprios agentes conversacionais.
+  // Agentes funcionais (utilitários SaaS) nunca aparecem aqui.
+  // is_active=true: não exibir agentes desativados no select.
 
-  const { data: allAgents, error: agentsErr } = await supabaseAdmin
+  const { data: availableAgents, error: agentsErr } = await supabaseAdmin
     .from('lovoo_agents')
-    .select('id, name, agent_use_bindings(use_id)')
+    .select('id, name')
+    .eq('company_id', company_id)
+    .eq('agent_type', 'conversational')
+    .eq('is_active', true)
     .order('name', { ascending: true });
 
   if (agentsErr) {
     console.warn('[company-config] Aviso: não foi possível carregar agentes disponíveis:', agentsErr.message);
   }
-
-  // Filtrar agentes conversacionais: sem binding OU apenas bindings 'chat:*'
-  const availableAgents = (allAgents ?? []).filter((a) => {
-    const bindings = a.agent_use_bindings ?? [];
-    return bindings.length === 0 || bindings.every((b) => b.use_id?.startsWith('chat:'));
-  });
-
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '37d3c1' },
-    body: JSON.stringify({
-      sessionId: '37d3c1',
-      location: 'company-config.js:available_agents_filter',
-      message: 'available_agents após filtro conversacional',
-      data: {
-        total_before_filter: (allAgents ?? []).length,
-        total_after_filter:  availableAgents.length,
-        agents_returned:     availableAgents.map((a) => a.name),
-        agents_excluded:     (allAgents ?? []).filter((a) => !availableAgents.includes(a)).map((a) => ({
-          name:     a.name,
-          bindings: (a.agent_use_bindings ?? []).map((b) => b.use_id)
-        }))
-      },
-      hypothesisId: 'H-A',
-      timestamp: Date.now()
-    })
-  }).catch(() => {});
-  // #endregion
 
   // ── Normalizar resposta ───────────────────────────────────────────────────
 
@@ -215,7 +185,7 @@ export default async function handler(req, res) {
     data: {
       assignments:             normalizedAssignments,
       routing_rules_fallback:  normalizedRules,
-      available_agents:        availableAgents.map((a) => ({ id: a.id, name: a.name }))
+      available_agents:        (availableAgents ?? []).map((a) => ({ id: a.id, name: a.name }))
     }
   });
 }
