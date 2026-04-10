@@ -344,7 +344,7 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
           return (
             <div
               key={sectionId}
-              className={`border rounded-lg overflow-hidden transition-colors ${
+              className={`border rounded-lg transition-colors ${
                 enabled
                   ? 'border-blue-200 bg-white'
                   : 'border-gray-200 bg-gray-50'
