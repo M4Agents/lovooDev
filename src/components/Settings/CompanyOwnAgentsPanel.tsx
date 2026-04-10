@@ -28,6 +28,7 @@ import {
 import { api } from '../../services/api'
 import { PromptEditor } from '../ui/PromptEditor'
 import { AgentPromptBuilder, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
+import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -82,10 +83,16 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
   // Novos agentes sempre iniciam em structured.
   const isStructured = !isEdit || agent!.prompt_config !== null
 
-  const [meta, setMeta]       = useState<FormMeta>(isEdit ? agentToMeta(agent!) : emptyMeta())
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState<string | null>(null)
-  const [conflict, setConflict] = useState(false)
+  const [meta, setMeta]           = useState<FormMeta>(isEdit ? agentToMeta(agent!) : emptyMeta())
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const [conflict, setConflict]   = useState(false)
+
+  // Estado de ferramentas — inicializado com o valor existente ao editar.
+  // Novos agentes iniciam com lista vazia (nenhuma ação habilitada por padrão).
+  const [allowedTools, setAllowedTools] = useState<string[]>(
+    isEdit && Array.isArray(agent?.allowed_tools) ? agent!.allowed_tools : []
+  )
 
   // Estado de prompt — modo legacy
   const [legacyPrompt, setLegacyPrompt] = useState<string>(
@@ -135,6 +142,7 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           model:          meta.model,
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
+          allowed_tools:  allowedTools,
         }
 
         if (isStructured) {
@@ -154,6 +162,7 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           model:          meta.model,
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
+          allowed_tools:  allowedTools,
         }
 
         if (isStructured) {
@@ -306,6 +315,13 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           </select>
         </div>
       </div>
+
+      {/* Ações do agente */}
+      <AgentToolsSelector
+        selectedTools={allowedTools}
+        onChange={setAllowedTools}
+        disabled={saving}
+      />
 
       {/* Status */}
       <div className="flex items-center gap-2">

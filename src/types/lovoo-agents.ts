@@ -63,6 +63,7 @@ export interface LovooAgent {
   knowledge_mode: KnowledgeMode
   model: string
   model_config: LovooAgentModelConfig
+  allowed_tools: string[]
   created_at: string
   updated_at: string
 }

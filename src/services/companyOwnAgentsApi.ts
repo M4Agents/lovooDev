@@ -17,6 +17,7 @@ export interface CompanyAgent {
   model:          string
   knowledge_mode: AgentKnowledgeMode
   model_config:   Record<string, unknown>
+  allowed_tools:  string[]
   is_active:      boolean
   created_at:     string
   updated_at:     string
@@ -33,6 +34,7 @@ export interface CreateCompanyAgentPayload {
   knowledge_mode?: AgentKnowledgeMode
   is_active?:     boolean
   model_config?:  Record<string, unknown>
+  allowed_tools?: string[]
 }
 
 export interface UpdateCompanyAgentPayload {
@@ -48,6 +50,7 @@ export interface UpdateCompanyAgentPayload {
   knowledge_mode?: AgentKnowledgeMode
   is_active?:      boolean
   model_config?:   Record<string, unknown>
+  allowed_tools?:  string[]
 }
 
 // Erro de conflito de versão (409)

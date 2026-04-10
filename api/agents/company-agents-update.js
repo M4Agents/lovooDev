@@ -33,6 +33,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validatePromptConfig } from '../lib/agents/promptConfigValidator.js';
 import { assemblePrompt }        from '../lib/agents/promptAssembler.js';
+import { VALID_TOOL_NAMES }      from '../lib/agents/validTools.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -43,6 +44,11 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 const WRITE_ROLES           = ['admin', 'system_admin', 'super_admin'];
 const VALID_KNOWLEDGE_MODES  = ['none', 'inline'];
+
+function sanitizeAllowedTools(raw) {
+  if (!Array.isArray(raw)) return null;  // null = campo não enviado, não alterar no banco
+  return [...new Set(raw.filter(t => typeof t === 'string' && VALID_TOOL_NAMES.has(t)))];
+}
 
 // ── Validação de caller (JWT + membership + role) ─────────────────────────────
 
@@ -105,7 +111,8 @@ export default async function handler(req, res) {
     model,
     knowledge_mode,
     is_active,
-    model_config
+    model_config,
+    allowed_tools,
   } = req.body ?? {};
 
   // ── Validação mínima ───────────────────────────────────────────────────────
@@ -238,6 +245,13 @@ export default async function handler(req, res) {
     updatePayload.model_config = model_config;
   }
 
+  // Só atualiza allowed_tools se o campo veio como array no body.
+  // Se omitido: campo NÃO é tocado no banco — agentes existentes preservam suas tools.
+  const sanitizedTools = sanitizeAllowedTools(allowed_tools);
+  if (sanitizedTools !== null) {
+    updatePayload.allowed_tools = sanitizedTools;
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     return res.status(400).json({ success: false, error: 'Nenhum campo válido para atualizar.' });
   }
@@ -273,7 +287,7 @@ export default async function handler(req, res) {
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
       .eq('prompt_version', prompt_version)    // OPTIMISTIC LOCK
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
       .maybeSingle();
 
     if (updateErr) {
@@ -305,7 +319,7 @@ export default async function handler(req, res) {
       .eq('id', agent_id)
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
       .single();
 
     if (updateErr) {

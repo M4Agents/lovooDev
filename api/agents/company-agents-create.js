@@ -24,6 +24,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validatePromptConfig } from '../lib/agents/promptConfigValidator.js';
 import { assemblePrompt }        from '../lib/agents/promptAssembler.js';
+import { VALID_TOOL_NAMES }      from '../lib/agents/validTools.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -35,6 +36,11 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const WRITE_ROLES           = ['admin', 'system_admin', 'super_admin'];
 const VALID_KNOWLEDGE_MODES  = ['none', 'inline'];
 const DEFAULT_MODEL          = 'gpt-4.1-mini';
+
+function sanitizeAllowedTools(raw) {
+  if (!Array.isArray(raw)) return null;  // null = não enviado, banco usa DEFAULT '[]'
+  return [...new Set(raw.filter(t => typeof t === 'string' && VALID_TOOL_NAMES.has(t)))];
+}
 
 // ── Validação de caller (JWT + membership + role) ─────────────────────────────
 
@@ -95,7 +101,8 @@ export default async function handler(req, res) {
     model,
     knowledge_mode,
     is_active,
-    model_config
+    model_config,
+    allowed_tools,
   } = req.body ?? {};
 
   // ── Validação básica ───────────────────────────────────────────────────────
@@ -160,6 +167,8 @@ export default async function handler(req, res) {
 
   // ── Montar payload — company_id do JWT, agent_type forçado ────────────────
 
+  const sanitizedTools = sanitizeAllowedTools(allowed_tools);
+
   const insertPayload = {
     company_id:     auth.callerCompanyId,   // SEMPRE do JWT — nunca do body
     agent_type:     'conversational',        // SEMPRE forçado
@@ -174,12 +183,18 @@ export default async function handler(req, res) {
     model_config:   (typeof model_config === 'object' && model_config !== null) ? model_config : {}
   };
 
+  // Só inclui allowed_tools se o frontend enviou o campo (array).
+  // Se não enviado: banco usa DEFAULT '[]' — comportamento preservado.
+  if (sanitizedTools !== null) {
+    insertPayload.allowed_tools = sanitizedTools;
+  }
+
   // ── INSERT ─────────────────────────────────────────────────────────────────
 
   const { data: agent, error: insertErr } = await supabaseAdmin
     .from('lovoo_agents')
     .insert(insertPayload)
-    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, created_at, updated_at')
     .single();
 
   if (insertErr) {

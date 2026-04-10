@@ -87,7 +87,7 @@ export default async function handler(req, res) {
 
   const { data: agents, error: agentsErr } = await supabaseAdmin
     .from('lovoo_agents')
-    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, created_at, updated_at')
     .eq('company_id', company_id)
     .eq('agent_type', 'conversational')
     .order('created_at', { ascending: true });
