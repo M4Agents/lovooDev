@@ -88,9 +88,11 @@ export default async function handler(req, res) {
   // Filtro duplo: company_id + agent_type — nunca expõe agentes de outra empresa
   // nem agentes funcionais (utilitários do SaaS).
 
+  // #region agent log — diagnóstico: allowed_tools removido temporariamente para isolar H1
   const { data: agents, error: agentsErr } = await supabaseAdmin
     .from('lovoo_agents')
-    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, created_at, updated_at')
+  // #endregion
     .eq('company_id', company_id)
     .eq('agent_type', 'conversational')
     .order('created_at', { ascending: true });
