@@ -56,9 +56,6 @@ async function validateCaller(req, companyId) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  // #region agent log
-  try {
-  // #endregion
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -87,40 +84,23 @@ export default async function handler(req, res) {
   // ── Buscar agentes conversacionais da empresa ─────────────────────────────
   // Filtro duplo: company_id + agent_type — nunca expõe agentes de outra empresa
   // nem agentes funcionais (utilitários do SaaS).
+  // NOTA: allowed_tools omitido do SELECT até a migration ser aplicada no banco.
+  // Restaurar quando: ALTER TABLE lovoo_agents ADD COLUMN IF NOT EXISTS allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb;
 
-  // #region agent log — diagnóstico: allowed_tools removido temporariamente para isolar H1
   const { data: agents, error: agentsErr } = await supabaseAdmin
     .from('lovoo_agents')
     .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, created_at, updated_at')
-  // #endregion
     .eq('company_id', company_id)
     .eq('agent_type', 'conversational')
     .order('created_at', { ascending: true });
 
   if (agentsErr) {
-    // #region agent log
-    console.error('[company-agents] ERRO:', JSON.stringify({ code: agentsErr.code, message: agentsErr.message, details: agentsErr.details, hint: agentsErr.hint }));
-    return res.status(500).json({
-      success: false,
-      error:   'Erro ao carregar agentes.',
-      _debug:  { code: agentsErr.code, message: agentsErr.message, details: agentsErr.details, hint: agentsErr.hint }
-    });
-    // #endregion
+    console.error('[company-agents] Erro ao buscar agentes:', agentsErr.message);
+    return res.status(500).json({ success: false, error: 'Erro ao carregar agentes.' });
   }
 
   return res.status(200).json({
     success: true,
     data:    agents ?? []
   });
-  // #region agent log
-  } catch (uncaught) {
-    console.error('[company-agents] EXCEÇÃO NÃO TRATADA:', uncaught?.message, uncaught?.stack);
-    return res.status(500).json({
-      success: false,
-      error:   'Exceção interna.',
-      _debug:  { uncaught_message: uncaught?.message, uncaught_stack: uncaught?.stack?.slice(0, 500) }
-    });
-  }
-  // #endregion
 }
-

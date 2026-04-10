@@ -245,12 +245,10 @@ export default async function handler(req, res) {
     updatePayload.model_config = model_config;
   }
 
-  // Só atualiza allowed_tools se o campo veio como array no body.
-  // Se omitido: campo NÃO é tocado no banco — agentes existentes preservam suas tools.
-  const sanitizedTools = sanitizeAllowedTools(allowed_tools);
-  if (sanitizedTools !== null) {
-    updatePayload.allowed_tools = sanitizedTools;
-  }
+  // #region agent log — allowed_tools desabilitado até migration ser aplicada no banco dev
+  // const sanitizedTools = sanitizeAllowedTools(allowed_tools);
+  // if (sanitizedTools !== null) { updatePayload.allowed_tools = sanitizedTools; }
+  // #endregion
 
   if (Object.keys(updatePayload).length === 0) {
     return res.status(400).json({ success: false, error: 'Nenhum campo válido para atualizar.' });
@@ -287,7 +285,7 @@ export default async function handler(req, res) {
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
       .eq('prompt_version', prompt_version)    // OPTIMISTIC LOCK
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
       .maybeSingle();
 
     if (updateErr) {
@@ -319,7 +317,7 @@ export default async function handler(req, res) {
       .eq('id', agent_id)
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, updated_at')
       .single();
 
     if (updateErr) {

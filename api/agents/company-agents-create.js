@@ -167,7 +167,9 @@ export default async function handler(req, res) {
 
   // ── Montar payload — company_id do JWT, agent_type forçado ────────────────
 
-  const sanitizedTools = sanitizeAllowedTools(allowed_tools);
+  // #region agent log — allowed_tools desabilitado até migration ser aplicada no banco dev
+  // const sanitizedTools = sanitizeAllowedTools(allowed_tools);
+  // #endregion
 
   const insertPayload = {
     company_id:     auth.callerCompanyId,   // SEMPRE do JWT — nunca do body
@@ -183,18 +185,16 @@ export default async function handler(req, res) {
     model_config:   (typeof model_config === 'object' && model_config !== null) ? model_config : {}
   };
 
-  // Só inclui allowed_tools se o frontend enviou o campo (array).
-  // Se não enviado: banco usa DEFAULT '[]' — comportamento preservado.
-  if (sanitizedTools !== null) {
-    insertPayload.allowed_tools = sanitizedTools;
-  }
+  // #region agent log — allowed_tools desabilitado até migration ser aplicada
+  // if (sanitizedTools !== null) { insertPayload.allowed_tools = sanitizedTools; }
+  // #endregion
 
   // ── INSERT ─────────────────────────────────────────────────────────────────
 
   const { data: agent, error: insertErr } = await supabaseAdmin
     .from('lovoo_agents')
     .insert(insertPayload)
-    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, agent_type, company_id, created_at, updated_at')
     .single();
 
   if (insertErr) {
