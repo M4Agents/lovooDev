@@ -10,7 +10,7 @@
 import { SECTION_ORDER } from './variablesCatalog.js'
 
 export const SECTION_MAX_CHARS   = 3000
-export const PROMPT_MAX_CHARS    = 10000
+export const PROMPT_MAX_CHARS    = 30000
 export const VALID_CONFIG_VERSION = 1
 
 export interface ValidationError {

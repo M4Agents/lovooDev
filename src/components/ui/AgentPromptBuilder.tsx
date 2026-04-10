@@ -31,6 +31,8 @@ import {
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const SECTION_MAX_CHARS = 3000
+const PROMPT_MAX_CHARS  = 30000
+const PROMPT_NEAR_LIMIT = PROMPT_MAX_CHARS * 0.85  // aviso a partir de 85%
 
 // ── Highlight de variáveis ────────────────────────────────────────────────────
 
@@ -295,7 +297,10 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
     onChange(updateSection(value, sectionId, { content }))
   }
 
-  const preview = assemblePreview(value)
+  const preview        = assemblePreview(value)
+  const totalChars     = preview.length
+  const totalOverLimit = totalChars > PROMPT_MAX_CHARS
+  const totalNearLimit = totalChars > PROMPT_NEAR_LIMIT && !totalOverLimit
   const activeSections = SECTION_ORDER.filter(id => {
     const s = value.sections[id]
     return s?.enabled && s.content.trim().length > 0
@@ -468,6 +473,31 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
           )
         })}
       </div>
+
+      {/* Indicador de total do prompt montado */}
+      {(totalNearLimit || totalOverLimit) && (
+        <div className={`rounded-lg border px-3 py-2.5 text-xs flex items-start gap-2 ${
+          totalOverLimit
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-amber-50 border-amber-200 text-amber-700'
+        }`}>
+          <span className="flex-shrink-0 font-bold">{totalOverLimit ? '✕' : '!'}</span>
+          <div className="min-w-0">
+            <p className="font-semibold">
+              {totalOverLimit
+                ? `Prompt excede o limite — ${totalChars.toLocaleString('pt-BR')} / ${PROMPT_MAX_CHARS.toLocaleString('pt-BR')} caracteres`
+                : `Prompt próximo do limite — ${totalChars.toLocaleString('pt-BR')} / ${PROMPT_MAX_CHARS.toLocaleString('pt-BR')} caracteres`
+              }
+            </p>
+            <p className="mt-0.5 text-xs opacity-80">
+              {totalOverLimit
+                ? 'Reduza o conteúdo de algumas seções para conseguir salvar. O servidor rejeitará o prompt acima de 30.000 caracteres.'
+                : 'Você está se aproximando do limite. Considere reduzir ou desativar algumas seções.'
+              }
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Painel de variáveis */}
       <VariablesPanel
