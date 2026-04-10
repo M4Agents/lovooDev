@@ -444,7 +444,18 @@ export function AgentPromptBuilder({ value, onChange, disabled = false, customFi
                     )}
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    {content.trim().length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => handleContentChange(sectionId, SECTION_CATALOG[sectionId].placeholder)}
+                        className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                      >
+                        ↙ usar texto de exemplo
+                      </button>
+                    ) : (
+                      <span />
+                    )}
                     <span className={`text-xs ${
                       overLimit ? 'text-red-600 font-medium' : nearLimit ? 'text-amber-600' : 'text-gray-400'
                     }`}>
