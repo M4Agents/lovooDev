@@ -68,10 +68,13 @@ export function useAccessControl() {
   // Permite admin, system_admin ou super_admin de qualquer empresa
   // gerenciar assignments e routing rules da sua própria empresa.
   // Independente de company_type — não restrito à empresa-pai.
+  // Durante impersonação: currentRole é null (super_admin não tem membership
+  // na empresa filha), mas o acesso deve ser mantido — o backend valida.
   const canManageConversationalAgents =
     currentRole === 'admin' ||
     currentRole === 'system_admin' ||
-    currentRole === 'super_admin'
+    currentRole === 'super_admin' ||
+    isImpersonating
 
   // ── Governança global de IA ────────────────────────────────
   // Restrito à empresa-pai + super_admin.
