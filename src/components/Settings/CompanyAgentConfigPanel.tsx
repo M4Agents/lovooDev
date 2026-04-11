@@ -9,14 +9,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
+import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, Plus, X } from 'lucide-react'
 import {
   companyAgentConfigApi,
   type CompanyAgentAssignment,
   type AgentRoutingRuleFallback,
   type AvailableAgent,
   type PriceDisplayPolicy,
-  type AgentCapabilities
+  type AgentCapabilities,
+  type AgentChannel,
 } from '../../services/companyAgentConfigApi'
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
@@ -319,6 +320,35 @@ function RoutingRuleFallbackCard({ rule, companyId, onSaved }: RoutingRuleCardPr
   )
 }
 
+// ── Tipos internos do modal de criação ───────────────────────────────────────
+
+const CHANNEL_OPTIONS: { value: AgentChannel; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'web',      label: 'Web' },
+  { value: 'email',    label: 'E-mail' },
+  { value: 'sms',      label: 'SMS' },
+]
+
+interface CreateForm {
+  agentId:     string
+  channel:     AgentChannel
+  displayName: string
+  canAutoReply:    boolean
+  canInformPrices: boolean
+  canSendMedia:    boolean
+  pricePolicy: PriceDisplayPolicy
+}
+
+const DEFAULT_CREATE_FORM: CreateForm = {
+  agentId:         '',
+  channel:         'whatsapp',
+  displayName:     '',
+  canAutoReply:    false,
+  canInformPrices: false,
+  canSendMedia:    false,
+  pricePolicy:     'disabled',
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
@@ -327,6 +357,12 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>([])
   const [loading,        setLoading]        = useState(true)
   const [loadError,      setLoadError]      = useState<string | null>(null)
+
+  // ── Estados do modal de criação ───────────────────────────────────────────
+  const [showModal,    setShowModal]    = useState(false)
+  const [creating,     setCreating]     = useState(false)
+  const [createError,  setCreateError]  = useState<string | null>(null)
+  const [form,         setForm]         = useState<CreateForm>(DEFAULT_CREATE_FORM)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -355,6 +391,53 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
     setRoutingRules((prev) =>
       prev.map((r) => (r.id === ruleId ? { ...r, is_active: isActive } : r))
     )
+  }
+
+  // ── Handlers do modal de criação ──────────────────────────────────────────
+
+  const openModal = () => {
+    setForm({
+      ...DEFAULT_CREATE_FORM,
+      agentId: availableAgents[0]?.id ?? '',
+    })
+    setCreateError(null)
+    setShowModal(true)
+  }
+
+  const closeModal = () => {
+    if (creating) return
+    setShowModal(false)
+    setCreateError(null)
+  }
+
+  const handleCreate = async () => {
+    if (!form.agentId || !form.displayName.trim()) {
+      setCreateError('Selecione um agente e informe o nome de exibição.')
+      return
+    }
+
+    setCreating(true)
+    setCreateError(null)
+
+    try {
+      await companyAgentConfigApi.createAssignment(companyId, {
+        agent_id:     form.agentId,
+        channel:      form.channel,
+        display_name: form.displayName.trim(),
+        capabilities: {
+          can_auto_reply:    form.canAutoReply,
+          can_inform_prices: form.canInformPrices,
+          can_send_media:    form.canSendMedia,
+        },
+        price_display_policy: form.pricePolicy,
+      })
+      setShowModal(false)
+      await load()
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Erro ao criar assignment.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -390,14 +473,168 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
 
   if (assignments.length === 0 && routingRules.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-        <Bot className="w-10 h-10 text-gray-300" />
-        <p className="text-sm font-medium text-gray-600">Nenhum agente configurado</p>
-        <p className="text-xs text-gray-400 max-w-sm">
-          Os agentes conversacionais são provisionados pelo administrador da plataforma.
-          Entre em contato caso precise configurar um agente para sua empresa.
-        </p>
-      </div>
+      <>
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <Bot className="w-10 h-10 text-gray-300" />
+          <div>
+            <p className="text-sm font-medium text-gray-600">Nenhum agente configurado</p>
+            {availableAgents.length > 0 ? (
+              <p className="text-xs text-gray-400 mt-1">
+                Vincule um agente a um canal para começar a receber atendimentos automáticos.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 max-w-sm mt-1">
+                Crie um agente conversacional antes de configurar o atendimento por canal.
+              </p>
+            )}
+          </div>
+          {availableAgents.length > 0 && (
+            <button
+              onClick={openModal}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar canal
+            </button>
+          )}
+        </div>
+
+        {/* Modal de criação de assignment */}
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+
+              {/* Header do modal */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-900">Adicionar canal</h3>
+                <button
+                  onClick={closeModal}
+                  disabled={creating}
+                  className="p-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Agente */}
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-gray-700">Agente</label>
+                <div className="relative">
+                  <select
+                    value={form.agentId}
+                    onChange={e => setForm(f => ({ ...f, agentId: e.target.value }))}
+                    disabled={creating}
+                    className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    {availableAgents.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Canal */}
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-gray-700">Canal</label>
+                <div className="relative">
+                  <select
+                    value={form.channel}
+                    onChange={e => setForm(f => ({ ...f, channel: e.target.value as AgentChannel }))}
+                    disabled={creating}
+                    className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    {CHANNEL_OPTIONS.map(c => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Nome de exibição */}
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-gray-700">Nome de exibição</label>
+                <input
+                  type="text"
+                  value={form.displayName}
+                  onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
+                  disabled={creating}
+                  placeholder="Ex: Atendimento WhatsApp"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                />
+              </div>
+
+              {/* Capacidades */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700">Capacidades</label>
+                {[
+                  { key: 'canAutoReply',    label: 'Resposta automática' },
+                  { key: 'canInformPrices', label: 'Informar preços' },
+                  { key: 'canSendMedia',    label: 'Enviar mídia' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form[key as keyof CreateForm] as boolean}
+                      onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
+                      disabled={creating}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Política de preços */}
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-gray-700">Política de preços</label>
+                <div className="relative">
+                  <select
+                    value={form.pricePolicy}
+                    onChange={e => setForm(f => ({ ...f, pricePolicy: e.target.value as PriceDisplayPolicy }))}
+                    disabled={creating}
+                    className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    {(Object.entries(PRICE_POLICY_LABELS) as [PriceDisplayPolicy, string][]).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Erro */}
+              {createError && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  {createError}
+                </p>
+              )}
+
+              {/* Ações */}
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  onClick={closeModal}
+                  disabled={creating}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !form.agentId || !form.displayName.trim()}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {creating ? 'Criando…' : 'Criar'}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 

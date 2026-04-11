@@ -69,6 +69,16 @@ export interface UpdateAssignmentPayload {
   price_display_policy?: PriceDisplayPolicy
 }
 
+export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms'
+
+export interface CreateAssignmentPayload {
+  agent_id:              string
+  channel:               AgentChannel
+  display_name:          string
+  capabilities?:         Partial<AgentCapabilities>
+  price_display_policy?: PriceDisplayPolicy
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -128,6 +138,32 @@ export const companyAgentConfigApi = {
     }
 
     return json.data
+  },
+
+  /**
+   * Cria o primeiro assignment (canal ↔ agente) para a empresa.
+   * O backend também cria automaticamente a routing rule fallback.
+   */
+  async createAssignment(
+    companyId: string,
+    payload:   CreateAssignmentPayload
+  ): Promise<CompanyAgentAssignment> {
+    const headers = await getAuthHeaders()
+    const res = await fetch('/api/agents/company-config-create-assignment', {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({
+        company_id: companyId,
+        ...payload
+      })
+    })
+
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? 'Erro ao criar assignment')
+    }
+
+    return json.data as CompanyAgentAssignment
   },
 
   /**
