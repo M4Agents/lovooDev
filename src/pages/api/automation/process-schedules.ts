@@ -5,8 +5,14 @@
 // =====================================================
 
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { createClient } from '@supabase/supabase-js'
 import { scheduleService } from '../../../services/automation/ScheduleService'
-import { supabase } from '../../../lib/supabase'
+import { automationEngine } from '../../../services/automation/AutomationEngine'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+)
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -95,17 +101,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }
 
 /**
- * Retoma execução após delay
+ * Retoma execução após delay.
+ * Passa currentNodeId diretamente para o engine, sem injetar dados sintéticos.
  */
 async function resumeExecution(execution: any, flow: any, delayNodeId: string) {
-  // Encontrar próximos nós após o delay
   const edges = flow.edges || []
-  const nodes = flow.nodes || []
-
   const nextEdges = edges.filter((e: any) => e.source === delayNodeId)
 
   if (nextEdges.length === 0) {
-    // Sem próximos nós, completar execução
     await supabase
       .from('automation_executions')
       .update({
@@ -114,24 +117,10 @@ async function resumeExecution(execution: any, flow: any, delayNodeId: string) {
       })
       .eq('id', execution.id)
 
-    console.log('✅ Execução completada (sem próximos nós)')
+    console.log('✅ Execução completada (sem próximos nós após delay)')
     return
   }
 
-  // Atualizar execução para running
-  await supabase
-    .from('automation_executions')
-    .update({
-      status: 'running',
-      paused_at: null,
-      resume_at: null
-    })
-    .eq('id', execution.id)
-
-  // TODO: Continuar processamento dos próximos nós
-  // Por enquanto, apenas marca como running
-  // A implementação completa requer integração com AutomationEngine
-  // para processar os nós restantes
-
-  console.log('ℹ️ Execução retomada (processamento de nós pendente)')
+  console.log('🔄 Retomando execução após delay via engine:', execution.id)
+  await automationEngine.resumeExecution(execution.id, '', delayNodeId)
 }

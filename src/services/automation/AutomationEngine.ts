@@ -372,7 +372,7 @@ export class AutomationEngine {
   private async createLog(
     context: ExecutionContext,
     node: Node,
-    status: 'started' | 'success' | 'error',
+    status: 'started' | 'success' | 'error' | 'paused',
     output?: any,
     errorMessage?: string
   ): Promise<void> {
@@ -384,7 +384,7 @@ export class AutomationEngine {
         node_id: node.id,
         node_type: node.type,
         action: node.data.label || node.type,
-        status: status === 'started' ? 'success' : status,
+        status: status,
         input_data: node.data.config,
         output_data: output,
         error_message: errorMessage,
@@ -1331,9 +1331,14 @@ export class AutomationEngine {
   }
 
   /**
-   * FASE 5.2: Executa delay síncrono (para delays curtos)
+   * FASE 5.2: Executa delay síncrono (apenas para delays curtos — máx. 8s).
+   * Ambiente serverless tem timeout fixo (~10s no Vercel hobby, ~60s no Pro).
+   * Delays acima do limite devem usar o nó de tipo 'delay' com agendamento real.
    */
   private async executeDelay(node: Node, context: ExecutionContext): Promise<any> {
+    // Limite máximo seguro para espera bloqueante em serverless (8 segundos)
+    const MAX_BLOCKING_DELAY_MS = 8_000
+
     try {
       const duration = node.data.config?.duration || 1
       const unit = node.data.config?.unit || 'seconds'
@@ -1344,6 +1349,15 @@ export class AutomationEngine {
         delayMs = duration * 60 * 1000
       } else if (unit === 'hours') {
         delayMs = duration * 60 * 60 * 1000
+      }
+
+      // Rejeitar delays que ultrapassariam o timeout seguro do serverless
+      if (delayMs > MAX_BLOCKING_DELAY_MS) {
+        throw new Error(
+          `Delay de ${duration} ${unit} (${delayMs}ms) excede o limite seguro de ${MAX_BLOCKING_DELAY_MS}ms ` +
+          `para execução bloqueante em serverless. Use o nó de tipo "delay" para delays longos — ` +
+          `ele agenda a retomada via cron sem bloquear a função.`
+        )
       }
 
       console.log(`⏱️ Aguardando ${duration} ${unit}...`)
@@ -1405,12 +1419,12 @@ export class AutomationEngine {
       // e será retomada pelo cron job
       return {
         delayed: true,
+        paused: true,
         scheduleId,
         resumeAt: resumeAt.toISOString(),
         duration,
         unit,
         businessHoursOnly,
-        // Flag especial para indicar que a execução deve pausar
         pauseExecution: true
       }
     } catch (error: any) {
@@ -1977,7 +1991,7 @@ export class AutomationEngine {
   /**
    * Retoma execução pausada após receber resposta do usuário
    */
-  async resumeExecution(executionId: string, userResponse: string): Promise<void> {
+  async resumeExecution(executionId: string, userResponse: string, currentNodeId?: string): Promise<void> {
     try {
       console.log('▶️ Retomando execução pausada:', executionId)
 
@@ -1993,16 +2007,18 @@ export class AutomationEngine {
         throw new Error('Execução pausada não encontrada')
       }
 
-      // 2. Extrair informações da pausa
+      // 2. Resolver nó atual: currentNodeId tem prioridade sobre _awaiting_input
       const awaitingInput = execution.variables?._awaiting_input
-      if (!awaitingInput) {
+      const resolvedNodeId = currentNodeId ?? awaitingInput?.node_id
+      if (!resolvedNodeId) {
         throw new Error('Informações de pausa não encontradas')
       }
 
-      // 3. Salvar resposta do usuário na variável
-      const updatedVariables = {
-        ...execution.variables,
-        [awaitingInput.variable_name]: userResponse
+      // 3. Salvar resposta do usuário na variável (se houver variável mapeada)
+      const variableName = awaitingInput?.variable_name
+      const updatedVariables = { ...execution.variables }
+      if (variableName && userResponse) {
+        updatedVariables[variableName] = userResponse
       }
       delete updatedVariables._awaiting_input
 
@@ -2016,7 +2032,9 @@ export class AutomationEngine {
         })
         .eq('id', executionId)
 
-      console.log(`✅ Resposta salva na variável: ${awaitingInput.variable_name} = "${userResponse}"`)
+      if (variableName) {
+        console.log(`✅ Resposta salva na variável: ${variableName} = "${userResponse}"`)
+      }
 
       // 5. Buscar fluxo
       const { data: flow } = await supabase
@@ -2041,18 +2059,18 @@ export class AutomationEngine {
       }
 
       // 7. Encontrar próximo nó após o nó pausado
-      const currentNode = flow.nodes.find((n: Node) => n.id === awaitingInput.node_id)
+      const currentNode = flow.nodes.find((n: Node) => n.id === resolvedNodeId)
       if (!currentNode) {
         throw new Error('Nó atual não encontrado')
       }
 
-      const nextNodes = this.getNextNodes(currentNode, flow.edges)
+      const nextNodes = this.getNextNodes(currentNode, flow.nodes, flow.edges, null)
       
       // 8. Continuar processamento a partir do próximo nó
       console.log('🔄 Continuando execução a partir do próximo nó...')
       
       for (const nextNode of nextNodes) {
-        await this.processNode(nextNode, context, flow.nodes, flow.edges)
+        await this.processNode(nextNode, flow.nodes, flow.edges, context)
       }
 
       // 9. Marcar execução como concluída

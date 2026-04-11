@@ -122,18 +122,22 @@ export class TriggerManager {
    */
   private async findMatchingFlows(event: TriggerEvent): Promise<AutomationFlow[]> {
     try {
-      // Buscar fluxos ativos da empresa
+      // Buscar todos os fluxos ativos da empresa sem filtrar por trigger_type.
+      // O campo trigger_type é legado e pode estar nulo ou desatualizado em
+      // fluxos criados após a migration add_triggers_column.sql, que migrou
+      // a configuração real para startNode.data.triggers (JSONB).
+      // A filtragem por tipo e condições é feita inteiramente por matchesTriggerConditions,
+      // que lê o StartNode diretamente — fonte de verdade atual.
       const { data: flows, error } = await supabase
         .from('automation_flows')
         .select('*')
         .eq('company_id', event.companyId)
         .eq('is_active', true)
-        .eq('trigger_type', event.type)
 
       if (error) throw error
       if (!flows || flows.length === 0) return []
 
-      // Filtrar fluxos que correspondem às condições específicas
+      // Filtrar fluxos que correspondem ao tipo de trigger e às condições específicas
       const matchingFlows = flows.filter(flow => {
         return this.matchesTriggerConditions(flow, event)
       })

@@ -115,47 +115,35 @@ export default async function handler(req, res) {
       })
     }
 
-    const variableName = awaitingInput.variable_name
+    // Delegar o salvamento da resposta e o processamento dos próximos nós
+    // ao pipeline de retomada (resume-execution), que chama continue_automation_execution
+    // e processa os nós a partir de current_node_id.
+    const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app'
+    const resumeEndpoint = `${appBase}/api/automation/resume-execution`
 
-    // Salvar resposta do usuário na variável
-    const updatedVariables = {
-      ...execution.variables,
-      [variableName]: message_content
-    }
-    delete updatedVariables._awaiting_input
-
-    // Atualizar execução para running
-    const { error: updateError } = await supabase
-      .from('automation_executions')
-      .update({
-        status: 'running',
-        variables: updatedVariables,
-        paused_at: null
+    const resumeResponse = await fetch(resumeEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': process.env.INTERNAL_SECRET || ''
+      },
+      body: JSON.stringify({
+        execution_id: execution.id,
+        user_response: message_content
       })
-      .eq('id', execution.id)
-
-    if (updateError) {
-      console.error('❌ Erro ao atualizar execução:', updateError)
-      return res.status(500).json({ success: false, error: 'Erro interno' })
-    }
-
-    console.log(`✅ Resposta salva: ${variableName} = "${message_content}"`)
-
-    // Chamar função RPC para retomar execução (processamento assíncrono)
-    const { error: resumeError } = await supabase.rpc('resume_automation_execution', {
-      p_execution_id: execution.id,
-      p_user_response: message_content
     })
 
-    if (resumeError) {
-      console.error('⚠️ Erro ao retomar execução (será processada em background):', resumeError)
-      // Não retornar erro, pois a resposta já foi salva
+    if (!resumeResponse.ok) {
+      const body = await resumeResponse.json().catch(() => ({}))
+      console.error('❌ Erro ao retomar execução via pipeline:', resumeResponse.status, body)
+      return res.status(500).json({ success: false, error: 'Erro interno ao continuar fluxo' })
     }
+
+    console.log('✅ Fluxo retomado com sucesso:', execution.id)
 
     return res.status(200).json({ 
       success: true, 
       execution_id: execution.id,
-      variable: variableName,
       message: 'Resposta processada e execução retomada'
     })
 

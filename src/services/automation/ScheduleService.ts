@@ -5,7 +5,12 @@
 // IMPORTANTE: Não altera sistema existente, apenas adiciona funcionalidade
 // =====================================================
 
-import { supabase } from '../../lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+)
 
 interface CreateScheduleParams {
   executionId: string
@@ -63,6 +68,7 @@ export class ScheduleService {
         .from('automation_executions')
         .update({
           status: 'paused',
+          current_node_id: params.currentNodeId,
           paused_at: new Date().toISOString(),
           resume_at: finalResumeAt.toISOString()
         })
