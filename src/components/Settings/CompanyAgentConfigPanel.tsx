@@ -651,13 +651,24 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
             Configure os agentes de IA vinculados à sua empresa.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Recarregar"
-        >
-          <RefreshCw className="w-4 h-4 text-gray-500" />
-        </button>
+        <div className="flex items-center gap-2">
+          {availableAgents.length > 0 && (
+            <button
+              onClick={openModal}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar canal
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            title="Recarregar"
+          >
+            <RefreshCw className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
       </div>
 
       {/* Assignments */}
@@ -702,6 +713,140 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Modal de criação de assignment */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+
+            {/* Header do modal */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900">Adicionar canal</h3>
+              <button
+                onClick={closeModal}
+                disabled={creating}
+                className="p-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Agente */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">Agente</label>
+              <div className="relative">
+                <select
+                  value={form.agentId}
+                  onChange={e => setForm(f => ({ ...f, agentId: e.target.value }))}
+                  disabled={creating}
+                  className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  {availableAgents.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Canal */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">Canal</label>
+              <div className="relative">
+                <select
+                  value={form.channel}
+                  onChange={e => setForm(f => ({ ...f, channel: e.target.value as AgentChannel }))}
+                  disabled={creating}
+                  className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  {CHANNEL_OPTIONS.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Nome de exibição */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">Nome de exibição</label>
+              <input
+                type="text"
+                value={form.displayName}
+                onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
+                disabled={creating}
+                placeholder="Ex: Atendimento WhatsApp"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              />
+            </div>
+
+            {/* Capacidades */}
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-gray-700">Capacidades</label>
+              {[
+                { key: 'canAutoReply',    label: 'Resposta automática' },
+                { key: 'canInformPrices', label: 'Informar preços' },
+              ].map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form[key as keyof CreateForm] as boolean}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
+                    disabled={creating}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className="text-sm text-gray-700">{label}</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Política de preços */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">Política de preços</label>
+              <div className="relative">
+                <select
+                  value={form.pricePolicy}
+                  onChange={e => setForm(f => ({ ...f, pricePolicy: e.target.value as PriceDisplayPolicy }))}
+                  disabled={creating}
+                  className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  {(Object.entries(PRICE_POLICY_LABELS) as [PriceDisplayPolicy, string][]).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {createError && (
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                {createError}
+              </p>
+            )}
+
+            {/* Ações */}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={closeModal}
+                disabled={creating}
+                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating || !form.agentId || !form.displayName.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                {creating ? 'Criando…' : 'Criar'}
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>
