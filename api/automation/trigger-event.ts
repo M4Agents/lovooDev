@@ -7,11 +7,10 @@
 // diretamente para filtrar fluxos e automationEngine para executar.
 // =====================================================
 
-import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { automationEngine } from '../../../services/automation/AutomationEngine'
-import { matchesTriggerConditions } from '../../../services/automation/triggerEvaluator'
-import type { TriggerEvent } from '../../../services/automation/triggerEvaluator'
+import { automationEngine } from '../../src/services/automation/AutomationEngine'
+import { matchesTriggerConditions } from '../../src/services/automation/triggerEvaluator'
+import type { TriggerEvent } from '../../src/services/automation/triggerEvaluator'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -22,7 +21,7 @@ function isUUID(value: unknown): value is string {
   return typeof value === 'string' && UUID_REGEX.test(value)
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -108,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Filtrar flows compatíveis com o trigger
-    const matchingFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
+    const matchingFlows = flows.filter((flow: any) => matchesTriggerConditions(flow, event))
 
     console.log(`[trigger-event] ${event_type}: ${matchingFlows.length}/${flows.length} fluxos compatíveis para empresa ${company_id}`)
 
@@ -117,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Executar os flows correspondentes após a resposta (fire-and-forget no servidor)
     for (const flow of matchingFlows) {
-      automationEngine.executeFlow(flow.id, event.data, company_id).catch(err => {
+      automationEngine.executeFlow(flow.id, event.data, company_id).catch((err: any) => {
         console.error(`[trigger-event] Erro ao executar fluxo ${flow.id}:`, err)
       })
     }

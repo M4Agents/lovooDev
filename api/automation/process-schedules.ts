@@ -4,17 +4,16 @@
 // Objetivo: Processar agendamentos pendentes (chamado por cron job)
 // =====================================================
 
-import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { scheduleService } from '../../../services/automation/ScheduleService'
-import { automationEngine } from '../../../services/automation/AutomationEngine'
+import { scheduleService } from '../../src/services/automation/ScheduleService'
+import { automationEngine } from '../../src/services/automation/AutomationEngine'
 
 const supabase = createClient(
   process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 )
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

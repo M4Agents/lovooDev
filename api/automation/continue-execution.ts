@@ -5,12 +5,11 @@
 // Protegido por: x-internal-secret (apenas chamadas internas)
 // =====================================================
 
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { automationEngine } from '../../../services/automation/AutomationEngine'
+import { automationEngine } from '../../src/services/automation/AutomationEngine'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

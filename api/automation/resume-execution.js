@@ -2,7 +2,7 @@
 // API: RESUME EXECUTION (shim)
 // Objetivo: Validar a requisição e delegar ao engine TypeScript
 // O processamento real dos nós ocorre em:
-//   src/pages/api/automation/continue-execution.ts
+//   api/automation/continue-execution.ts
 // =====================================================
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'execution_id inválido' });
     }
 
-    // Delegar ao engine TypeScript via continue-execution (src/pages/api)
+    // Delegar ao engine TypeScript via api/automation/continue-execution.ts
     const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app';
     const continueEndpoint = `${appBase}/api/automation/continue-execution`;
 
