@@ -82,7 +82,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     key:         'send_media',
     label:       'Enviar mídias do catálogo',
     description:
-      'Envia imagens ou vídeos vinculados ao produto ou serviço em foco, conforme a intenção (apresentação, prova ou detalhe).',
+      'Envia imagens ou vídeos do produto ou serviço em foco, conforme a intenção definida (apresentação, prova social ou detalhe técnico).',
     category:    'atendimento',
   },
 ]
