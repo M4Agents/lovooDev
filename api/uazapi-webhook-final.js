@@ -808,11 +808,15 @@ async function processMessage(payload) {
             // Chamar endpoint para continuar execução do fluxo
             try {
               console.log('🚀 Chamando endpoint para continuar fluxo...');
-              const resumeEndpoint = 'https://loovocrm.vercel.app/api/automation/resume-execution';
-              
+              const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app';
+              const resumeEndpoint = `${appBase}/api/automation/resume-execution`;
+
               const resumeResponse = await fetch(resumeEndpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-internal-secret': process.env.INTERNAL_SECRET || ''
+                },
                 body: JSON.stringify({
                   execution_id: resumeResult.execution_id,
                   user_response: messageText

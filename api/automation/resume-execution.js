@@ -1,33 +1,32 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function handler(req, res) {
-  console.log('🔧 ENDPOINT VERSION: 2026-03-25-16:40 - USING LOCAL FUNCTION');
-  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
-  
+
+  // Validar segredo interno — rejeitar antes de qualquer processamento
+  const internalSecret = process.env.INTERNAL_SECRET;
+  const receivedSecret = req.headers['x-internal-secret'];
+  if (!internalSecret || receivedSecret !== internalSecret) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+
   if (req.method !== 'POST') {
-    res.status(405).json({ 
-      success: false, 
-      error: 'Método não permitido. Use POST.' 
-    });
+    res.status(405).json({ success: false, error: 'Método não permitido. Use POST.' });
     return;
   }
-  
+
   try {
     const { execution_id, user_response } = req.body;
-    
+
     if (!execution_id || !user_response) {
       res.status(400).json({ 
         success: false, 
@@ -35,7 +34,18 @@ export default async function handler(req, res) {
       });
       return;
     }
-    
+
+    // Validar formato UUID antes de qualquer query
+    if (!UUID_REGEX.test(execution_id)) {
+      return res.status(400).json({ success: false, error: 'execution_id inválido' });
+    }
+
+    // Cliente com service_role — permite chamar RPCs após revogação do grant anon (T8)
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
     console.log('🔄 ENDPOINT: Retomando execução:', execution_id);
     console.log('📝 ENDPOINT: Resposta do usuário:', user_response);
     
@@ -48,10 +58,7 @@ export default async function handler(req, res) {
     
     if (rpcError || !executionData?.success) {
       console.error('❌ Erro na RPC:', rpcError || executionData);
-      res.status(500).json({ 
-        success: false, 
-        error: executionData?.error || rpcError?.message || 'Erro ao buscar execução'
-      });
+      res.status(500).json({ success: false, error: 'Erro ao buscar execução' });
       return;
     }
     
@@ -331,10 +338,6 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('❌ ENDPOINT: Erro ao retomar execução:', error);
-    
-    res.status(500).json({ 
-      success: false, 
-      error: error.message || 'Erro ao retomar execução'
-    });
+    res.status(500).json({ success: false, error: 'Erro ao retomar execução' });
   }
 }

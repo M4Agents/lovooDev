@@ -21,6 +21,25 @@ interface WebhookResult {
   error?: string
 }
 
+function isUrlAllowed(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return false
+    const hostname = parsed.hostname
+    const blocked = [
+      /^localhost$/i,
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[01])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+    ]
+    return !blocked.some(r => r.test(hostname))
+  } catch {
+    return false
+  }
+}
+
 export class WebhookService {
   /**
    * Envia webhook para URL externa
@@ -33,6 +52,15 @@ export class WebhookService {
     payload: any,
     authToken?: string
   ): Promise<WebhookResult> {
+    if (!isUrlAllowed(url)) {
+      console.warn('⛔ Webhook bloqueado — URL inválida ou não permitida:', url)
+      return {
+        success: false,
+        status: 0,
+        error: 'URL de destino inválida'
+      }
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     }

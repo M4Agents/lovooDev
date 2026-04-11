@@ -9,6 +9,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -19,20 +21,55 @@ export default async function handler(req, res) {
     res.status(200).end()
     return
   }
-  
+
+  // Validar segredo interno — rejeitar antes de qualquer processamento
+  const internalSecret = process.env.INTERNAL_SECRET
+  const receivedSecret = req.headers['x-internal-secret']
+  if (!internalSecret || receivedSecret !== internalSecret) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' })
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, error: 'Use POST' })
     return
   }
 
   try {
-    const { conversation_id, message_content, lead_id, company_id } = req.body
+    // Aceitar apenas conversation_id e message_content do body
+    const { conversation_id, message_content } = req.body
 
-    if (!conversation_id || !message_content || !lead_id || !company_id) {
+    if (!conversation_id || !message_content) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Parâmetros obrigatórios: conversation_id, message_content, lead_id, company_id' 
+        error: 'Parâmetros obrigatórios: conversation_id, message_content' 
       })
+    }
+
+    // Validar formato UUID antes de qualquer query
+    if (!UUID_REGEX.test(conversation_id)) {
+      return res.status(400).json({ success: false, error: 'conversation_id inválido' })
+    }
+
+    // Criar cliente Supabase com service role (bypass RLS)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Derivar company_id e lead_id da conversa — não confiar no body
+    const { data: conversation, error: convError } = await supabase
+      .from('chat_conversations')
+      .select('company_id, lead_id')
+      .eq('id', conversation_id)
+      .single()
+
+    if (convError || !conversation) {
+      console.error('❌ Conversa não encontrada:', conversation_id)
+      return res.status(400).json({ success: false, error: 'Conversa não encontrada' })
+    }
+
+    const { company_id, lead_id } = conversation
+
+    if (!company_id || !lead_id) {
+      console.error('❌ Conversa sem company_id ou lead_id:', conversation_id)
+      return res.status(400).json({ success: false, error: 'Conversa inválida' })
     }
 
     console.log('🔍 Processando resposta de usuário:', { 
@@ -41,9 +78,6 @@ export default async function handler(req, res) {
       company_id,
       message: message_content.substring(0, 50) 
     })
-
-    // Criar cliente Supabase com service role (bypass RLS)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Buscar execuções pausadas para este lead
     const { data: pausedExecutions, error: fetchError } = await supabase
@@ -57,7 +91,7 @@ export default async function handler(req, res) {
 
     if (fetchError) {
       console.error('❌ Erro ao buscar execuções pausadas:', fetchError)
-      return res.status(500).json({ success: false, error: fetchError.message })
+      return res.status(500).json({ success: false, error: 'Erro interno' })
     }
 
     if (!pausedExecutions || pausedExecutions.length === 0) {
@@ -102,7 +136,7 @@ export default async function handler(req, res) {
 
     if (updateError) {
       console.error('❌ Erro ao atualizar execução:', updateError)
-      return res.status(500).json({ success: false, error: updateError.message })
+      return res.status(500).json({ success: false, error: 'Erro interno' })
     }
 
     console.log(`✅ Resposta salva: ${variableName} = "${message_content}"`)
@@ -127,9 +161,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('❌ Erro ao processar resposta:', error)
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    })
+    return res.status(500).json({ success: false, error: 'Erro interno' })
   }
 }

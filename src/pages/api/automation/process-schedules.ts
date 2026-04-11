@@ -13,6 +13,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  const authHeader = req.headers.authorization
+  if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
   try {
     console.log('🔄 Processando schedules pendentes...')
 
@@ -85,10 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (error: any) {
     console.error('❌ Erro ao processar schedules:', error)
-    return res.status(500).json({
-      error: 'Erro ao processar schedules',
-      details: error.message
-    })
+    return res.status(500).json({ error: 'Erro ao processar schedules' })
   }
 }
 

@@ -1,6 +1,16 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 Deno.serve(async (req) => {
+  // Validar segredo da função
+  const expectedSecret = Deno.env.get('TIMEOUT_FUNCTION_SECRET')
+  const authHeader = req.headers.get('Authorization')
+  if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -26,11 +36,7 @@ Deno.serve(async (req) => {
 
     if (!expiredExecutions || expiredExecutions.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Nenhuma execução expirada',
-          count: 0 
-        }),
+        JSON.stringify({ processed: 0, errors: 0 }),
         { headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -53,24 +59,14 @@ Deno.serve(async (req) => {
     console.log(`✅ ${expiredExecutions.length} execuções canceladas por timeout`)
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `${expiredExecutions.length} execuções canceladas`,
-        count: expiredExecutions.length,
-        executions: expiredExecutions.map(e => ({
-          id: e.id,
-          flow_id: e.flow_id,
-          lead_id: e.lead_id,
-          timeout_at: e.timeout_at
-        }))
-      }),
+      JSON.stringify({ processed: expiredExecutions.length, errors: 0 }),
       { headers: { 'Content-Type': 'application/json' } }
     )
 
   } catch (error: any) {
     console.error('❌ Erro ao verificar timeouts:', error)
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ processed: 0, errors: 1 }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }

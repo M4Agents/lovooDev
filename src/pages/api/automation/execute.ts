@@ -9,6 +9,10 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { automationEngine } from '../../../services/automation/AutomationEngine'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).end()
+  }
+
   // Apenas POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -46,9 +50,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (error: any) {
     console.error('❌ Erro na API de execução:', error)
-    return res.status(500).json({
-      error: 'Erro ao executar fluxo',
-      details: error.message
-    })
+    return res.status(500).json({ error: 'Erro ao executar fluxo' })
   }
 }
