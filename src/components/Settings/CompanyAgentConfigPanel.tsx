@@ -65,7 +65,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     capabilities:         {
       can_auto_reply:    assignment.capabilities?.can_auto_reply    ?? false,
       can_inform_prices: assignment.capabilities?.can_inform_prices ?? false,
-      can_send_media:    assignment.capabilities?.can_send_media    ?? false
+      can_send_media:    true
     },
     price_display_policy: assignment.price_display_policy
   })
@@ -77,8 +77,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.is_active            !== assignment.is_active            ||
     draft.price_display_policy !== assignment.price_display_policy ||
     draft.capabilities.can_auto_reply    !== (assignment.capabilities?.can_auto_reply    ?? false) ||
-    draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false) ||
-    draft.capabilities.can_send_media    !== (assignment.capabilities?.can_send_media    ?? false)
+    draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false)
 
   const handleSave = async () => {
     setSaveState('saving')
@@ -179,7 +178,6 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
           {([
             { key: 'can_auto_reply',    label: 'Resposta automática' },
             { key: 'can_inform_prices', label: 'Informar preços' },
-            { key: 'can_send_media',    label: 'Enviar mídia' }
           ] as { key: keyof AgentCapabilities; label: string }[]).map(({ key, label }) => (
             <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -367,21 +365,12 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-start',message:'load() called',data:{companyId},hypothesisId:'A,D,E',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const config = await companyAgentConfigApi.getConfig(companyId)
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-success',message:'getConfig returned',data:{companyId,assignmentsCount:config.assignments.length,routingRulesCount:config.routing_rules_fallback.length,availableAgentsCount:config.available_agents.length,firstAssignment:config.assignments[0]??null},hypothesisId:'B,C,D',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setAssignments(config.assignments)
       setRoutingRules(config.routing_rules_fallback)
       setAvailableAgents(config.available_agents)
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-error',message:'getConfig threw error',data:{companyId,error:err instanceof Error?err.message:String(err)},hypothesisId:'B',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setLoadError(err instanceof Error ? err.message : 'Erro ao carregar configurações')
     } finally {
       setLoading(false)
@@ -580,7 +569,6 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
                 {[
                   { key: 'canAutoReply',    label: 'Resposta automática' },
                   { key: 'canInformPrices', label: 'Informar preços' },
-                  { key: 'canSendMedia',    label: 'Enviar mídia' },
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                     <input

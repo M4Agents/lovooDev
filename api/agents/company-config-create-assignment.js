@@ -177,7 +177,7 @@ export default async function handler(req, res) {
 
   const DEFAULT_CAPABILITIES = {
     can_auto_reply:              false,
-    can_send_media:              false,
+    can_send_media:              true,
     can_inform_prices:           false,
     can_update_lead:             false,
     can_update_opportunity:      false,
@@ -187,7 +187,7 @@ export default async function handler(req, res) {
 
   let finalCapabilities = { ...DEFAULT_CAPABILITIES };
   if (capabilities && typeof capabilities === 'object') {
-    const KNOWN_CAPS = ['can_auto_reply', 'can_send_media', 'can_inform_prices'];
+    const KNOWN_CAPS = ['can_auto_reply', 'can_inform_prices'];
     for (const cap of KNOWN_CAPS) {
       if (cap in capabilities) {
         finalCapabilities[cap] = Boolean(capabilities[cap]);
