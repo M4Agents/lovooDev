@@ -37,10 +37,12 @@ import {
   buildAllVariables,
   applyPolicyVariables,
 } from '../utils/policyVariables.js';
+import { matchCatalogItem } from './catalogMatcher.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const MESSAGES_LIMIT = 20;
+const MESSAGES_LIMIT   = 20;
+const MAX_CATALOG_ITEMS = 30;
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 
@@ -166,15 +168,39 @@ export async function buildContext(orchestratorContext) {
     console.warn('🤖 [CTX] ⚠️  Falha ao buscar oportunidade (continuando):', opportunityResult.reason?.message);
   }
 
-  // ── Montar mapa de variáveis (empresa executora) ──────────────────────────
+  // ── Filtrar catálogo por capabilities ────────────────────────────────────
+
+  const catalog = applyCapabilityFilters(
+    rawCatalog,
+    orchestratorContext.capabilities,
+    orchestratorContext.price_display_policy
+  );
+
+  // ── Identificar item de interesse (catalog matcher) ───────────────────────
+  // Matching feito sobre o catálogo já filtrado (preços respeitam policy).
+  // Não acessa banco — usa apenas o catálogo já carregado.
+
+  const userMessage = orchestratorContext.event.message_text ?? '';
+  const itemOfInterest = matchCatalogItem(userMessage, catalog);
+
+  if (itemOfInterest) {
+    console.log('🤖 [CTX] 🎯 Item de interesse identificado:', {
+      name:   itemOfInterest.name,
+      status: itemOfInterest.availability_status,
+      company_id: companyId,
+    });
+  }
+
+  // ── Montar mapa de variáveis (empresa executora + produto em foco) ─────────
   // Variáveis da EMPRESA EXECUTORA — nunca da empresa-pai.
-  // SEGURANÇA: policy e prompt do agente recebem dados da empresa atendendo o cliente.
+  // itemOfInterest preenche produto_* quando há match; strings vazias caso contrário.
 
   const allVariables = buildAllVariables(
     childCompany,
-    contact,                      // tem campos do lead (nome, email, etc.)
-    opportunity,                  // tem stage_name resolvido
-    contact?.custom_values ?? [], // lead_custom_values para cp_* variáveis
+    contact,
+    opportunity,
+    contact?.custom_values ?? [],
+    itemOfInterest,
   );
 
   // Aplicar variáveis na policy (se existir)
@@ -185,14 +211,6 @@ export async function buildContext(orchestratorContext) {
 
   // Aplicar variáveis no prompt do agente
   const processedAgentPrompt = applyPolicyVariables(agent.prompt, allVariables);
-
-  // ── Filtrar catálogo por capabilities ────────────────────────────────────
-
-  const catalog = applyCapabilityFilters(
-    rawCatalog,
-    orchestratorContext.capabilities,
-    orchestratorContext.price_display_policy
-  );
 
   // ── Montar ContextBuilderOutput ───────────────────────────────────────────
 
@@ -224,7 +242,9 @@ export async function buildContext(orchestratorContext) {
 
     catalog,
 
-    user_message: orchestratorContext.event.message_text ?? '',
+    item_of_interest: itemOfInterest ?? null,
+
+    user_message: userMessage,
 
     capabilities:         orchestratorContext.capabilities,
     price_display_policy: orchestratorContext.price_display_policy,
@@ -244,16 +264,17 @@ export async function buildContext(orchestratorContext) {
   };
 
   console.log('🤖 [CTX] ✅ ContextBuilderOutput montado:', {
-    run_id:          output.run_id,
-    agent_id:        output.agent.id,
-    knowledge_mode:  output.agent.knowledge_mode,
-    messages_count:  output.conversation.recent_messages.length,
-    has_lead:        !!output.contact.lead_id,
-    has_opportunity: !!opportunity,
-    products_count:  output.catalog.products.length,
-    services_count:  output.catalog.services.length,
-    conversation_id: conversationId,
-    company_id:      companyId,
+    run_id:              output.run_id,
+    agent_id:            output.agent.id,
+    knowledge_mode:      output.agent.knowledge_mode,
+    messages_count:      output.conversation.recent_messages.length,
+    has_lead:            !!output.contact.lead_id,
+    has_opportunity:     !!opportunity,
+    products_count:      output.catalog.products.length,
+    services_count:      output.catalog.services.length,
+    item_of_interest:    itemOfInterest?.name ?? null,
+    conversation_id:     conversationId,
+    company_id:          companyId,
   });
 
   return { success: true, output };
@@ -404,13 +425,28 @@ async function fetchContact(svc, { conversationId, companyId }) {
 }
 
 async function fetchCatalog(svc, { companyId }) {
+  const baseSelect = `
+    id, name, description, default_price,
+    ai_notes, ai_unavailable_guidance,
+    availability_status, stock_status,
+    catalog_categories ( name )
+  `;
+
   const [productsResult, servicesResult] = await Promise.allSettled([
     svc.from('products')
-      .select('id, name, description, default_price, ai_notes, ai_unavailable_guidance, availability_status')
-      .eq('company_id', companyId).eq('available_for_ai', true).eq('is_active', true),
+      .select(baseSelect)
+      .eq('company_id', companyId)
+      .eq('available_for_ai', true)
+      .eq('is_active', true)
+      .order('availability_status')   // 'available' < outros alfabeticamente
+      .limit(MAX_CATALOG_ITEMS),
     svc.from('services')
-      .select('id, name, description, default_price, ai_notes, ai_unavailable_guidance, availability_status')
-      .eq('company_id', companyId).eq('available_for_ai', true).eq('is_active', true),
+      .select(baseSelect)
+      .eq('company_id', companyId)
+      .eq('available_for_ai', true)
+      .eq('is_active', true)
+      .order('availability_status')
+      .limit(MAX_CATALOG_ITEMS),
   ]);
 
   const products = productsResult.status === 'fulfilled'

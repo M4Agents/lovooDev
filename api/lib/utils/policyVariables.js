@@ -240,25 +240,83 @@ export function buildCustomFieldVariables(customValues) {
   return vars;
 }
 
+// ── Variáveis de Produto em Foco ──────────────────────────────────────────────
+
+const AVAILABILITY_LABELS_VARS = {
+  available:    'disponível',
+  unavailable:  'indisponível',
+  on_demand:    'sob consulta',
+  discontinued: 'descontinuado',
+};
+
+const STOCK_LABELS_VARS = {
+  in_stock:     'em estoque',
+  out_of_stock: 'sem estoque',
+  low_stock:    'estoque baixo',
+};
+
+/**
+ * Constrói variáveis do produto/serviço identificado como item de interesse.
+ * Retorna strings vazias quando item é null (sem match).
+ *
+ * O preço respeita a policy de exibição: se default_price for null
+ * (removido pelo ContextBuilder via applyCapabilityFilters), a variável fica vazia.
+ *
+ * @param {object|null} item - Item do catálogo (produto ou serviço) ou null
+ * @returns {Record<string, string>}
+ */
+export function buildProductVariables(item) {
+  const empty = {
+    produto_nome:      '',
+    produto_preco:     '',
+    produto_descricao: '',
+    produto_categoria: '',
+    produto_status:    '',
+    produto_estoque:   '',
+  };
+
+  if (!item) return empty;
+
+  let preco = '';
+  if (item.default_price != null) {
+    try {
+      preco = Number(item.default_price).toLocaleString('pt-BR', {
+        style: 'currency', currency: 'BRL'
+      });
+    } catch {
+      preco = String(item.default_price);
+    }
+  }
+
+  return {
+    produto_nome:      item.name ?? '',
+    produto_preco:     preco,
+    produto_descricao: item.description ?? '',
+    produto_categoria: item.catalog_categories?.name ?? '',
+    produto_status:    AVAILABILITY_LABELS_VARS[item.availability_status] ?? item.availability_status ?? '',
+    produto_estoque:   STOCK_LABELS_VARS[item.stock_status] ?? '',
+  };
+}
+
 // ── Mapa combinado ────────────────────────────────────────────────────────────
 
 /**
  * Combina todos os grupos de variáveis em um único mapa.
- * Ordem: empresa sobreposta por lead sobreposta por oportunidade sobreposta por custom.
- * (Na prática não há sobreposição — namespaces distintos.)
  *
- * @param {object|null} company       - Empresa executora
- * @param {object|null} lead          - Lead da conversa (com campo custom_values)
- * @param {object|null} opportunity   - Oportunidade ativa (com stage_name)
- * @param {Array}       customValues  - lead_custom_values do lead
+ * @param {object|null} company        - Empresa executora
+ * @param {object|null} lead           - Lead da conversa (com campo custom_values)
+ * @param {object|null} opportunity    - Oportunidade ativa (com stage_name)
+ * @param {Array}       customValues   - lead_custom_values do lead
+ * @param {object|null} itemOfInterest - Item de catálogo identificado (opcional)
  * @returns {Record<string, string>}
  */
-export function buildAllVariables(company, lead, opportunity, customValues) {
+export function buildAllVariables(company, lead, opportunity, customValues, itemOfInterest) {
   return {
     ...buildCompanyVariables(company),
     ...buildLeadVariables(lead),
     ...buildOpportunityVariables(opportunity),
     ...buildCustomFieldVariables(customValues ?? []),
+    ...buildProductVariables(itemOfInterest ?? null),
   };
 }
 

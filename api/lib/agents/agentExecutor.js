@@ -44,8 +44,11 @@ import { evaluateTransition }   from './flowOrchestrator.js';
 const USE_ID = 'chat:conversational_agent:whatsapp';
 
 /** Limites de truncamento para economia de tokens no extra_context */
-const MAX_DESCRIPTION_CHARS = 300;
-const MAX_AI_NOTES_CHARS    = 200;
+const MAX_DESCRIPTION_CHARS  = 300;
+const MAX_AI_NOTES_CHARS     = 200;
+
+/** Máximo de itens na lista compacta (sem item em foco) */
+const MAX_COMPACT_LIST_ITEMS = 15;
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 
@@ -252,65 +255,113 @@ function buildExtraContext(output) {
     sections.push(`Informações do contato:\n${contactLines.join('\n')}`);
   }
 
-  // ── 3. Produtos disponíveis ──────────────────────────────────────────────
-  const products = output.catalog?.products ?? [];
-  if (products.length > 0) {
-    const productLines = products.map(p => formatCatalogItem(p));
-    sections.push(`Produtos disponíveis:\n${productLines.join('\n\n')}`);
-  }
+  // ── 3. Catálogo: item em foco ou lista compacta ──────────────────────────
 
-  // ── 4. Serviços disponíveis ──────────────────────────────────────────────
-  const services = output.catalog?.services ?? [];
-  if (services.length > 0) {
-    const serviceLines = services.map(s => formatCatalogItem(s));
-    sections.push(`Serviços disponíveis:\n${serviceLines.join('\n\n')}`);
+  const itemOfInterest = output.item_of_interest ?? null;
+
+  if (itemOfInterest) {
+    // Item identificado — seção detalhada separando público e interno
+    sections.push(formatItemInFocus(itemOfInterest));
+  } else {
+    // Sem item específico — lista compacta de produtos e serviços
+    const products = output.catalog?.products ?? [];
+    const services = output.catalog?.services ?? [];
+
+    const compactItems = [...products, ...services].slice(0, MAX_COMPACT_LIST_ITEMS);
+
+    if (compactItems.length > 0) {
+      const lines = compactItems.map(i => formatCatalogItemCompact(i));
+      sections.push(`Produtos e serviços disponíveis:\n${lines.join('\n')}`);
+    }
   }
 
   return sections.join('\n\n');
 }
 
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+const AVAILABILITY_LABELS = {
+  available:    'disponível',
+  unavailable:  'indisponível',
+  on_demand:    'sob consulta',
+  discontinued: 'descontinuado',
+};
+
+const STOCK_LABELS = {
+  in_stock:     'em estoque',
+  out_of_stock: 'sem estoque',
+  low_stock:    'estoque baixo',
+};
+
+function formatPrice(price) {
+  if (price == null) return null;
+  try {
+    return Number(price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  } catch {
+    return String(price);
+  }
+}
+
+function categoryName(item) {
+  // Supabase retorna catalog_categories como objeto { name: '...' } ou null
+  return item.catalog_categories?.name ?? null;
+}
+
 /**
- * Formata um item do catálogo (produto ou serviço) para o extra_context.
- * Campos opcionais incluídos apenas quando preenchidos.
- * description e ai_notes são truncados para economia de tokens.
+ * Formata um item em foco com seção detalhada:
+ *   - Conteúdo público: nome, categoria, preço, status, estoque, descrição
+ *   - Instruções internas: ai_notes (separadas, para o agente — não para o cliente)
+ *   - Orientação de indisponibilidade: ai_unavailable_guidance (quando aplicável)
  */
-function formatCatalogItem(item) {
-  const lines = [`- ${item.name}`];
+function formatItemInFocus(item) {
+  const publicLines = [`Produto em foco: ${item.name}`];
+
+  const cat = categoryName(item);
+  if (cat) publicLines.push(`Categoria: ${cat}`);
+
+  const price = formatPrice(item.default_price);
+  if (price) publicLines.push(`Preço: ${price}`);
+
+  const availLabel = AVAILABILITY_LABELS[item.availability_status] ?? item.availability_status;
+  if (availLabel) publicLines.push(`Disponibilidade: ${availLabel}`);
+
+  const stockLabel = STOCK_LABELS[item.stock_status];
+  if (stockLabel) publicLines.push(`Estoque: ${stockLabel}`);
 
   if (item.description) {
-    const desc = truncate(item.description, MAX_DESCRIPTION_CHARS);
-    lines.push(`  Descrição: ${desc}`);
+    publicLines.push(`Descrição: ${truncate(item.description, MAX_DESCRIPTION_CHARS)}`);
   }
 
-  // default_price é null quando can_inform_prices=false (ContextBuilder removeu)
-  if (item.default_price != null) {
-    const priceFormatted = Number(item.default_price).toLocaleString('pt-BR', {
-      style:    'currency',
-      currency: 'BRL'
-    });
-    lines.push(`  Preço: ${priceFormatted}`);
-  }
+  const result = [publicLines.join('\n')];
 
+  // Instruções internas (ai_notes) — separadas do conteúdo público
+  // O LLM usa para orientar a resposta, mas não reproduz literalmente ao cliente
   if (item.ai_notes) {
-    const notes = truncate(item.ai_notes, MAX_AI_NOTES_CHARS);
-    lines.push(`  Notas: ${notes}`);
+    result.push(`[Instrução interna — não compartilhar com o cliente]\n${truncate(item.ai_notes, MAX_AI_NOTES_CHARS)}`);
   }
 
-  if (item.availability_status && item.availability_status !== 'available') {
-    const statusLabel = {
-      unavailable:  'indisponível',
-      on_demand:    'sob consulta',
-      discontinued: 'descontinuado'
-    }[item.availability_status] ?? item.availability_status;
-    lines.push(`  Status: ${statusLabel}`);
-
-    if (item.ai_unavailable_guidance) {
-      const guidance = truncate(item.ai_unavailable_guidance, MAX_AI_NOTES_CHARS);
-      lines.push(`  Instrução: ${guidance}`);
-    }
+  // Orientação de indisponibilidade
+  if (item.availability_status !== 'available' && item.ai_unavailable_guidance) {
+    result.push(`[Orientação de indisponibilidade]\n${truncate(item.ai_unavailable_guidance, MAX_AI_NOTES_CHARS)}`);
   }
 
-  return lines.join('\n');
+  return result.join('\n\n');
+}
+
+/**
+ * Formata um item na lista compacta (sem item em foco).
+ * Apenas nome + categoria + status — sem descrição completa para economizar tokens.
+ */
+function formatCatalogItemCompact(item) {
+  const parts = [`- ${item.name}`];
+
+  const cat = categoryName(item);
+  if (cat) parts.push(cat);
+
+  const availLabel = AVAILABILITY_LABELS[item.availability_status];
+  if (availLabel && item.availability_status !== 'available') parts.push(`(${availLabel})`);
+
+  return parts.join(' · ');
 }
 
 function truncate(text, maxChars) {

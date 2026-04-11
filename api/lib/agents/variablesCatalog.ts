@@ -69,9 +69,19 @@ export const PROMPT_VARIABLES: PromptVariable[] = [
   { group: 'Oportunidade', variable: '{{oportunidade_status}}',        description: 'Status (Aberta/Ganha/Perdida)',     example: 'Aberta',            conditional: true },
   { group: 'Oportunidade', variable: '{{oportunidade_probabilidade}}', description: 'Probabilidade de fechamento',      example: '75%',               conditional: true },
   { group: 'Oportunidade', variable: '{{oportunidade_previsao}}',      description: 'Previsão de fechamento',           example: '30/05/2026',        conditional: true },
+
+  // ── Produto em Foco ───────────────────────────────────────────────────────
+  // Preenchidas automaticamente quando o backend identifica um produto/serviço
+  // de interesse na mensagem do lead. Vazias quando não há match.
+  { group: 'Produto em Foco', variable: '{{produto_nome}}',      description: 'Nome do produto/serviço identificado',    example: 'Curso de Elétrica',  conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_preco}}',     description: 'Preço formatado (respeita política)',      example: 'R$ 1.200,00',       conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_descricao}}', description: 'Descrição do produto/serviço',            example: 'Curso técnico...',   conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_categoria}}', description: 'Categoria do produto/serviço',            example: 'Cursos Técnicos',    conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_status}}',    description: 'Disponibilidade (disponível/sob consulta)', example: 'disponível',       conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_estoque}}',   description: 'Status de estoque (em estoque/sem estoque)', example: 'em estoque',      conditional: true },
 ]
 
-export const PROMPT_VARIABLE_GROUPS = ['Runtime', 'Empresa', 'Lead', 'Oportunidade'] as const
+export const PROMPT_VARIABLE_GROUPS = ['Runtime', 'Empresa', 'Lead', 'Oportunidade', 'Produto em Foco'] as const
 
 export function customFieldsToVariables(
   fields: Array<{ field_name: string; field_label: string; field_type: string }>
