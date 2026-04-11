@@ -104,6 +104,7 @@ export const SECTION_ORDER = [
   'objective',
   'communication_rules',
   'conversation_flow',
+  'product_usage',
   'pricing',
   'lead_qualification',
   'scheduling',
@@ -185,6 +186,26 @@ export const SECTION_CATALOG: Record<SectionId, SectionMeta> = {
       '5. PRÓXIMO PASSO: Dependendo do perfil, ofereça agendamento, envie um material ou transfira para um humano.\n' +
       '\n' +
       '6. ENCERRAMENTO: Confirme o próximo passo acordado e informe que a equipe entrará em contato. Despeça-se de forma cordial.',
+  },
+  product_usage: {
+    label: 'Uso de Produtos e Serviços',
+    placeholder:
+      'Defina como o agente deve usar as informações de produtos e serviços durante a conversa.\n' +
+      '\n' +
+      'Esta seção pode orientar o agente a:\n' +
+      '- priorizar o produto em foco quando houver um item identificado\n' +
+      '- usar descrição, categoria, preço e disponibilidade para responder\n' +
+      '- lidar com itens indisponíveis\n' +
+      '- apresentar opções quando não houver item claramente identificado\n' +
+      '- nunca expor informações internas do sistema\n' +
+      '\n' +
+      'Variáveis disponíveis:\n' +
+      '- {{produto_nome}}\n' +
+      '- {{produto_preco}}\n' +
+      '- {{produto_descricao}}\n' +
+      '- {{produto_categoria}}\n' +
+      '- {{produto_status}}\n' +
+      '- {{produto_estoque}}',
   },
   pricing: {
     label: 'Preços e Valores',
