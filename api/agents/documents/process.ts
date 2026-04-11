@@ -128,7 +128,6 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   const agentId = locked.agent_id as string
   const storagePath = locked.storage_path as string
-  const fileType = locked.file_type as string
 
   // ── 6. Pipeline principal — envolto em try/catch para rollback ────────────
 

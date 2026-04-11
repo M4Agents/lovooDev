@@ -3,7 +3,7 @@
 // =====================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { ELEVENLABS_MODEL_SENTINEL, ELEVENLABS_PROVIDER, PARENT_COMPANY_ID } from './config.js'
+import { ELEVENLABS_PROVIDER, PARENT_COMPANY_ID } from './config.js'
 
 export const FALLBACK_TIMEOUT_MS = 60_000
 

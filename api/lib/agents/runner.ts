@@ -28,12 +28,12 @@
 import { getOpenAIClient } from '../openai/client.js'
 import { fetchParentOpenAISettingsForSystem } from '../openai/settingsDb.js'
 import { isOpenAIApiKeyConfigured } from '../openai/config.js'
-import { resolveAgent } from './resolver.js'
+import { resolveAgent, type ResolvedAgent } from './resolver.js'
 import { getUseMeta, VALID_USE_IDS } from './uses.js'
 import { retrieveAgentContext } from './retriever.js'
 import { writeExecutionLog, type ExecutionLogEntry } from './logger.js'
 import { estimateCost } from './pricing.js'
-import { getToolsForAgent, CRITICAL_TOOLS } from './toolDefinitions.js'
+import { getToolsForAgent } from './toolDefinitions.js'
 import { executeToolCalls } from './toolExecutor.js'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
@@ -370,7 +370,7 @@ export async function runAgent(
     const estimatedCost = estimateCost(agent.model, inputTokens, outputTokens)
 
     return logAndReturn(
-      { ok: true, result, agent_id: agent.id, use_id: useId, fallback: false },
+      { ok: true, result, agent_id: agent.id, use_id: useId, fallback: false, tool_results: [] },
       {
         status:            'success',
         agent_id:          agent.id,
@@ -554,7 +554,7 @@ export async function runAgentWithConfig(
     let totalOutputTokens = firstCompletion.usage?.completion_tokens ?? null
     let totalTokensCount  = firstCompletion.usage?.total_tokens      ?? null
     // Hoistado para o escopo do try — acessível no return final
-    let toolResults: Awaited<ReturnType<typeof executeToolCalls>> = []
+    let toolResults: ToolCallResult[] = []
 
     // Se o LLM retornou tool calls, executa e faz second turn
     if (hasTools && toolCalls.length > 0) {
@@ -569,7 +569,7 @@ export async function runAgentWithConfig(
         model_config:          (agent.model_config as Record<string, unknown> | undefined) ?? ctx.model_config ?? {},
       }
 
-      toolResults = await executeToolCalls(toolCalls as any, toolContext)
+      toolResults = (await executeToolCalls(toolCalls as any, toolContext)) as ToolCallResult[]
 
       // Monta mensagens para o second turn
       const toolResultMessages: Parameters<typeof client.chat.completions.create>[0]['messages'] = [
