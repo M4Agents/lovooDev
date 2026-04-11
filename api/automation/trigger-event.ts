@@ -8,12 +8,12 @@
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js'
-import { matchesTriggerConditions } from '../lib/automation/triggerEvaluator'
-import type { TriggerEvent } from '../lib/automation/triggerEvaluator'
 // #region agent log
-// PROBE-3: triggerEvaluator de api/lib/ — confirmar que api/lib/ é resolvido pelo Vercel
-console.log('[trigger-event][7a137a] módulo carregado — triggerEvaluator de api/lib/automation/');
+// PROBE-4: triggerEvaluator como .js — require() de JS funciona sem compilação TS
+console.log('[trigger-event][7a137a] módulo carregado — importando triggerEvaluator.js');
 // #endregion
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { matchesTriggerConditions } = require('../lib/automation/triggerEvaluator')
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -26,8 +26,8 @@ function isUUID(value: unknown): value is string {
 
 export default async function handler(req: any, res: any) {
   // #region agent log
-  // PROBE-3: confirmar que api/lib/ funciona e matchesTriggerConditions é função
-  console.log('[trigger-event][7a137a] PROBE-3 invocado', { method: req.method })
+  // PROBE-4: confirmar que require() de .js em api/lib/ funciona em runtime Vercel
+  console.log('[trigger-event][7a137a] PROBE-4 invocado', { method: req.method })
   // #endregion
-  return res.status(200).json({ ok: true, probe: 'PROBE-3-api-lib', has_fn: typeof matchesTriggerConditions === 'function' })
+  return res.status(200).json({ ok: true, probe: 'PROBE-4-require-js', has_fn: typeof matchesTriggerConditions === 'function' })
 }
