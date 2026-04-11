@@ -44,7 +44,7 @@ export default async function handler(req: any, res: any) {
   } catch(importErr: any) {
     fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-engine-FAIL',message:'AutomationEngine import FALHOU',data:{error:String(importErr),stack:importErr?.stack?.split('\n').slice(0,5)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
     console.error('[trigger-event][7a137a] AutomationEngine import falhou:', importErr)
-    return res.status(500).json({ error: 'Erro interno ao carregar engine' })
+    return res.status(500).json({ debug_hypothesis:'H1', debug_error: String(importErr), debug_stack: (importErr as any)?.stack?.split('\n').slice(0,8) })
   }
   try {
     const evalMod = await import('../../src/services/automation/triggerEvaluator')
@@ -53,7 +53,7 @@ export default async function handler(req: any, res: any) {
   } catch(importErr: any) {
     fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-evaluator-FAIL',message:'triggerEvaluator import FALHOU',data:{error:String(importErr)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
     console.error('[trigger-event][7a137a] triggerEvaluator import falhou:', importErr)
-    return res.status(500).json({ error: 'Erro interno ao carregar evaluator' })
+    return res.status(500).json({ debug_hypothesis:'H2', debug_error: String(importErr), debug_stack: (importErr as any)?.stack?.split('\n').slice(0,8) })
   }
   // #endregion
 
