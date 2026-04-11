@@ -87,6 +87,13 @@ export type AgentRunContext = {
    * null = toolExecutor busca a mais recente aberta do lead.
    */
   locked_opportunity_id?: string | null
+  /**
+   * Item de catálogo em foco (produto ou serviço) — vem do ContextBuilder/matcher.
+   * Usado por tools como send_media; nunca confiar em IDs vindos do LLM.
+   */
+  item_of_interest?: Record<string, unknown> | null
+  /** model_config do agente (ex.: media_max_per_call) — somente backend. */
+  model_config?: Record<string, unknown>
 }
 
 export type ToolCallResult = {
@@ -558,6 +565,8 @@ export async function runAgentWithConfig(
         agent_id:              agent.id,
         locked_opportunity_id: ctx.locked_opportunity_id ?? null,
         allowed_tools:         agentAllowedTools,
+        item_of_interest:      ctx.item_of_interest ?? null,
+        model_config:          (agent.model_config as Record<string, unknown> | undefined) ?? ctx.model_config ?? {},
       }
 
       toolResults = await executeToolCalls(toolCalls as any, toolContext)

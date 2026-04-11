@@ -111,6 +111,8 @@ export async function executeAgent(output) {
     lead_id:              output.contact?.lead_id ? String(output.contact.lead_id) : null,
     conversation_id:      output.conversation?.id ?? null,
     locked_opportunity_id: output.locked_opportunity_id ?? null, // Phase 3: vem do flow state
+    item_of_interest:      output.item_of_interest ?? null,
+    model_config:          output.agent?.model_config ?? {},
   };
 
   console.log('🤖 [EXEC] 🚀 Chamando runner.runAgentWithConfig:', {

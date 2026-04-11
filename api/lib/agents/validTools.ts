@@ -21,4 +21,5 @@ export const VALID_TOOL_NAMES = new Set([
   'create_activity',
   'schedule_contact',
   'request_handoff',
+  'send_media',
 ])

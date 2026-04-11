@@ -78,6 +78,13 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description: 'Encaminha a conversa para um atendente da equipe quando solicitado ou quando necessário.',
     category:    'atendimento',
   },
+  {
+    key:         'send_media',
+    label:       'Enviar mídias do catálogo',
+    description:
+      'Envia imagens ou vídeos vinculados ao produto ou serviço em foco, conforme a intenção (apresentação, prova ou detalhe).',
+    category:    'atendimento',
+  },
 ]
 
 export const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {

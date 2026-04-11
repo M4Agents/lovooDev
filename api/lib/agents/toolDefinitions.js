@@ -263,6 +263,26 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+
+  {
+    type: 'function',
+    function: {
+      name: 'send_media',
+      description: 'Envia mídias relacionadas ao contexto atual',
+      parameters: {
+        type: 'object',
+        properties: {
+          intent: {
+            type: 'string',
+            enum: ['presentation', 'proof', 'detail'],
+            description:
+              'Intenção do envio: apresentação, prova social ou detalhamento (material de apoio).',
+          },
+        },
+        required: ['intent'],
+      },
+    },
+  },
 ]
 
 /**

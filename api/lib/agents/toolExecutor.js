@@ -31,6 +31,14 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { CRITICAL_TOOLS, FORBIDDEN_ARG_FIELDS } from './toolDefinitions.js'
+import { INTENT_TO_USAGE_ROLE } from './mediaConstants.js'
+import { mediaSelector } from './mediaSelector.js'
+
+const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
+const UAZAPI_TIMEOUT_MS = 30_000
+const UAZ_MAX_RETRIES = 1
+const SEND_MEDIA_COOLDOWN_MS = 10 * 60 * 1000
+const SEND_MEDIA_MIN_INTERVAL_MS = 60 * 1000
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -508,6 +516,497 @@ async function execScheduleContact(svc, args, ctx) {
   return { success: true, schedule_id: data.id, scheduled_at: scheduledDate.toISOString(), reason }
 }
 
+// ── send_media (mídias do catálogo) ───────────────────────────────────────────
+
+/**
+ * Resolve produto ou serviço do item em foco e valida ownership (company_id).
+ * @returns {Promise<{ item_type: 'product'|'service', item_id: string } | null>}
+ */
+async function resolveCatalogItemFocus(svc, companyId, item) {
+  if (!item?.id || !companyId) return null
+  const id = String(item.id)
+
+  const { data: p } = await svc
+    .from('products')
+    .select('id')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (p?.id) return { item_type: 'product', item_id: String(p.id) }
+
+  const { data: s } = await svc
+    .from('services')
+    .select('id')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (s?.id) return { item_type: 'service', item_id: String(s.id) }
+  return null
+}
+
+/**
+ * Agrega library_asset_id já enviados nesta conversa para o mesmo item (produto/serviço).
+ */
+async function fetchAlreadySentAssetIdsForItem(svc, { companyId, conversationId, itemType, itemId }) {
+  const { data: rows, error } = await svc
+    .from('agent_tool_executions')
+    .select('tool_output, success')
+    .eq('company_id', companyId)
+    .eq('conversation_id', conversationId)
+    .eq('tool_name', 'send_media')
+
+  if (error) {
+    console.error('[TOOL] send_media: falha ao listar envios anteriores:', error.message)
+    return []
+  }
+
+  const ids = []
+  for (const row of rows ?? []) {
+    if (!row.success) continue
+    const out = row.tool_output
+    if (!out || typeof out !== 'object') continue
+    // Logs antigos sem item_id: não entram na deduplicação por item (compatibilidade)
+    if (out.item_id == null || out.item_id === '') continue
+    if (out.item_type !== itemType || String(out.item_id) !== String(itemId)) continue
+    const list = out.sent_asset_ids
+    if (!Array.isArray(list)) continue
+    for (const a of list) {
+      if (typeof a === 'string' && a) ids.push(a)
+    }
+  }
+  return [...new Set(ids)]
+}
+
+/**
+ * Cooldown por conversa + item + intent: exige resposta inbound ou intervalo mínimo.
+ */
+async function checkSendMediaCooldown(svc, {
+  companyId,
+  conversationId,
+  itemType,
+  itemId,
+  intent,
+}) {
+  const { data: rows, error } = await svc
+    .from('agent_tool_executions')
+    .select('tool_output, success, executed_at')
+    .eq('company_id', companyId)
+    .eq('conversation_id', conversationId)
+    .eq('tool_name', 'send_media')
+    .eq('success', true)
+    .order('executed_at', { ascending: false })
+    .limit(40)
+
+  if (error) {
+    console.error('[TOOL] send_media cooldown query:', error.message)
+    return { blocked: false }
+  }
+
+  let lastMatch = null
+  for (const row of rows ?? []) {
+    const out = row.tool_output
+    if (!out || typeof out !== 'object') continue
+    if (out.item_id == null || out.item_id === '') continue
+    if (out.item_type !== itemType || String(out.item_id) !== String(itemId)) continue
+    if (out.intent !== intent) continue
+    lastMatch = row
+    break
+  }
+
+  if (!lastMatch) return { blocked: false }
+
+  const lastAt = new Date(lastMatch.executed_at).getTime()
+  const now = Date.now()
+  const elapsed = now - lastAt
+
+  const { data: inbound, error: inErr } = await svc
+    .from('chat_messages')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'inbound')
+    .gt('created_at', lastMatch.executed_at)
+    .limit(1)
+    .maybeSingle()
+
+  if (inErr) {
+    console.warn('[TOOL] send_media: inbound check:', inErr.message)
+  }
+
+  if (inbound?.id) return { blocked: false }
+
+  if (elapsed < SEND_MEDIA_MIN_INTERVAL_MS) return { blocked: true, reason: 'min_interval' }
+  if (elapsed < SEND_MEDIA_COOLDOWN_MS) return { blocked: true, reason: 'cooldown' }
+  return { blocked: false }
+}
+
+async function fetchConversationSendContext(svc, { conversation_id, company_id }) {
+  const { data, error } = await svc
+    .from('chat_conversations')
+    .select('instance_id, contact_phone, ai_state')
+    .eq('id', conversation_id)
+    .eq('company_id', company_id)
+    .single()
+
+  if (error || !data?.instance_id || !data?.contact_phone) {
+    return { ok: false, error: 'conversation_not_found' }
+  }
+  return {
+    ok: true,
+    instance_id: data.instance_id,
+    contact_phone: data.contact_phone,
+    ai_state: data.ai_state,
+  }
+}
+
+async function fetchProviderSendContext(svc, { instance_id, company_id }) {
+  const { data: instance, error } = await svc
+    .from('whatsapp_life_instances')
+    .select('provider_instance_id, provider_token')
+    .eq('id', instance_id)
+    .eq('company_id', company_id)
+    .single()
+
+  if (error || !instance?.provider_token) {
+    return { ok: false, error: 'provider_not_found' }
+  }
+  return { ok: true, api_key: instance.provider_token }
+}
+
+async function sendMediaViaUazapi({ api_key, phone, mediaUrl, mediaType }) {
+  const url = `${UAZAPI_BASE_URL}/send/media`
+  const type = mediaType === 'video' ? 'video' : 'image'
+  const payload = {
+    number: phone,
+    type,
+    file: mediaUrl,
+    text: '',
+    delay: 800,
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token: api_key,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(UAZAPI_TIMEOUT_MS),
+    })
+    const body = await response.json().catch(() => ({}))
+    if (response.ok) {
+      return {
+        ok: true,
+        uazapi_message_id: body.messageid ?? body.messageId ?? null,
+      }
+    }
+    return {
+      ok: false,
+      error_message: `HTTP ${response.status}: ${JSON.stringify(body).slice(0, 200)}`,
+    }
+  } catch (e) {
+    return { ok: false, error_message: e?.message ?? 'network_error' }
+  }
+}
+
+/**
+ * Primeira tentativa + até UAZ_MAX_RETRIES reenvios (timeout/rede/HTTP).
+ */
+async function sendMediaViaUazapiWithRetry(params) {
+  let last = { ok: false, error_message: 'unknown' }
+  for (let attempt = 0; attempt <= UAZ_MAX_RETRIES; attempt++) {
+    try {
+      const r = await sendMediaViaUazapi(params)
+      last = r
+      if (r.ok) return r
+    } catch (e) {
+      last = { ok: false, error_message: e?.message ?? 'send_media_uaz_exception' }
+    }
+  }
+  return last
+}
+
+/**
+ * Log estruturado (uma linha JSON) para diagnóstico — nunca omitir company_id / conversation_id em falhas.
+ */
+function logSendMediaStructured(level, payload) {
+  const line = JSON.stringify({ scope: 'send_media', ts: new Date().toISOString(), ...payload })
+  if (level === 'error') console.error(line)
+  else if (level === 'info') console.log(line)
+  else console.warn(line)
+}
+
+async function persistOutboundMediaMessage(svc, {
+  conversation_id,
+  company_id,
+  message_type,
+  content,
+  media_url,
+}) {
+  const { data, error } = await svc.rpc('chat_create_message', {
+    p_conversation_id: conversation_id,
+    p_company_id: company_id,
+    p_content: content ?? ' ',
+    p_message_type: message_type,
+    p_direction: 'outbound',
+    p_sent_by: null,
+    p_media_url: media_url,
+    p_is_ai_generated: true,
+    p_ai_run_id: null,
+    p_ai_block_index: null,
+    p_ai_block_type: 'media',
+  })
+
+  if (error) return { success: false, error: error.message }
+  if (!data?.success) return { success: false, error: data?.error ?? 'rpc_failed' }
+  return { success: true, message_id: data.message_id }
+}
+
+async function updateMessageStatusSafe(svc, { message_id, company_id, ok, uazapi_message_id, error_message }) {
+  if (!message_id) return
+  try {
+    await svc.rpc('update_message_status', {
+      p_message_id: message_id,
+      p_status: ok ? 'sent' : 'failed',
+      p_uazapi_message_id: uazapi_message_id ?? null,
+      p_error_message: ok ? null : error_message ?? null,
+    })
+  } catch (e) {
+    console.warn('[TOOL] send_media update_message_status:', e?.message)
+  }
+}
+
+async function execSendMedia(svc, args, ctx) {
+  const intent = args?.intent
+  if (typeof intent !== 'string' || !(intent in INTENT_TO_USAGE_ROLE)) {
+    return {
+      success: false,
+      executed: false,
+      reason: 'invalid_intent',
+      error: 'invalid_intent',
+      error_code: 'validation_error',
+    }
+  }
+
+  const item = ctx.item_of_interest ?? null
+  if (!item) {
+    return { success: false, error: 'no_item_context', error_code: 'validation_error' }
+  }
+
+  if (!ctx.conversation_id || String(ctx.conversation_id).trim() === '') {
+    return { success: false, error: 'no_conversation', error_code: 'validation_error' }
+  }
+
+  const companyId = ctx.company_id
+
+  const focus = await resolveCatalogItemFocus(svc, companyId, item)
+  if (!focus) {
+    return { success: false, error: 'no_item_context', error_code: 'validation_error' }
+  }
+
+  const itemType = focus.item_type
+  const itemId = focus.item_id
+
+  const hardLimit = 3
+  const modelConfig = ctx.model_config && typeof ctx.model_config === 'object' ? ctx.model_config : {}
+  const configured = typeof modelConfig.media_max_per_call === 'number'
+    ? modelConfig.media_max_per_call
+    : 1
+  const limit = Math.min(Math.max(1, configured), hardLimit)
+
+  const cd = await checkSendMediaCooldown(svc, {
+    companyId,
+    conversationId: ctx.conversation_id,
+    itemType,
+    itemId,
+    intent,
+  })
+  if (cd.blocked) {
+    return { success: false, error: 'cooldown_active', error_code: 'validation_error' }
+  }
+
+  const alreadySentAssetIds = await fetchAlreadySentAssetIdsForItem(svc, {
+    companyId,
+    conversationId: ctx.conversation_id,
+    itemType,
+    itemId,
+  })
+
+  const mediaList = await mediaSelector(svc, {
+    company_id: companyId,
+    item_type: itemType,
+    item_id: itemId,
+    intent,
+    alreadySentAssetIds,
+    limit,
+  })
+
+  if (!mediaList.length) {
+    return {
+      success: false,
+      executed: false,
+      reason: 'no_media_available',
+      error: 'no_media_available',
+      error_code: 'crm_action_failed',
+      item_type: itemType,
+      item_id: itemId,
+      intent,
+    }
+  }
+
+  const convCtx = await fetchConversationSendContext(svc, {
+    conversation_id: ctx.conversation_id,
+    company_id: companyId,
+  })
+  if (!convCtx.ok) {
+    return { success: false, error: 'conversation_not_found', error_code: 'crm_action_failed' }
+  }
+
+  if (convCtx.ai_state && convCtx.ai_state !== 'ai_active') {
+    return { success: false, error: 'ai_not_active', error_code: 'validation_error' }
+  }
+
+  const provCtx = await fetchProviderSendContext(svc, {
+    instance_id: convCtx.instance_id,
+    company_id: companyId,
+  })
+  if (!provCtx.ok) {
+    return { success: false, error: 'provider_not_found', error_code: 'crm_action_failed' }
+  }
+
+  const sentAssetIds = []
+  let successCount = 0
+  let failCount = 0
+  const total = mediaList.length
+
+  for (const m of mediaList) {
+    try {
+      const msgType = m.type === 'video' ? 'video' : 'image'
+      const persist = await persistOutboundMediaMessage(svc, {
+        conversation_id: ctx.conversation_id,
+        company_id: companyId,
+        message_type: msgType,
+        content: ' ',
+        media_url: m.url,
+      })
+
+      if (!persist.success || !persist.message_id) {
+        failCount++
+        logSendMediaStructured('error', {
+          company_id: companyId,
+          conversation_id: ctx.conversation_id,
+          item_type: itemType,
+          item_id: itemId,
+          intent,
+          sent_asset_ids: [...sentAssetIds],
+          phase: 'persist',
+          error: persist.error ?? 'persist_message_failed',
+          asset_id: m.asset_id,
+        })
+        continue
+      }
+
+      const sendResult = await sendMediaViaUazapiWithRetry({
+        api_key: provCtx.api_key,
+        phone: convCtx.contact_phone,
+        mediaUrl: m.url,
+        mediaType: m.type,
+      })
+
+      await updateMessageStatusSafe(svc, {
+        message_id: persist.message_id,
+        company_id: companyId,
+        ok: sendResult.ok,
+        uazapi_message_id: sendResult.uazapi_message_id,
+        error_message: sendResult.ok ? null : sendResult.error_message,
+      })
+
+      if (!sendResult.ok) {
+        failCount++
+        logSendMediaStructured('error', {
+          company_id: companyId,
+          conversation_id: ctx.conversation_id,
+          item_type: itemType,
+          item_id: itemId,
+          intent,
+          sent_asset_ids: [...sentAssetIds],
+          phase: 'uazapi',
+          error: sendResult.error_message ?? 'uazapi_send_failed',
+          asset_id: m.asset_id,
+        })
+        continue
+      }
+
+      successCount++
+      sentAssetIds.push(m.asset_id)
+    } catch (err) {
+      failCount++
+      logSendMediaStructured('error', {
+        company_id: companyId,
+        conversation_id: ctx.conversation_id,
+        item_type: itemType,
+        item_id: itemId,
+        intent,
+        sent_asset_ids: [...sentAssetIds],
+        phase: 'item_loop',
+        error: err?.message ?? String(err),
+        asset_id: m?.asset_id,
+      })
+    }
+  }
+
+  const baseResult = {
+    executed: true,
+    sent: successCount,
+    failed: failCount,
+    total,
+    item_type: itemType,
+    item_id: itemId,
+    intent,
+    sent_asset_ids: sentAssetIds,
+  }
+
+  if (successCount === 0) {
+    logSendMediaStructured('error', {
+      company_id: companyId,
+      conversation_id: ctx.conversation_id,
+      item_type: itemType,
+      item_id: itemId,
+      intent,
+      sent_asset_ids: [],
+      phase: 'summary',
+      error: 'all_media_send_failed',
+    })
+    return {
+      success: false,
+      error: 'all_media_send_failed',
+      error_code: 'crm_action_failed',
+      ...baseResult,
+    }
+  }
+
+  logSendMediaStructured('info', {
+    company_id: companyId,
+    conversation_id: ctx.conversation_id,
+    item_type: itemType,
+    item_id: itemId,
+    intent,
+    sent_asset_ids: sentAssetIds,
+    phase: 'summary',
+    sent: successCount,
+    failed: failCount,
+    total,
+  })
+
+  return {
+    success: true,
+    ...baseResult,
+  }
+}
+
 async function execRequestHandoff(svc, args, ctx) {
   const reason = String(args.reason ?? '').trim().slice(0, 300)
 
@@ -553,6 +1052,7 @@ const TOOL_HANDLERS = {
   update_opportunity: execUpdateOpportunity,
   schedule_contact:   execScheduleContact,
   request_handoff:    execRequestHandoff,
+  send_media:         execSendMedia,
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
