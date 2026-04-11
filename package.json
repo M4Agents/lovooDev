@@ -1,7 +1,7 @@
 {
   "name": "lovoo-crm",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Plataforma SaaS para análise comportamental de visitantes em landing pages",
   "homepage": "https://app.lovoocrm.com",
   "repository": {

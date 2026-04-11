@@ -45,9 +45,8 @@ export function AgentToolsSelector({ selectedTools, onChange, disabled = false }
     return acc
   }, {} as Record<ToolCategory, typeof TOOL_CATALOG>)
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'AgentToolsSelector.tsx:46',message:'TOOL_CATALOG runtime state',data:{total:TOOL_CATALOG.length,keys:TOOL_CATALOG.map(t=>t.key),atendimento:byCategory['atendimento']?.map(t=>t.key)},timestamp:Date.now(),hypothesisId:'A-B-C-D'})}).catch(()=>{});
-  // #endregion
+  // eslint-disable-next-line no-console
+  console.log('[AgentToolsSelector] tools:', TOOL_CATALOG.map(t => t.key))
 
   const hasNoneSelected = selectedTools.length === 0
 
