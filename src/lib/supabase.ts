@@ -7,8 +7,6 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 // Debug: Log configurações - FORÇADO PARA M4_DIGITAL
 console.log('🔧 [Supabase] FORCED M4_Digital URL:', supabaseUrl);
 console.log('🔧 [Supabase] FORCED M4_Digital Key (first 20 chars):', supabaseAnonKey.substring(0, 20) + '...');
-console.log('🔧 [Supabase] Environment URL override ignored:', import.meta.env.VITE_SUPABASE_URL);
-console.log('🔧 [Supabase] Environment KEY override ignored:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Not present');
 
 // Criar cliente com valores padrão se as variáveis não estiverem configuradas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
