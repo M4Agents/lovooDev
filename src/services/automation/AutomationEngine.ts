@@ -4,18 +4,32 @@
 // Objetivo: Motor de execução de fluxos de automação
 // IMPORTANTE: Implementação incremental e não-destrutiva
 // =====================================================
-import { notificationService } from './NotificationService'
-import { supabase } from '../../lib/supabase'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { AutomationFlow, AutomationExecution, AutomationLog, Node, Edge } from '../../types/automation'
+import { notificationService } from './NotificationService'
 import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
-// #region agent log
-fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'AutomationEngine.ts:12',message:'AutomationEngine importado — contexto frontend ou backend?',data:{isNode:typeof window==='undefined',hasImportMeta:typeof (globalThis as any).importMeta!=='undefined'},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{})
-// #endregion
 import { scheduleService } from './ScheduleService'
 import { webhookService } from './WebhookService'
 import { activityService } from './ActivityService'
 import { ChatApi } from '../chat/chatApi'
+
+// Client criado sob demanda para garantir uso de service_role no backend.
+// O Proxy intercepta o primeiro acesso a qualquer propriedade e inicializa o
+// client real. Isso evita crash de módulo em contexto Vite/browser (onde
+// process.env.SUPABASE_URL é undefined), mantendo todas as 35+ call sites inalteradas.
+let _engineSupabase: SupabaseClient | null = null
+const supabase = new Proxy({} as SupabaseClient, {
+  get(_: SupabaseClient, prop: string | symbol) {
+    if (!_engineSupabase) {
+      const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      _engineSupabase = createClient(url, key)
+    }
+    const val = (_engineSupabase as any)[prop as string]
+    return typeof val === 'function' ? val.bind(_engineSupabase) : val
+  }
+})
 
 interface ExecutionContext {
   executionId: string

@@ -16,9 +16,6 @@ function getSupabase(): SupabaseClient {
   if (!_supabase) {
     const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'ScheduleService.ts:getSupabase',message:'lazy createClient chamado',data:{hasUrl:!!url,hasKey:!!key,isBrowser:typeof window!=='undefined'},hypothesisId:'H1-fix',timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     _supabase = createClient(url, key)
   }
   return _supabase
