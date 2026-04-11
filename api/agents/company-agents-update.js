@@ -160,10 +160,8 @@ export default async function handler(req, res) {
     .maybeSingle();
 
   if (fetchErr) {
-    // #region agent log
-    console.error('[company-agents/update] fetchErr:', JSON.stringify({ code: fetchErr.code, message: fetchErr.message, details: fetchErr.details, hint: fetchErr.hint }));
-    return res.status(500).json({ success: false, error: 'Erro ao validar agente.', _debug: { step: 'fetch', code: fetchErr.code, message: fetchErr.message, hint: fetchErr.hint } });
-    // #endregion
+    console.error('[company-agents/update] Erro ao buscar agente:', fetchErr.message);
+    return res.status(500).json({ success: false, error: 'Erro ao validar agente.' });
   }
 
   if (!existing) {
@@ -291,10 +289,8 @@ export default async function handler(req, res) {
       .maybeSingle();
 
     if (updateErr) {
-      // #region agent log
-      console.error('[company-agents/update] updateErr structured:', JSON.stringify({ code: updateErr.code, message: updateErr.message, details: updateErr.details, hint: updateErr.hint }));
-      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.', _debug: { step: 'update_structured', code: updateErr.code, message: updateErr.message, hint: updateErr.hint, payload_keys: Object.keys(updatePayload) } });
-      // #endregion
+      console.error('[company-agents/update] Erro ao atualizar agente:', updateErr.message);
+      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.' });
     }
 
     if (!updatedData) {
@@ -325,10 +321,8 @@ export default async function handler(req, res) {
       .single();
 
     if (updateErr) {
-      // #region agent log
-      console.error('[company-agents/update] updateErr legacy:', JSON.stringify({ code: updateErr.code, message: updateErr.message, details: updateErr.details, hint: updateErr.hint }));
-      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.', _debug: { step: 'update_legacy', code: updateErr.code, message: updateErr.message, hint: updateErr.hint, payload_keys: Object.keys(updatePayload) } });
-      // #endregion
+      console.error('[company-agents/update] Erro ao atualizar agente:', updateErr.message);
+      return res.status(500).json({ success: false, error: 'Erro ao atualizar agente.' });
     }
 
     updatedAgent = updatedData;
