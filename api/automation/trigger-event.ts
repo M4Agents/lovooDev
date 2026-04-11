@@ -8,11 +8,11 @@
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js'
-import { matchesTriggerConditions } from '../../src/services/automation/triggerEvaluator'
-import type { TriggerEvent } from '../../src/services/automation/triggerEvaluator'
+import { matchesTriggerConditions } from '../lib/automation/triggerEvaluator'
+import type { TriggerEvent } from '../lib/automation/triggerEvaluator'
 // #region agent log
-// PROBE-2: só triggerEvaluator (puro) — sem AutomationEngine
-console.log('[trigger-event][7a137a] módulo carregado — com triggerEvaluator, SEM AutomationEngine');
+// PROBE-3: triggerEvaluator de api/lib/ — confirmar que api/lib/ é resolvido pelo Vercel
+console.log('[trigger-event][7a137a] módulo carregado — triggerEvaluator de api/lib/automation/');
 // #endregion
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -26,8 +26,8 @@ function isUUID(value: unknown): value is string {
 
 export default async function handler(req: any, res: any) {
   // #region agent log
-  // PROBE-2: testar se triggerEvaluator (puro) carrega sem crash
-  console.log('[trigger-event][7a137a] PROBE-2 invocado', { method: req.method })
+  // PROBE-3: confirmar que api/lib/ funciona e matchesTriggerConditions é função
+  console.log('[trigger-event][7a137a] PROBE-3 invocado', { method: req.method })
   // #endregion
-  return res.status(200).json({ ok: true, probe: 'PROBE-2-triggerEvaluator-only', has_fn: typeof matchesTriggerConditions === 'function' })
+  return res.status(200).json({ ok: true, probe: 'PROBE-3-api-lib', has_fn: typeof matchesTriggerConditions === 'function' })
 }
