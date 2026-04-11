@@ -9,6 +9,9 @@ import { supabase } from '../../lib/supabase'
 import type { AutomationFlow, AutomationExecution, AutomationLog, Node, Edge } from '../../types/automation'
 import { whatsAppService } from './WhatsAppService'
 import { crmService } from './CRMService'
+// #region agent log
+fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'AutomationEngine.ts:12',message:'AutomationEngine importado — contexto frontend ou backend?',data:{isNode:typeof window==='undefined',hasImportMeta:typeof (globalThis as any).importMeta!=='undefined'},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{})
+// #endregion
 import { scheduleService } from './ScheduleService'
 import { webhookService } from './WebhookService'
 import { activityService } from './ActivityService'

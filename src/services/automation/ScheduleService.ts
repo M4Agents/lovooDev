@@ -5,12 +5,24 @@
 // IMPORTANTE: Não altera sistema existente, apenas adiciona funcionalidade
 // =====================================================
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-)
+// Cliente criado sob demanda para evitar crash em contexto browser (Vite),
+// onde process.env.SUPABASE_URL é undefined. Os métodos desta classe são
+// chamados apenas em contexto backend (cron/serverless), nunca no browser.
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'ScheduleService.ts:getSupabase',message:'lazy createClient chamado',data:{hasUrl:!!url,hasKey:!!key,isBrowser:typeof window!=='undefined'},hypothesisId:'H1-fix',timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 interface CreateScheduleParams {
   executionId: string
@@ -55,7 +67,7 @@ export class ScheduleService {
         created_at: new Date().toISOString()
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('automation_schedules')
         .insert(schedule)
         .select()
@@ -64,7 +76,7 @@ export class ScheduleService {
       if (error) throw error
 
       // Atualizar execução para status 'paused'
-      await supabase
+      await getSupabase()
         .from('automation_executions')
         .update({
           status: 'paused',
@@ -90,7 +102,7 @@ export class ScheduleService {
     try {
       const now = new Date().toISOString()
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('automation_schedules')
         .select('*')
         .eq('status', 'pending')
@@ -112,7 +124,7 @@ export class ScheduleService {
    */
   async markAsProcessed(scheduleId: string): Promise<void> {
     try {
-      await supabase
+      await getSupabase()
         .from('automation_schedules')
         .update({
           status: 'processed',
@@ -129,7 +141,7 @@ export class ScheduleService {
    */
   async markAsFailed(scheduleId: string, errorMessage: string): Promise<void> {
     try {
-      await supabase
+      await getSupabase()
         .from('automation_schedules')
         .update({
           status: 'failed',
@@ -147,7 +159,7 @@ export class ScheduleService {
    */
   async cancelSchedule(scheduleId: string): Promise<void> {
     try {
-      await supabase
+      await getSupabase()
         .from('automation_schedules')
         .update({
           status: 'cancelled',
