@@ -24,9 +24,6 @@ const supabase = new Proxy({} as SupabaseClient, {
     if (!_engineSupabase) {
       const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-      // #region agent log
-      console.warn('[DEBUG-7a137a] [H1] AutomationEngine Proxy createClient', { urlPresent: !!url, urlLen: url.length, keyPresent: !!key, isBrowser: typeof window !== 'undefined', prop: String(prop), supabaseEnvKeys: typeof process !== 'undefined' ? Object.keys(process.env || {}).filter(k => k.includes('SUPABASE')) : [] })
-      // #endregion
       _engineSupabase = createClient(url, key)
     }
     const val = (_engineSupabase as any)[prop as string]
@@ -110,9 +107,6 @@ export class AutomationEngine {
       return data
     } catch (error) {
       console.error('Erro ao buscar fluxo:', error)
-      // #region agent log
-      console.warn('[DEBUG-7a137a] [H3] getFlow catch — error silenced here', { errorMsg: error instanceof Error ? error.message : String(error), isBrowser: typeof window !== 'undefined' })
-      // #endregion
       return null
     }
   }

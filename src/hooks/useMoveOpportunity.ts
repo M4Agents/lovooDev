@@ -16,7 +16,7 @@
 
 import { useCallback, useState } from 'react'
 import { funnelApi } from '../services/funnelApi'
-import { triggerManager } from '../services/automation/TriggerManager'
+import { supabase } from '../lib/supabase'
 import type { MoveOpportunityForm } from '../types/sales-funnel'
 
 export interface MoveOpportunityParams extends MoveOpportunityForm {
@@ -50,25 +50,26 @@ export function useMoveOpportunity(
         position_in_stage: params.position_in_stage
       })
 
-      // Disparar automação apenas quando a etapa realmente muda
+      // Disparar automação no backend apenas quando a etapa realmente muda
       if (companyId && params.from_stage_id !== params.to_stage_id) {
-        triggerManager
-          .onOpportunityStageChanged(
-            companyId,
-            params.opportunity_id,
-            params.from_stage_id,
-            params.to_stage_id,
-            {
-              opportunity_id:  params.opportunity_id,
-              funnel_id:       params.funnel_id,
-              lead_id:         params.lead_id,
-              conversation_id: params.conversationId,
-              ...(params.opportunityData ?? {})
-            }
-          )
-          .catch(automationError => {
-            console.error('Automation trigger failed (non-blocking):', automationError)
-          })
+        supabase.auth.getSession().then(({ data }) => {
+          const token = data.session?.access_token
+          if (!token) return
+          fetch('/api/automation/trigger-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              event_type:     'opportunity.stage_changed',
+              company_id:     companyId,
+              opportunity_id: params.opportunity_id,
+              from_stage_id:  params.from_stage_id,
+              to_stage_id:    params.to_stage_id,
+              funnel_id:      params.funnel_id ?? null,
+              lead_id:        params.lead_id ?? null,
+              conversation_id: params.conversationId ?? null
+            })
+          }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+        })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao mover oportunidade'

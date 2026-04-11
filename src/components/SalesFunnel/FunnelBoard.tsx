@@ -27,7 +27,6 @@ import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
-import { triggerManager } from '../../services/automation/TriggerManager'
 import { getCompanyUsers } from '../../services/userApi'
 import type {
   LeadPositionFilter,
@@ -481,15 +480,26 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     recentlyMovedRef.current.set(opportunityId, Date.now())
     setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
 
-    // Disparar automação (fire-and-forget)
+    // Disparar automação no backend (fire-and-forget)
     if (companyId && fromStageId !== toStageId) {
-      triggerManager.onOpportunityStageChanged(
-        companyId,
-        opportunityId,
-        fromStageId,
-        toStageId,
-        { opportunity_id: opportunityId, funnel_id: funnelId, lead_id: leadId, conversation_id: conversationId, ...data?.[0] }
-      ).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token) return
+        fetch('/api/automation/trigger-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type:     'opportunity.stage_changed',
+            company_id:     companyId,
+            opportunity_id: opportunityId,
+            from_stage_id:  fromStageId,
+            to_stage_id:    toStageId,
+            funnel_id:      funnelId ?? null,
+            lead_id:        leadId ?? null,
+            conversation_id: conversationId ?? null
+          })
+        }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+      })
     }
 
     refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
@@ -519,13 +529,24 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
 
     if (companyId && fromStageId !== toStageId) {
-      triggerManager.onOpportunityStageChanged(
-        companyId,
-        opportunityId,
-        fromStageId,
-        toStageId,
-        { opportunity_id: opportunityId, funnel_id: funnelId, lead_id: leadId, conversation_id: conversationId, ...data?.[0] }
-      ).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token) return
+        fetch('/api/automation/trigger-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type:     'opportunity.stage_changed',
+            company_id:     companyId,
+            opportunity_id: opportunityId,
+            from_stage_id:  fromStageId,
+            to_stage_id:    toStageId,
+            funnel_id:      funnelId ?? null,
+            lead_id:        leadId ?? null,
+            conversation_id: conversationId ?? null
+          })
+        }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+      })
     }
 
     refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))

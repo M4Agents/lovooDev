@@ -7,26 +7,11 @@
 
 import { supabase } from '../../lib/supabase'
 import { automationEngine } from './AutomationEngine'
+import { matchesTriggerConditions } from './triggerEvaluator'
 import type { AutomationFlow } from '../../types/automation'
+import type { TriggerType, TriggerEvent } from './triggerEvaluator'
 
-export type TriggerType =
-  | 'lead.created'
-  | 'message.received'
-  | 'opportunity.created'
-  | 'opportunity.stage_changed'
-  | 'opportunity.won'
-  | 'opportunity.lost'
-  | 'opportunity.owner_assigned'
-  | 'opportunity.owner_removed'
-  | 'tag.added'
-  | 'tag.removed'
-  | 'schedule.time'
-
-interface TriggerEvent {
-  type: TriggerType
-  companyId: string
-  data: Record<string, any>
-}
+export type { TriggerType }
 
 export class TriggerManager {
   private activeFlows: Map<string, AutomationFlow[]> = new Map()
@@ -92,9 +77,6 @@ export class TriggerManager {
   async trigger(event: TriggerEvent): Promise<void> {
     try {
       console.log('🎯 Trigger disparado:', event.type, 'Empresa:', event.companyId)
-      // #region agent log
-      console.warn('[DEBUG-7a137a] [H2] TriggerManager.trigger() called', { eventType: event.type, companyId: event.companyId, isBrowser: typeof window !== 'undefined' })
-      // #endregion
 
       // Buscar fluxos que escutam este trigger
       const flows = await this.findMatchingFlows(event)
@@ -141,9 +123,7 @@ export class TriggerManager {
       if (!flows || flows.length === 0) return []
 
       // Filtrar fluxos que correspondem ao tipo de trigger e às condições específicas
-      const matchingFlows = flows.filter(flow => {
-        return this.matchesTriggerConditions(flow, event)
-      })
+      const matchingFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
 
       console.log(`🔍 Encontrados ${matchingFlows.length} de ${flows.length} fluxos que correspondem às condições`)
 
@@ -157,255 +137,6 @@ export class TriggerManager {
   /**
    * Valida se o fluxo corresponde às condições do trigger
    */
-    private matchesTriggerConditions(flow: AutomationFlow, event: TriggerEvent): boolean {
-    // Buscar configuração do trigger no StartNode
-    const startNode = flow.nodes.find((node: any) => node.type === 'start')
-    if (!startNode) return false
-    
-    const triggers = startNode.data?.triggers || []
-    if (triggers.length === 0) return false
-    
-    // Obter operador lógico (padrão: OR para compatibilidade)
-    const operator = startNode.data?.triggerOperator || flow.trigger_operator || 'OR'
-    
-    // Filtrar apenas triggers habilitados do tipo do evento
-    const relevantTriggers = triggers.filter((t: any) => t.enabled && t.type === event.type)
-    if (relevantTriggers.length === 0) return false
-    
-    // Avaliar cada trigger relevante
-    const results = relevantTriggers.map((trigger: any) => {
-      switch (event.type) {
-        case 'opportunity.stage_changed':
-          return this.matchesOpportunityStageChanged(trigger, event.data)
-        
-        case 'opportunity.created':
-          return this.matchesOpportunityCreated(trigger, event.data)
-        
-        case 'opportunity.won':
-          return this.matchesOpportunityWon(trigger, event.data)
-        
-        case 'opportunity.lost':
-          return this.matchesOpportunityLost(trigger, event.data)
-        
-        case 'opportunity.owner_assigned':
-        case 'opportunity.owner_removed':
-          return this.matchesOpportunityOwner(trigger, event.data)
-        
-        case 'tag.added':
-        case 'tag.removed':
-          return this.matchesTag(trigger, event.data)
-        
-        case 'message.received':
-          return this.matchesMessageReceived(trigger, event.data)
-        
-        default:
-          // Triggers sem validação específica (lead.created, etc)
-          return true
-      }
-    })
-    
-    // Aplicar operador lógico
-    if (operator === 'AND') {
-      // Todos os triggers devem corresponder
-      const allMatch = results.every((r: boolean) => r === true)
-      console.log(`🔗 Operador AND: ${allMatch ? '✅ Todos correspondem' : '❌ Nem todos correspondem'}`, {
-        flowId: flow.id,
-        flowName: flow.name,
-        totalTriggers: relevantTriggers.length,
-        results
-      })
-      return allMatch
-    } else {
-      // Pelo menos um trigger deve corresponder (OR - comportamento atual)
-      const anyMatch = results.some((r: boolean) => r === true)
-      console.log(`🔗 Operador OR: ${anyMatch ? '✅ Pelo menos um corresponde' : '❌ Nenhum corresponde'}`, {
-        flowId: flow.id,
-        flowName: flow.name,
-        totalTriggers: relevantTriggers.length,
-        results
-      })
-      return anyMatch
-    }
-  }
-
-  /**
-   * Valida condições para opportunity.stage_changed
-   */
-  private matchesOpportunityStageChanged(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar funil (se especificado)
-    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
-      console.log('❌ Funil não corresponde:', config.funnelId, '!=', eventData.opportunity?.funnel_id)
-      return false
-    }
-    
-    // Validar etapa de destino (obrigatório)
-    if (config.toStageId && config.toStageId !== eventData.new_stage) {
-      console.log('❌ Etapa destino não corresponde:', config.toStageId, '!=', eventData.new_stage)
-      return false
-    }
-    
-    // Validar etapa de origem (se especificado)
-    if (config.fromStageId && config.fromStageId !== eventData.old_stage) {
-      console.log('❌ Etapa origem não corresponde:', config.fromStageId, '!=', eventData.old_stage)
-      return false
-    }
-    
-    // Validar valor mínimo (se especificado)
-    if (config.minValue && eventData.opportunity?.value < config.minValue) {
-      console.log('❌ Valor abaixo do mínimo:', eventData.opportunity?.value, '<', config.minValue)
-      return false
-    }
-    
-    // Validar valor máximo (se especificado)
-    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
-      console.log('❌ Valor acima do máximo:', eventData.opportunity?.value, '>', config.maxValue)
-      return false
-    }
-    
-    console.log('✅ Condições de opportunity.stage_changed correspondem')
-    return true
-  }
-
-  /**
-   * Valida condições para opportunity.created
-   */
-  private matchesOpportunityCreated(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar funil (se especificado)
-    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
-      return false
-    }
-    
-    // Validar etapa inicial (se especificado)
-    if (config.initialStageId && config.initialStageId !== eventData.opportunity?.stage_id) {
-      return false
-    }
-    
-    // Validar valor mínimo (se especificado)
-    if (config.minValue && eventData.opportunity?.value < config.minValue) {
-      return false
-    }
-    
-    // Validar valor máximo (se especificado)
-    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
-      return false
-    }
-    
-    return true
-  }
-
-  /**
-   * Valida condições para message.received
-   */
-  private matchesMessageReceived(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar instância WhatsApp (se especificada)
-    if (config.instanceId && config.instanceId !== eventData.instance_id) {
-      console.log('❌ Instância não corresponde:', {
-        configured: config.instanceId,
-        received: eventData.instance_id,
-        configuredName: config.instanceName
-      })
-      return false
-    }
-    
-    console.log('✅ Trigger message.received corresponde', {
-      instanceId: eventData.instance_id,
-      hasFilter: !!config.instanceId
-    })
-    return true
-  }
-
-  /**
-   * Valida condições para opportunity.won
-   */
-  private matchesOpportunityWon(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar funil (se especificado)
-    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
-      return false
-    }
-    
-    // Validar valor mínimo (se especificado)
-    if (config.minValue && eventData.opportunity?.value < config.minValue) {
-      return false
-    }
-    
-    // Validar valor máximo (se especificado)
-    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
-      return false
-    }
-    
-    return true
-  }
-
-  /**
-   * Valida condições para opportunity.lost
-   */
-  private matchesOpportunityLost(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar funil (se especificado)
-    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
-      return false
-    }
-    
-    // Validar motivo da perda (se especificado)
-    if (config.lostReason && config.lostReason !== eventData.lost_reason) {
-      return false
-    }
-    
-    // Validar valor mínimo (se especificado)
-    if (config.minValue && eventData.opportunity?.value < config.minValue) {
-      return false
-    }
-    
-    // Validar valor máximo (se especificado)
-    if (config.maxValue && eventData.opportunity?.value > config.maxValue) {
-      return false
-    }
-    
-    return true
-  }
-
-  /**
-   * Valida condições para opportunity.owner_assigned/removed
-   */
-  private matchesOpportunityOwner(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar funil (se especificado)
-    if (config.funnelId && config.funnelId !== eventData.opportunity?.funnel_id) {
-      return false
-    }
-    
-    // Validar vendedor específico (se especificado)
-    if (config.ownerId && config.ownerId !== eventData.owner_id) {
-      return false
-    }
-    
-    return true
-  }
-
-  /**
-   * Valida condições para tag.added/removed
-   */
-  private matchesTag(trigger: any, eventData: any): boolean {
-    const config = trigger.config || {}
-    
-    // Validar tag específica (se especificado)
-    if (config.tagId && config.tagId !== eventData.tag_id) {
-      return false
-    }
-    
-    return true
-  }
-
   /**
    * Helpers para disparar triggers específicos
    */
