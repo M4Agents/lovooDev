@@ -94,6 +94,13 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
     isEdit && Array.isArray(agent?.allowed_tools) ? agent!.allowed_tools : []
   )
 
+  // Configuração de mídias: quantidade máxima por chamada à tool send_media.
+  // Lido de model_config.media_max_per_call ao editar; padrão 1.
+  const [mediaMaxPerCall, setMediaMaxPerCall] = useState<number>(() => {
+    const v = agent?.model_config?.media_max_per_call
+    return typeof v === 'number' && v >= 1 && v <= 3 ? v : 1
+  })
+
   // Estado de prompt — modo legacy
   const [legacyPrompt, setLegacyPrompt] = useState<string>(
     (!isStructured && agent) ? agent.prompt : ''
@@ -143,6 +150,7 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
           allowed_tools:  allowedTools,
+          model_config:   { ...agent.model_config, media_max_per_call: mediaMaxPerCall },
         }
 
         if (isStructured) {
@@ -163,6 +171,7 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
           allowed_tools:  allowedTools,
+          model_config:   { media_max_per_call: mediaMaxPerCall },
         }
 
         if (isStructured) {
@@ -322,6 +331,29 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
         onChange={setAllowedTools}
         disabled={saving}
       />
+
+      {/* Mídias por envio — visível somente quando send_media está habilitado */}
+      {allowedTools.includes('send_media') && (
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Mídias por envio
+          </label>
+          <select
+            value={mediaMaxPerCall}
+            onChange={e => setMediaMaxPerCall(Number(e.target.value))}
+            disabled={saving}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          >
+            <option value={1}>1 mídia por envio</option>
+            <option value={2}>2 mídias por envio</option>
+            <option value={3}>3 mídias por envio</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Quantidade máxima de imagens ou vídeos enviados em cada acionamento de mídia.
+          </p>
+        </div>
+      )}
 
       {/* Status */}
       <div className="flex items-center gap-2">
