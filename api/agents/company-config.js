@@ -76,6 +76,14 @@ export default async function handler(req, res) {
   // ── Validar caller ────────────────────────────────────────────────────────
 
   const auth = await validateCaller(req, company_id);
+
+  // #region agent log
+  console.log('[DEBUG-7a137a][company-config] auth result:', JSON.stringify({
+    ok: auth.ok, status: auth.status, error: auth.error,
+    callerId: auth.callerId, role: auth.role, requestedCompanyId: company_id
+  }));
+  // #endregion
+
   if (!auth.ok) {
     return res.status(auth.status).json({ success: false, error: auth.error });
   }
@@ -99,6 +107,14 @@ export default async function handler(req, res) {
     `)
     .eq('company_id', company_id)
     .order('created_at', { ascending: true });
+
+  // #region agent log
+  console.log('[DEBUG-7a137a][company-config] assignments query result:', JSON.stringify({
+    company_id, assignmentsCount: assignments?.length ?? 0,
+    assignErr: assignErr?.message ?? null,
+    firstAssignment: assignments?.[0] ? { id: assignments[0].id, channel: assignments[0].channel, is_active: assignments[0].is_active, agent_id: assignments[0].agent_id } : null
+  }));
+  // #endregion
 
   if (assignErr) {
     console.error('[company-config] Erro ao buscar assignments:', assignErr.message);

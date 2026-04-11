@@ -367,12 +367,21 @@ export const CompanyAgentConfigPanel: React.FC<Props> = ({ companyId }) => {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-start',message:'load() called',data:{companyId},hypothesisId:'A,D,E',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     try {
       const config = await companyAgentConfigApi.getConfig(companyId)
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-success',message:'getConfig returned',data:{companyId,assignmentsCount:config.assignments.length,routingRulesCount:config.routing_rules_fallback.length,availableAgentsCount:config.available_agents.length,firstAssignment:config.assignments[0]??null},hypothesisId:'B,C,D',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setAssignments(config.assignments)
       setRoutingRules(config.routing_rules_fallback)
       setAvailableAgents(config.available_agents)
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'CompanyAgentConfigPanel.tsx:load-error',message:'getConfig threw error',data:{companyId,error:err instanceof Error?err.message:String(err)},hypothesisId:'B',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setLoadError(err instanceof Error ? err.message : 'Erro ao carregar configurações')
     } finally {
       setLoading(false)
