@@ -92,6 +92,9 @@ export class TriggerManager {
   async trigger(event: TriggerEvent): Promise<void> {
     try {
       console.log('🎯 Trigger disparado:', event.type, 'Empresa:', event.companyId)
+      // #region agent log
+      console.warn('[DEBUG-7a137a] [H2] TriggerManager.trigger() called', { eventType: event.type, companyId: event.companyId, isBrowser: typeof window !== 'undefined' })
+      // #endregion
 
       // Buscar fluxos que escutam este trigger
       const flows = await this.findMatchingFlows(event)
