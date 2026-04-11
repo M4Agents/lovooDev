@@ -786,8 +786,11 @@ export class AutomationEngine {
     opportunityId: context.opportunityId
   } : {}
   
-  this.executeFlow(targetFlowId, triggerData, context.companyId)
-  return { executed: true, action: 'trigger_automation', targetFlowId }
+  const childExecutionId = await this.executeFlow(targetFlowId, triggerData, context.companyId)
+  if (!childExecutionId) {
+    throw new Error(`Falha ao iniciar fluxo filho: ${targetFlowId}`)
+  }
+  return { executed: true, action: 'trigger_automation', targetFlowId, childExecutionId }
 
         default:
           console.warn('⚠️ Tipo de ação desconhecido:', actionType)
