@@ -8,9 +8,15 @@
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js'
-import { automationEngine } from '../../src/services/automation/AutomationEngine'
-import { matchesTriggerConditions } from '../../src/services/automation/triggerEvaluator'
+// AutomationEngine e triggerEvaluator convertidos para dynamic import
+// para capturar erros de module-load em runtime (debug session 7a137a)
 import type { TriggerEvent } from '../../src/services/automation/triggerEvaluator'
+
+// #region agent log
+// Prova que o módulo carregou sem crash nos imports estáticos (H1/H2 baseline)
+console.log('[trigger-event][7a137a] módulo carregado OK — imports estáticos resolvidos');
+fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:module',message:'módulo carregado',data:{env_url_present:!!process.env.SUPABASE_URL,env_key_present:!!process.env.SUPABASE_SERVICE_ROLE_KEY},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+// #endregion
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -22,6 +28,35 @@ function isUUID(value: unknown): value is string {
 }
 
 export default async function handler(req: any, res: any) {
+  // #region agent log
+  // H3/H4: handler foi invocado (módulo e imports estáticos carregaram com sucesso)
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:handler-entry',message:'handler invocado',data:{method:req.method},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
+
+  // #region agent log
+  // H1/H2: testar import dinâmico de AutomationEngine (cadeia pesada de dependências)
+  let automationEngine: any
+  let matchesTriggerConditions: any
+  try {
+    const engineMod = await import('../../src/services/automation/AutomationEngine')
+    automationEngine = engineMod.automationEngine
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-engine',message:'AutomationEngine importado OK',data:{has_engine:!!automationEngine},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  } catch(importErr: any) {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-engine-FAIL',message:'AutomationEngine import FALHOU',data:{error:String(importErr),stack:importErr?.stack?.split('\n').slice(0,5)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    console.error('[trigger-event][7a137a] AutomationEngine import falhou:', importErr)
+    return res.status(500).json({ error: 'Erro interno ao carregar engine' })
+  }
+  try {
+    const evalMod = await import('../../src/services/automation/triggerEvaluator')
+    matchesTriggerConditions = evalMod.matchesTriggerConditions
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-evaluator',message:'triggerEvaluator importado OK',data:{has_fn:!!matchesTriggerConditions},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+  } catch(importErr: any) {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'trigger-event.ts:import-evaluator-FAIL',message:'triggerEvaluator import FALHOU',data:{error:String(importErr)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    console.error('[trigger-event][7a137a] triggerEvaluator import falhou:', importErr)
+    return res.status(500).json({ error: 'Erro interno ao carregar evaluator' })
+  }
+  // #endregion
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
