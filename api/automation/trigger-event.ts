@@ -14,6 +14,8 @@ import { createClient } from '@supabase/supabase-js'
 import { matchesTriggerConditions } from '../lib/automation/triggerEvaluator.js'
 // @ts-ignore — arquivo JS ESM em api/lib/automation
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
+// @ts-ignore — arquivo JS ESM em api/lib/automation
+import { createExecution, processFlowAsync } from '../lib/automation/executor.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed'] as const
@@ -94,10 +96,10 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // 5. Buscar fluxos ativos da empresa
+  // 5. Buscar fluxos ativos da empresa (incluindo edges para travessia do grafo)
   const { data: flows, error: flowsErr } = await supabaseAdmin
     .from('automation_flows')
-    .select('id, name, nodes, trigger_operator')
+    .select('id, name, nodes, edges, trigger_operator')
     .eq('company_id', company_id)
     .eq('is_active', true)
 
@@ -107,7 +109,22 @@ export default async function handler(req: any, res: any) {
 
   // 6. Filtrar fluxos que correspondem ao evento
   const event = { type: event_type as AllowedEventType, data }
-  const matched = (flows ?? []).filter((flow: any) => matchesTriggerConditions(flow, event))
+  const matchedFlows = (flows ?? []).filter((flow: any) => matchesTriggerConditions(flow, event))
 
-  return res.status(200).json({ success: true, matched: matched.length })
+  if (matchedFlows.length === 0) {
+    return res.status(200).json({ success: true, matched: 0, executions: [] })
+  }
+
+  // 7. Criar execução e processar cada flow ativado
+  const executionIds: string[] = []
+
+  for (const flow of matchedFlows) {
+    const execution = await createExecution(flow, data, company_id, supabaseAdmin)
+    if (!execution) continue
+
+    executionIds.push(execution.id)
+    await processFlowAsync(flow, execution, supabaseAdmin)
+  }
+
+  return res.status(200).json({ success: true, matched: matchedFlows.length, executions: executionIds })
 }
