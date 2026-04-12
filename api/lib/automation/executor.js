@@ -141,13 +141,14 @@ function getNextNodes(currentNode, allNodes, allEdges, result) {
 /**
  * Resolve a ação de um nó.
  *
- * Etapa 1 — suportados:
+ * Suportados:
  *   start / trigger → { triggered: true }
  *   end             → { ended: true }
+ *   message         → envio WhatsApp via whatsappSender.js
  *
  * Demais tipos: { skipped: true, reason } — sem crash.
  */
-async function executeNodeAction(node, context) {
+async function executeNodeAction(node, context, supabase) {
   switch (node.type) {
     case 'trigger':
     case 'start':
@@ -155,6 +156,11 @@ async function executeNodeAction(node, context) {
 
     case 'end':
       return { ended: true }
+
+    case 'message': {
+      const { sendMessageNode } = await import('./whatsappSender.js')
+      return await sendMessageNode(node, context, supabase)
+    }
 
     default:
       console.log(`[executor] nó não suportado nesta etapa: ${node.type} (id: ${node.id}) — skipped`)
@@ -168,7 +174,7 @@ async function processNode(node, allNodes, allEdges, context, supabase) {
   await createLog(context, node, 'started', null, null, supabase)
 
   try {
-    const result = await executeNodeAction(node, context)
+    const result = await executeNodeAction(node, context, supabase)
 
     // Nó de fim: registrar e parar a recursão
     if (result?.ended) {
