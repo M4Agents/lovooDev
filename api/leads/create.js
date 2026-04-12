@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -130,6 +131,10 @@ export default async function handler(req, res) {
         }
       }
     }
+
+    // Disparar automação backend (fire-and-forget — nunca bloqueia a resposta)
+    dispatchLeadCreatedTrigger({ companyId: company.id, leadId: lead.id, source: 'api' })
+      .catch(err => console.error('[api/leads/create] automation trigger failed:', err))
 
     // Retornar sucesso
     res.status(201).json({
