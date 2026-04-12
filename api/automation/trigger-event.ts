@@ -12,10 +12,8 @@
 import { createClient } from '@supabase/supabase-js'
 // @ts-ignore — arquivo JS ESM em api/lib/automation
 import { matchesTriggerConditions } from '../lib/automation/triggerEvaluator.js'
-
-// #region agent log
-console.log('[trigger-event][7a137a] módulo inicializado — triggerEvaluator estático OK')
-// #endregion
+// @ts-ignore — arquivo JS ESM em api/lib/automation
+import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed'] as const
@@ -65,19 +63,7 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Campo data é obrigatório e deve ser um objeto' })
   }
 
-  // #region agent log
-  // H-A: verificar se supabaseAdmin.js carrega corretamente em runtime
-  let getSupabaseAdminFn: any
-  try {
-    const mod = await import('../lib/automation/supabaseAdmin.js')
-    getSupabaseAdminFn = mod.getSupabaseAdmin
-    console.log('[trigger-event][7a137a] supabaseAdmin.js carregou OK', { has_fn: typeof getSupabaseAdminFn })
-  } catch (err: any) {
-    console.log('[trigger-event][7a137a] supabaseAdmin.js FALHOU', { error: err?.message, code: err?.code })
-    return res.status(200).json({ probe: 'FASE-1-diag', supabase_admin_error: err?.message ?? String(err), code: err?.code })
-  }
-  const supabaseAdmin = getSupabaseAdminFn()
-  // #endregion
+  const supabaseAdmin = getSupabaseAdmin()
 
   // 3. Validar membership do usuário na empresa
   const { data: membership } = await supabaseAdmin
