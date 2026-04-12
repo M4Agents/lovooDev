@@ -18,11 +18,7 @@ const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 // ---------------------------------------------------------------------------
 
 async function resolveLead(opportunityId, companyId, supabase) {
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:resolveLead-entry',message:'resolveLead chamado',data:{opportunityId,companyId,hasSupabase:typeof supabase,hasFrom:typeof supabase?.from},timestamp:Date.now(),hypothesisId:'H2,H4'})}).catch(()=>{});
-  // #endregion
-
-  if (!opportunityId) return null
+  if (!opportunityId) return { lead: null, debug: 'opportunityId ausente' }
 
   const { data: opp, error: oppError } = await supabase
     .from('opportunities')
@@ -31,18 +27,16 @@ async function resolveLead(opportunityId, companyId, supabase) {
     .eq('company_id', companyId)
     .maybeSingle()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:opp-query-result',message:'resultado query opportunities',data:{opp,oppError:oppError?.message,oppCode:oppError?.code},timestamp:Date.now(),hypothesisId:'H1,H2,H3,H5'})}).catch(()=>{});
-  // #endregion
-
   if (oppError) {
-    console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
-    return null
+    return { lead: null, debug: `opp-error: ${oppError.message} [${oppError.code}]` }
   }
 
-  if (!opp?.lead_id) {
-    console.log(`[whatsappSender] oportunidade ${opportunityId} sem lead_id — opp:`, JSON.stringify(opp))
-    return null
+  if (!opp) {
+    return { lead: null, debug: `opp-null: nenhuma linha encontrada (oppId=${opportunityId} companyId=${companyId})` }
+  }
+
+  if (!opp.lead_id) {
+    return { lead: null, debug: `opp-sem-lead_id: opp=${JSON.stringify(opp)}` }
   }
 
   const { data: lead, error: leadError } = await supabase
@@ -51,16 +45,19 @@ async function resolveLead(opportunityId, companyId, supabase) {
     .eq('id', opp.lead_id)
     .maybeSingle()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:lead-query-result',message:'resultado query leads',data:{leadId:opp.lead_id,lead:{id:lead?.id,phone:lead?.phone,hasPhone:!!lead?.phone},leadError:leadError?.message,leadCode:leadError?.code},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
-  // #endregion
-
   if (leadError) {
-    console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
-    return null
+    return { lead: null, debug: `lead-error: ${leadError.message} [${leadError.code}] (lead_id=${opp.lead_id})` }
   }
 
-  return lead || null
+  if (!lead) {
+    return { lead: null, debug: `lead-null: nenhuma linha (lead_id=${opp.lead_id})` }
+  }
+
+  if (!lead.phone) {
+    return { lead: null, debug: `lead-sem-phone: id=${lead.id} name=${lead.name}` }
+  }
+
+  return { lead, debug: 'ok' }
 }
 
 async function resolveConversation(phone, leadName, instanceId, companyId, supabase) {
@@ -251,11 +248,11 @@ export async function sendMessageNode(node, context, supabase) {
     : messageType === 'audio' ? 'audio' : 'text'
 
   // 1. Resolver lead via opportunity_id
-  const lead = await resolveLead(context.opportunityId, context.companyId, supabase)
+  const { lead, debug: leadDebug } = await resolveLead(context.opportunityId, context.companyId, supabase)
   if (!lead?.phone) {
     return {
       skipped: true,
-      reason: `Lead não encontrado ou sem telefone (opportunity_id: ${context.opportunityId})`,
+      reason: `Lead não encontrado [debug: ${leadDebug}]`,
     }
   }
 
