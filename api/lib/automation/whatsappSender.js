@@ -18,6 +18,10 @@ const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 // ---------------------------------------------------------------------------
 
 async function resolveLead(opportunityId, companyId, supabase) {
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:resolveLead-entry',message:'resolveLead chamado',data:{opportunityId,companyId,hasSupabase:typeof supabase,hasFrom:typeof supabase?.from},timestamp:Date.now(),hypothesisId:'H2,H4'})}).catch(()=>{});
+  // #endregion
+
   if (!opportunityId) return null
 
   const { data: opp, error: oppError } = await supabase
@@ -26,6 +30,10 @@ async function resolveLead(opportunityId, companyId, supabase) {
     .eq('id', opportunityId)
     .eq('company_id', companyId)
     .maybeSingle()
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:opp-query-result',message:'resultado query opportunities',data:{opp,oppError:oppError?.message,oppCode:oppError?.code},timestamp:Date.now(),hypothesisId:'H1,H2,H3,H5'})}).catch(()=>{});
+  // #endregion
 
   if (oppError) {
     console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
@@ -37,20 +45,20 @@ async function resolveLead(opportunityId, companyId, supabase) {
     return null
   }
 
-  console.log(`[whatsappSender] lead_id encontrado: ${opp.lead_id}`)
-
   const { data: lead, error: leadError } = await supabase
     .from('leads')
     .select('id, name, phone, email, company_name, city, state')
     .eq('id', opp.lead_id)
     .maybeSingle()
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a137a'},body:JSON.stringify({sessionId:'7a137a',location:'whatsappSender.js:lead-query-result',message:'resultado query leads',data:{leadId:opp.lead_id,lead:{id:lead?.id,phone:lead?.phone,hasPhone:!!lead?.phone},leadError:leadError?.message,leadCode:leadError?.code},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
+  // #endregion
+
   if (leadError) {
     console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
     return null
   }
-
-  console.log(`[whatsappSender] lead resolvido: id=${lead?.id} phone=${lead?.phone}`)
 
   return lead || null
 }
