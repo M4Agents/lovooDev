@@ -1,10 +1,10 @@
 // =====================================================
 // EXECUTOR — núcleo mínimo de execução de flows
-// Etapa 1: travessia básica + registro de estado
+// Etapa 3: condition + message + travessia + logs
 //
-// Suportado:   start, trigger, end
-// Não suportado (Etapa 1): condition, action, message,
-//   delay, distribution — skipped com log claro.
+// Suportado:   start, trigger, end, message, condition
+// Não suportado: action, delay, distribution, user_input
+//   → skipped com log claro.
 //
 // Todas as funções recebem `supabase` (supabaseAdmin)
 // como parâmetro — sem importar nada de src/.
@@ -160,6 +160,11 @@ async function executeNodeAction(node, context, supabase) {
     case 'message': {
       const { sendMessageNode } = await import('./whatsappSender.js')
       return await sendMessageNode(node, context, supabase)
+    }
+
+    case 'condition': {
+      const { evaluateCondition } = await import('./conditionEval.js')
+      return await evaluateCondition(node, context, supabase)
     }
 
     default:
