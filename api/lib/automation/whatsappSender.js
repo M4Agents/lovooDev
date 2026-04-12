@@ -20,23 +20,37 @@ const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 async function resolveLead(opportunityId, companyId, supabase) {
   if (!opportunityId) return null
 
-  const { data: opp } = await supabase
+  const { data: opp, error: oppError } = await supabase
     .from('opportunities')
     .select('lead_id')
     .eq('id', opportunityId)
     .eq('company_id', companyId)
     .maybeSingle()
 
-  if (!opp?.lead_id) {
-    console.log(`[whatsappSender] oportunidade ${opportunityId} sem lead_id`)
+  if (oppError) {
+    console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
     return null
   }
 
-  const { data: lead } = await supabase
+  if (!opp?.lead_id) {
+    console.log(`[whatsappSender] oportunidade ${opportunityId} sem lead_id — opp:`, JSON.stringify(opp))
+    return null
+  }
+
+  console.log(`[whatsappSender] lead_id encontrado: ${opp.lead_id}`)
+
+  const { data: lead, error: leadError } = await supabase
     .from('leads')
     .select('id, name, phone, email, company_name, city, state')
     .eq('id', opp.lead_id)
     .maybeSingle()
+
+  if (leadError) {
+    console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
+    return null
+  }
+
+  console.log(`[whatsappSender] lead resolvido: id=${lead?.id} phone=${lead?.phone}`)
 
   return lead || null
 }
