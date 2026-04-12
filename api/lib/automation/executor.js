@@ -1,9 +1,9 @@
 // =====================================================
 // EXECUTOR — núcleo mínimo de execução de flows
-// Etapa 3: condition + message + travessia + logs
+// Etapa 4: action (CRM) + condition + message + logs
 //
-// Suportado:   start, trigger, end, message, condition
-// Não suportado: action, delay, distribution, user_input
+// Suportado:   start, trigger, end, message, condition, action
+// Não suportado: delay, distribution, user_input
 //   → skipped com log claro.
 //
 // Todas as funções recebem `supabase` (supabaseAdmin)
@@ -165,6 +165,11 @@ async function executeNodeAction(node, context, supabase) {
     case 'condition': {
       const { evaluateCondition } = await import('./conditionEval.js')
       return await evaluateCondition(node, context, supabase)
+    }
+
+    case 'action': {
+      const { executeCrmAction } = await import('./crmActions.js')
+      return await executeCrmAction(node, context, supabase)
     }
 
     default:
