@@ -1,14 +1,17 @@
 // =====================================================
 // EXECUTOR — núcleo mínimo de execução de flows
-// Etapa 4: action (CRM) + condition + message + logs
+// Etapa 7: lock de execução via executionLock.js
+//        + user_input + delay + action + condition + message + logs
 //
-// Suportado:   start, trigger, end, message, condition, action
-// Não suportado: delay, distribution, user_input
+// Suportado:   start, trigger, end, message, condition, action, delay, user_input
+// Não suportado: distribution
 //   → skipped com log claro.
 //
 // Todas as funções recebem `supabase` (supabaseAdmin)
 // como parâmetro — sem importar nada de src/.
 // =====================================================
+
+import { acquireLock, releaseLock } from './executionLock.js'
 
 // ---------------------------------------------------------------------------
 // Registro de estado
@@ -138,6 +141,101 @@ function getNextNodes(currentNode, allNodes, allEdges, result) {
     .filter(Boolean)
 }
 
+// ---------------------------------------------------------------------------
+// Pausa em nó user_input
+// 1. Envia a pergunta ao usuário via WhatsApp (fail-safe)
+// 2. Pausa a execução e salva _awaiting_input nas variables
+// ---------------------------------------------------------------------------
+
+async function pauseAtUserInput(node, context, supabase) {
+  const config = node.data?.config || {}
+
+  const variableName = config.variable    || 'user_response'
+  const timeoutValue = Number(config.timeoutValue) || 24
+  const timeoutUnit  = config.timeoutUnit || 'hours'
+  const question     = config.question    || 'Responda esta mensagem para continuar.'
+
+  // 1. Enviar a pergunta ao usuário via WhatsApp (antes de pausar)
+  let questionSent  = false
+  let questionError = null
+
+  try {
+    // Nó sintético de texto — reutiliza toda a infra de sendMessageNode
+    const questionNode = {
+      id:   node.id,
+      type: 'message',
+      data: {
+        label:  node.data?.label || 'user_input',
+        config: { messageType: 'text', message: question },
+      },
+    }
+
+    const { sendMessageNode } = await import('./whatsappSender.js')
+    const sendResult = await sendMessageNode(questionNode, context, supabase)
+
+    if (sendResult?.sent) {
+      questionSent = true
+      console.log(`[executor] user_input: pergunta enviada (to: ${sendResult.to})`)
+    } else {
+      questionError = sendResult?.reason || 'envio retornou sem confirmação'
+      console.warn(`[executor] user_input: pergunta não enviada — ${questionError}`)
+    }
+  } catch (sendErr) {
+    questionError = sendErr?.message || 'erro desconhecido no envio'
+    console.error(`[executor] user_input: erro ao enviar pergunta — ${questionError}`)
+  }
+
+  // 2. Calcular timeout_at
+  const timeoutAt = new Date()
+  switch (timeoutUnit) {
+    case 'minutes': timeoutAt.setMinutes(timeoutAt.getMinutes() + timeoutValue); break
+    case 'hours':   timeoutAt.setHours(timeoutAt.getHours()     + timeoutValue); break
+    case 'days':    timeoutAt.setDate(timeoutAt.getDate()        + timeoutValue); break
+    default:        timeoutAt.setHours(timeoutAt.getHours()      + timeoutValue); break
+  }
+
+  const updatedVariables = {
+    ...(context.variables || {}),
+    _awaiting_input: {
+      node_id:        node.id,
+      variable_name:  variableName,
+      question,
+      timeout_value:  timeoutValue,
+      timeout_unit:   timeoutUnit,
+      question_sent:  questionSent,
+      ...(questionError ? { question_error: questionError } : {}),
+    },
+  }
+
+  // 3. Pausar execução (sempre, independente do resultado do envio)
+  const { error: pauseErr } = await supabase
+    .from('automation_executions')
+    .update({
+      status:          'paused',
+      paused_at:       new Date().toISOString(),
+      timeout_at:      timeoutAt.toISOString(),
+      current_node_id: node.id,
+      variables:       updatedVariables,
+    })
+    .eq('id', context.executionId)
+
+  if (pauseErr) throw new Error(`Erro ao pausar execução em user_input: ${pauseErr.message}`)
+
+  // Atualizar contexto local para que processFlowAsync detecte o pause
+  context.variables = updatedVariables
+
+  console.log(`[executor] user_input: execução ${context.executionId} pausada — aguardando "${variableName}" (timeout: ${timeoutValue} ${timeoutUnit})`)
+
+  return {
+    paused:        true,
+    awaitingInput: true,
+    variableName,
+    timeoutAt:     timeoutAt.toISOString(),
+    questionSent,
+    ...(questionError ? { questionError } : {}),
+  }
+}
+
 /**
  * Resolve a ação de um nó.
  *
@@ -145,6 +243,7 @@ function getNextNodes(currentNode, allNodes, allEdges, result) {
  *   start / trigger → { triggered: true }
  *   end             → { ended: true }
  *   message         → envio WhatsApp via whatsappSender.js
+ *   user_input      → pausa execução aguardando resposta
  *
  * Demais tipos: { skipped: true, reason } — sem crash.
  */
@@ -158,9 +257,16 @@ async function executeNodeAction(node, context, supabase) {
       return { ended: true }
 
     case 'message': {
+      // Nó message configurado como user_input (legado do AutomationEngine)
+      if (node.data?.config?.messageType === 'user_input') {
+        return await pauseAtUserInput(node, context, supabase)
+      }
       const { sendMessageNode } = await import('./whatsappSender.js')
       return await sendMessageNode(node, context, supabase)
     }
+
+    case 'user_input':
+      return await pauseAtUserInput(node, context, supabase)
 
     case 'condition': {
       const { evaluateCondition } = await import('./conditionEval.js')
@@ -170,6 +276,11 @@ async function executeNodeAction(node, context, supabase) {
     case 'action': {
       const { executeCrmAction } = await import('./crmActions.js')
       return await executeCrmAction(node, context, supabase)
+    }
+
+    case 'delay': {
+      const { pauseAtDelay } = await import('./delayHandler.js')
+      return await pauseAtDelay(node, context, supabase)
     }
 
     default:
@@ -193,6 +304,14 @@ async function processNode(node, allNodes, allEdges, context, supabase) {
       return
     }
 
+    // Nó de delay pausou a execução: registrar e interromper recursão
+    if (result?.paused) {
+      await createLog(context, node, 'paused', result, null, supabase)
+      await updateExecutedNodes(context.executionId, node.id, 'paused', result, null, supabase)
+      console.log(`[executor] execução pausada no nó delay: ${node.id} — resume_at: ${result.resumeAt}`)
+      return
+    }
+
     await createLog(context, node, 'success', result, null, supabase)
     await updateExecutedNodes(context.executionId, node.id, 'success', result, null, supabase)
 
@@ -209,10 +328,144 @@ async function processNode(node, allNodes, allEdges, context, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// Retomada após delay — chamado por process-schedules
+// ---------------------------------------------------------------------------
+
+export async function resumeFromNode(execution, flow, pausedNodeId, supabase, userResponse = undefined) {
+  // Garantia de segurança: só retomar se execution estiver realmente pausada
+  if (execution.status !== 'paused') {
+    console.warn(`[executor] resumeFromNode: execução ${execution.id} não está pausada (status: ${execution.status}) — skip`)
+    return { skipped: true, reason: `execução não está pausada (status: ${execution.status})` }
+  }
+
+  // Adquirir lock antes de qualquer operação — protege contra cron + webhook simultâneos
+  const lock = await acquireLock(execution.id, supabase)
+  if (!lock.acquired) {
+    console.warn(`[executor] resumeFromNode: execução ${execution.id} ignorada — ${lock.reason}`)
+    return { skipped: true, reason: lock.reason }
+  }
+
+  try {
+    const allNodes = flow.nodes || []
+    const allEdges = flow.edges || []
+
+    // Localizar o nó que pausou a execução
+    const pausedNode = allNodes.find(n => n.id === pausedNodeId)
+    if (!pausedNode) {
+      throw new Error(`Nó "${pausedNodeId}" não encontrado no flow — o flow pode ter sido editado após o pause`)
+    }
+
+    // -------------------------------------------------------------------------
+    // Tratar retomada de user_input: persistir resposta na variável configurada
+    // -------------------------------------------------------------------------
+
+    const awaitingInput = execution.variables?._awaiting_input
+
+    if (awaitingInput) {
+      // Retomada de user_input — userResponse é obrigatório
+      if (userResponse === undefined || userResponse === null || String(userResponse).trim() === '') {
+        throw new Error(
+          `userResponse é obrigatório para retomar a execução ${execution.id} (aguardando entrada no nó "${awaitingInput.node_id}")`
+        )
+      }
+
+      const variableName = awaitingInput.variable_name || 'user_response'
+      const updatedVariables = { ...(execution.variables || {}) }
+
+      updatedVariables[variableName] = userResponse
+      delete updatedVariables._awaiting_input
+
+      const { error: varErr } = await supabase
+        .from('automation_executions')
+        .update({ variables: updatedVariables })
+        .eq('id', execution.id)
+
+      if (varErr) throw new Error(`Erro ao salvar resposta do usuário: ${varErr.message}`)
+
+      execution.variables = updatedVariables
+
+      console.log(`[executor] user_input: resposta salva em context.variables.${variableName}`)
+    }
+
+    // Voltar execução para running e limpar campos de pausa
+    const { error: resumeErr } = await supabase
+      .from('automation_executions')
+      .update({
+        status:          'running',
+        paused_at:       null,
+        resume_at:       null,
+        timeout_at:      null,
+        current_node_id: null,
+      })
+      .eq('id', execution.id)
+
+    if (resumeErr) {
+      throw new Error(`Erro ao retomar execução: ${resumeErr.message}`)
+    }
+
+    const context = {
+      executionId:   execution.id,
+      flowId:        flow.id,
+      companyId:     execution.company_id,
+      triggerData:   execution.trigger_data  || {},
+      variables:     execution.variables     || {},
+      leadId:        execution.lead_id       || null,
+      opportunityId: execution.opportunity_id || null,
+      instanceId:    execution.trigger_data?.instanceId ?? null,
+    }
+
+    const resumeType = awaitingInput ? 'user_input' : 'delay'
+    console.log(`[executor] retomando execução ${execution.id} após ${resumeType}: ${pausedNodeId}`)
+
+    const nextNodes = getNextNodes(pausedNode, allNodes, allEdges, {})
+
+    if (nextNodes.length === 0) {
+      await completeExecution(execution.id, 'completed', null, supabase)
+      console.log(`[executor] execução completada após retomada (sem próximos nós): ${execution.id}`)
+      return { completed: true }
+    }
+
+    try {
+      for (const next of nextNodes) {
+        await processNode(next, allNodes, allEdges, context, supabase)
+      }
+    } catch (err) {
+      console.error(`[executor] erro ao retomar execução ${execution.id}:`, err?.message)
+      await completeExecution(execution.id, 'failed', err?.message, supabase)
+      throw err
+    }
+
+    const { data: current } = await supabase
+      .from('automation_executions')
+      .select('status')
+      .eq('id', execution.id)
+      .single()
+
+    if (current?.status === 'paused') {
+      console.log(`[executor] execução pausada novamente após retomada: ${execution.id}`)
+      return { paused: true }
+    }
+
+    await completeExecution(execution.id, 'completed', null, supabase)
+    console.log(`[executor] execução completada após retomada: ${execution.id}`)
+    return { completed: true }
+
+  } finally {
+    await releaseLock(execution.id, lock.lockId, supabase)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Orquestrador principal — chamado por trigger-event.ts
 // ---------------------------------------------------------------------------
 
 export async function processFlowAsync(flow, execution, supabase) {
+  const lock = await acquireLock(execution.id, supabase)
+  if (!lock.acquired) {
+    console.warn(`[executor] processFlowAsync: execução ${execution.id} ignorada — ${lock.reason}`)
+    return
+  }
+
   try {
     console.log(`[executor] iniciando flow: ${flow.id}`)
 
@@ -234,7 +487,6 @@ export async function processFlowAsync(flow, execution, supabase) {
 
     await processNode(triggerNode, flow.nodes, flow.edges || [], context, supabase)
 
-    // Verificar se algum nó pausou a execução (suporte futuro a user_input)
     const { data: current } = await supabase
       .from('automation_executions')
       .select('status')
@@ -251,5 +503,7 @@ export async function processFlowAsync(flow, execution, supabase) {
   } catch (err) {
     console.error(`[executor] erro no flow ${flow.id}:`, err?.message)
     await completeExecution(execution.id, 'failed', err?.message, supabase)
+  } finally {
+    await releaseLock(execution.id, lock.lockId, supabase)
   }
 }
