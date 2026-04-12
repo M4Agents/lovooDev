@@ -142,18 +142,11 @@ export class TriggerManager {
    */
 
   /**
-   * Dispara quando um novo lead é criado
+   * @deprecated Migrado para /api/automation/trigger-event (backend novo).
+   * Mantido como no-op para evitar erros em call sites não identificados.
    */
-  async onLeadCreated(companyId: string, leadId: number, leadData: any): Promise<void> {
-    await this.trigger({
-      type: 'lead.created',
-      companyId,
-      data: {
-        lead_id: leadId,
-        lead: leadData,
-        timestamp: new Date().toISOString()
-      }
-    })
+  async onLeadCreated(_companyId: string, _leadId: number, _leadData: any): Promise<void> {
+    console.warn('[LEGACY DISABLED] TriggerManager.onLeadCreated — use /api/automation/trigger-event')
   }
 
   /**

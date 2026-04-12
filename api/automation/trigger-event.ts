@@ -22,7 +22,7 @@ import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { createExecution, processFlowAsync } from '../lib/automation/executor.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed', 'tag.added'] as const
+const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed', 'tag.added', 'lead.created'] as const
 type AllowedEventType = (typeof ALLOWED_EVENT_TYPES)[number]
 
 // Janela de deduplicação: execuções criadas nos últimos 60 segundos
@@ -171,6 +171,8 @@ export default async function handler(req: any, res: any) {
     auditPayload.lead_id  = data.lead_id  || null
     auditPayload.tag_id   = data.tag_id   || null
     auditPayload.tag_name = data.tag_name || null
+  } else if (event_type === 'lead.created') {
+    auditPayload.lead_id = data.lead_id || null
   }
 
   // 3. Validar membership do usuário na empresa
@@ -199,6 +201,25 @@ export default async function handler(req: any, res: any) {
 
     if (!opp) {
       return res.status(403).json({ error: 'Oportunidade não pertence à empresa informada' })
+    }
+  }
+
+  // 4c. Validações específicas para lead.created
+  if (event_type === 'lead.created') {
+    const leadId = data.lead_id ? Number(data.lead_id) : null
+    if (!leadId || isNaN(leadId)) {
+      return res.status(400).json({ error: 'lead_id é obrigatório para lead.created' })
+    }
+
+    const { data: lead } = await supabaseAdmin
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .eq('company_id', company_id)
+      .maybeSingle()
+
+    if (!lead) {
+      return res.status(403).json({ error: 'Lead não pertence à empresa informada' })
     }
   }
 

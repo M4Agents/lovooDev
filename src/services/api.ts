@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { triggerManager } from './automation/TriggerManager';
+// triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 
 // Process tracking queue
 export const processTrackingQueue = async () => {
@@ -867,10 +867,21 @@ export const api = {
 
       console.log('API: Lead created successfully:', lead);
 
-      // Disparar trigger lead.created de forma não-bloqueante
-      triggerManager.onLeadCreated(lead.company_id, lead.id, lead).catch(err => {
-        console.error('Error firing lead.created trigger:', err);
-      });
+      // Disparar automação backend (fire-and-forget — nunca bloqueia a criação)
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token || !lead.company_id) return
+
+        fetch('/api/automation/trigger-event', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type: 'lead.created',
+            company_id: lead.company_id,
+            data: { lead_id: lead.id },
+          }),
+        }).catch(err => console.error('[api.createLead] automation trigger failed:', err))
+      }).catch(() => { /* sem sessão — ignora silenciosamente */ })
 
       return lead;
     } catch (error) {

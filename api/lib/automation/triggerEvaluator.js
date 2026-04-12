@@ -17,6 +17,7 @@ function matchesTriggerConditions(flow, event) {
 
   const results = relevantTriggers.map(trigger => {
     switch (event.type) {
+      case 'lead.created':              return matchesLeadCreated(trigger, event.data)
       case 'opportunity.stage_changed': return matchesOpportunityStageChanged(trigger, event.data)
       case 'opportunity.created':       return matchesOpportunityCreated(trigger, event.data)
       case 'opportunity.won':           return matchesOpportunityWon(trigger, event.data)
@@ -32,6 +33,11 @@ function matchesTriggerConditions(flow, event) {
 
   if (operator === 'AND') return results.every(r => r === true)
   return results.some(r => r === true)
+}
+
+// lead.created não possui filtros configuráveis na UI — qualquer lead criado dispara o flow
+function matchesLeadCreated(_trigger, _eventData) {
+  return true
 }
 
 function matchesOpportunityStageChanged(trigger, eventData) {
@@ -91,6 +97,7 @@ function matchesMessageReceived(trigger, eventData) {
 
 export {
   matchesTriggerConditions,
+  matchesLeadCreated,
   matchesOpportunityStageChanged,
   matchesOpportunityCreated,
   matchesOpportunityWon,
