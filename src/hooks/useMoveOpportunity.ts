@@ -59,14 +59,16 @@ export function useMoveOpportunity(
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({
-              event_type:     'opportunity.stage_changed',
-              company_id:     companyId,
-              opportunity_id: params.opportunity_id,
-              from_stage_id:  params.from_stage_id,
-              to_stage_id:    params.to_stage_id,
-              funnel_id:      params.funnel_id ?? null,
-              lead_id:        params.lead_id ?? null,
-              conversation_id: params.conversationId ?? null
+              event_type: 'opportunity.stage_changed',
+              company_id: companyId,
+              data: {
+                opportunity_id: params.opportunity_id,
+                old_stage:      params.from_stage_id,
+                new_stage:      params.to_stage_id,
+                opportunity: {
+                  funnel_id: params.funnel_id ?? null
+                }
+              }
             })
           }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
         })
