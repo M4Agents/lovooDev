@@ -241,7 +241,7 @@ export async function sendMessageNode(node, context, supabase) {
 
   // Conteúdo da mensagem
   const rawMessage = config.message || config.caption || config.question || ''
-  const mediaUrl   = config.fileUrl || null
+  const mediaUrl   = config.fileUrl || config.audioUrl || null
   // Mapear tipo para a API (file → fileType, audio → audio, texto → text)
   const apiType = messageType === 'file'
     ? (config.fileType || 'document')
