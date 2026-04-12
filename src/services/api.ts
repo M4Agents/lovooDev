@@ -1507,6 +1507,23 @@ export const api = {
           }
 
           results.push(lead);
+
+          // Disparar automação backend (fire-and-forget — nunca bloqueia a importação)
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const token = sessionData.session?.access_token
+            if (!token || !lead.company_id) return
+
+            fetch('/api/automation/trigger-event', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event_type: 'lead.created',
+                company_id: lead.company_id,
+                data: { lead_id: lead.id, source: 'import' },
+              }),
+            }).catch(err => console.error('[api.importLeads] automation trigger failed:', err))
+          }).catch(() => { /* sem sessão — ignora silenciosamente */ })
+
         } catch (leadError) {
           console.error('Error importing individual lead:', leadError);
           // Continuar com próximo lead em caso de erro
