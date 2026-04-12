@@ -36,11 +36,11 @@ function matchesTriggerConditions(flow, event) {
 
 function matchesOpportunityStageChanged(trigger, eventData) {
   const config = trigger.config || {}
-  if (config.funnelId   && config.funnelId   !== eventData.opportunity?.funnel_id) return false
-  if (config.toStageId  && config.toStageId  !== eventData.new_stage)              return false
-  if (config.fromStageId && config.fromStageId !== eventData.old_stage)            return false
-  if (config.minValue   && eventData.opportunity?.value < config.minValue)         return false
-  if (config.maxValue   && eventData.opportunity?.value > config.maxValue)         return false
+  if (config.funnelId    && config.funnelId    !== eventData?.opportunity?.funnel_id) return false
+  if (config.toStageId   && config.toStageId   !== eventData?.new_stage)              return false
+  if (config.fromStageId && config.fromStageId !== eventData?.old_stage)              return false
+  if (config.minValue    && eventData?.opportunity?.value < config.minValue)          return false
+  if (config.maxValue    && eventData?.opportunity?.value > config.maxValue)          return false
   return true
 }
 

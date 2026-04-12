@@ -61,6 +61,9 @@ export default async function handler(req: any, res: any) {
   if (!isUUID(company_id)) {
     return res.status(400).json({ error: 'company_id inválido ou ausente' })
   }
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ error: 'Campo data é obrigatório e deve ser um objeto' })
+  }
 
   // #region agent log
   // H-A: verificar se supabaseAdmin.js carrega corretamente em runtime
