@@ -89,7 +89,7 @@ function matchesMessageReceived(trigger, eventData) {
   return true
 }
 
-module.exports = {
+export {
   matchesTriggerConditions,
   matchesOpportunityStageChanged,
   matchesOpportunityCreated,
