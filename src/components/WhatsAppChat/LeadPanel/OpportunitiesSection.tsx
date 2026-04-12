@@ -22,7 +22,7 @@ import type {
 } from '../../../types/sales-funnel'
 import { supabase } from '../../../lib/supabase'
 import { funnelApi } from '../../../services/funnelApi'
-import { triggerManager } from '../../../services/automation/TriggerManager'
+// triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 import toast from 'react-hot-toast'
 
 interface OpportunitiesSectionProps {
@@ -234,45 +234,26 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   ) => {
     if (!oldStageId || oldStageId === newStageId) return
     try {
-      const { data: opportunity } = await supabase
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single()
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) return
 
-      const { data: lead, error: leadError } = await supabase
-        .from('leads')
-        .select('phone, name, email, company, city, state')
-        .eq('id', leadId)
-        .single()
-
-      let leadData: Record<string, unknown>
-      if (leadError || !lead) {
-        leadData = {
-          phone: phoneNumber,
-          name: leadName,
-          email: null,
-          company: null,
-          city: null,
-          state: null
-        }
-      } else {
-        leadData = lead as Record<string, unknown>
-      }
-
-      await triggerManager.onOpportunityStageChanged(
-        companyId,
-        opportunityId,
-        oldStageId,
-        newStageId,
-        {
-          ...opportunity,
-          funnel_id: newFunnelId,
-          lead_id: leadId,
-          lead: leadData,
-          conversation_id: conversationId
-        }
-      )
+      fetch('/api/automation/trigger-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          event_type: 'opportunity.stage_changed',
+          company_id: companyId,
+          data: {
+            opportunity_id:  opportunityId,
+            old_stage:       oldStageId,
+            new_stage:       newStageId,
+            opportunity:     { funnel_id: newFunnelId },
+            lead_id:         leadId ?? null,
+            conversation_id: conversationId ?? null,
+          },
+        }),
+      }).catch(err => console.error('[OpportunitiesSection] Automation trigger failed (non-blocking):', err))
     } catch (automationError) {
       console.error('❌ Erro ao disparar automação:', automationError)
     }

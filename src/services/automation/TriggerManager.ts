@@ -195,26 +195,17 @@ export class TriggerManager {
   }
 
   /**
-   * Dispara quando uma oportunidade muda de etapa
+   * @deprecated Migrado para /api/automation/trigger-event (backend novo).
+   * Mantido como no-op para evitar erros em call sites não identificados.
    */
   async onOpportunityStageChanged(
-    companyId: string,
-    opportunityId: string,
-    oldStage: string,
-    newStage: string,
-    opportunityData: any
+    _companyId: string,
+    _opportunityId: string,
+    _oldStage: string,
+    _newStage: string,
+    _opportunityData: any
   ): Promise<void> {
-    await this.trigger({
-      type: 'opportunity.stage_changed',
-      companyId,
-      data: {
-        opportunity_id: opportunityId,
-        old_stage: oldStage,
-        new_stage: newStage,
-        opportunity: opportunityData,
-        timestamp: new Date().toISOString()
-      }
-    })
+    console.warn('[LEGACY DISABLED] TriggerManager.onOpportunityStageChanged — use /api/automation/trigger-event')
   }
 
   /**

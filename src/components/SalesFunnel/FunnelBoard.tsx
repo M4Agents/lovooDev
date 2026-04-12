@@ -489,14 +489,16 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            event_type:     'opportunity.stage_changed',
-            company_id:     companyId,
-            opportunity_id: opportunityId,
-            from_stage_id:  fromStageId,
-            to_stage_id:    toStageId,
-            funnel_id:      funnelId ?? null,
-            lead_id:        leadId ?? null,
-            conversation_id: conversationId ?? null
+            event_type: 'opportunity.stage_changed',
+            company_id: companyId,
+            data: {
+              opportunity_id:  opportunityId,
+              old_stage:       fromStageId,
+              new_stage:       toStageId,
+              opportunity:     { funnel_id: funnelId ?? null },
+              lead_id:         leadId ?? null,
+              conversation_id: conversationId ?? null,
+            },
           })
         }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
       })
@@ -536,14 +538,16 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            event_type:     'opportunity.stage_changed',
-            company_id:     companyId,
-            opportunity_id: opportunityId,
-            from_stage_id:  fromStageId,
-            to_stage_id:    toStageId,
-            funnel_id:      funnelId ?? null,
-            lead_id:        leadId ?? null,
-            conversation_id: conversationId ?? null
+            event_type: 'opportunity.stage_changed',
+            company_id: companyId,
+            data: {
+              opportunity_id:  opportunityId,
+              old_stage:       fromStageId,
+              new_stage:       toStageId,
+              opportunity:     { funnel_id: funnelId ?? null },
+              lead_id:         leadId ?? null,
+              conversation_id: conversationId ?? null,
+            },
           })
         }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
       })
