@@ -22,7 +22,7 @@ import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { createExecution, processFlowAsync } from '../lib/automation/executor.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed'] as const
+const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed', 'tag.added'] as const
 type AllowedEventType = (typeof ALLOWED_EVENT_TYPES)[number]
 
 // Janela de deduplicação: execuções criadas nos últimos 60 segundos
@@ -160,13 +160,17 @@ export default async function handler(req: any, res: any) {
 
   const supabaseAdmin = getSupabaseAdmin()
 
-  // Payload resumido — gravado em todos os registros de auditoria
-  const auditPayload = {
-    event_type,
-    opportunity_id: data.opportunity_id || null,
-    lead_id:        data.lead_id        || null,
-    old_stage:      data.old_stage      || null,
-    new_stage:      data.new_stage      || null,
+  // Payload resumido — gravado em todos os registros de auditoria (campos variam por evento)
+  const auditPayload: Record<string, any> = { event_type }
+  if (event_type === 'opportunity.stage_changed') {
+    auditPayload.opportunity_id = data.opportunity_id || null
+    auditPayload.lead_id        = data.lead_id        || null
+    auditPayload.old_stage      = data.old_stage      || null
+    auditPayload.new_stage      = data.new_stage      || null
+  } else if (event_type === 'tag.added') {
+    auditPayload.lead_id  = data.lead_id  || null
+    auditPayload.tag_id   = data.tag_id   || null
+    auditPayload.tag_name = data.tag_name || null
   }
 
   // 3. Validar membership do usuário na empresa
@@ -181,8 +185,8 @@ export default async function handler(req: any, res: any) {
     return res.status(403).json({ error: 'Sem acesso à empresa informada' })
   }
 
-  // 4. Validar que a oportunidade pertence à empresa (quando presente)
-  if (data?.opportunity_id) {
+  // 4a. Validações específicas para opportunity.stage_changed
+  if (event_type === 'opportunity.stage_changed' && data?.opportunity_id) {
     if (!isUUID(data.opportunity_id)) {
       return res.status(400).json({ error: 'opportunity_id inválido' })
     }
@@ -195,6 +199,42 @@ export default async function handler(req: any, res: any) {
 
     if (!opp) {
       return res.status(403).json({ error: 'Oportunidade não pertence à empresa informada' })
+    }
+  }
+
+  // 4b. Validações específicas para tag.added
+  if (event_type === 'tag.added') {
+    const leadId = data.lead_id ? Number(data.lead_id) : null
+    if (!leadId || isNaN(leadId)) {
+      return res.status(400).json({ error: 'lead_id é obrigatório para tag.added' })
+    }
+
+    const { data: lead } = await supabaseAdmin
+      .from('leads')
+      .select('id')
+      .eq('id', leadId)
+      .eq('company_id', company_id)
+      .maybeSingle()
+
+    if (!lead) {
+      return res.status(403).json({ error: 'Lead não pertence à empresa informada' })
+    }
+
+    // tag_id é opcional — validar apenas se vier
+    if (data.tag_id !== undefined && data.tag_id !== null) {
+      if (!isUUID(data.tag_id)) {
+        return res.status(400).json({ error: 'tag_id inválido' })
+      }
+      const { data: tag } = await supabaseAdmin
+        .from('lead_tags')
+        .select('id')
+        .eq('id', data.tag_id)
+        .eq('company_id', company_id)
+        .maybeSingle()
+
+      if (!tag) {
+        return res.status(403).json({ error: 'Tag não pertence à empresa informada' })
+      }
     }
   }
 

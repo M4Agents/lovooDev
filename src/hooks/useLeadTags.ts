@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { tagsApi } from '../services/tagsApi'
+import { supabase } from '../lib/supabase'
 import type { Tag } from '../types/tags'
 
 /**
@@ -44,6 +45,26 @@ export function useLeadTags() {
 
     try {
       await tagsApi.addTagToLead(leadId, tag.id)
+
+      // Disparar automação backend (fire-and-forget — nunca bloqueia a UI)
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token || !tag.company_id) return
+
+        fetch('/api/automation/trigger-event', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type: 'tag.added',
+            company_id: tag.company_id,
+            data: {
+              lead_id:  leadId,
+              tag_id:   tag.id,
+              tag_name: tag.name,
+            },
+          }),
+        }).catch(err => console.error('[useLeadTags] automation trigger failed:', err))
+      }).catch(() => { /* sem token — ignora silenciosamente */ })
     } catch {
       // Rollback ao snapshot anterior à mutação otimista
       setTags(snapshot)
