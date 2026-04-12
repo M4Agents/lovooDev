@@ -41,7 +41,7 @@ async function resolveLead(opportunityId, companyId, supabase) {
 
   const { data: lead, error: leadError } = await supabase
     .from('leads')
-    .select('id, name, phone, email, company_name, city, state')
+    .select('id, name, phone, email, company_name, cidade, estado')
     .eq('id', opp.lead_id)
     .maybeSingle()
 
@@ -143,8 +143,8 @@ function replaceVariables(message, lead, contextVariables) {
   result = result.replace(/\{\{lead\.email\}\}/g,    lead?.email        || '')
   result = result.replace(/\{\{lead\.telefone\}\}/g, lead?.phone        || '')
   result = result.replace(/\{\{lead\.empresa\}\}/g,  lead?.company_name || '')
-  result = result.replace(/\{\{lead\.cidade\}\}/g,   lead?.city         || '')
-  result = result.replace(/\{\{lead\.estado\}\}/g,   lead?.state        || '')
+  result = result.replace(/\{\{lead\.cidade\}\}/g,   lead?.cidade       || '')
+  result = result.replace(/\{\{lead\.estado\}\}/g,   lead?.estado       || '')
 
   // Variáveis de data/hora
   result = result.replace(/\{\{data\.hoje\}\}/g, now.toLocaleDateString('pt-BR'))
