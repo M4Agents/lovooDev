@@ -18,7 +18,7 @@ const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 // ---------------------------------------------------------------------------
 
 async function resolveLead(opportunityId, companyId, supabase) {
-  if (!opportunityId) return { lead: null, debug: 'opportunityId ausente' }
+  if (!opportunityId) return null
 
   const { data: opp, error: oppError } = await supabase
     .from('opportunities')
@@ -28,16 +28,11 @@ async function resolveLead(opportunityId, companyId, supabase) {
     .maybeSingle()
 
   if (oppError) {
-    return { lead: null, debug: `opp-error: ${oppError.message} [${oppError.code}]` }
+    console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
+    return null
   }
 
-  if (!opp) {
-    return { lead: null, debug: `opp-null: nenhuma linha encontrada (oppId=${opportunityId} companyId=${companyId})` }
-  }
-
-  if (!opp.lead_id) {
-    return { lead: null, debug: `opp-sem-lead_id: opp=${JSON.stringify(opp)}` }
-  }
+  if (!opp?.lead_id) return null
 
   const { data: lead, error: leadError } = await supabase
     .from('leads')
@@ -46,18 +41,11 @@ async function resolveLead(opportunityId, companyId, supabase) {
     .maybeSingle()
 
   if (leadError) {
-    return { lead: null, debug: `lead-error: ${leadError.message} [${leadError.code}] (lead_id=${opp.lead_id})` }
+    console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
+    return null
   }
 
-  if (!lead) {
-    return { lead: null, debug: `lead-null: nenhuma linha (lead_id=${opp.lead_id})` }
-  }
-
-  if (!lead.phone) {
-    return { lead: null, debug: `lead-sem-phone: id=${lead.id} name=${lead.name}` }
-  }
-
-  return { lead, debug: 'ok' }
+  return lead || null
 }
 
 async function resolveConversation(phone, leadName, instanceId, companyId, supabase) {
@@ -248,11 +236,11 @@ export async function sendMessageNode(node, context, supabase) {
     : messageType === 'audio' ? 'audio' : 'text'
 
   // 1. Resolver lead via opportunity_id
-  const { lead, debug: leadDebug } = await resolveLead(context.opportunityId, context.companyId, supabase)
+  const lead = await resolveLead(context.opportunityId, context.companyId, supabase)
   if (!lead?.phone) {
     return {
       skipped: true,
-      reason: `Lead não encontrado [debug: ${leadDebug}]`,
+      reason: `Lead não encontrado ou sem telefone (opportunity_id: ${context.opportunityId})`,
     }
   }
 
