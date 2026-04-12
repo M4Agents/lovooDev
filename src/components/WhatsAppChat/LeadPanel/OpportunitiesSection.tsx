@@ -114,6 +114,22 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           setLeadId(null)
         } else if (newLead) {
           setLeadId(newLead.id)
+
+          // Disparar automação backend (fire-and-forget — nunca bloqueia o painel)
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const token = sessionData.session?.access_token
+            if (!token) return
+
+            fetch('/api/automation/trigger-event', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event_type: 'lead.created',
+                company_id: companyId,
+                data: { lead_id: newLead.id, source: 'chat' },
+              }),
+            }).catch(err => console.error('[OpportunitiesSection] automation trigger failed:', err))
+          }).catch(() => { /* sem sessão — ignora silenciosamente */ })
         }
       } catch (err) {
         console.error('❌ OpportunitiesSection - Erro:', err)
