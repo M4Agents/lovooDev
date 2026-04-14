@@ -148,12 +148,14 @@ export default async function handler(req: any, res: any) {
 
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
+    console.warn('[executions/flowId] sem Authorization header')
     return res.status(401).json({ error: 'Unauthorized' })
   }
   const token = authHeader.replace('Bearer ', '').trim()
 
   try {
     const { flowId } = req.query
+    console.log('[executions/flowId] recebido — flowId:', flowId)
     const pageRaw    = parseInt((req.query.page     as string) || '1')
     const pageSizeRaw = parseInt((req.query.pageSize as string) || String(MAX_EXECUTIONS))
 
@@ -169,8 +171,10 @@ export default async function handler(req: any, res: any) {
     const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     const { data: { user }, error: authError } = await anonClient.auth.getUser(token)
     if (authError || !user) {
+      console.warn('[executions/flowId] JWT inválido:', authError?.message)
       return res.status(401).json({ error: 'Unauthorized' })
     }
+    console.log('[executions/flowId] usuário autenticado:', user.id)
 
     const supabase = getSupabaseAdmin()
 
@@ -184,8 +188,10 @@ export default async function handler(req: any, res: any) {
       .maybeSingle()
 
     if (membershipError || !membership?.company_id) {
+      console.warn('[executions/flowId] membership não encontrada — userId:', user.id, 'err:', membershipError?.message)
       return res.status(403).json({ error: 'Acesso negado' })
     }
+    console.log('[executions/flowId] company_id:', membership.company_id)
 
     const companyId = membership.company_id
 
@@ -229,6 +235,8 @@ export default async function handler(req: any, res: any) {
       .range(offsetInt, offsetInt + pageSize - 1)
 
     if (execErr) throw execErr
+
+    console.log('[executions/flowId] execuções encontradas:', executions?.length ?? 0, '| flowId:', flowId)
 
     if (!executions || executions.length === 0) {
       return res.status(200).json({
