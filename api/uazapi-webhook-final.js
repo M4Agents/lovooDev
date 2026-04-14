@@ -4,6 +4,8 @@
 
 import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCreatedTrigger.js';
 import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
+import { resumeFromNode }                 from './lib/automation/executor.js';
+import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
 
 // =====================================================
 // NORMALIZAÇÃO DE MESSAGE_TYPE
@@ -813,32 +815,36 @@ async function processMessage(payload) {
           if (target) {
             console.log(`[webhook][user_input] retomando execução ${target.id} com resposta do lead ${inboundLeadId}`);
 
-            // Chamar continue-execution diretamente (o status ainda é 'paused' — correto)
-            const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
-            const continueEndpoint = `${appBase}/api/automation/continue-execution`;
+            // Buscar execução e flow completos via supabaseAdmin (bypassa RLS)
+            const supabaseAdmin = getSupabaseAdmin();
 
-            const continueRes = await fetch(continueEndpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-internal-secret': process.env.INTERNAL_SECRET || ''
-              },
-              body: JSON.stringify({
-                execution_id: target.id,
-                user_response: messageText
-              })
-            });
+            const { data: execution, error: execErr } = await supabaseAdmin
+              .from('automation_executions')
+              .select('id, flow_id, company_id, status, current_node_id, lead_id, opportunity_id, trigger_data, variables')
+              .eq('id', target.id)
+              .single();
 
-            const continueBody = await continueRes.json().catch(() => ({}));
-
-            // #region agent log
-            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-result',message:'resultado do continue-execution',data:{executionId:target.id,httpStatus:continueRes.status,body:continueBody},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
-
-            if (continueRes.ok) {
-              console.log(`[webhook][user_input] ✅ execução ${target.id} retomada com sucesso`);
+            if (execErr || !execution) {
+              console.error(`[webhook][user_input] ❌ execução ${target.id} não encontrada:`, execErr?.message);
+            } else if (execution.status !== 'paused') {
+              console.warn(`[webhook][user_input] ⚠️ execução ${target.id} não está pausada (status: ${execution.status})`);
             } else {
-              console.error(`[webhook][user_input] ❌ falha ao retomar execução ${target.id}:`, continueRes.status, continueBody);
+              const { data: flow, error: flowErr } = await supabaseAdmin
+                .from('automation_flows')
+                .select('id, nodes, edges, company_id')
+                .eq('id', execution.flow_id)
+                .single();
+
+              if (flowErr || !flow) {
+                console.error(`[webhook][user_input] ❌ flow ${execution.flow_id} não encontrado:`, flowErr?.message);
+              } else {
+                // #region agent log
+                fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-direct',message:'chamando resumeFromNode diretamente',data:{executionId:target.id,nodeId:execution.current_node_id,userResponse:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+
+                await resumeFromNode(execution, flow, execution.current_node_id, supabaseAdmin, messageText);
+                console.log(`[webhook][user_input] ✅ execução ${target.id} retomada com sucesso`);
+              }
             }
           }
         }
