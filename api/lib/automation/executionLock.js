@@ -80,10 +80,6 @@ export async function acquireLock(executionId, supabase) {
       .eq('id', executionId)
       .single()
 
-    // #region agent log
-    console.warn(`[executionLock][debug] lock recusado — executionId=${executionId} locked_at=${current?.locked_at??'NULL'} locked_by=${current?.locked_by??'NULL'} freshErrCode=${freshErr?.code??'none'} expiredErrCode=${expiredErr?.code??'none'}`)
-    // #endregion
-
     const holder = current?.locked_by ?? 'desconhecido'
     console.warn(`[executionLock] lock recusado — execução ${executionId} já travada por ${holder}`)
     return { acquired: false, reason: `execução já está sendo processada (lock: ${holder})` }

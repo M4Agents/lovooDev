@@ -122,9 +122,6 @@ async function isDuplicate(
   }
 
   const { data } = await query.maybeSingle()
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'trigger-event.ts:isDuplicate',message:'dedup check result',data:{flowId,opportunityId,leadId,since,found:!!data,executionId:data?.id??null},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{})
-  // #endregion
   return !!data
 }
 

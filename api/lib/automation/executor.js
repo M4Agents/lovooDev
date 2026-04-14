@@ -305,9 +305,6 @@ async function executeNodeAction(node, context, supabase) {
       if (node.data?.config?.messageType === 'user_input') {
         return await pauseAtUserInput(node, context, supabase)
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'executor.js:message',message:'context before sendMessageNode',data:{executionId:context.executionId,opportunityId:context.opportunityId,leadId:context.leadId,instanceId:context.instanceId,conversationId:context.conversationId,messageType:node.data?.config?.messageType},hypothesisId:'H-C',timestamp:Date.now()})}).catch(()=>{})
-      // #endregion
       const { sendMessageNode } = await import('./whatsappSender.js')
       return await sendMessageNode(node, context, supabase)
     }

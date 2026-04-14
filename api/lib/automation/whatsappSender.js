@@ -233,10 +233,6 @@ export async function sendMessageNode(node, context, supabase) {
     ? (config.fileType || 'document')
     : messageType === 'audio' ? 'audio' : 'text'
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'whatsappSender.js:sendMessageNode',message:'entry',data:{opportunityId:context.opportunityId,leadId:context.leadId,instanceId:context.instanceId,conversationId:context.conversationId,messageType,companyId:context.companyId},hypothesisId:'H-C',timestamp:Date.now()})}).catch(()=>{})
-  // #endregion
-
   // 1. Resolver lead via opportunity_id
   const lead = await resolveLead(context.opportunityId, context.companyId, supabase)
   if (!lead?.phone) {
