@@ -1216,12 +1216,22 @@ export const api = {
   }) {
     console.log('API: createCustomField called with:', data);
     
+    // #region agent log
+    const _dbgSession = await supabase.auth.getSession();
+    const _dbgUid = _dbgSession.data?.session?.user?.id ?? null;
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'api.ts:createCustomField:entry',message:'createCustomField chamado',data:{company_id:data.company_id,field_name:data.field_name,auth_uid:_dbgUid},hypothesisId:'H-A,H-B,H-C',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     try {
       const { data: field, error } = await supabase
         .from('lead_custom_fields')
         .insert(data)
         .select()
         .single();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'api.ts:createCustomField:result',message:'resultado do insert',data:{field:field??null,error_code:error?.code??null,error_message:error?.message??null,error_hint:error?.hint??null,error_details:(error as any)?.details??null},hypothesisId:'H-A,H-B,H-C',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (error) throw error;
       return field;

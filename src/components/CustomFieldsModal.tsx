@@ -123,6 +123,10 @@ export const CustomFieldsModal: React.FC<CustomFieldsModalProps> = ({
     e.preventDefault();
     if (!company?.id) return;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'CustomFieldsModal.tsx:handleSubmitField',message:'submit disparado',data:{company_id:company?.id,company_name:(company as any)?.name,company_type:(company as any)?.company_type,parent_company_id:(company as any)?.parent_company_id,isEdit:!!editingField},hypothesisId:'H-A,H-B',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     try {
       setLoading(true);
       
