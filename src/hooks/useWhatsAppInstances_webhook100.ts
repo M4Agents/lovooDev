@@ -38,6 +38,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
         .from('whatsapp_life_instances')
         .select('*')
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) {
