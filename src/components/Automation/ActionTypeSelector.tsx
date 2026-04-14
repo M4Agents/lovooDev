@@ -7,7 +7,7 @@
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
   ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
-  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle, Bot, BotOff
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle, Bot, PowerOff
 } from 'lucide-react'
 
 export interface ActionType {
@@ -200,7 +200,7 @@ export const ACTION_TYPES: ActionType[] = [
   {
     id: 'detach_agent',
     label: 'Desativar Agente de IA',
-    icon: <BotOff className="w-4 h-4" />,
+    icon: <PowerOff className="w-4 h-4" />,
     description: 'Remove o agente de IA da conversa em andamento',
     category: 'system'
   }
