@@ -865,12 +865,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Fallback final para sistema legado
-    const isParentCompany = company?.company_type === 'parent';
-    const isClientAdminWithUserPermissions = company?.company_type === 'client' &&
-      ['users', 'create_users', 'edit_users', 'delete_users'].includes(permission);
-
-    return isParentCompany || isClientAdminWithUserPermissions;
+    // currentRole é null e userPermissions é null: negar acesso por segurança.
+    // Não conceder acesso baseado apenas em company_type — violação do modelo RBAC.
+    return false;
   };
 
   const canImpersonateCompany = async (companyId: string): Promise<boolean> => {

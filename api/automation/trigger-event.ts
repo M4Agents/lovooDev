@@ -210,12 +210,13 @@ export default async function handler(req: any, res: any) {
     auditPayload.channel         = data.channel         || 'whatsapp'
   }
 
-  // 3. Validar membership do usuário na empresa
+  // 3. Validar membership ativo do usuário na empresa
   const { data: membership } = await supabaseAdmin
     .from('company_users')
     .select('role')
     .eq('user_id', user.id)
     .eq('company_id', company_id)
+    .eq('is_active', true)
     .maybeSingle()
 
   if (!membership) {
