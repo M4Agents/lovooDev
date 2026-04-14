@@ -814,7 +814,7 @@ async function processMessage(payload) {
             console.log(`[webhook][user_input] retomando execução ${target.id} com resposta do lead ${inboundLeadId}`);
 
             // Chamar continue-execution diretamente (o status ainda é 'paused' — correto)
-            const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app';
+            const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
             const continueEndpoint = `${appBase}/api/automation/continue-execution`;
 
             const continueRes = await fetch(continueEndpoint, {
