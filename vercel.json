@@ -23,6 +23,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/automation/process-schedules",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/sync-whatsapp-status",
       "schedule": "*/10 * * * *"
     }
