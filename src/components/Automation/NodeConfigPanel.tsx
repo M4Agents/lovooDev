@@ -848,16 +848,28 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                         </select>
                       )}
                     </div>
-                    <div className="text-xs text-blue-600 bg-blue-50 p-3 rounded-md">
-                      O agente será ativado para responder automaticamente todas as mensagens desta conversa. Requer que exista uma conversa no contexto da execução (gatilhos: Mensagem Recebida, Oportunidade Movida).
+                    <div className="space-y-2">
+                      <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
+                        <strong>Como funciona:</strong> esta ação ativa o agente para a conversa atual. Após isso, todas as próximas mensagens do lead serão respondidas automaticamente pelo motor de IA enquanto a conversa estiver ativa.
+                      </div>
+                      <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-2 space-y-1">
+                        <div>Não envia mensagem imediatamente — apenas ativa o atendimento automático.</div>
+                        <div>Requer que exista uma conversa no contexto (gatilhos: Mensagem Recebida, Oportunidade Movida).</div>
+                        <div>Se a conversa já tiver outro agente ativo, a troca precisa ser explícita via configuração <code className="bg-gray-200 px-1 rounded">force</code>.</div>
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* Desativar Agente de IA */}
                 {config.actionType === 'detach_agent' && (
-                  <div className="text-sm text-gray-600 bg-orange-50 border border-orange-200 p-3 rounded-md">
-                    O agente de IA será desativado para esta conversa. O atendimento automático será encerrado.
+                  <div className="space-y-2">
+                    <div className="text-sm text-orange-700 bg-orange-50 border border-orange-200 p-3 rounded-md">
+                      O agente de IA será desativado para esta conversa. As próximas mensagens do lead não serão mais respondidas automaticamente.
+                    </div>
+                    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-2">
+                      Se a conversa já estiver sem agente ativo, esta ação é ignorada automaticamente (idempotente).
+                    </div>
                   </div>
                 )}
 

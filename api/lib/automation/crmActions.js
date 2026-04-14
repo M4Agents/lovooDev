@@ -426,18 +426,23 @@ async function setCustomField(config, context, supabase) {
 
 // ---------------------------------------------------------------------------
 // Ativar agente de IA em uma conversa — define ai_state = 'ai_active'
+//
+// Regras de idempotência e troca controlada:
+//   - se ai_inactive → ativa normalmente
+//   - se ai_active + mesmo assignment → skip ("já ativo")
+//   - se ai_active + assignment diferente + config.force !== true → skip ("outro agente ativo")
+//   - se ai_active + assignment diferente + config.force === true → substitui agente
 // ---------------------------------------------------------------------------
 
 async function attachAgent(config, context, supabase) {
   const { companyId, conversationId } = context
-  const agentId = config.agentId
+  const agentId  = config.agentId
+  const force    = config.force === true
 
-  if (!agentId)       throw new Error('[attach_agent] agentId obrigatório na configuração')
-  if (!companyId)     throw new Error('[attach_agent] companyId obrigatório no contexto')
-
-  if (!conversationId) {
-    return { skipped: true, reason: 'conversationId obrigatório para attach_agent — conversa não encontrada no contexto' }
-  }
+  // Validações obrigatórias
+  if (!agentId)        return { skipped: true, reason: '[attach_agent] agentId obrigatório na configuração' }
+  if (!companyId)      return { skipped: true, reason: '[attach_agent] companyId obrigatório no contexto' }
+  if (!conversationId) return { skipped: true, reason: 'conversationId obrigatório para attach_agent — conversa não encontrada no contexto' }
 
   // Buscar assignment ativo da empresa para o agente selecionado
   const { data: assignment, error: assignErr } = await supabase
@@ -451,10 +456,10 @@ async function attachAgent(config, context, supabase) {
   if (assignErr) throw new Error(`[attach_agent] erro ao buscar assignment: ${assignErr.message}`)
   if (!assignment) throw new Error(`[attach_agent] agente ${agentId} não encontrado ou inativo para a empresa ${companyId}`)
 
-  // Verificar estado atual da conversa (multi-tenant + idempotência)
+  // Buscar estado atual da conversa (multi-tenant)
   const { data: conv, error: convErr } = await supabase
     .from('chat_conversations')
-    .select('id, ai_state')
+    .select('id, ai_state, ai_assignment_id')
     .eq('id', conversationId)
     .eq('company_id', companyId)
     .maybeSingle()
@@ -462,9 +467,34 @@ async function attachAgent(config, context, supabase) {
   if (convErr) throw new Error(`[attach_agent] erro ao buscar conversa: ${convErr.message}`)
   if (!conv)   throw new Error(`[attach_agent] conversa ${conversationId} não encontrada na empresa ${companyId}`)
 
-  // Idempotência: não atualizar se o agente já estiver ativo
-  if (conv.ai_state === 'ai_active') {
-    return { skipped: true, reason: 'Agente já está ativo nesta conversa', conversationId }
+  const previousAiState      = conv.ai_state
+  const previousAssignmentId = conv.ai_assignment_id
+
+  // Lógica de idempotência e troca controlada
+  if (previousAiState === 'ai_active') {
+    if (previousAssignmentId === assignment.id) {
+      return {
+        skipped: true,
+        reason: 'Agente já está ativo nesta conversa',
+        action: 'attach_agent',
+        conversationId,
+        assignmentId: assignment.id,
+        previousAiState,
+        newAiState: 'ai_active'
+      }
+    }
+
+    // Assignment diferente — só substitui se force = true
+    if (!force) {
+      return {
+        skipped: true,
+        reason: 'Conversa já possui outro agente ativo. Use force: true para substituir.',
+        action: 'attach_agent',
+        conversationId,
+        previousAssignmentId,
+        newAssignmentId: assignment.id
+      }
+    }
   }
 
   const { error: updateErr } = await supabase
@@ -475,21 +505,60 @@ async function attachAgent(config, context, supabase) {
 
   if (updateErr) throw new Error(`[attach_agent] erro ao ativar agente: ${updateErr.message}`)
 
-  console.log(`[attach_agent] agente ${agentId} ativado na conversa ${conversationId}`)
-  return { executed: true, action: 'attach_agent', agentId, assignmentId: assignment.id, conversationId }
+  const replaced = previousAiState === 'ai_active' && previousAssignmentId !== assignment.id
+  console.log(`[attach_agent] agente ${agentId} ${replaced ? 'substituído' : 'ativado'} na conversa ${conversationId}`)
+
+  return {
+    executed: true,
+    action: 'attach_agent',
+    conversationId,
+    agentId,
+    assignmentId: assignment.id,
+    previousAiState,
+    newAiState: 'ai_active',
+    previousAssignmentId,
+    newAssignmentId: assignment.id,
+    replaced
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Desativar agente de IA em uma conversa — define ai_state = 'ai_inactive'
+//
+// Idempotente: se já estiver inativo, retorna skipped.
 // ---------------------------------------------------------------------------
 
 async function detachAgent(config, context, supabase) {
   const { companyId, conversationId } = context
 
-  if (!companyId) throw new Error('[detach_agent] companyId obrigatório no contexto')
+  // Validações obrigatórias
+  if (!companyId)      return { skipped: true, reason: '[detach_agent] companyId obrigatório no contexto' }
+  if (!conversationId) return { skipped: true, reason: 'conversationId obrigatório para detach_agent — conversa não encontrada no contexto' }
 
-  if (!conversationId) {
-    return { skipped: true, reason: 'conversationId obrigatório para detach_agent — conversa não encontrada no contexto' }
+  // Buscar estado atual da conversa (multi-tenant + idempotência)
+  const { data: conv, error: convErr } = await supabase
+    .from('chat_conversations')
+    .select('id, ai_state, ai_assignment_id')
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (convErr) throw new Error(`[detach_agent] erro ao buscar conversa: ${convErr.message}`)
+  if (!conv)   throw new Error(`[detach_agent] conversa ${conversationId} não encontrada na empresa ${companyId}`)
+
+  const previousAiState      = conv.ai_state
+  const previousAssignmentId = conv.ai_assignment_id
+
+  // Idempotência: já está inativo e sem assignment
+  if (previousAiState === 'ai_inactive' && previousAssignmentId === null) {
+    return {
+      skipped: true,
+      reason: 'Agente já está inativo nesta conversa',
+      action: 'detach_agent',
+      conversationId,
+      previousAiState,
+      newAiState: 'ai_inactive'
+    }
   }
 
   const { error: updateErr } = await supabase
@@ -501,7 +570,15 @@ async function detachAgent(config, context, supabase) {
   if (updateErr) throw new Error(`[detach_agent] erro ao desativar agente: ${updateErr.message}`)
 
   console.log(`[detach_agent] agente desativado na conversa ${conversationId}`)
-  return { executed: true, action: 'detach_agent', conversationId }
+  return {
+    executed: true,
+    action: 'detach_agent',
+    conversationId,
+    previousAiState,
+    newAiState: 'ai_inactive',
+    previousAssignmentId,
+    newAssignmentId: null
+  }
 }
 
 // ---------------------------------------------------------------------------

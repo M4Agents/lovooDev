@@ -104,6 +104,15 @@ function normalizeText(text) {
 function matchesMessageReceived(trigger, eventData) {
   const config = trigger.config || {}
 
+  // Proteção contra loop: ignorar mensagens que não são do lead (outbound, agente, sistema)
+  // Tolerante à ausência dos campos — só rejeita quando há indicativo explícito
+  if (eventData.direction === 'outbound')        return false
+  if (eventData.from_agent === true)             return false
+  if (eventData.sender_type === 'agent')         return false
+  if (eventData.sender_type === 'system')        return false
+  if (eventData.origin === 'system')             return false
+  if (eventData.is_from_me === true)             return false
+
   // Filtro por instância WhatsApp
   if (config.instanceId && config.instanceId !== eventData.instance_id) return false
 

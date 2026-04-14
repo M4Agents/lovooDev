@@ -765,6 +765,16 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         <p className="text-xs text-gray-500 mt-1">
           {sessionControls.find(c => c.value === config.sessionControl)?.description}
         </p>
+        {config.sessionControl === 'new_conversation' && (
+          <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md p-2">
+            Recomendado para ativar agente de IA: o flow roda apenas na primeira mensagem do lead, evitando disparos repetidos em conversas em andamento.
+          </div>
+        )}
+        {(!config.sessionControl || config.sessionControl === 'always') && (
+          <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+            Atenção: este modo dispara em toda mensagem recebida. Para ativar agente de IA, prefira "Nova conversa" para evitar execuções repetidas.
+          </div>
+        )}
       </div>
 
       {/* Opções Avançadas */}
