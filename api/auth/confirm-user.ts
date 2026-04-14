@@ -21,6 +21,32 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ── AUTENTICAÇÃO ──────────────────────────────────────────
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+
+  const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
+  if (authError || !caller) {
+    return res.status(401).json({ error: 'Token inválido' });
+  }
+
+  // ── AUTORIZAÇÃO: exige admin-level ativo em qualquer empresa ─
+  const { data: membership } = await supabaseAdmin
+    .from('company_users')
+    .select('role')
+    .eq('user_id', caller.id)
+    .eq('is_active', true)
+    .in('role', ['admin', 'super_admin', 'system_admin'])
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership) {
+    return res.status(403).json({ error: 'Sem permissão' });
+  }
+  // ─────────────────────────────────────────────────────────
+
   try {
     const { email } = req.body;
 

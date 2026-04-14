@@ -75,6 +75,7 @@ async function assertCompanyMember(
     .select('role')
     .eq('user_id', user.id)
     .eq('company_id', companyId)
+    .eq('is_active', true)
     .maybeSingle()
 
   if (!membership) return { ok: false, status: 403, message: 'Acesso negado' }
