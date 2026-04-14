@@ -74,18 +74,23 @@ export function useFlowDebug(flowId: string | undefined) {
         { headers: { Authorization: `Bearer ${session.access_token}` } },
       )
 
-      if (!res.ok) return
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        console.error('[useFlowDebug] API retornou erro:', res.status, errBody)
+        return
+      }
 
       const json = await res.json()
       const items: FlowExecution[] = json.items ?? []
+      console.log('[useFlowDebug] execuções carregadas:', items.length, 'flowId:', flowId)
 
       setExecutions(items)
 
       const latest = items[0] ?? null
       setLastExecution(latest)
       setNodeStatusMap(latest?.nodeStatusMap ?? {})
-    } catch {
-      // Falha silenciosa — debug não deve quebrar o canvas
+    } catch (err) {
+      console.error('[useFlowDebug] erro inesperado:', err)
     } finally {
       setLoading(false)
     }
