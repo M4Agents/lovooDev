@@ -31,7 +31,19 @@ const DEDUP_WINDOW_MS = 60 * 1000  // 60 s — mesma janela de trigger-event.ts
  * @param {object}  [supabaseOverride]     - Cliente Supabase alternativo (testes)
  */
 export async function dispatchMessageReceivedTrigger(
-  { companyId, leadId = null, conversationId = null, instanceId = null, messageId = null, text = null },
+  {
+    companyId,
+    leadId       = null,
+    conversationId = null,
+    instanceId   = null,
+    messageId    = null,
+    text         = null,
+    direction    = null,
+    from_agent   = null,
+    sender_type  = null,
+    origin       = null,
+    is_from_me   = null,
+  },
   supabaseOverride
 ) {
   const tag = `[dispatchMessageReceivedTrigger][company:${companyId}][lead:${leadId}][conv:${conversationId}]`
@@ -71,6 +83,13 @@ export async function dispatchMessageReceivedTrigger(
         message_id:      messageId,
         text,
         channel:         'whatsapp',
+        // Campos de origem — permitem que triggerEvaluator filtre loops
+        // independentemente de quem chamar este dispatcher no futuro
+        direction,
+        from_agent,
+        sender_type,
+        origin,
+        is_from_me,
       },
     }
 

@@ -855,8 +855,19 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                       <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-2 space-y-1">
                         <div>Não envia mensagem imediatamente — apenas ativa o atendimento automático.</div>
                         <div>Requer que exista uma conversa no contexto (gatilhos: Mensagem Recebida, Oportunidade Movida).</div>
-                        <div>Se a conversa já tiver outro agente ativo, a troca precisa ser explícita via configuração <code className="bg-gray-200 px-1 rounded">force</code>.</div>
                       </div>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.force === true}
+                          onChange={(e) => setConfig({ ...config, force: e.target.checked })}
+                          className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-700">
+                          <span className="font-medium">Substituir agente ativo</span>
+                          <span className="block text-gray-500">Permite trocar o agente atual da conversa, mesmo que já exista um ativo.</span>
+                        </span>
+                      </label>
                     </div>
                   </div>
                 )}

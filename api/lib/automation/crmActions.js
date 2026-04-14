@@ -439,10 +439,12 @@ async function attachAgent(config, context, supabase) {
   const agentId  = config.agentId
   const force    = config.force === true
 
-  // Validações obrigatórias
-  if (!agentId)        return { skipped: true, reason: '[attach_agent] agentId obrigatório na configuração' }
-  if (!companyId)      return { skipped: true, reason: '[attach_agent] companyId obrigatório no contexto' }
-  if (!conversationId) return { skipped: true, reason: 'conversationId obrigatório para attach_agent — conversa não encontrada no contexto' }
+  // Erros críticos de configuração/infraestrutura → throw (não silenciar)
+  if (!companyId) throw new Error('[attach_agent] companyId ausente no contexto — erro crítico de executor')
+  if (!agentId)   throw new Error('[attach_agent] agentId obrigatório na configuração do nó')
+
+  // Condição de runtime esperada (ex.: trigger lead.created sem conversa) → skipped
+  if (!conversationId) return { skipped: true, reason: 'conversationId ausente — attach_agent requer uma conversa no contexto' }
 
   // Buscar assignment ativo da empresa para o agente selecionado
   const { data: assignment, error: assignErr } = await supabase
@@ -469,6 +471,19 @@ async function attachAgent(config, context, supabase) {
 
   const previousAiState      = conv.ai_state
   const previousAssignmentId = conv.ai_assignment_id
+
+  // Proteger estado pausado: ai_paused indica que o sistema suspendeu o agente
+  // intencionalmente. Não reativar sem confirmação explícita via force.
+  if (previousAiState === 'ai_paused' && !force) {
+    return {
+      skipped: true,
+      reason: 'Conversa com agente pausado — use force: true para reativar',
+      action: 'attach_agent',
+      conversationId,
+      previousAiState,
+      previousAssignmentId
+    }
+  }
 
   // Lógica de idempotência e troca controlada
   if (previousAiState === 'ai_active') {
@@ -531,9 +546,11 @@ async function attachAgent(config, context, supabase) {
 async function detachAgent(config, context, supabase) {
   const { companyId, conversationId } = context
 
-  // Validações obrigatórias
-  if (!companyId)      return { skipped: true, reason: '[detach_agent] companyId obrigatório no contexto' }
-  if (!conversationId) return { skipped: true, reason: 'conversationId obrigatório para detach_agent — conversa não encontrada no contexto' }
+  // Erros críticos de configuração/infraestrutura → throw (não silenciar)
+  if (!companyId) throw new Error('[detach_agent] companyId ausente no contexto — erro crítico de executor')
+
+  // Condição de runtime esperada → skipped
+  if (!conversationId) return { skipped: true, reason: 'conversationId ausente — detach_agent requer uma conversa no contexto' }
 
   // Buscar estado atual da conversa (multi-tenant + idempotência)
   const { data: conv, error: convErr } = await supabase

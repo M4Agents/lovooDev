@@ -916,6 +916,10 @@ async function processMessage(payload) {
     // 🎯 DISPATCH message.received — aciona automações de mensagem recebida (fire-and-forget)
     // Executado após resume/user_input e após emitter de IA.
     // Independente do user_input: resume retoma execução pausada; message.received inicia nova.
+    // Guard duplo de direção: o filtro `direction === 'inbound'` aqui já garante que apenas
+    // mensagens do lead chegam ao dispatcher. Os campos extras (direction, from_agent, etc.)
+    // são passados para que triggerEvaluator possa filtrar de forma independente no futuro,
+    // caso o dispatcher seja invocado de outros contextos.
     if (direction === 'inbound' && conversationId) {
       dispatchMessageReceivedTrigger({
         companyId:      company.id,
@@ -924,6 +928,11 @@ async function processMessage(payload) {
         instanceId:     instance.id,
         messageId:      savedMessageId,
         text:           messageText,
+        direction,
+        from_agent:     false,
+        sender_type:    'lead',
+        origin:         'whatsapp',
+        is_from_me:     false,
       }).catch(err => console.error('[uazapi-webhook-final] message.received trigger failed:', err));
     }
 
