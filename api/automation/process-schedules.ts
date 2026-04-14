@@ -84,7 +84,9 @@ export default async function handler(req: any, res: any) {
       .single()
 
     if (lockErr || !locked) {
-      // Outro processo já pegou este schedule
+      // #region agent log
+      console.warn(`[process-schedules][debug] schedule ${scheduleId} — lockErr: ${JSON.stringify(lockErr)} | locked: ${JSON.stringify(locked)}`)
+      // #endregion
       console.log(`[process-schedules] schedule ${scheduleId} já foi capturado por outro processo — skip`)
       results.skipped++
       continue
