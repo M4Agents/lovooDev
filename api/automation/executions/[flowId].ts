@@ -6,8 +6,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js'
 
-const SUPABASE_URL     = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+const SUPABASE_URL      = process.env.VITE_SUPABASE_URL      ?? process.env.SUPABASE_URL      ?? process.env.NEXT_PUBLIC_SUPABASE_URL      ?? ''
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 const MAX_EXECUTIONS = 20   // cap da lista de execuções por request
 const LOGS_PER_EXEC  = 15   // logs retornados por execução
