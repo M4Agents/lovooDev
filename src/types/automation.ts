@@ -323,6 +323,76 @@ export interface MessageReceivedTriggerConfig {
   receiveMetadata: boolean
 }
 
+/**
+ * Formato padrão de eventData para o trigger message.received.
+ *
+ * Todos os dispatchers (WhatsApp Uazapi, Cloud API, webchat, etc.) DEVEM
+ * produzir este objeto ao disparar o evento. O triggerEvaluator.js usa os
+ * campos de origem (direction, from_agent, sender_type, origin, is_from_me)
+ * para evitar que automações disparem em mensagens outbound ou geradas
+ * internamente pelo sistema (proteção anti-loop).
+ *
+ * Campos opcionais devem ser passados como null quando não disponíveis —
+ * nunca omitidos — para que os guards do evaluator funcionem corretamente.
+ *
+ * @see api/lib/automation/dispatchMessageReceivedTrigger.js — contrato completo
+ * @see api/lib/automation/triggerEvaluator.js — uso dos campos de origem
+ */
+export interface MessageReceivedEventData {
+  /** ID do lead relacionado à mensagem */
+  lead_id: string | null
+
+  /** UUID da conversa no banco */
+  conversation_id: string | null
+
+  /** ID da instância de canal (ex: UUID do número WhatsApp) */
+  instance_id?: string | null
+
+  /** ID único da mensagem salva no banco */
+  message_id?: string | null
+
+  /** Conteúdo textual da mensagem */
+  text?: string | null
+
+  /** Canal de origem (ex: 'whatsapp', 'webchat') */
+  channel?: string | null
+
+  // ── Campos de origem (obrigatórios para proteção anti-loop) ──
+
+  /**
+   * Direção da mensagem.
+   * - 'inbound'  → veio do lead
+   * - 'outbound' → enviada pela plataforma ou agente
+   */
+  direction?: 'inbound' | 'outbound' | null
+
+  /**
+   * true se a mensagem foi gerada pelo agente de IA.
+   * Combinado com direction para detectar loops.
+   */
+  from_agent?: boolean | null
+
+  /**
+   * Tipo do remetente.
+   * - 'lead'   → contato externo
+   * - 'agent'  → agente de IA
+   * - 'system' → gerado internamente pelo sistema
+   */
+  sender_type?: 'lead' | 'agent' | 'system' | null
+
+  /**
+   * Canal/origem da mensagem.
+   * Exemplos: 'whatsapp', 'webchat', 'api', 'system'
+   */
+  origin?: string | null
+
+  /**
+   * true se a mensagem foi enviada pela própria plataforma (outbound).
+   * false se recebida externamente (inbound).
+   */
+  is_from_me?: boolean | null
+}
+
 // Gatilho: Oportunidade Criada
 export interface OpportunityCreatedTriggerConfig {
   triggerType: 'opportunity.created'

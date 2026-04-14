@@ -12,6 +12,58 @@
 // Fail-safe: nunca lança exceção para o caller.
 // =====================================================
 
+/**
+ * CONTRATO DE eventData — message.received
+ * =========================================
+ *
+ * Este é o formato padrão que TODOS os dispatchers de mensagem DEVEM
+ * seguir ao chamar esta função ou ao disparar o evento message.received.
+ * O triggerEvaluator.js depende desses campos para filtrar mensagens e
+ * evitar loops. Novas integrações (Cloud API, webchat, etc.) devem
+ * respeitar este contrato.
+ *
+ * Campos de identificação (obrigatórios):
+ *   @param {string}  companyId       - UUID da empresa (multi-tenant)
+ *
+ * Campos de contexto (recomendados):
+ *   @param {string}  leadId          - ID do lead relacionado à mensagem
+ *   @param {string}  conversationId  - UUID da conversa no banco
+ *   @param {string}  instanceId      - ID da instância (ex: número WhatsApp)
+ *   @param {string}  messageId       - ID único da mensagem salva
+ *   @param {string}  text            - Conteúdo textual da mensagem
+ *
+ * Campos de origem (obrigatórios para proteção anti-loop):
+ *   @param {'inbound'|'outbound'} direction
+ *     - 'inbound'  → mensagem veio do lead
+ *     - 'outbound' → mensagem foi enviada pela plataforma ou agente
+ *
+ *   @param {boolean} from_agent
+ *     - true  → mensagem gerada pelo agente de IA
+ *     - false → mensagem enviada pelo lead ou operador humano
+ *
+ *   @param {'lead'|'agent'|'system'} sender_type
+ *     - 'lead'   → remetente é o lead/contato externo
+ *     - 'agent'  → remetente é o agente de IA
+ *     - 'system' → mensagem gerada internamente pelo sistema
+ *
+ *   @param {string} origin
+ *     - Canal/origem da mensagem (ex: 'whatsapp', 'webchat', 'api', 'system')
+ *
+ *   @param {boolean} is_from_me
+ *     - true  → mensagem enviada pela própria plataforma (outbound)
+ *     - false → mensagem recebida externamente (inbound)
+ *
+ * Comportamento do triggerEvaluator com esses campos:
+ *   - Se direction === 'outbound'   → automação NÃO dispara
+ *   - Se from_agent === true        → automação NÃO dispara
+ *   - Se sender_type === 'agent'    → automação NÃO dispara
+ *   - Se sender_type === 'system'   → automação NÃO dispara
+ *   - Se origin === 'system'        → automação NÃO dispara
+ *   - Se is_from_me === true        → automação NÃO dispara
+ *
+ * Referência de tipos TypeScript: src/types/automation.ts → MessageReceivedEventData
+ */
+
 import { getSupabaseAdmin }                       from './supabaseAdmin.js'
 import { matchesTriggerConditions }               from './triggerEvaluator.js'
 import { createExecution, processFlowAsync }      from './executor.js'
