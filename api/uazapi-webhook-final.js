@@ -788,40 +788,26 @@ async function processMessage(payload) {
         fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-start',message:'iniciando busca de execução pausada',data:{companyId:company.id,inboundLeadId,conversationId,messageText:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
 
-        console.log('[webhook][user_input] v2 — buscando execuções pausadas (filtro JS)', { companyId: company.id, inboundLeadId });
+        console.log('[webhook][user_input] v3 — buscando via RPC SECURITY DEFINER', { companyId: company.id, inboundLeadId });
 
-        // Busca execuções pausadas da empresa e filtra _awaiting_input em JS
-        // (filtro JSONB via PostgREST com -> não funciona para IS NOT NULL)
-        const { data: allPaused, error: pausedErr } = await supabase
-          .from('automation_executions')
-          .select('id, lead_id, current_node_id, paused_at, variables')
-          .eq('company_id', company.id)
-          .eq('status', 'paused')
-          .order('paused_at', { ascending: false })
-          .limit(20);
+        // Usa RPC SECURITY DEFINER para bypass do RLS (client anon não acessa diretamente)
+        const { data: pausedResult, error: pausedErr } = await supabase
+          .rpc('find_paused_awaiting_input_execution', {
+            p_company_id: company.id,
+            p_lead_id: inboundLeadId || null
+          });
 
-        console.log('[webhook][user_input] total paused no banco:', allPaused?.length ?? 0, '| erro:', pausedErr?.message ?? null);
-        const pausedCandidates = (allPaused || []).filter(e => e.variables?._awaiting_input);
-        console.log('[webhook][user_input] com _awaiting_input:', pausedCandidates.length);
+        console.log('[webhook][user_input] resultado RPC:', pausedResult, '| erro:', pausedErr?.message ?? null);
 
         if (pausedErr) {
-          console.error('[webhook][user_input] erro ao buscar execuções pausadas:', pausedErr.message);
-        } else if (!pausedCandidates || pausedCandidates.length === 0) {
+          console.error('[webhook][user_input] erro ao buscar execução pausada:', pausedErr.message);
+        } else if (!pausedResult?.found) {
           console.log('[webhook][user_input] nenhuma execução pausada aguardando input');
         } else {
-          // Prioridade 1: execução cujo lead_id bate com o inboundLeadId
-          // Prioridade 2: execução com lead_id null (trigger sem lead explícito)
-          // Prioridade 3: a mais recente (fallback)
-          let target = null;
-          if (inboundLeadId) {
-            target = pausedCandidates.find(e => e.lead_id == inboundLeadId) || null;
-          }
-          if (!target) {
-            target = pausedCandidates.find(e => e.lead_id === null) || pausedCandidates[0];
-          }
+          const target = { id: pausedResult.execution_id, lead_id: pausedResult.lead_id };
 
           // #region agent log
-          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-target',message:'execução candidata selecionada',data:{candidates:pausedCandidates.length,targetId:target?.id,targetLeadId:target?.lead_id,inboundLeadId},timestamp:Date.now()})}).catch(()=>{});
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-target',message:'execução candidata selecionada via RPC',data:{targetId:target?.id,targetLeadId:target?.lead_id,inboundLeadId},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
 
           if (target) {
