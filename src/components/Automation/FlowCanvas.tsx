@@ -373,13 +373,19 @@ function FlowCanvasInner({
         y: event.clientY - reactFlowBounds.top
       })
 
+      const defaultConfig: Record<string, any> = {}
+      if (blockData.type === 'delay') {
+        defaultConfig.duration = 1
+        defaultConfig.unit = 'minutes'
+      }
+
       const newNode: Node = {
         id: `${blockData.type}-${Date.now()}`,
         type: blockData.type,
         position,
         data: {
           label: blockData.label,
-          config: {}
+          config: defaultConfig
         }
       }
       newNode.data.onSelect = () => onNodeSelectRef.current(newNode)
@@ -489,6 +495,12 @@ function FlowCanvasInner({
     if (!sourceNode) return
 
     // Criar nó de ação conectado ao nó de origem
+    const actionDefaultConfig: Record<string, any> = {}
+    if (actionType === 'delay') {
+      actionDefaultConfig.duration = 1
+      actionDefaultConfig.unit = 'minutes'
+    }
+
     const newNode: Node = {
       id: `${actionType}-${Date.now()}`,
       type: actionType,
@@ -501,7 +513,7 @@ function FlowCanvasInner({
                actionType === 'action' ? 'Ação' :
                actionType === 'condition' ? 'Condição' :
                actionType === 'delay' ? 'Espera' : 'Ação',
-        config: {}
+        config: actionDefaultConfig
       }
     }
     newNode.data.onSelect = () => onNodeSelectRef.current(newNode)
