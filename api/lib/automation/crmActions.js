@@ -13,6 +13,8 @@
 //   lose_opportunity        — status = 'lost' + closed_at
 //   create_opportunity      — cria nova oportunidade para o lead
 //   set_custom_field        — upsert em lead_custom_values
+//   attach_agent            — ativa agente de IA na conversa (ai_state = ai_active)
+//   detach_agent            — desativa agente de IA na conversa (ai_state = ai_inactive)
 //
 // resolveLeadId centralizado em contextUtils.js
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
@@ -423,6 +425,86 @@ async function setCustomField(config, context, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// Ativar agente de IA em uma conversa — define ai_state = 'ai_active'
+// ---------------------------------------------------------------------------
+
+async function attachAgent(config, context, supabase) {
+  const { companyId, conversationId } = context
+  const agentId = config.agentId
+
+  if (!agentId)       throw new Error('[attach_agent] agentId obrigatório na configuração')
+  if (!companyId)     throw new Error('[attach_agent] companyId obrigatório no contexto')
+
+  if (!conversationId) {
+    return { skipped: true, reason: 'conversationId obrigatório para attach_agent — conversa não encontrada no contexto' }
+  }
+
+  // Buscar assignment ativo da empresa para o agente selecionado
+  const { data: assignment, error: assignErr } = await supabase
+    .from('company_agent_assignments')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('agent_id', agentId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (assignErr) throw new Error(`[attach_agent] erro ao buscar assignment: ${assignErr.message}`)
+  if (!assignment) throw new Error(`[attach_agent] agente ${agentId} não encontrado ou inativo para a empresa ${companyId}`)
+
+  // Verificar estado atual da conversa (multi-tenant + idempotência)
+  const { data: conv, error: convErr } = await supabase
+    .from('chat_conversations')
+    .select('id, ai_state')
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (convErr) throw new Error(`[attach_agent] erro ao buscar conversa: ${convErr.message}`)
+  if (!conv)   throw new Error(`[attach_agent] conversa ${conversationId} não encontrada na empresa ${companyId}`)
+
+  // Idempotência: não atualizar se o agente já estiver ativo
+  if (conv.ai_state === 'ai_active') {
+    return { skipped: true, reason: 'Agente já está ativo nesta conversa', conversationId }
+  }
+
+  const { error: updateErr } = await supabase
+    .from('chat_conversations')
+    .update({ ai_state: 'ai_active', ai_assignment_id: assignment.id })
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+
+  if (updateErr) throw new Error(`[attach_agent] erro ao ativar agente: ${updateErr.message}`)
+
+  console.log(`[attach_agent] agente ${agentId} ativado na conversa ${conversationId}`)
+  return { executed: true, action: 'attach_agent', agentId, assignmentId: assignment.id, conversationId }
+}
+
+// ---------------------------------------------------------------------------
+// Desativar agente de IA em uma conversa — define ai_state = 'ai_inactive'
+// ---------------------------------------------------------------------------
+
+async function detachAgent(config, context, supabase) {
+  const { companyId, conversationId } = context
+
+  if (!companyId) throw new Error('[detach_agent] companyId obrigatório no contexto')
+
+  if (!conversationId) {
+    return { skipped: true, reason: 'conversationId obrigatório para detach_agent — conversa não encontrada no contexto' }
+  }
+
+  const { error: updateErr } = await supabase
+    .from('chat_conversations')
+    .update({ ai_state: 'ai_inactive', ai_assignment_id: null })
+    .eq('id', conversationId)
+    .eq('company_id', companyId)
+
+  if (updateErr) throw new Error(`[detach_agent] erro ao desativar agente: ${updateErr.message}`)
+
+  console.log(`[detach_agent] agente desativado na conversa ${conversationId}`)
+  return { executed: true, action: 'detach_agent', conversationId }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point principal — chamado pelo executor.js
 // ---------------------------------------------------------------------------
 
@@ -468,6 +550,12 @@ export async function executeCrmAction(node, context, supabase) {
 
       case 'set_custom_field':
         return await setCustomField(config, context, supabase)
+
+      case 'attach_agent':
+        return await attachAgent(config, context, supabase)
+
+      case 'detach_agent':
+        return await detachAgent(config, context, supabase)
 
       default:
         console.log(`[crmActions] ação não suportada nesta etapa: ${actionType} — skipped`)

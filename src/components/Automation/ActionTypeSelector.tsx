@@ -7,11 +7,11 @@
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
   ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
-  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle, Bot, BotOff
 } from 'lucide-react'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent'
   label: string
   icon: React.ReactNode
   description?: string
@@ -189,6 +189,20 @@ export const ACTION_TYPES: ActionType[] = [
     description: 'Dispare outro fluxo de automação',
     category: 'system',
     comingSoon: true
+  },
+  {
+    id: 'attach_agent',
+    label: 'Ativar Agente de IA',
+    icon: <Bot className="w-4 h-4" />,
+    description: 'Ativa um agente de IA para atender esta conversa automaticamente',
+    category: 'system'
+  },
+  {
+    id: 'detach_agent',
+    label: 'Desativar Agente de IA',
+    icon: <BotOff className="w-4 h-4" />,
+    description: 'Remove o agente de IA da conversa em andamento',
+    category: 'system'
   }
 ]
 

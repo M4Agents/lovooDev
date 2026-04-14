@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import ActionTypeSelector, { ACTION_TYPES } from './ActionTypeSelector'
 import { CreateActivityForm, UpdateActivityForm, CompleteActivityForm, CancelActivityForm, RescheduleActivityForm } from './ActivityForms'
+import { companyOwnAgentsApi, type CompanyAgent } from '../../services/companyOwnAgentsApi'
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -40,6 +41,8 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   const [customFields, setCustomFields] = useState<any[]>([])
   const [flows, setFlows] = useState<any[]>([])
   const [loadingCustomFields, setLoadingCustomFields] = useState(false)
+  const [agents, setAgents] = useState<CompanyAgent[]>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
 
   useEffect(() => {
     if (selectedNode) {
@@ -77,6 +80,13 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
       loadFlows()
     }
   }, [config.actionType, company?.id])
+
+  useEffect(() => {
+    const actionType = config.actionType || selectedNode?.data?.config?.actionType
+    if (selectedNode?.type === 'action' && company?.id && actionType === 'attach_agent') {
+      loadAgents()
+    }
+  }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
 
   useEffect(() => {
     if (config.funnelId) {
@@ -186,6 +196,19 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
       console.error('Erro:', error)
     } finally {
       setLoadingCustomFields(false)
+    }
+  }
+
+  const loadAgents = async () => {
+    if (!company?.id) return
+    setLoadingAgents(true)
+    try {
+      const data = await companyOwnAgentsApi.list(company.id)
+      setAgents(data || [])
+    } catch (error) {
+      console.error('[NodeConfigPanel] Erro ao carregar agentes:', error)
+    } finally {
+      setLoadingAgents(false)
     }
   }
 
@@ -796,8 +819,50 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                 {config.actionType === 'reschedule_activity' && <RescheduleActivityForm config={config} setConfig={setConfig} />}
                 {config.actionType === 'send_notification' && <NotificationForm config={config} setConfig={setConfig} users={users} />}
                 {config.actionType === 'trigger_automation' && <TriggerAutomationForm config={config} setConfig={setConfig} flows={flows} currentFlowId={flowId} />}
+
+                {/* Ativar Agente de IA */}
+                {config.actionType === 'attach_agent' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Agente de IA *
+                      </label>
+                      {loadingAgents ? (
+                        <div className="text-sm text-gray-500">Carregando agentes...</div>
+                      ) : agents.length === 0 ? (
+                        <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
+                          Nenhum agente de IA disponível. Configure um agente para esta empresa primeiro.
+                        </div>
+                      ) : (
+                        <select
+                          value={config.agentId || ''}
+                          onChange={(e) => setConfig({ ...config, agentId: e.target.value })}
+                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        >
+                          <option value="">Selecione um agente</option>
+                          {agents.map((agent) => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div className="text-xs text-blue-600 bg-blue-50 p-3 rounded-md">
+                      O agente será ativado para responder automaticamente todas as mensagens desta conversa. Requer que exista uma conversa no contexto da execução (gatilhos: Mensagem Recebida, Oportunidade Movida).
+                    </div>
+                  </div>
+                )}
+
+                {/* Desativar Agente de IA */}
+                {config.actionType === 'detach_agent' && (
+                  <div className="text-sm text-gray-600 bg-orange-50 border border-orange-200 p-3 rounded-md">
+                    O agente de IA será desativado para esta conversa. O atendimento automático será encerrado.
+                  </div>
+                )}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

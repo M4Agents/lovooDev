@@ -35,8 +35,12 @@ function matchesTriggerConditions(flow, event) {
   return results.some(r => r === true)
 }
 
-// lead.created não possui filtros configuráveis na UI — qualquer lead criado dispara o flow
-function matchesLeadCreated(_trigger, _eventData) {
+// lead.created — filtro opcional por origem (source)
+function matchesLeadCreated(trigger, eventData) {
+  const config = trigger.config || {}
+  if (config.source && config.source !== 'any') {
+    return eventData?.source === config.source
+  }
   return true
 }
 
@@ -89,9 +93,39 @@ function matchesTag(trigger, eventData) {
   return true
 }
 
+// Normaliza texto: lowercase + remove acentos
+function normalizeText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
 function matchesMessageReceived(trigger, eventData) {
   const config = trigger.config || {}
+
+  // Filtro por instância WhatsApp
   if (config.instanceId && config.instanceId !== eventData.instance_id) return false
+
+  // Filtro por tipo de sessão: só dispara em novas conversas
+  // Somente bloqueia se o dispatcher explicitamente marcou is_new_conversation = false
+  if (config.sessionControl === 'new_conversation' && eventData.is_new_conversation === false) return false
+
+  // Filtro por palavras-chave
+  const keywords = config.keywords || []
+  if (keywords.length > 0) {
+    const text = normalizeText(eventData.text || eventData.message_text || '')
+    const normalizedKeywords = keywords.map(normalizeText)
+    const matchMode = config.keywordMatch || config.comparisonType || 'any'
+
+    if (matchMode === 'all') {
+      if (!normalizedKeywords.every(kw => text.includes(kw))) return false
+    } else {
+      // 'any', 'contains' e demais modos: ao menos uma palavra deve estar presente
+      if (!normalizedKeywords.some(kw => text.includes(kw))) return false
+    }
+  }
+
   return true
 }
 
@@ -104,5 +138,6 @@ export {
   matchesOpportunityLost,
   matchesOpportunityOwner,
   matchesTag,
-  matchesMessageReceived
+  matchesMessageReceived,
+  normalizeText
 }

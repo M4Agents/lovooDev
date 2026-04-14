@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { useSalesFunnels } from '../../hooks/useSalesFunnels'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
+import { supabase } from '../../lib/supabase'
 import type { TriggerType, ComparisonType, SessionControl, LostReason } from '../../types/automation'
 
 interface TriggerConfigPanelProps {
@@ -45,10 +46,27 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     previousStatus: 'won'
   })
   const [currentKeyword, setCurrentKeyword] = useState('')
+  const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([])
+  const [loadingTags, setLoadingTags] = useState(false)
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   const { funnels, loading: loadingFunnels } = useSalesFunnels(company?.id)
   const { stages, loading: loadingStages } = useFunnelStages(config.funnelId || '')
+
+  useEffect(() => {
+    const type = config.triggerType
+    if ((type === 'tag.added' || type === 'tag.removed') && company?.id && tags.length === 0) {
+      setLoadingTags(true)
+      supabase
+        .from('lead_tags')
+        .select('id, name, color')
+        .eq('company_id', company.id)
+        .eq('is_active', true)
+        .order('name')
+        .then(({ data }) => setTags(data || []))
+        .finally(() => setLoadingTags(false))
+    }
+  }, [config.triggerType, company?.id])
 
   useEffect(() => {
     if (selectedNode) {
@@ -77,7 +95,11 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         maxValue: nodeConfig.maxValue,
         ownerId: nodeConfig.ownerId || '',
         ownerName: nodeConfig.ownerName || '',
-        previousStatus: nodeConfig.previousStatus || 'won'
+        previousStatus: nodeConfig.previousStatus || 'won',
+        source: nodeConfig.source || 'any',
+        tagId: nodeConfig.tagId || '',
+        tagName: nodeConfig.tagName || '',
+        keywordMatch: nodeConfig.keywordMatch || 'any'
       })
     }
   }, [selectedNode])
@@ -814,14 +836,58 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           {config.triggerType === 'message.received' && renderMessageReceivedConfig()}
           
           {config.triggerType === 'lead.created' && (
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
-              ℹ️ Esta automação será disparada sempre que um novo lead for criado no sistema.
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Origem do Lead
+                </label>
+                <select
+                  value={config.source || 'any'}
+                  onChange={(e) => setConfig({ ...config, source: e.target.value })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                >
+                  <option value="any">Qualquer origem</option>
+                  <option value="manual">Criado manualmente</option>
+                  <option value="import">Importação em massa</option>
+                  <option value="whatsapp">Via WhatsApp</option>
+                  <option value="api">Via API / Webhook</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Filtre por como o lead foi criado. "Qualquer origem" dispara em todos os casos.
+                </p>
+              </div>
             </div>
           )}
 
           {(config.triggerType === 'tag.added' || config.triggerType === 'tag.removed') && (
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
-              ℹ️ Configuração de tags será implementada em breve.
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tag específica (opcional)
+                </label>
+                {loadingTags ? (
+                  <div className="text-sm text-gray-500">Carregando tags...</div>
+                ) : (
+                  <select
+                    value={config.tagId || ''}
+                    onChange={(e) => {
+                      const tag = tags.find(t => t.id === e.target.value)
+                      setConfig({ ...config, tagId: e.target.value, tagName: tag?.name || '' })
+                    }}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                  >
+                    <option value="">Qualquer tag</option>
+                    {tags.map(tag => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Deixe vazio para disparar quando qualquer tag for {config.triggerType === 'tag.added' ? 'adicionada' : 'removida'}.
+                </p>
+              </div>
             </div>
           )}
 
