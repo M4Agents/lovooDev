@@ -3,15 +3,54 @@
 // Etapa 7: lock de execução via executionLock.js
 //        + user_input + delay + action + condition + message + logs
 //
-// Suportado:   start, trigger, end, message, condition, action, delay, user_input
-// Não suportado: distribution
-//   → skipped com log claro.
+// Suportado:   start, trigger, end, message, condition, action, delay, user_input, distribution
 //
 // Todas as funções recebem `supabase` (supabaseAdmin)
 // como parâmetro — sem importar nada de src/.
 // =====================================================
 
 import { acquireLock, releaseLock } from './executionLock.js'
+
+// ---------------------------------------------------------------------------
+// Resolução de instanceId — fonte única para processFlowAsync e resumeFromNode
+//
+// Prioridade:
+//   1. trigger_data.instance_id  (snake_case — padrão dos dispatchers atuais)
+//   2. trigger_data.instanceId   (camelCase  — compatibilidade legado)
+//   3. triggerNode config        (config do nó trigger do flow — fallback estático)
+// ---------------------------------------------------------------------------
+
+function resolveInstanceId(execution, triggerNode) {
+  return (
+    execution.trigger_data?.instance_id
+    ?? execution.trigger_data?.instanceId
+    ?? triggerNode?.data?.triggers?.find(t => t.enabled)?.config?.instanceId
+    ?? null
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Validação defensiva do context
+//
+// Não lança exception — apenas loga e retorna false para que o caller
+// possa encerrar a execução de forma controlada sem crashar a Lambda.
+// ---------------------------------------------------------------------------
+
+function assertContext(context) {
+  const required = ['executionId', 'flowId', 'companyId', 'triggerData', 'variables']
+  for (const field of required) {
+    if (context[field] === undefined || context[field] === null) {
+      console.error('[executor][context inválido] campo obrigatório ausente:', field, {
+        executionId:   context.executionId,
+        flowId:        context.flowId,
+        companyId:     context.companyId,
+        missingField:  field,
+      })
+      return false
+    }
+  }
+  return true
+}
 
 // ---------------------------------------------------------------------------
 // Registro de estado
@@ -188,13 +227,17 @@ async function pauseAtUserInput(node, context, supabase) {
   // 2. Calcular timeout_at
   const timeoutAt = new Date()
   switch (timeoutUnit) {
+    case 'seconds': timeoutAt.setSeconds(timeoutAt.getSeconds() + timeoutValue); break
     case 'minutes': timeoutAt.setMinutes(timeoutAt.getMinutes() + timeoutValue); break
     case 'hours':   timeoutAt.setHours(timeoutAt.getHours()     + timeoutValue); break
     case 'days':    timeoutAt.setDate(timeoutAt.getDate()        + timeoutValue); break
     default:        timeoutAt.setHours(timeoutAt.getHours()      + timeoutValue); break
   }
 
-  const updatedVariables = {
+  // Cópia imutável — não muta context.variables diretamente.
+  // _awaiting_input é um marcador interno: persiste no banco mas nunca deve
+  // entrar em context.variables em memória nem ser exposto em output_data de API.
+  const nextVariables = {
     ...(context.variables || {}),
     _awaiting_input: {
       node_id:        node.id,
@@ -215,14 +258,15 @@ async function pauseAtUserInput(node, context, supabase) {
       paused_at:       new Date().toISOString(),
       timeout_at:      timeoutAt.toISOString(),
       current_node_id: node.id,
-      variables:       updatedVariables,
+      variables:       nextVariables,
     })
     .eq('id', context.executionId)
 
   if (pauseErr) throw new Error(`Erro ao pausar execução em user_input: ${pauseErr.message}`)
 
-  // Atualizar contexto local para que processFlowAsync detecte o pause
-  context.variables = updatedVariables
+  // Não mutar context.variables: o banco é a fonte de verdade.
+  // O flow para imediatamente após este retorno (processNode detecta result.paused === true).
+  // Quando o flow for retomado (resumeFromNode), um context novo é construído do banco.
 
   console.log(`[executor] user_input: execução ${context.executionId} pausada — aguardando "${variableName}" (timeout: ${timeoutValue} ${timeoutUnit})`)
 
@@ -281,6 +325,16 @@ async function executeNodeAction(node, context, supabase) {
     case 'delay': {
       const { pauseAtDelay } = await import('./delayHandler.js')
       return await pauseAtDelay(node, context, supabase)
+    }
+
+    case 'distribution': {
+      const { executeDistribution } = await import('./distributionHandler.js')
+      return await executeDistribution(node, context, supabase)
+    }
+
+    case 'execute_agent': {
+      const { executeAgentNode } = await import('./agentNodeHandler.js')
+      return await executeAgentNode(node, context, supabase)
     }
 
     default:
@@ -403,15 +457,53 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
       throw new Error(`Erro ao retomar execução: ${resumeErr.message}`)
     }
 
+    // triggerNode não está disponível aqui; resolveInstanceId usa pausedNode como fallback
     const context = {
-      executionId:   execution.id,
-      flowId:        flow.id,
-      companyId:     execution.company_id,
-      triggerData:   execution.trigger_data  || {},
-      variables:     execution.variables     || {},
-      leadId:        execution.lead_id       || null,
-      opportunityId: execution.opportunity_id || null,
-      instanceId:    execution.trigger_data?.instanceId ?? null,
+      executionId:    execution.id,
+      flowId:         flow.id,
+      companyId:      execution.company_id,
+      triggerData:    execution.trigger_data   || {},
+      variables:      execution.variables      || {},
+      leadId:         execution.lead_id        || null,
+      opportunityId:  execution.opportunity_id  || null,
+      instanceId:     resolveInstanceId(execution, pausedNode),
+      // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
+      // trigger_data.conversationId existe apenas como compatibilidade com payloads legados.
+      // Não derivar de outras fontes — para evitar divergência futura como ocorreu com instanceId.
+      conversationId: execution.trigger_data?.conversation_id
+                      ?? execution.trigger_data?.conversationId
+                      ?? null,
+    }
+
+    if (!assertContext(context)) {
+      const errorMsg = 'context inválido após resume — campo obrigatório ausente'
+      // Gravar rastro diretamente usando execution.id e flow.id (não o context, que é inválido)
+      try {
+        await supabase.from('automation_logs').insert({
+          execution_id:  execution.id,
+          flow_id:       flow.id,
+          company_id:    execution.company_id,
+          node_id:       pausedNodeId || 'unknown',
+          node_type:     'system',
+          action:        'resume_context_invalid',
+          status:        'error',
+          input_data:    null,
+          output_data:   {
+            missingFields: ['executionId', 'flowId', 'companyId', 'triggerData', 'variables'].filter(
+              f => context[f] === undefined || context[f] === null
+            ),
+            executionId:  context.executionId,
+            flowId:       context.flowId,
+            companyId:    context.companyId,
+          },
+          error_message: errorMsg,
+          executed_at:   new Date().toISOString(),
+        })
+      } catch (logErr) {
+        console.error('[executor][resumeFromNode] falha ao registrar log de context inválido:', logErr?.message)
+      }
+      await completeExecution(execution.id, 'failed', errorMsg, supabase)
+      return { failed: true, reason: 'context inválido' }
     }
 
     const resumeType = awaitingInput ? 'user_input' : 'delay'
@@ -472,17 +564,26 @@ export async function processFlowAsync(flow, execution, supabase) {
     const triggerNode = (flow.nodes || []).find(n => n.type === 'trigger' || n.type === 'start')
     if (!triggerNode) throw new Error('Nó trigger/start não encontrado no flow')
 
-    const firstTrigger = (triggerNode.data?.triggers || []).find(t => t.enabled)
-
     const context = {
-      executionId:   execution.id,
-      flowId:        flow.id,
-      companyId:     execution.company_id,
-      triggerData:   execution.trigger_data,
-      variables:     execution.variables || {},
-      leadId:        execution.lead_id,
-      opportunityId: execution.opportunity_id,
-      instanceId:    firstTrigger?.config?.instanceId ?? null,
+      executionId:    execution.id,
+      flowId:         flow.id,
+      companyId:      execution.company_id,
+      triggerData:    execution.trigger_data   || {},
+      variables:      execution.variables      || {},
+      leadId:         execution.lead_id        || null,
+      opportunityId:  execution.opportunity_id  || null,
+      instanceId:     resolveInstanceId(execution, triggerNode),
+      // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
+      // trigger_data.conversationId existe apenas como compatibilidade com payloads legados.
+      // Não derivar de outras fontes — para evitar divergência futura como ocorreu com instanceId.
+      conversationId: execution.trigger_data?.conversation_id
+                      ?? execution.trigger_data?.conversationId
+                      ?? null,
+    }
+
+    if (!assertContext(context)) {
+      await completeExecution(execution.id, 'failed', 'context inválido — campo obrigatório ausente', supabase)
+      return
     }
 
     await processNode(triggerNode, flow.nodes, flow.edges || [], context, supabase)

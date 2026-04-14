@@ -9,6 +9,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { Clock, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
+import NodeDebugBadge from './NodeDebugBadge'
 
 // =====================================================
 // HELPER: Traduzir unidades de tempo
@@ -32,20 +33,15 @@ const getUnitLabel = (unit?: string): string => {
 // HELPER: Gerar preview dinâmico do delay
 // =====================================================
 const getDelayPreview = (config: any): string => {
-  // Verificar se tem configuração (duration pode ser 0)
-  if (!config || (config.duration === undefined && config.duration === null)) {
+  if (!config || config.duration == null || config.duration <= 0) {
     return 'Clique para configurar tempo'
   }
-
-  const duration = config.duration ?? 0
-  const unit = config.unit || 'minutes'
-  
-  return `Atraso de ${duration} ${getUnitLabel(unit)}`
+  return `Aguardar ${config.duration} ${getUnitLabel(config.unit)}`
 }
 
 const DelayNode = ({ data, selected, id }: NodeProps) => {
   const delayPreview = getDelayPreview(data.config)
-  const hasConfig = !!(data.config?.duration !== undefined || data.config?.duration === 0)
+  const hasConfig = !!(data.config?.duration > 0)
   const { setNodes, setEdges } = useReactFlow()
 
   const handleDelete = () => {
@@ -82,6 +78,8 @@ const DelayNode = ({ data, selected, id }: NodeProps) => {
     <div className={`bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative ${
       selected ? 'border-orange-600 ring-2 ring-orange-300' : 'border-gray-200 hover:border-orange-400'
     }`}>
+      <NodeDebugBadge debugStatus={data.debugStatus} />
+
       {/* Toolbar - aparece apenas quando selecionado */}
       {selected && (
         <NodeToolbar

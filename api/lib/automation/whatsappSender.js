@@ -138,14 +138,15 @@ function replaceVariables(message, lead, contextVariables) {
   result = result.replace(/\{\{data\.hoje\}\}/g, now.toLocaleDateString('pt-BR'))
   result = result.replace(/\{\{data\.hora\}\}/g, now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
 
-  // Variáveis de contexto/custom
+  // Variáveis de contexto/custom — padrão {{variavel}} (double-brace)
   const vars = contextVariables || {}
   Object.keys(vars).forEach(key => {
+    const value = String(vars[key] ?? '')
     if (key.startsWith('custom_')) {
       const fieldName = key.replace('custom_', '')
-      result = result.replace(new RegExp(`\\{\\{custom\\.${fieldName}\\}\\}`, 'g'), String(vars[key] || ''))
+      result = result.replace(new RegExp(`\\{\\{custom\\.${fieldName}\\}\\}`, 'g'), value)
     }
-    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), vars[key] || '')
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value)
   })
 
   return result
@@ -222,9 +223,6 @@ export async function sendMessageNode(node, context, supabase) {
   // Tipos não suportados nesta etapa
   if (messageType === 'delay') {
     return { skipped: true, reason: 'messageType=delay não suportado nesta etapa' }
-  }
-  if (messageType === 'user_input') {
-    return { skipped: true, reason: 'messageType=user_input não suportado nesta etapa (requer webhook)' }
   }
 
   // Conteúdo da mensagem

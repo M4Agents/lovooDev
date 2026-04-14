@@ -132,7 +132,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
 
   const triggerTypes: { value: TriggerType; label: string }[] = [
     { value: 'message.received', label: '📥 Mensagem Recebida' },
-    { value: 'message.sent', label: '📤 Mensagem Enviada' },
     { value: 'lead.created', label: '👤 Lead Criado' },
     { value: 'tag.added', label: '🏷️ Tag Adicionada' },
     { value: 'tag.removed', label: '🏷️ Tag Removida' },
@@ -142,7 +141,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     { value: 'opportunity.lost', label: '😔 Oportunidade Perdida' },
     { value: 'opportunity.owner_assigned', label: '👤 Vendedor Atribuído' },
     { value: 'opportunity.owner_removed', label: '👤 Vendedor Removido' },
-    { value: 'opportunity.restored', label: '🔄 Oportunidade Restaurada' },
   ]
 
   const comparisonTypes: { value: ComparisonType; label: string }[] = [
@@ -621,52 +619,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     </div>
   )
 
-  const renderOpportunityRestoredConfig = () => (
-    <div className="space-y-4">
-      {/* Status Anterior */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Status Anterior *
-        </label>
-        <select
-          value={config.previousStatus || 'won'}
-          onChange={(e) => setConfig({ ...config, previousStatus: e.target.value })}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-        >
-          <option value="won">🎉 Ganha</option>
-          <option value="lost">😔 Perdida</option>
-        </select>
-      </div>
-
-      {/* Funil */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Funil (opcional)
-        </label>
-        {loadingFunnels ? (
-          <div className="text-sm text-gray-500">Carregando funis...</div>
-        ) : (
-          <select
-            value={config.funnelId || ''}
-            onChange={(e) => handleFunnelChange(e.target.value)}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-          >
-            <option value="">Qualquer funil</option>
-            {funnels.map(funnel => (
-              <option key={funnel.id} value={funnel.id}>
-                {funnel.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
-        ℹ️ Este gatilho dispara quando uma oportunidade ganha/perdida é reaberta
-      </div>
-    </div>
-  )
-
   const renderMessageReceivedConfig = () => (
     <div className="space-y-4">
       {/* Instância WhatsApp */}
@@ -880,7 +832,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           {config.triggerType === 'opportunity.lost' && renderOpportunityLostConfig()}
           {config.triggerType === 'opportunity.owner_assigned' && renderOpportunityOwnerAssignedConfig()}
           {config.triggerType === 'opportunity.owner_removed' && renderOpportunityOwnerRemovedConfig()}
-          {config.triggerType === 'opportunity.restored' && renderOpportunityRestoredConfig()}
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2, ArrowRight, TrendingUp, TrendingDown, User } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
+import NodeDebugBadge from './NodeDebugBadge'
 
 const ActionNode = ({ data, selected, id }: NodeProps) => {
   // FASE 7.5 - Novo design implementado em 14/03/2026
@@ -98,6 +99,8 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
     <div className={`bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative ${
       selected ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200 hover:border-blue-400'
     }`}>
+      <NodeDebugBadge debugStatus={data.debugStatus} />
+
       {/* Toolbar - aparece apenas quando selecionado */}
       {selected && (
         <NodeToolbar
@@ -119,7 +122,7 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 text-white">{getActionIcon()}</div>
             <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
-              Ação
+              {getActionLabel()}
             </span>
           </div>
           {hasConfig ? (

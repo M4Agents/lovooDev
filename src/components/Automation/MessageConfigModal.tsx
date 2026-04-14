@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, X, Settings } from 'lucide-react'
+import { ArrowLeft, X, Settings, AlertCircle } from 'lucide-react'
 import MessageTypeSelector, { MessageType } from './MessageTypeSelector'
 import MessageTextForm from './forms/MessageTextForm'
 import UserInputForm from './forms/UserInputForm'
@@ -29,14 +29,15 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
   const [selectedType, setSelectedType] = useState<MessageType['id'] | null>(config.messageType || null)
   const [currentConfig, setCurrentConfig] = useState(config)
   const [selectedInstance, setSelectedInstance] = useState(config.instanceId || '')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // Resetar estado quando modal abrir ou config mudar
   useEffect(() => {
     if (isOpen) {
-      console.log('🔄 MessageConfigModal RESETANDO:', config)
       setCurrentConfig(config)
       setSelectedType(config.messageType || null)
       setSelectedInstance(config.instanceId || '')
+      setValidationError(null)
     }
   }, [isOpen, config])
 
@@ -44,34 +45,59 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
 
   const handleBack = () => {
     setSelectedType(null)
+    setValidationError(null)
   }
 
   const handleSelectType = (typeId: MessageType['id']) => {
     setSelectedType(typeId)
     setCurrentConfig({ ...currentConfig, messageType: typeId })
+    setValidationError(null)
   }
 
   const handleConfigChange = (newConfig: any) => {
     setCurrentConfig({ ...currentConfig, ...newConfig })
+    setValidationError(null)
+  }
+
+  const validateConfig = (): string | null => {
+    switch (selectedType) {
+      case 'text':
+        if (!currentConfig.message?.trim())
+          return 'A mensagem não pode estar vazia.'
+        break
+      case 'user_input':
+        if (!currentConfig.question?.trim())
+          return 'A pergunta não pode estar vazia.'
+        break
+      case 'audio':
+        if (!currentConfig.audioFile && !currentConfig.audioUrl?.trim())
+          return 'Envie um arquivo de áudio ou informe uma URL.'
+        break
+      case 'file':
+        if (!currentConfig.file && !currentConfig.fileUrl?.trim())
+          return 'Envie um arquivo ou informe uma URL.'
+        break
+      case 'dynamic_url':
+        if (!currentConfig.url?.trim())
+          return 'A URL não pode estar vazia.'
+        break
+    }
+    return null
   }
 
   const handleSave = () => {
-    // Buscar nome da instância selecionada
+    const error = validateConfig()
+    if (error) {
+      setValidationError(error)
+      return
+    }
+
     const selectedInstanceData = instances.find(inst => inst.id === selectedInstance)
-    
-    const configToSave = { 
-      ...currentConfig, 
+    const configToSave = {
+      ...currentConfig,
       instanceId: selectedInstance,
       instanceName: selectedInstanceData?.instance_name || ''
     }
-    console.log('💾 MessageConfigModal SALVANDO:', {
-      messageType: configToSave.messageType,
-      duration: configToSave.duration,
-      unit: configToSave.unit,
-      instanceId: configToSave.instanceId,
-      instanceName: configToSave.instanceName,
-      fullConfig: configToSave
-    })
     onSave(configToSave)
     onClose()
   }
@@ -171,19 +197,27 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
 
         {/* Footer */}
         {selectedType && (
-          <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Salvar
-            </button>
+          <div className="px-6 py-4 border-t border-gray-200 space-y-3">
+            {validationError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-red-700">{validationError}</p>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Salvar
+              </button>
+            </div>
           </div>
         )}
       </div>

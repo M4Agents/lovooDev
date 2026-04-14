@@ -20,6 +20,8 @@ interface TriggerOption {
   description: string
   icon: any
   color: string
+  /** Quando true: visível mas desabilitado — backend ainda não implementado */
+  comingSoon?: boolean
 }
 
 interface TriggerCategory {
@@ -39,13 +41,6 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
         type: 'message.received',
         label: 'Mensagem Recebida',
         description: 'Dispara quando uma mensagem do WhatsApp é recebida',
-        icon: MessageCircle,
-        color: 'green'
-      },
-      {
-        type: 'message.sent',
-        label: 'Mensagem Enviada',
-        description: 'Dispara quando uma mensagem é enviada',
         icon: MessageCircle,
         color: 'green'
       }
@@ -97,13 +92,6 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
         description: 'Dispara quando um vendedor é retirado de uma oportunidade',
         icon: UserMinus,
         color: 'red'
-      },
-      {
-        type: 'opportunity.restored',
-        label: 'Oportunidade Restaurada',
-        description: 'Dispara quando uma oportunidade ganha/perdida é reaberta',
-        icon: RotateCcw,
-        color: 'orange'
       }
     ]
   },
@@ -152,7 +140,8 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
         label: 'Horário Agendado',
         description: 'Dispara em um horário específico (diário, semanal)',
         icon: Clock,
-        color: 'red'
+        color: 'red',
+        comingSoon: true
       }
     ]
   }
@@ -176,7 +165,7 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
       if (triggerType) break
     }
 
-    if (!triggerType) return
+    if (!triggerType || triggerType.comingSoon) return
 
     const newTrigger: TriggerConfig = {
       id: crypto.randomUUID(),
@@ -253,13 +242,16 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
               <div className="space-y-3">
                 {currentCategory?.triggers.map((trigger) => {
                   const Icon = trigger.icon
+                  const isDisabled = trigger.comingSoon
                   return (
                     <label
                       key={trigger.type}
-                      className={`relative flex items-start p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
-                        selectedType === trigger.type
-                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500'
-                          : 'border-gray-300'
+                      className={`relative flex items-start p-3 border rounded-lg transition-colors ${
+                        isDisabled
+                          ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
+                          : selectedType === trigger.type
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500 cursor-pointer'
+                            : 'border-gray-300 hover:bg-gray-50 cursor-pointer'
                       }`}
                     >
                       <input
@@ -267,22 +259,30 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
                         name="trigger_type"
                         value={trigger.type}
                         checked={selectedType === trigger.type}
-                        onChange={(e) => setSelectedType(e.target.value)}
+                        onChange={(e) => !isDisabled && setSelectedType(e.target.value)}
+                        disabled={isDisabled}
                         className="sr-only"
                       />
                       <div className="flex items-start flex-1">
-                        <div className={`flex-shrink-0 p-2 rounded-lg bg-${trigger.color}-100`}>
-                          <Icon className={`w-5 h-5 text-${trigger.color}-600`} />
+                        <div className={`flex-shrink-0 p-2 rounded-lg ${isDisabled ? 'bg-gray-100' : `bg-${trigger.color}-100`}`}>
+                          <Icon className={`w-5 h-5 ${isDisabled ? 'text-gray-400' : `text-${trigger.color}-600`}`} />
                         </div>
                         <div className="ml-3 flex-1">
                           <div className="flex items-center gap-2">
                             <ChevronRight className="w-4 h-4 text-gray-400" />
-                            <p className="text-sm font-medium text-gray-900">{trigger.label}</p>
+                            <p className={`text-sm font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {trigger.label}
+                            </p>
+                            {isDisabled && (
+                              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-none">
+                                Em breve
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500 mt-1 ml-6">{trigger.description}</p>
                         </div>
                       </div>
-                      {selectedType === trigger.type && (
+                      {!isDisabled && selectedType === trigger.type && (
                         <div className="flex-shrink-0 ml-3">
                           <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center">
                             <svg

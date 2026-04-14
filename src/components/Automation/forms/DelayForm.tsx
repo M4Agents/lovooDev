@@ -31,9 +31,7 @@ export default function DelayForm({ config, onChange }: DelayFormProps) {
   }, [])
 
   const handleChange = (field: string, value: any) => {
-    const newConfig = { ...config, [field]: value }
-    console.log('📝 DelayForm handleChange:', { field, value, newConfig })
-    onChange(newConfig)
+    onChange({ ...config, [field]: value })
   }
 
   return (

@@ -13,25 +13,29 @@ const DISTRIBUTION_METHODS = [
     id: 'round_robin',
     label: 'Rodízio (Round Robin)',
     description: 'Distribui leads alternando entre usuários em ordem sequencial',
-    icon: <Shuffle className="w-5 h-5" />
+    icon: <Shuffle className="w-5 h-5" />,
+    comingSoon: false
   },
   {
     id: 'availability',
     label: 'Disponibilidade',
     description: 'Distribui apenas para usuários online/disponíveis',
-    icon: <Activity className="w-5 h-5" />
+    icon: <Activity className="w-5 h-5" />,
+    comingSoon: true
   },
   {
     id: 'workload',
     label: 'Carga de Trabalho',
     description: 'Distribui para o usuário com menos leads ativos',
-    icon: <Users className="w-5 h-5" />
+    icon: <Users className="w-5 h-5" />,
+    comingSoon: true
   },
   {
     id: 'region',
     label: 'Por Região',
     description: 'Distribui baseado na região/localização do lead',
-    icon: <MapPin className="w-5 h-5" />
+    icon: <MapPin className="w-5 h-5" />,
+    comingSoon: true
   }
 ]
 
@@ -143,20 +147,30 @@ export function DistributionForm({ config, setConfig }: DistributionFormProps) {
           {DISTRIBUTION_METHODS.map((m) => (
             <button
               key={m.id}
-              onClick={() => setMethod(m.id)}
+              onClick={() => !m.comingSoon && setMethod(m.id)}
+              disabled={m.comingSoon}
               className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
-                method === m.id
-                  ? 'border-cyan-500 bg-cyan-50'
-                  : 'border-gray-200 hover:border-gray-300'
+                m.comingSoon
+                  ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
+                  : method === m.id
+                    ? 'border-cyan-500 bg-cyan-50'
+                    : 'border-gray-200 hover:border-gray-300'
               }`}
             >
               <div className="flex items-start gap-3">
-                <div className={`mt-0.5 ${method === m.id ? 'text-cyan-600' : 'text-gray-400'}`}>
+                <div className={`mt-0.5 ${m.comingSoon ? 'text-gray-400' : method === m.id ? 'text-cyan-600' : 'text-gray-400'}`}>
                   {m.icon}
                 </div>
                 <div className="flex-1">
-                  <div className={`font-medium ${method === m.id ? 'text-cyan-900' : 'text-gray-900'}`}>
-                    {m.label}
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${m.comingSoon ? 'text-gray-400' : method === m.id ? 'text-cyan-900' : 'text-gray-900'}`}>
+                      {m.label}
+                    </span>
+                    {m.comingSoon && (
+                      <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-none">
+                        Em breve
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-600 mt-1">
                     {m.description}

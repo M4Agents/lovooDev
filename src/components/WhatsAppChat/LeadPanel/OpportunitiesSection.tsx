@@ -344,6 +344,31 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           await fireAutomationAfterStageChange(pt.opportunityId, pt.fromStageId, pt.toStageId, pt.funnelId)
         }
 
+        // Disparar opportunity.won / opportunity.lost (fire-and-forget)
+        if (params.to_status === 'won' || params.to_status === 'lost') {
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const token = sessionData.session?.access_token
+            if (!token || !companyId) return
+            const wonLostType = params.to_status === 'won' ? 'opportunity.won' : 'opportunity.lost'
+            fetch('/api/automation/trigger-event', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event_type: wonLostType,
+                company_id: companyId,
+                data: {
+                  opportunity_id: pt.opportunityId,
+                  lead_id:        leadId ?? null,
+                  opportunity:    { funnel_id: pt.funnelId ?? null },
+                  ...(params.to_status === 'lost' && params.loss_reason
+                    ? { loss_reason: params.loss_reason }
+                    : {}),
+                },
+              }),
+            }).catch(err => console.error(`[OpportunitiesSection] ${wonLostType} trigger failed:`, err))
+          }).catch(() => { /* sem sessão — ignora silenciosamente */ })
+        }
+
         const { data } = await supabase
           .from('opportunity_funnel_positions')
           .select('*')

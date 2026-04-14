@@ -2,6 +2,9 @@
 // Endpoint: /api/webhook/uazapi/[company_id]
 // CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
 
+import { dispatchLeadCreatedTrigger }    from '../../lib/automation/dispatchLeadCreatedTrigger.js';
+import { dispatchMessageReceivedTrigger } from '../../lib/automation/dispatchMessageReceivedTrigger.js';
+
 export default async function handler(req, res) {
   console.error('🚀 WEBHOOK UAZAPI v2.0 - CACHE BUST ATIVO');
   console.error('⏰ TIMESTAMP:', new Date().toISOString());
@@ -531,9 +534,14 @@ async function processMessage(payload) {
         } else if (rpcResult && rpcResult.success) {
           leadId = rpcResult.lead_id;
           const wasCreated = rpcResult.created;
-          console.log(wasCreated ? '� NOVO LEAD CRIADO:' : '👤 LEAD JÁ EXISTIA:', leadId);
+          console.log(wasCreated ? '🆕 NOVO LEAD CRIADO:' : '👤 LEAD JÁ EXISTIA:', leadId);
           if (wasCreated && rpcResult.opportunity_id) {
             console.log('✅ OPORTUNIDADE CRIADA:', rpcResult.opportunity_id);
+          }
+          // Disparar automação apenas para leads recém-criados (fire-and-forget)
+          if (wasCreated && leadId) {
+            dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'whatsapp' })
+              .catch(err => console.error('[webhook/uazapi] automation trigger failed:', err));
           }
 
           // Vincular lead_id à conversa (apenas se ainda não vinculado)
@@ -581,6 +589,18 @@ async function processMessage(payload) {
       } catch (cancelError) {
         console.error('❌ EXCEPTION no cancelamento automático:', cancelError);
         // Não falhar o webhook por causa disso - apenas log
+      }
+
+      // 🎯 DISPATCH message.received — aciona automações de mensagem recebida (fire-and-forget)
+      if (conversationId) {
+        dispatchMessageReceivedTrigger({
+          companyId:      company.id,
+          leadId:         leadId || null,
+          conversationId,
+          instanceId:     instance.id,
+          messageId:      savedMessageId,
+          text:           messageText,
+        }).catch(err => console.error('[webhook/uazapi/company_id] message.received trigger failed:', err));
       }
     }
     

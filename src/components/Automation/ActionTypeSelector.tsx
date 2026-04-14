@@ -16,6 +16,8 @@ export interface ActionType {
   icon: React.ReactNode
   description?: string
   category: 'lead' | 'opportunity' | 'integration' | 'activity' | 'system'
+  /** Quando true: exibido na UI mas desabilitado — backend ainda não implementado */
+  comingSoon?: boolean
 }
 
 export interface ActionCategory {
@@ -78,8 +80,9 @@ export const ACTION_TYPES: ActionType[] = [
     id: 'distribute_lead',
     label: 'Distribuir Lead',
     icon: <Shuffle className="w-4 h-4" />,
-    description: 'Distribua leads entre usuários automaticamente',
-    category: 'lead'
+    description: 'Use o nó "Distribuir Lead" no canvas',
+    category: 'lead',
+    comingSoon: true
   },
   {
     id: 'update_lead',
@@ -128,57 +131,65 @@ export const ACTION_TYPES: ActionType[] = [
     label: 'Disparar Webhook',
     icon: <Webhook className="w-4 h-4" />,
     description: 'Envie dados para URL externa',
-    category: 'integration'
+    category: 'integration',
+    comingSoon: true
   },
   {
     id: 'create_activity',
     label: 'Criar Atividade',
     icon: <Calendar className="w-4 h-4" />,
     description: 'Agende uma nova atividade',
-    category: 'activity'
+    category: 'activity',
+    comingSoon: true
   },
   {
     id: 'update_activity',
     label: 'Atualizar Atividade',
     icon: <Edit className="w-4 h-4" />,
     description: 'Atualize atividades existentes',
-    category: 'activity'
+    category: 'activity',
+    comingSoon: true
   },
   {
     id: 'complete_activity',
     label: 'Concluir Atividade',
     icon: <CalendarCheck className="w-4 h-4" />,
     description: 'Marque atividades como concluídas',
-    category: 'activity'
+    category: 'activity',
+    comingSoon: true
   },
   {
     id: 'cancel_activity',
     label: 'Cancelar Atividade',
     icon: <CalendarX className="w-4 h-4" />,
     description: 'Cancele atividades pendentes',
-    category: 'activity'
+    category: 'activity',
+    comingSoon: true
   },
   {
     id: 'reschedule_activity',
     label: 'Reagendar Atividade',
     icon: <CalendarClock className="w-4 h-4" />,
     description: 'Reagende atividades para nova data',
-    category: 'activity'
+    category: 'activity',
+    comingSoon: true
   },
   {
     id: 'send_notification',
     label: 'Enviar Notificação',
     icon: <Bell className="w-4 h-4" />,
     description: 'Notifique usuários sobre eventos',
-    category: 'system'
+    category: 'system',
+    comingSoon: true
   },
   {
-  id: 'trigger_automation',
-  label: 'Iniciar Outra Automação',
-  icon: <Zap className="w-4 h-4" />,
-  description: 'Dispare outro fluxo de automação',
-  category: 'system'
-}
+    id: 'trigger_automation',
+    label: 'Iniciar Outra Automação',
+    icon: <Zap className="w-4 h-4" />,
+    description: 'Dispare outro fluxo de automação',
+    category: 'system',
+    comingSoon: true
+  }
 ]
 
 interface ActionTypeSelectorProps {
@@ -203,14 +214,30 @@ export default function ActionTypeSelector({ onSelectType }: ActionTypeSelectorP
               {categoryActions.map((type) => (
                 <button
                   key={type.id}
-                  onClick={() => onSelectType(type.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                  onClick={() => !type.comingSoon && onSelectType(type.id)}
+                  disabled={type.comingSoon}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left ${
+                    type.comingSoon
+                      ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                      : 'hover:bg-gray-50'
+                  }`}
                 >
-                  <div className="text-blue-600">{type.icon}</div>
+                  <div className={type.comingSoon ? 'text-gray-400' : 'text-blue-600'}>
+                    {type.icon}
+                  </div>
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">{type.label}</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium ${type.comingSoon ? 'text-gray-400' : 'text-gray-900'}`}>
+                        {type.label}
+                      </span>
+                      {type.comingSoon && (
+                        <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-none">
+                          Em breve
+                        </span>
+                      )}
+                    </div>
                     {type.description && (
-                      <div className="text-xs text-gray-500 mt-0.5">{type.description}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{type.description}</div>
                     )}
                   </div>
                 </button>

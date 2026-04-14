@@ -147,7 +147,28 @@ export default function ChatModalSimple({
         .maybeSingle()
 
       if (!existingOpp) {
-        await crmService.createOpportunity({ leadId, companyId })
+        const createdOpp = await crmService.createOpportunity({ leadId, companyId })
+
+        // Disparar automação (fire-and-forget — nunca bloqueia a UI)
+        if (createdOpp?.opportunityId) {
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const token = sessionData.session?.access_token
+            if (!token) return
+            fetch('/api/automation/trigger-event', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event_type: 'opportunity.created',
+                company_id: companyId,
+                data: {
+                  opportunity_id: createdOpp.opportunityId,
+                  lead_id:        leadId ?? null,
+                  opportunity:    {},
+                },
+              }),
+            }).catch(err => console.error('[ChatModalSimple] opportunity.created trigger failed:', err))
+          }).catch(() => { /* sem sessão — ignora silenciosamente */ })
+        }
       }
     } catch (err) {
       console.error('Erro ao criar lead/oportunidade automaticamente:', err)

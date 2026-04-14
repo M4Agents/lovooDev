@@ -169,22 +169,15 @@ export class TriggerManager {
   }
 
   /**
-   * Dispara quando uma oportunidade é criada
+   * @deprecated Migrado para /api/automation/trigger-event (backend novo).
+   * Mantido como no-op para evitar erros em call sites não identificados.
    */
   async onOpportunityCreated(
-    companyId: string,
-    opportunityId: string,
-    opportunityData: any
+    _companyId: string,
+    _opportunityId: string,
+    _opportunityData: any
   ): Promise<void> {
-    await this.trigger({
-      type: 'opportunity.created',
-      companyId,
-      data: {
-        opportunity_id: opportunityId,
-        opportunity: opportunityData,
-        timestamp: new Date().toISOString()
-      }
-    })
+    console.warn('[LEGACY DISABLED] TriggerManager.onOpportunityCreated — use /api/automation/trigger-event')
   }
 
   /**

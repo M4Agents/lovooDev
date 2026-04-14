@@ -3,6 +3,8 @@
 // Método: POST com api_key no body + dados do formulário
 // Padrão baseado no webhook-visitor que funciona 100%
 
+import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreatedTrigger.js';
+
 // Função para disparar webhooks avançados automaticamente
 async function triggerAdvancedWebhooks(leadData, companyId) {
   console.log('🚀 FUNÇÃO triggerAdvancedWebhooks INICIADA');
@@ -437,6 +439,10 @@ async function createLeadDirectSQL(params) {
       // Não falhar a criação do lead por causa do webhook
     }
     
+    // Disparar automação backend (fire-and-forget — nunca bloqueia o webhook)
+    dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' })
+      .catch(err => console.error('[webhook-lead] automation trigger failed:', err));
+
     return { success: true, lead_id: lead.lead_id };
     
   } catch (error) {

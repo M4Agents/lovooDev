@@ -1,38 +1,45 @@
 // =====================================================
-// CRM ACTIONS — Etapa 4 do núcleo mínimo backend
+// CRM ACTIONS — núcleo mínimo backend
 //
-// Ações CRM prioritárias para o executor backend.
+// Ações CRM suportadas:
+//   move_opportunity        — RPC move_opportunity (via opportunity_funnel_positions)
+//   update_lead             — atualiza campos diretos do lead
+//   assign_lead_owner       — define responsible_user_id no lead
+//   assign_opportunity_owner— define owner_user_id na oportunidade
+//   assign_owner            — alias legado → assign_lead_owner (warning)
+//   add_tag                 — busca/cria tag e vincula ao lead
+//   remove_tag              — remove vínculo de tag do lead
+//   win_opportunity         — status = 'won' + closed_at
+//   lose_opportunity        — status = 'lost' + closed_at
+//   create_opportunity      — cria nova oportunidade para o lead
+//   set_custom_field        — upsert em lead_custom_values
+//
+// resolveLeadId centralizado em contextUtils.js
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
-//
-// Suportadas:
-//   move_opportunity  — RPC move_opportunity + fallback direto
-//   update_lead       — atualiza campos diretos do lead
-//   assign_owner      — define responsible_user_id no lead
-//   add_tag           — busca/cria tag e vincula ao lead
-//   remove_tag        — remove vínculo de tag do lead
 // =====================================================
 
+import { resolveLeadId } from './contextUtils.js'
+
 // ---------------------------------------------------------------------------
-// Utilitário: resolver leadId a partir do contexto
+// Utilitário: validar membership do usuário na empresa
 // ---------------------------------------------------------------------------
 
-async function resolveLeadId(context, supabase) {
-  if (context.leadId) return context.leadId
-  if (!context.opportunityId) return null
-
-  const { data: opp } = await supabase
-    .from('opportunities')
-    .select('lead_id')
-    .eq('id', context.opportunityId)
+async function validateMembership(userId, companyId, supabase) {
+  const { data } = await supabase
+    .from('company_users')
+    .select('user_id')
+    .eq('user_id', userId)
+    .eq('company_id', companyId)
+    .eq('is_active', true)
     .maybeSingle()
-
-  return opp?.lead_id || null
+  return !!data
 }
 
 // ---------------------------------------------------------------------------
 // Ação: mover oportunidade de stage
-// Usa RPC atômica (atualiza posição + histórico).
-// Fallback: atualiza stage_id direto se sem posição no funil.
+// Depende exclusivamente da RPC move_opportunity.
+// opportunities.stage_id NÃO existe no schema — o stage fica em
+// opportunity_funnel_positions, que é o que a RPC atualiza atomicamente.
 // ---------------------------------------------------------------------------
 
 async function moveOpportunity(config, context, supabase) {
@@ -51,16 +58,7 @@ async function moveOpportunity(config, context, supabase) {
   if (posError) throw new Error(`Erro ao buscar posição no funil: ${posError.message}`)
 
   if (!position) {
-    console.warn('[crmActions] moveOpportunity: sem posição no funil — usando fallback direto')
-    const { error } = await supabase
-      .from('opportunities')
-      .update({ stage_id: stageId, updated_at: new Date().toISOString() })
-      .eq('id', opportunityId)
-      .eq('company_id', context.companyId)
-
-    if (error) throw new Error(`Erro ao mover oportunidade (fallback): ${error.message}`)
-
-    return { executed: true, action: 'move_opportunity', opportunityId, stageId, method: 'fallback' }
+    throw new Error(`Oportunidade ${opportunityId} não tem posição registrada no funil — não é possível mover sem RPC`)
   }
 
   const { error } = await supabase.rpc('move_opportunity', {
@@ -72,7 +70,6 @@ async function moveOpportunity(config, context, supabase) {
   })
 
   if (error) throw new Error(`Erro na RPC move_opportunity: ${error.message}`)
-
   return { executed: true, action: 'move_opportunity', opportunityId, stageId, method: 'rpc' }
 }
 
@@ -96,32 +93,23 @@ async function updateLead(config, context, supabase) {
     .eq('company_id', context.companyId)
 
   if (error) throw new Error(`Erro ao atualizar lead: ${error.message}`)
-
   return { executed: true, action: 'update_lead', leadId, fields: Object.keys(fields) }
 }
 
 // ---------------------------------------------------------------------------
 // Ação: atribuir responsável ao lead
-// Valida membership na empresa via company_users antes de atribuir.
-// Coluna real: responsible_user_id
+// Coluna: leads.responsible_user_id
 // ---------------------------------------------------------------------------
 
-async function assignOwner(config, context, supabase) {
+async function assignLeadOwner(config, context, supabase) {
   const leadId = await resolveLeadId(context, supabase)
   if (!leadId) throw new Error('leadId ausente no contexto')
 
   const ownerId = config.userId
-  if (!ownerId) throw new Error('userId não configurado na ação assign_owner')
+  if (!ownerId) throw new Error('userId não configurado na ação assign_lead_owner')
 
-  const { data: member } = await supabase
-    .from('company_users')
-    .select('user_id')
-    .eq('user_id', ownerId)
-    .eq('company_id', context.companyId)
-    .eq('is_active', true)
-    .maybeSingle()
-
-  if (!member) throw new Error(`Usuário ${ownerId} não encontrado ou inativo na empresa`)
+  const valid = await validateMembership(ownerId, context.companyId, supabase)
+  if (!valid) throw new Error(`Usuário ${ownerId} não encontrado ou inativo na empresa`)
 
   const { error } = await supabase
     .from('leads')
@@ -129,15 +117,37 @@ async function assignOwner(config, context, supabase) {
     .eq('id', Number(leadId))
     .eq('company_id', context.companyId)
 
-  if (error) throw new Error(`Erro ao atribuir responsável: ${error.message}`)
+  if (error) throw new Error(`Erro ao atribuir responsável ao lead: ${error.message}`)
+  return { executed: true, action: 'assign_lead_owner', leadId, ownerId }
+}
 
-  return { executed: true, action: 'assign_owner', leadId, ownerId }
+// ---------------------------------------------------------------------------
+// Ação: atribuir responsável à oportunidade
+// Coluna: opportunities.owner_user_id (não owner_id)
+// ---------------------------------------------------------------------------
+
+async function assignOpportunityOwner(config, context, supabase) {
+  const opportunityId = context.opportunityId
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+
+  const ownerId = config.userId
+  if (!ownerId) throw new Error('userId não configurado na ação assign_opportunity_owner')
+
+  const valid = await validateMembership(ownerId, context.companyId, supabase)
+  if (!valid) throw new Error(`Usuário ${ownerId} não encontrado ou inativo na empresa`)
+
+  const { error } = await supabase
+    .from('opportunities')
+    .update({ owner_user_id: ownerId, updated_at: new Date().toISOString() })
+    .eq('id', opportunityId)
+    .eq('company_id', context.companyId)
+
+  if (error) throw new Error(`Erro ao atribuir responsável à oportunidade: ${error.message}`)
+  return { executed: true, action: 'assign_opportunity_owner', opportunityId, ownerId }
 }
 
 // ---------------------------------------------------------------------------
 // Ação: adicionar tag ao lead
-// Busca tag pelo nome — cria se não existir.
-// Idempotente: não duplica se vínculo já existe.
 // ---------------------------------------------------------------------------
 
 const TAG_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316']
@@ -149,7 +159,6 @@ async function addTag(config, context, supabase) {
   const tagName = config.tagName
   if (!tagName) throw new Error('tagName não configurado na ação add_tag')
 
-  // Buscar tag existente
   let { data: tag } = await supabase
     .from('lead_tags')
     .select('id')
@@ -158,18 +167,11 @@ async function addTag(config, context, supabase) {
     .eq('is_active', true)
     .maybeSingle()
 
-  // Criar tag se não existir
   if (!tag) {
     const color = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
     const { data: newTag, error: tagError } = await supabase
       .from('lead_tags')
-      .insert({
-        company_id: context.companyId,
-        name:       tagName,
-        color,
-        is_active:  true,
-        created_at: new Date().toISOString(),
-      })
+      .insert({ company_id: context.companyId, name: tagName, color, is_active: true, created_at: new Date().toISOString() })
       .select('id')
       .single()
 
@@ -177,7 +179,6 @@ async function addTag(config, context, supabase) {
     tag = newTag
   }
 
-  // Verificar se vínculo já existe
   const { data: existing } = await supabase
     .from('lead_tag_assignments')
     .select('id')
@@ -194,7 +195,6 @@ async function addTag(config, context, supabase) {
     .insert({ lead_id: Number(leadId), tag_id: tag.id, created_at: new Date().toISOString() })
 
   if (error) throw new Error(`Erro ao vincular tag ao lead: ${error.message}`)
-
   return { executed: true, action: 'add_tag', leadId, tagName, tagId: tag.id }
 }
 
@@ -228,8 +228,198 @@ async function removeTag(config, context, supabase) {
     .eq('tag_id', tag.id)
 
   if (error) throw new Error(`Erro ao remover tag: ${error.message}`)
-
   return { executed: true, action: 'remove_tag', leadId, tagName, tagId: tag.id }
+}
+
+// ---------------------------------------------------------------------------
+// Ação: marcar oportunidade como ganha
+// Colunas reais: status, closed_at, actual_close_date, value, loss_reason
+// ---------------------------------------------------------------------------
+
+async function winOpportunity(config, context, supabase) {
+  const opportunityId = context.opportunityId
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+
+  const now  = new Date()
+  const updates = {
+    status:            'won',
+    closed_at:         now.toISOString(),
+    actual_close_date: now.toISOString().split('T')[0],
+    updated_at:        now.toISOString(),
+  }
+
+  if (config.finalValue !== undefined && config.finalValue !== null) {
+    updates.value = config.finalValue
+  }
+
+  if (config.description) updates.description = config.description
+
+  const { error } = await supabase
+    .from('opportunities')
+    .update(updates)
+    .eq('id', opportunityId)
+    .eq('company_id', context.companyId)
+
+  if (error) throw new Error(`Erro ao marcar oportunidade como ganha: ${error.message}`)
+  return { executed: true, action: 'win_opportunity', opportunityId }
+}
+
+// ---------------------------------------------------------------------------
+// Ação: marcar oportunidade como perdida
+// ---------------------------------------------------------------------------
+
+async function loseOpportunity(config, context, supabase) {
+  const opportunityId = context.opportunityId
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+
+  const now = new Date()
+  const updates = {
+    status:            'lost',
+    closed_at:         now.toISOString(),
+    actual_close_date: now.toISOString().split('T')[0],
+    updated_at:        now.toISOString(),
+  }
+
+  if (config.lossReason)   updates.loss_reason  = config.lossReason
+  if (config.description)  updates.description  = config.description
+
+  const { error } = await supabase
+    .from('opportunities')
+    .update(updates)
+    .eq('id', opportunityId)
+    .eq('company_id', context.companyId)
+
+  if (error) throw new Error(`Erro ao marcar oportunidade como perdida: ${error.message}`)
+  return { executed: true, action: 'lose_opportunity', opportunityId, lossReason: config.lossReason || null }
+}
+
+// ---------------------------------------------------------------------------
+// Ação: criar oportunidade para o lead
+// opportunities NÃO tem funnel_id/stage_id diretos:
+// a posição fica em opportunity_funnel_positions.
+// ---------------------------------------------------------------------------
+
+async function createOpportunity(config, context, supabase) {
+  const leadId = await resolveLeadId(context, supabase)
+  if (!leadId) throw new Error('leadId ausente no contexto')
+
+  let { funnelId, stageId } = config
+
+  // Resolver funil se não especificado
+  if (!funnelId) {
+    const { data: funnel } = await supabase
+      .from('sales_funnels')
+      .select('id')
+      .eq('company_id', context.companyId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (!funnel) throw new Error('Nenhum funil ativo encontrado para criar a oportunidade')
+    funnelId = funnel.id
+  }
+
+  // Resolver stage inicial se não especificado
+  if (!stageId) {
+    const { data: stage } = await supabase
+      .from('funnel_stages')
+      .select('id')
+      .eq('funnel_id', funnelId)
+      .order('order_index', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (!stage) throw new Error('Nenhuma etapa encontrada no funil')
+    stageId = stage.id
+  }
+
+  // Buscar nome do lead para title padrão
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('name')
+    .eq('id', Number(leadId))
+    .maybeSingle()
+
+  // Criar oportunidade (sem funnel_id/stage_id — ficam em opportunity_funnel_positions)
+  const { data: opp, error: oppError } = await supabase
+    .from('opportunities')
+    .insert({
+      company_id:  context.companyId,
+      lead_id:     Number(leadId),
+      title:       config.title || lead?.name || 'Nova oportunidade',
+      value:       config.value || 0,
+      probability: config.probability || 50,
+      status:      'open',
+      created_at:  new Date().toISOString(),
+      updated_at:  new Date().toISOString(),
+    })
+    .select('id')
+    .single()
+
+  if (oppError) throw new Error(`Erro ao criar oportunidade: ${oppError.message}`)
+
+  // Registrar posição no funil
+  const { error: posError } = await supabase
+    .from('opportunity_funnel_positions')
+    .insert({
+      opportunity_id:   opp.id,
+      lead_id:          Number(leadId),
+      funnel_id:        funnelId,
+      stage_id:         stageId,
+      position_in_stage: 0,
+      entered_stage_at: new Date().toISOString(),
+      updated_at:       new Date().toISOString(),
+    })
+
+  if (posError) {
+    console.warn(`[crmActions] createOpportunity: oportunidade criada (${opp.id}) mas erro ao registrar posição no funil: ${posError.message}`)
+  }
+
+  return { executed: true, action: 'create_opportunity', opportunityId: opp.id, leadId, funnelId, stageId }
+}
+
+// ---------------------------------------------------------------------------
+// Ação: definir campo personalizado do lead
+// Upsert em lead_custom_values (field_id deve existir previamente).
+// ---------------------------------------------------------------------------
+
+async function setCustomField(config, context, supabase) {
+  const leadId = await resolveLeadId(context, supabase)
+  if (!leadId) throw new Error('leadId ausente no contexto')
+
+  const fieldId = config.customFieldId
+  const value   = config.customFieldValue
+
+  if (!fieldId) throw new Error('customFieldId não configurado na ação set_custom_field')
+  if (value === undefined || value === null || value === '') {
+    throw new Error('customFieldValue não configurado na ação set_custom_field')
+  }
+
+  // Verificar se já existe valor para este campo
+  const { data: existing } = await supabase
+    .from('lead_custom_values')
+    .select('id')
+    .eq('lead_id', Number(leadId))
+    .eq('field_id', fieldId)
+    .maybeSingle()
+
+  if (existing) {
+    const { error } = await supabase
+      .from('lead_custom_values')
+      .update({ value: String(value), updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
+
+    if (error) throw new Error(`Erro ao atualizar campo personalizado: ${error.message}`)
+    return { executed: true, action: 'set_custom_field', leadId, fieldId, value, result: 'updated' }
+  }
+
+  const { error } = await supabase
+    .from('lead_custom_values')
+    .insert({ lead_id: Number(leadId), field_id: fieldId, value: String(value) })
+
+  if (error) throw new Error(`Erro ao criar valor de campo personalizado: ${error.message}`)
+  return { executed: true, action: 'set_custom_field', leadId, fieldId, value, result: 'created' }
 }
 
 // ---------------------------------------------------------------------------
@@ -250,14 +440,34 @@ export async function executeCrmAction(node, context, supabase) {
       case 'update_lead':
         return await updateLead(config, context, supabase)
 
+      case 'assign_lead_owner':
+        return await assignLeadOwner(config, context, supabase)
+
+      case 'assign_opportunity_owner':
+        return await assignOpportunityOwner(config, context, supabase)
+
+      // Alias legado — redireciona para assign_lead_owner com warning
       case 'assign_owner':
-        return await assignOwner(config, context, supabase)
+        console.warn('[crmActions] WARN: "assign_owner" é legado — use "assign_lead_owner". Redirecionando.')
+        return await assignLeadOwner(config, context, supabase)
 
       case 'add_tag':
         return await addTag(config, context, supabase)
 
       case 'remove_tag':
         return await removeTag(config, context, supabase)
+
+      case 'win_opportunity':
+        return await winOpportunity(config, context, supabase)
+
+      case 'lose_opportunity':
+        return await loseOpportunity(config, context, supabase)
+
+      case 'create_opportunity':
+        return await createOpportunity(config, context, supabase)
+
+      case 'set_custom_field':
+        return await setCustomField(config, context, supabase)
 
       default:
         console.log(`[crmActions] ação não suportada nesta etapa: ${actionType} — skipped`)

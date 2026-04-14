@@ -2,6 +2,7 @@ import React from 'react'
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow'
 import { Shuffle, Settings, CheckCircle, AlertTriangle } from 'lucide-react'
 import NodeToolbar from './NodeToolbar'
+import NodeDebugBadge from './NodeDebugBadge'
 
 export default function DistributionNode({ data, selected, id }: NodeProps) {
   const { setNodes, setEdges } = useReactFlow()
@@ -71,6 +72,8 @@ export default function DistributionNode({ data, selected, id }: NodeProps) {
         ${selected ? 'border-cyan-500 ring-2 ring-cyan-300' : 'border-gray-200 hover:border-cyan-400'}
       `}
     >
+      <NodeDebugBadge debugStatus={data.debugStatus} />
+
       {/* Toolbar - aparece apenas quando selecionado */}
       {selected && (
         <NodeToolbar
@@ -96,7 +99,7 @@ export default function DistributionNode({ data, selected, id }: NodeProps) {
               Distribuição
             </span>
           </div>
-          {config?.method ? (
+          {config?.method && config.users?.length > 0 ? (
             <CheckCircle className="w-2.5 h-2.5 text-green-300" />
           ) : (
             <AlertTriangle className="w-2.5 h-2.5 text-yellow-300" />

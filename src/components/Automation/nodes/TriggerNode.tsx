@@ -1,7 +1,9 @@
 // =====================================================
 // COMPONENT: TRIGGER NODE
 // Data: 13/03/2026
-// Objetivo: Nó de gatilho para o canvas
+// @deprecated — Nó legado. O motor backend usa apenas o nó "start".
+//   Mantido apenas para compatibilidade com flows antigos.
+//   Não adicionar novos nodes deste tipo.
 // =====================================================
 
 import { memo } from 'react'
@@ -204,10 +206,16 @@ const TriggerNode = ({ data, selected }: NodeProps) => {
   
   return (
     <div className={`bg-white rounded-md shadow-md border-2 min-w-[140px] max-w-[170px] transition-all ${
-      selected ? 'border-green-600 ring-2 ring-green-300' : 'border-gray-200 hover:border-green-400'
+      selected ? 'border-amber-500 ring-2 ring-amber-200' : 'border-amber-300 hover:border-amber-400'
     }`}>
+      {/* Badge de depreciação */}
+      <div className="bg-amber-50 border-b border-amber-200 px-2 py-0.5 rounded-t-md flex items-center gap-1">
+        <span className="text-[8px] font-semibold text-amber-700 uppercase tracking-wide">
+          ⚠ Nó legado — não dispara
+        </span>
+      </div>
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-500 to-green-600 px-2 py-1 rounded-t-md">
+      <div className="bg-gradient-to-r from-gray-400 to-gray-500 px-2 py-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
             {getTriggerIcon()}

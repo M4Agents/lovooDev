@@ -481,10 +481,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     setTimeout(() => recentlyMovedRef.current.delete(opportunityId), 6_000)
 
     // Disparar automação no backend (fire-and-forget)
-    if (companyId && fromStageId !== toStageId) {
-      supabase.auth.getSession().then(({ data: sessionData }) => {
-        const token = sessionData.session?.access_token
-        if (!token) return
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      const token = sessionData.session?.access_token
+      if (!token || !companyId) return
+
+      // opportunity.stage_changed (somente se mudou de etapa)
+      if (fromStageId !== toStageId) {
         fetch('/api/automation/trigger-event', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -500,9 +502,30 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
               conversation_id: conversationId ?? null,
             },
           })
-        }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
-      })
-    }
+        }).catch(err => console.error('[FunnelBoard] stage_changed trigger failed:', err))
+      }
+
+      // opportunity.won / opportunity.lost
+      if (params.to_status === 'won' || params.to_status === 'lost') {
+        const wonLostType = params.to_status === 'won' ? 'opportunity.won' : 'opportunity.lost'
+        fetch('/api/automation/trigger-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type: wonLostType,
+            company_id: companyId,
+            data: {
+              opportunity_id: opportunityId,
+              lead_id:        leadId ?? null,
+              opportunity:    { funnel_id: funnelId ?? null },
+              ...(params.to_status === 'lost' && params.loss_reason
+                ? { loss_reason: params.loss_reason }
+                : {}),
+            },
+          })
+        }).catch(err => console.error(`[FunnelBoard] ${wonLostType} trigger failed:`, err))
+      }
+    }).catch(() => { /* sem sessão — ignora silenciosamente */ })
 
     refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
     setPendingTransition(null)

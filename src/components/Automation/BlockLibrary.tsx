@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState } from 'react'
-import { Zap, Target, GitBranch, MessageSquare, Clock, Flag, ChevronDown, ChevronRight, MessageCircle, UserPlus, Tag, TrendingUp, UserCheck, UserMinus, RotateCcw, Shuffle } from 'lucide-react'
+import { Target, GitBranch, MessageSquare, Clock, Flag, ChevronDown, ChevronRight, Shuffle } from 'lucide-react'
 
 interface Block {
   type: string
@@ -16,96 +16,6 @@ interface Block {
 }
 
 const BLOCK_CATEGORIES = {
-  triggers: {
-    title: 'Gatilhos',
-    icon: '⚡',
-    blocks: [
-      {
-        type: 'trigger',
-        label: 'Mensagem Recebida',
-        icon: <MessageCircle className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando receber uma mensagem'
-      },
-      {
-        type: 'trigger',
-        label: 'Mensagem Enviada',
-        icon: <MessageCircle className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando enviar uma mensagem'
-      },
-      {
-        type: 'trigger',
-        label: 'Novo Lead',
-        icon: <UserPlus className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando um novo lead é criado'
-      },
-      {
-        type: 'trigger',
-        label: 'Tag Adicionada',
-        icon: <Tag className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma tag é adicionada'
-      },
-      {
-        type: 'trigger',
-        label: 'Tag Removida',
-        icon: <Tag className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma tag é removida'
-      },
-      {
-        type: 'trigger',
-        label: 'Oportunidade Criada',
-        icon: <TrendingUp className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma oportunidade é criada'
-      },
-      {
-        type: 'trigger',
-        label: 'Oportunidade Movida',
-        icon: <TrendingUp className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma oportunidade muda de etapa'
-      },
-      {
-        type: 'trigger',
-        label: 'Oportunidade Ganha',
-        icon: <TrendingUp className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma oportunidade é ganha'
-      },
-      {
-        type: 'trigger',
-        label: 'Oportunidade Perdida',
-        icon: <TrendingUp className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma oportunidade é perdida'
-      },
-      {
-        type: 'trigger',
-        label: 'Vendedor Atribuído',
-        icon: <UserCheck className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando um vendedor é atribuído'
-      },
-      {
-        type: 'trigger',
-        label: 'Vendedor Removido',
-        icon: <UserMinus className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando um vendedor é removido'
-      },
-      {
-        type: 'trigger',
-        label: 'Oportunidade Restaurada',
-        icon: <RotateCcw className="w-5 h-5" />,
-        color: 'bg-green-500',
-        description: 'Dispara quando uma oportunidade é restaurada'
-      }
-    ]
-  },
   actions: {
     title: 'Ações',
     icon: '🎯',
@@ -210,7 +120,6 @@ const BLOCK_CATEGORIES = {
 
 export default function BlockLibrary() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    triggers: true,
     actions: true,
     conditions: false,
     messages: false,

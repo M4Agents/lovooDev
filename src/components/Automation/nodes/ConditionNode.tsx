@@ -9,35 +9,89 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { GitBranch, CheckCircle, AlertTriangle, Check, X } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
+import NodeDebugBadge from './NodeDebugBadge'
 
 // =====================================================
 // HELPER: Gerar preview dinâmico da condição
+// Suporta o formato novo (config.type) e o legado (config.field)
 // =====================================================
+const OP: Record<string, string> = {
+  equals: '=', not_equals: '≠', contains: 'contém', not_contains: 'não contém',
+  greater_than: '>', less_than: '<', greater_or_equal: '≥', less_or_equal: '≤',
+  is_today: 'é hoje', is_yesterday: 'é ontem', is_this_week: 'esta semana',
+  is_this_month: 'este mês', is_older_than: 'há mais de', is_newer_than: 'há menos de',
+  has_tag: 'tem tag', not_has_tag: 'não tem tag', has_any_tag: 'tem alguma', has_all_tags: 'tem todas',
+  is: '=', is_not: '≠', is_in: 'em', is_between: 'entre', is_before: 'antes de', is_after: 'após',
+  has_no_owner: 'sem responsável', is_longer_than: 'mais de', is_shorter_than: 'menos de',
+  never_interacted: 'nunca interagiu', is_first_day: '1º dia do mês', is_last_day: 'último dia do mês',
+  is_empty: 'vazio', is_not_empty: 'preenchido',
+}
+const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
 const getConditionPreview = (config: any): string => {
-  if (!config || !config.field || !config.operator) {
-    return 'Clique para configurar condição'
+  if (!config) return 'Clique para configurar condição'
+
+  const condType = config.type as string | undefined
+  const op = OP[config.operator] || config.operator || ''
+
+  if (condType) {
+    switch (condType) {
+      case 'lead_tags': {
+        const tags: string[] = config.tags || []
+        if (tags.length === 0) return 'Tag: (nenhuma configurada)'
+        return `Tag: ${op} ${tags.length === 1 ? tags[0] : `${tags.length} tags`}`
+      }
+      case 'lead_field':
+        if (!config.field) return 'Campo: (não configurado)'
+        return `Se ${config.field} ${op} ${config.value ?? ''}`
+      case 'lead_source':
+        return `Origem ${op} ${config.value || '(vazia)'}`
+      case 'lead_created_date':
+        return `Data criação: ${op}${config.value ? ` ${config.value}` : ''}`
+      case 'last_interaction':
+        if (config.operator === 'never_interacted') return 'Nunca interagiu'
+        return `Últ. interação: ${op} ${config.value || ''}`
+      case 'lead_score':
+        return `Score ${op} ${config.value ?? ''}`
+      case 'opportunity_stage':
+        return `Etapa ${op} ${config.value || ''}`
+      case 'opportunity_value':
+        return `Valor ${op} ${config.value ?? ''}`
+      case 'opportunity_owner':
+        if (config.operator === 'has_no_owner') return 'Sem responsável'
+        return `Responsável ${op} ${config.value || ''}`
+      case 'opportunity_stage_duration':
+        return `Tempo na etapa ${op} ${config.value || ''}`
+      case 'day_of_week': {
+        const dayLabel = typeof config.value === 'number' ? DAYS[config.value] : config.value
+        return `Dia ${op} ${dayLabel || ''}`
+      }
+      case 'time_of_day':
+        if (config.operator === 'is_between' && config.value)
+          return `Hora entre ${config.value.start || '?'}–${config.value.end || '?'}`
+        return `Hora ${op} ${config.value || ''}`
+      case 'day_of_month':
+        if (config.operator === 'is_first_day') return '1º dia do mês'
+        if (config.operator === 'is_last_day') return 'Último dia do mês'
+        if (config.operator === 'is_between' && config.value)
+          return `Dia entre ${config.value.start || '?'}–${config.value.end || '?'}`
+        return `Dia ${op} ${config.value || ''}`
+      default:
+        return `Condição: ${condType}`
+    }
   }
 
-  const operatorLabel: { [key: string]: string } = {
-    'equals': '=',
-    'not_equals': '≠',
-    'contains': 'contém',
-    'not_contains': 'não contém',
-    'greater_than': '>',
-    'less_than': '<',
-    'greater_or_equal': '≥',
-    'less_or_equal': '≤'
-  }
-
-  const operator = operatorLabel[config.operator] || config.operator
-  const value = config.value || '(vazio)'
-  
-  return `Se: ${config.field} ${operator} ${value}`
+  // Formato legado (sem config.type)
+  if (!config.field || !config.operator) return 'Clique para configurar condição'
+  return `Se: ${config.field} ${op} ${config.value || '(vazio)'}`
 }
 
 const ConditionNode = ({ data, selected, id }: NodeProps) => {
   const conditionPreview = getConditionPreview(data.config)
-  const hasConfig = !!(data.config?.field && data.config?.operator)
+  const hasConfig = !!(
+    (data.config?.type && data.config?.operator) ||
+    (data.config?.field && data.config?.operator)
+  )
   const { setNodes, setEdges } = useReactFlow()
 
   const handleDelete = () => {
@@ -74,6 +128,8 @@ const ConditionNode = ({ data, selected, id }: NodeProps) => {
     <div className={`bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative ${
       selected ? 'border-yellow-600 ring-2 ring-yellow-300' : 'border-gray-200 hover:border-yellow-400'
     }`}>
+      <NodeDebugBadge debugStatus={data.debugStatus} />
+
       {/* Toolbar - aparece apenas quando selecionado */}
       {selected && (
         <NodeToolbar

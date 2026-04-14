@@ -82,8 +82,31 @@ export function useLeadTags() {
 
     setError(null)
 
+    // Capturar dados da tag antes da remoção (snapshot já contém o objeto completo)
+    const removedTag = snapshot.find(t => t.id === tagId)
+
     try {
       await tagsApi.removeTagFromLead(leadId, tagId)
+
+      // Disparar automação backend (fire-and-forget — nunca bloqueia a UI)
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token || !removedTag?.company_id) return
+
+        fetch('/api/automation/trigger-event', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type: 'tag.removed',
+            company_id: removedTag.company_id,
+            data: {
+              lead_id:  leadId,
+              tag_id:   tagId,
+              tag_name: removedTag.name,
+            },
+          }),
+        }).catch(err => console.error('[useLeadTags] tag.removed trigger failed:', err))
+      }).catch(() => { /* sem token — ignora silenciosamente */ })
     } catch {
       // Rollback ao snapshot anterior à mutação otimista
       setTags(snapshot)

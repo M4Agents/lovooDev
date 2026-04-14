@@ -399,8 +399,27 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               firstStage.id,
               leadId
             )
-            
+
             console.log('✅ CreateOpportunityModal - Oportunidade adicionada ao funil com sucesso!')
+
+            // Disparar automação (fire-and-forget — nunca bloqueia a UI)
+            supabase.auth.getSession().then(({ data: sessionData }) => {
+              const token = sessionData.session?.access_token
+              if (!token || !company?.id) return
+              fetch('/api/automation/trigger-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  event_type: 'opportunity.created',
+                  company_id: company.id,
+                  data: {
+                    opportunity_id: result.id,
+                    lead_id:        leadId ?? null,
+                    opportunity:    { funnel_id: defaultFunnel.id, stage_id: firstStage.id },
+                  },
+                }),
+              }).catch(err => console.error('[CreateOpportunityModal] opportunity.created trigger failed:', err))
+            }).catch(() => { /* sem sessão — ignora silenciosamente */ })
           } else {
             console.warn('⚠️ CreateOpportunityModal - Funil não tem etapas cadastradas')
           }

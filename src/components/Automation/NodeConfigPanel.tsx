@@ -7,11 +7,12 @@ import { TriggerAutomationForm } from './TriggerAutomationForm'
 import { NotificationForm } from './NotificationForm'
 import { ConditionForm } from './ConditionForm'
 import { DistributionForm } from './DistributionForm'
+import ExecuteAgentForm from './forms/ExecuteAgentForm'
+import NodeExecutionStatus from './NodeExecutionStatus'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
 import { Node } from 'reactflow'
 import { useAuth } from '../../contexts/AuthContext'
-import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { supabase } from '../../lib/supabase'
 import ActionTypeSelector, { ACTION_TYPES } from './ActionTypeSelector'
 import { CreateActivityForm, UpdateActivityForm, CompleteActivityForm, CancelActivityForm, RescheduleActivityForm } from './ActivityForms'
@@ -27,7 +28,6 @@ interface NodeConfigPanelProps {
 export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, onSave }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<any>({})
   const { company } = useAuth()
-  const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   
   const [tags, setTags] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
@@ -164,25 +164,16 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   }
 
   const loadFlows = async () => {
-    if (!company?.id) {
-      console.log('⚠️ loadFlows: company.id não disponível')
-      return
-    }
-    
-    console.log('🔄 loadFlows: Carregando automações para company:', company.id)
-    
+    if (!company?.id) return
     try {
       const { data, error } = await supabase.from('automation_flows').select('*').eq('company_id', company.id)
-      
       if (error) {
-        console.error('❌ loadFlows: Erro ao carregar:', error)
+        console.error('Erro ao carregar automações:', error)
         return
       }
-      
-      console.log('✅ loadFlows: Carregadas', data?.length || 0, 'automações:', data)
       setFlows(data || [])
     } catch (error) {
-      console.error('❌ loadFlows: Exceção:', error)
+      console.error('Erro ao carregar automações:', error)
     }
   }
 
@@ -201,18 +192,10 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   if (!selectedNode) return null
 
   const handleSave = () => {
-    // ✅ Validação: Bloco de ação DEVE ter actionType
     if (selectedNode.type === 'action' && !config.actionType) {
       alert('⚠️ Por favor, selecione um tipo de ação antes de salvar.')
       return
     }
-    
-    console.log('💾 NodeConfigPanel salvando:', {
-      nodeId: selectedNode.id,
-      nodeType: selectedNode.type,
-      config: config
-    })
-    
     onSave(selectedNode.id, config)
     onClose()
   }
@@ -833,143 +816,6 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
           </div>
         )
 
-      case 'message':
-        // Detectar se trigger tem instanceId configurado
-        const triggerNode = nodes?.find(n => n.id === 'start-node')
-        // Buscar no primeiro trigger habilitado
-        const firstTrigger = triggerNode?.data?.triggers?.find((t: any) => t.enabled)
-        const triggerInstanceId = firstTrigger?.config?.instanceId
-        const triggerInstanceName = firstTrigger?.config?.instanceName
-        
-        return (
-          <div className="space-y-4">
-            {/* Mostrar campo APENAS se trigger NÃO tiver instanceId */}
-            {!triggerInstanceId ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Instância WhatsApp *
-                </label>
-                {loadingInstances ? (
-                  <div className="text-sm text-gray-500">Carregando instâncias...</div>
-                ) : instances.length === 0 ? (
-                  <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
-                    ⚠️ Nenhuma instância WhatsApp conectada. Configure uma instância primeiro.
-                  </div>
-                ) : (
-                  <select
-                    value={config.instanceId || ''}
-                    onChange={(e) => {
-                      const selectedInstance = instances.find(inst => inst.id === e.target.value)
-                      setConfig({ 
-                        ...config, 
-                        instanceId: e.target.value,
-                        instanceName: selectedInstance?.instance_name || ''
-                      })
-                    }}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-                    required
-                  >
-                    <option value="">Selecione uma instância</option>
-                    {instances
-                      .filter(inst => inst.status === 'connected')
-                      .map(inst => (
-                        <option key={inst.id} value={inst.id}>
-                          📱 {inst.instance_name} {inst.phone_number ? `(${inst.phone_number})` : ''}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-            ) : (
-              // Mostrar aviso informativo quando instância já está no trigger
-              <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-md">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-blue-700">
-                      <strong>Instância definida no gatilho:</strong> 📱 {triggerInstanceName}
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Esta mensagem será enviada pela instância configurada no primeiro card.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mensagem
-              </label>
-              <textarea
-                value={config.message || ''}
-                onChange={(e) => setConfig({ ...config, message: e.target.value })}
-                rows={4}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Digite a mensagem que será enviada..."
-              />
-            </div>
-            
-            {/* Botões */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Botões de Resposta
-              </label>
-              <div className="space-y-2">
-                {(config.buttons || []).map((button: any, index: number) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={button.text || ''}
-                      onChange={(e) => {
-                        const newButtons = [...(config.buttons || [])]
-                        newButtons[index] = { ...button, text: e.target.value }
-                        setConfig({ ...config, buttons: newButtons })
-                      }}
-                      className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      placeholder={`Botão ${index + 1}`}
-                    />
-                    <button
-                      onClick={() => {
-                        const newButtons = (config.buttons || []).filter((_: any, i: number) => i !== index)
-                        setConfig({ ...config, buttons: newButtons })
-                      }}
-                      className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-md"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => {
-                    const newButtons = [...(config.buttons || []), { text: '' }]
-                    setConfig({ ...config, buttons: newButtons })
-                  }}
-                  className="w-full px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-md hover:bg-blue-50"
-                >
-                  + Adicionar Botão
-                </button>
-              </div>
-            </div>
-            
-            <div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={config.useVariables || false}
-                  onChange={(e) => setConfig({ ...config, useVariables: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Usar variáveis (ex: {'{nome}'})</span>
-              </label>
-            </div>
-          </div>
-        )
-
       case 'condition':
         return <ConditionForm config={config} setConfig={setConfig} />
 
@@ -1019,6 +865,9 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
       case 'distribution':
         return <DistributionForm config={config} setConfig={setConfig} />
 
+      case 'execute_agent':
+        return <ExecuteAgentForm config={config} setConfig={setConfig} />
+
       default:
         return (
           <div className="text-sm text-gray-500">
@@ -1050,6 +899,13 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
         </div>
 
         {renderConfigFields()}
+
+        {selectedNode.data.debugStatus && (
+          <NodeExecutionStatus
+            nodeType={selectedNode.type || ''}
+            debugStatus={selectedNode.data.debugStatus}
+          />
+        )}
 
         <div className="mt-6 flex gap-3">
           <button

@@ -110,7 +110,26 @@ export const useLeadPositions = (funnelId: string, companyId?: string, filter?: 
       
       // Adicionar oportunidade ao funil
       await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, firstStage.id)
-      
+
+      // Disparar automação (fire-and-forget — nunca bloqueia a UI)
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData.session?.access_token
+        if (!token || !lead.company_id) return
+        fetch('/api/automation/trigger-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            event_type: 'opportunity.created',
+            company_id: lead.company_id,
+            data: {
+              opportunity_id: opportunity.id,
+              lead_id:        leadId ?? null,
+              opportunity:    { funnel_id: funnelId, stage_id: firstStage.id },
+            },
+          }),
+        }).catch(err => console.error('[useLeadPositions] opportunity.created trigger failed:', err))
+      }).catch(() => { /* sem sessão — ignora silenciosamente */ })
+
       // Atualizar lista
       await fetchPositions()
     } catch (err) {

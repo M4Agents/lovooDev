@@ -22,7 +22,18 @@ import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { createExecution, processFlowAsync } from '../lib/automation/executor.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const ALLOWED_EVENT_TYPES = ['opportunity.stage_changed', 'tag.added', 'lead.created'] as const
+const ALLOWED_EVENT_TYPES = [
+  'opportunity.stage_changed',
+  'opportunity.created',
+  'opportunity.won',
+  'opportunity.lost',
+  'opportunity.owner_assigned',
+  'opportunity.owner_removed',
+  'tag.added',
+  'tag.removed',
+  'lead.created',
+  'message.received',
+] as const
 type AllowedEventType = (typeof ALLOWED_EVENT_TYPES)[number]
 
 // Janela de deduplicação: execuções criadas nos últimos 60 segundos
@@ -167,12 +178,36 @@ export default async function handler(req: any, res: any) {
     auditPayload.lead_id        = data.lead_id        || null
     auditPayload.old_stage      = data.old_stage      || null
     auditPayload.new_stage      = data.new_stage      || null
-  } else if (event_type === 'tag.added') {
+  } else if (event_type === 'opportunity.created') {
+    auditPayload.opportunity_id = data.opportunity_id || null
+    auditPayload.lead_id        = data.lead_id        || null
+    auditPayload.funnel_id      = data.opportunity?.funnel_id || null
+    auditPayload.stage_id       = data.opportunity?.stage_id  || null
+  } else if (event_type === 'opportunity.won') {
+    auditPayload.opportunity_id = data.opportunity_id || null
+    auditPayload.lead_id        = data.lead_id        || null
+    auditPayload.funnel_id      = data.opportunity?.funnel_id || null
+  } else if (event_type === 'opportunity.lost') {
+    auditPayload.opportunity_id = data.opportunity_id || null
+    auditPayload.lead_id        = data.lead_id        || null
+    auditPayload.funnel_id      = data.opportunity?.funnel_id || null
+    auditPayload.loss_reason    = data.loss_reason    || null
+  } else if (event_type === 'tag.added' || event_type === 'tag.removed') {
     auditPayload.lead_id  = data.lead_id  || null
     auditPayload.tag_id   = data.tag_id   || null
     auditPayload.tag_name = data.tag_name || null
   } else if (event_type === 'lead.created') {
     auditPayload.lead_id = data.lead_id || null
+  } else if (event_type === 'opportunity.owner_assigned' || event_type === 'opportunity.owner_removed') {
+    auditPayload.opportunity_id = data.opportunity_id || null
+    auditPayload.owner_id       = data.owner_id       || null
+    auditPayload.funnel_id      = data.opportunity?.funnel_id || null
+  } else if (event_type === 'message.received') {
+    auditPayload.conversation_id = data.conversation_id || null
+    auditPayload.lead_id         = data.lead_id         || null
+    auditPayload.message_id      = data.message_id      || null
+    auditPayload.instance_id     = data.instance_id     || null
+    auditPayload.channel         = data.channel         || 'whatsapp'
   }
 
   // 3. Validar membership do usuário na empresa
@@ -223,11 +258,56 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // 4b. Validações específicas para tag.added
-  if (event_type === 'tag.added') {
+  // 4b. Validações para opportunity.created, opportunity.won, opportunity.lost
+  if (
+    event_type === 'opportunity.created' ||
+    event_type === 'opportunity.won'     ||
+    event_type === 'opportunity.lost'
+  ) {
+    if (!isUUID(data.opportunity_id)) {
+      return res.status(400).json({ error: `opportunity_id é obrigatório para ${event_type}` })
+    }
+
+    const { data: opp } = await supabaseAdmin
+      .from('opportunities')
+      .select('id, lead_id')
+      .eq('id', data.opportunity_id)
+      .eq('company_id', company_id)
+      .maybeSingle()
+
+    if (!opp) {
+      return res.status(403).json({ error: 'Oportunidade não pertence à empresa informada' })
+    }
+
+    // Se lead_id vier no payload, validar coerência com o lead da oportunidade
+    if (data.lead_id && opp.lead_id && Number(data.lead_id) !== Number(opp.lead_id)) {
+      return res.status(403).json({ error: 'lead_id não corresponde à oportunidade informada' })
+    }
+  }
+
+  // 4d. Validações para opportunity.owner_assigned e opportunity.owner_removed
+  if (event_type === 'opportunity.owner_assigned' || event_type === 'opportunity.owner_removed') {
+    if (!isUUID(data.opportunity_id)) {
+      return res.status(400).json({ error: `opportunity_id é obrigatório para ${event_type}` })
+    }
+
+    const { data: opp } = await supabaseAdmin
+      .from('opportunities')
+      .select('id')
+      .eq('id', data.opportunity_id)
+      .eq('company_id', company_id)
+      .maybeSingle()
+
+    if (!opp) {
+      return res.status(403).json({ error: 'Oportunidade não pertence à empresa informada' })
+    }
+  }
+
+  // 4c. Validações específicas para tag.added e tag.removed
+  if (event_type === 'tag.added' || event_type === 'tag.removed') {
     const leadId = data.lead_id ? Number(data.lead_id) : null
     if (!leadId || isNaN(leadId)) {
-      return res.status(400).json({ error: 'lead_id é obrigatório para tag.added' })
+      return res.status(400).json({ error: `lead_id é obrigatório para ${event_type}` })
     }
 
     const { data: lead } = await supabaseAdmin
@@ -253,8 +333,43 @@ export default async function handler(req: any, res: any) {
         .eq('company_id', company_id)
         .maybeSingle()
 
-      if (!tag) {
+      // Para tag.removed: a tag pode já não existir na tabela após a remoção — não bloquear
+      if (event_type === 'tag.added' && !tag) {
         return res.status(403).json({ error: 'Tag não pertence à empresa informada' })
+      }
+    }
+  }
+
+  // 4e. Validações para message.received (todos os campos são opcionais; só validar se presentes)
+  if (event_type === 'message.received') {
+    if (data.conversation_id !== undefined && data.conversation_id !== null) {
+      if (!isUUID(data.conversation_id)) {
+        return res.status(400).json({ error: 'conversation_id inválido' })
+      }
+      const { data: conv } = await supabaseAdmin
+        .from('chat_conversations')
+        .select('id')
+        .eq('id', data.conversation_id)
+        .eq('company_id', company_id)
+        .maybeSingle()
+      if (!conv) {
+        return res.status(403).json({ error: 'conversation_id não pertence à empresa informada' })
+      }
+    }
+
+    if (data.lead_id !== undefined && data.lead_id !== null) {
+      const leadId = Number(data.lead_id)
+      if (isNaN(leadId)) {
+        return res.status(400).json({ error: 'lead_id inválido' })
+      }
+      const { data: lead } = await supabaseAdmin
+        .from('leads')
+        .select('id')
+        .eq('id', leadId)
+        .eq('company_id', company_id)
+        .maybeSingle()
+      if (!lead) {
+        return res.status(403).json({ error: 'Lead não pertence à empresa informada' })
       }
     }
   }
@@ -283,7 +398,6 @@ export default async function handler(req: any, res: any) {
     const matched = matchesTriggerConditions(flow, event)
 
     if (!matched) {
-      // Registrar not_matched — sem log de console para não poluir
       await logTriggerEvent(supabaseAdmin, {
         companyId:   company_id,
         flowId:      flow.id,
@@ -291,7 +405,7 @@ export default async function handler(req: any, res: any) {
         eventType:   event_type,
         status:      'not_matched',
         matched:     false,
-        reason:      'flow não corresponde ao evento',
+        reason:      `flow "${flow.name}" não possui trigger compatível com ${event_type}`,
         dedupKey:    null,
         payload:     auditPayload,
       })
@@ -380,7 +494,7 @@ export default async function handler(req: any, res: any) {
       matched:     true,
       reason:      null,
       dedupKey,
-      payload:     auditPayload,
+      payload:     { ...auditPayload, flow_name: flow.name },
     })
 
     executionIds.push(execution.id)

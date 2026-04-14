@@ -11,6 +11,9 @@ export interface MessageType {
   label: string
   icon: React.ReactNode
   description?: string
+  /** Quando true: exibido mas desabilitado — use o nó Delay dedicado no canvas */
+  disabled?: boolean
+  disabledReason?: string
 }
 
 export const MESSAGE_TYPES: MessageType[] = [
@@ -30,7 +33,9 @@ export const MESSAGE_TYPES: MessageType[] = [
     id: 'delay',
     label: 'Atraso de tempo',
     icon: <Clock className="w-4 h-4" />,
-    description: 'Aguarde um tempo específico'
+    description: 'Use o nó "Espera" no canvas',
+    disabled: true,
+    disabledReason: 'Use o nó Delay'
   },
   {
     id: 'audio',
@@ -62,14 +67,30 @@ export default function MessageTypeSelector({ onSelectType }: MessageTypeSelecto
       {MESSAGE_TYPES.map((type) => (
         <button
           key={type.id}
-          onClick={() => onSelectType(type.id)}
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+          onClick={() => !type.disabled && onSelectType(type.id)}
+          disabled={type.disabled}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left ${
+            type.disabled
+              ? 'opacity-50 cursor-not-allowed bg-gray-50'
+              : 'hover:bg-gray-50'
+          }`}
         >
-          <div className="text-blue-600">{type.icon}</div>
+          <div className={type.disabled ? 'text-gray-400' : 'text-blue-600'}>
+            {type.icon}
+          </div>
           <div className="flex-1">
-            <div className="font-medium text-gray-900">{type.label}</div>
+            <div className="flex items-center gap-2">
+              <span className={`font-medium ${type.disabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                {type.label}
+              </span>
+              {type.disabled && type.disabledReason && (
+                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-none">
+                  {type.disabledReason}
+                </span>
+              )}
+            </div>
             {type.description && (
-              <div className="text-xs text-gray-500 mt-0.5">{type.description}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{type.description}</div>
             )}
           </div>
         </button>

@@ -9,6 +9,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { MessageSquare, MessageCircle, CheckCircle, AlertTriangle, AlignLeft, Clock, Mic, Paperclip, Link } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
+import NodeDebugBadge from './NodeDebugBadge'
 
 // =====================================================
 // HELPER: Traduzir unidades de tempo
@@ -104,14 +105,6 @@ const getMessagePreview = (config: any) => {
 }
 
 const MessageNode = ({ data, selected, id }: NodeProps) => {
-  // DEBUG: Verificar config recebido
-  console.log('🔍 MessageNode DEBUG:', {
-    nodeId: id,
-    messageType: data.config?.messageType,
-    duration: data.config?.duration,
-    unit: data.config?.unit,
-    fullConfig: data.config
-  })
   
   const preview = getMessagePreview(data.config)
   const buttons = data.config?.buttons || []
@@ -152,6 +145,8 @@ const MessageNode = ({ data, selected, id }: NodeProps) => {
     <div className={`bg-white rounded shadow-sm border-2 w-36 transition-all overflow-visible relative ${
       selected ? 'border-purple-600 ring-2 ring-purple-300' : 'border-gray-200 hover:border-purple-400'
     }`}>
+      <NodeDebugBadge debugStatus={data.debugStatus} />
+
       {/* Toolbar - aparece apenas quando selecionado */}
       {selected && (
         <NodeToolbar

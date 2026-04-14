@@ -4,7 +4,8 @@
 // Objetivo: Menu lateral de ações estilo Datacraz
 // =====================================================
 
-import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Brain, FileCode, Flag } from 'lucide-react'
+import React from 'react'
+import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Bot, FileCode, Flag } from 'lucide-react'
 import { useMemo } from 'react'
 
 interface ActionMenuProps {
@@ -15,7 +16,15 @@ interface ActionMenuProps {
   lineStart?: { x: number; y: number } | null
 }
 
-const ACTIONS = [
+interface ActionMenuItem {
+  type: string
+  label: string
+  icon: React.ElementType
+  description: string
+  comingSoon?: boolean
+}
+
+const ACTIONS: ActionMenuItem[] = [
   {
     type: 'message',
     label: 'Mensagem',
@@ -50,25 +59,28 @@ const ACTIONS = [
     type: 'api',
     label: 'API',
     icon: Code,
-    description: 'Chamada de API externa'
+    description: 'Chamada de API externa',
+    comingSoon: true
   },
   {
     type: 'field_operations',
     label: 'Operações de campos',
     icon: Wrench,
-    description: 'Manipular campos do lead'
+    description: 'Manipular campos do lead',
+    comingSoon: true
   },
   {
-    type: 'ai',
-    label: 'IA',
-    icon: Brain,
-    description: 'Inteligência artificial'
+    type: 'execute_agent',
+    label: 'Executar Agente IA',
+    icon: Bot,
+    description: 'Executar um agente de IA e salvar a resposta'
   },
   {
     type: 'javascript',
     label: 'JavaScript',
     icon: FileCode,
-    description: 'Executar código JavaScript'
+    description: 'Executar código JavaScript',
+    comingSoon: true
   },
   {
     type: 'end',
@@ -162,20 +174,35 @@ export default function ActionMenu({ isOpen, onClose, onSelectAction, position, 
         <div className="p-2">
           {ACTIONS.map((action) => {
             const Icon = action.icon
+            const disabled = action.comingSoon
             return (
               <button
                 key={action.type}
-                onClick={() => handleSelect(action.type)}
-                className="w-full flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left group"
+                onClick={() => !disabled && handleSelect(action.type)}
+                disabled={disabled}
+                className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors text-left group ${
+                  disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                }`}
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                  <Icon className="w-4 h-4 text-blue-600" />
+                <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                  disabled ? 'bg-gray-100' : 'bg-blue-50 group-hover:bg-blue-100'
+                }`}>
+                  <Icon className={`w-4 h-4 ${disabled ? 'text-gray-400' : 'text-blue-600'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
-                    {action.label}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-medium transition-colors ${
+                      disabled ? 'text-gray-400' : 'text-gray-900 group-hover:text-blue-600'
+                    }`}>
+                      {action.label}
+                    </span>
+                    {disabled && (
+                      <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-none">
+                        Em breve
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5 leading-tight">
+                  <div className="text-xs text-gray-400 mt-0.5 leading-tight">
                     {action.description}
                   </div>
                 </div>

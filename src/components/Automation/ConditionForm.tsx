@@ -154,6 +154,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
   const [sources, setSources] = useState<string[]>([])
   const [selectedFunnel, setSelectedFunnel] = useState<string>('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     if (config?.type) {
@@ -260,7 +261,82 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
     }
   }
 
+  const NO_VALUE_OPERATORS = new Set([
+    'is_empty', 'is_not_empty', 'never_interacted', 'has_no_owner',
+    'is_first_day', 'is_last_day', 'is_today', 'is_yesterday',
+    'is_this_week', 'is_this_month',
+  ])
+
+  const validateCondition = (): string | null => {
+    if (!selectedType) return 'Selecione o tipo de condição.'
+    if (!operator) return 'Selecione o operador.'
+
+    if (NO_VALUE_OPERATORS.has(operator)) return null
+
+    switch (selectedType) {
+      case 'lead_field':
+        if (!field) return 'Selecione o campo do lead.'
+        if (!value?.toString().trim()) return 'Informe o valor para comparação.'
+        break
+      case 'lead_tags':
+        if (selectedTags.length === 0) return 'Selecione ao menos uma tag.'
+        break
+      case 'lead_source':
+        if (!value) return 'Selecione a origem do lead.'
+        break
+      case 'lead_created_date':
+      case 'last_interaction':
+        if (!value || Number(value) <= 0) return 'Informe uma quantidade válida (maior que zero).'
+        break
+      case 'lead_score':
+        if (value === '' || value === null || value === undefined)
+          return 'Informe o score para comparação.'
+        break
+      case 'opportunity_stage':
+        if (!value) return 'Selecione a etapa do funil.'
+        break
+      case 'opportunity_value':
+        if (value === '' || value === null || value === undefined)
+          return 'Informe o valor da oportunidade.'
+        break
+      case 'opportunity_owner':
+        if (!value) return 'Selecione o responsável.'
+        break
+      case 'opportunity_stage_duration':
+        if (!value || Number(value) <= 0) return 'Informe uma duração válida (maior que zero).'
+        break
+      case 'day_of_week':
+        if (value === '' || value === null || value === undefined)
+          return 'Selecione o dia da semana.'
+        break
+      case 'time_of_day':
+        if (!value?.start) return 'Informe o horário inicial.'
+        if (operator === 'is_between' && !value?.end) return 'Informe o horário final.'
+        break
+      case 'day_of_month':
+        if (operator === 'is_between') {
+          if (!value?.start) return 'Informe o dia inicial do intervalo.'
+          if (!value?.end) return 'Informe o dia final do intervalo.'
+        } else {
+          if (!value) return 'Informe o dia do mês.'
+        }
+        break
+      default:
+        if (!value?.toString().trim()) return 'Informe o valor para comparação.'
+    }
+
+    return null
+  }
+
   const handleSave = () => {
+    const error = validateCondition()
+    if (error) {
+      setValidationError(error)
+      return
+    }
+
+    setValidationError(null)
+
     const newConfig: any = {
       type: selectedType,
       operator,
@@ -577,6 +653,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
                 setSelectedType('')
                 setOperator('')
                 setValue('')
+                setValidationError(null)
               }}
               className={`px-3 py-2 text-sm rounded-md border transition-colors ${
                 selectedCategory === cat.id
@@ -599,6 +676,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
               setSelectedType(e.target.value as ConditionType)
               setOperator('')
               setValue('')
+              setValidationError(null)
             }}
             className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           >
@@ -620,6 +698,7 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
             onChange={(e) => {
               setOperator(e.target.value)
               setValue('')
+              setValidationError(null)
             }}
             className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           >
@@ -639,6 +718,13 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
             <div className="text-xs font-medium text-gray-500 mb-1">Preview:</div>
             <div className="text-sm text-gray-900">{getPreview()}</div>
           </div>
+
+          {validationError && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-700">{validationError}</p>
+            </div>
+          )}
 
           <button
             onClick={handleSave}

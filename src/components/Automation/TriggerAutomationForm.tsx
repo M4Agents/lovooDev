@@ -1,9 +1,7 @@
 import React from 'react'
 
 export function TriggerAutomationForm({ config, setConfig, flows, currentFlowId }: any) {
-  console.log('🎯 TriggerAutomationForm:', { totalFlows: flows?.length || 0, currentFlowId, flows })
   const activeFlows = flows.filter((f: any) => f.is_active && f.id !== currentFlowId)
-  console.log('✅ Fluxos ativos:', activeFlows.length)
 
   return (
     <>

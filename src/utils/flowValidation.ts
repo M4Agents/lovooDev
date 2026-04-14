@@ -151,15 +151,47 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
         }
         break
 
-      case 'condition':
-        if (!config.field) {
-          errors.push({
-            nodeId: node.id,
-            type: 'error',
-            message: `Bloco de condição "${node.data.label}" não tem campo configurado`
-          })
+      case 'condition': {
+        // Tipos que NÃO usam config.field — têm operador/valor próprios
+        const FIELDLESS_CONDITION_TYPES = new Set([
+          'lead_tags',
+          'lead_source',
+          'lead_created_date',
+          'last_interaction',
+          'lead_score',
+          'opportunity_stage',
+          'opportunity_value',
+          'opportunity_owner',
+          'opportunity_stage_duration',
+          'day_of_week',
+          'time_of_day',
+          'day_of_month',
+        ])
+
+        const condType = config.type as string | undefined
+
+        if (!condType) {
+          // Modo legado (sem config.type): exige config.field
+          if (!config.field) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de condição "${node.data.label}" não tem campo configurado`
+            })
+          }
+        } else if (!FIELDLESS_CONDITION_TYPES.has(condType)) {
+          // Tipos que usam field (ex: lead_field): exige config.field
+          if (!config.field) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de condição "${node.data.label}" não tem campo configurado`
+            })
+          }
         }
+        // Tipos fieldless: sem exigência de field — validação de operador fica no ConditionForm
         break
+      }
 
       case 'delay':
         if (!config.duration || config.duration <= 0) {
@@ -180,6 +212,44 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
           })
         }
         break
+
+      case 'execute_agent': {
+        const VARIABLE_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+
+        if (!config.agentId || typeof config.agentId !== 'string' || !config.agentId.trim()) {
+          errors.push({
+            nodeId: node.id,
+            type: 'error',
+            message: `Bloco de agente "${node.data.label}" não tem agente selecionado`
+          })
+        }
+
+        if (!config.promptTemplate || typeof config.promptTemplate !== 'string' || !config.promptTemplate.trim()) {
+          errors.push({
+            nodeId: node.id,
+            type: 'error',
+            message: `Bloco de agente "${node.data.label}" não tem prompt configurado`
+          })
+        }
+
+        if (!config.saveToVariable || typeof config.saveToVariable !== 'string') {
+          errors.push({
+            nodeId: node.id,
+            type: 'error',
+            message: `Bloco de agente "${node.data.label}" não tem variável de saída configurada`
+          })
+        } else {
+          const varName = config.saveToVariable.trim().slice(0, 64)
+          if (!VARIABLE_NAME_RE.test(varName)) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de agente "${node.data.label}": variável de saída inválida — use apenas letras, números e underscores`
+            })
+          }
+        }
+        break
+      }
     }
   })
 

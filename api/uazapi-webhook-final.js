@@ -2,6 +2,9 @@
 // Endpoint: /pages/api/uazapi-webhook-final
 // CORREÇÃO RLS: Agora usa process_webhook_message_safe para bypass do RLS
 
+import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCreatedTrigger.js';
+import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
+
 // =====================================================
 // NORMALIZAÇÃO DE MESSAGE_TYPE
 // =====================================================
@@ -612,6 +615,9 @@ async function processMessage(payload) {
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;
 
+    // lead_id resolvido do bloco inbound — acessível após o bloco para o dispatch de message.received
+    let inboundLeadId = null;
+
     // 🎯 CRIAÇÃO AUTOMÁTICA DE LEAD PARA NOVOS CONTATOS - CORREÇÃO CRÍTICA 2026-02-20
     // USANDO SECURITY DEFINER PARA MANTER RLS ATIVO
     if (direction === 'inbound') {
@@ -631,6 +637,9 @@ async function processMessage(payload) {
         } else if (leadResult && leadResult.success) {
           if (leadResult.created) {
             console.log('✅ LEAD CRIADO AUTOMATICAMENTE:', leadResult.lead_id, '-', senderName);
+            // Disparar automação apenas para leads recém-criados (fire-and-forget)
+            dispatchLeadCreatedTrigger({ companyId: company.id, leadId: leadResult.lead_id, source: 'whatsapp' })
+              .catch(err => console.error('[uazapi-webhook-final] automation trigger failed:', err));
           } else {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
           }
@@ -638,6 +647,8 @@ async function processMessage(payload) {
           if (leadResult.lead_id && conversationId) {
             await supabase.from('chat_conversations').update({ lead_id: leadResult.lead_id }).eq('id', conversationId);
           }
+          // Expor para uso no dispatch de message.received
+          inboundLeadId = leadResult.lead_id || null;
         } else {
           console.error('❌ RPC retornou erro:', leadResult);
         }
@@ -899,6 +910,20 @@ async function processMessage(payload) {
         // Emitter nunca pode quebrar o fluxo do webhook
         console.error('🤖 ❌ EXCEPTION no emitter de conversação:', emitterError.message);
       }
+    }
+
+    // 🎯 DISPATCH message.received — aciona automações de mensagem recebida (fire-and-forget)
+    // Executado após resume/user_input e após emitter de IA.
+    // Independente do user_input: resume retoma execução pausada; message.received inicia nova.
+    if (direction === 'inbound' && conversationId) {
+      dispatchMessageReceivedTrigger({
+        companyId:      company.id,
+        leadId:         inboundLeadId,
+        conversationId,
+        instanceId:     instance.id,
+        messageId:      savedMessageId,
+        text:           messageText,
+      }).catch(err => console.error('[uazapi-webhook-final] message.received trigger failed:', err));
     }
 
     return { 

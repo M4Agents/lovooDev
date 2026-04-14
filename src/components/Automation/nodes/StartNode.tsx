@@ -7,6 +7,8 @@
 import { Handle, Position } from 'reactflow'
 import { Plus, TrendingUp, MessageCircle, Tag, UserPlus, X } from 'lucide-react'
 import type { TriggerConfig } from '../../../types/automation'
+import NodeDebugBadge from './NodeDebugBadge'
+import type { NodeDebugStatus } from '../../../hooks/useFlowDebug'
 
 interface StartNodeProps {
   data: {
@@ -17,6 +19,7 @@ interface StartNodeProps {
     triggers?: TriggerConfig[]
     triggerOperator?: 'OR' | 'AND'
     onOperatorChange?: (operator: 'OR' | 'AND') => void
+    debugStatus?: NodeDebugStatus | null
     // Legado - manter compatibilidade
     selectedTrigger?: {
       type: string
@@ -42,6 +45,7 @@ export default function StartNode({ data }: StartNodeProps) {
 
   return (
     <div className="bg-white rounded shadow-sm border border-gray-200 p-2 w-36 overflow-visible relative">
+      <NodeDebugBadge debugStatus={data.debugStatus} />
       {/* Header */}
       <div className="flex items-center gap-1 mb-1.5">
         <span className="text-green-600 text-xs">▷</span>

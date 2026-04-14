@@ -31,13 +31,6 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
   // Buscar variáveis disponíveis
   const { variables } = useVariables(company?.id || '')
   
-  // Debug: log variáveis carregadas
-  useEffect(() => {
-    console.log('📊 Variáveis carregadas:', variables.length, 'variáveis')
-    if (variables.length > 0) {
-      console.log('📊 Primeiras 3 variáveis:', variables.slice(0, 3))
-    }
-  }, [variables])
 
   const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
@@ -49,18 +42,8 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
     // Detectar {{ ou [ para abrir autocomplete
     const beforeCursor = value.substring(0, cursorPos)
     const match = beforeCursor.match(/\{\{([^}]*)$/) || beforeCursor.match(/\[([^\]]*)$/)
-    
-    console.log('🔍 Autocomplete Debug:', {
-      beforeCursor,
-      match: match ? match[0] : null,
-      filter: match ? match[1] : null,
-      variablesCount: variables.length,
-      showAutocomplete: !!match
-    })
-    
+
     if (match) {
-      // Abrir autocomplete
-      console.log('✅ Abrindo autocomplete com', variables.length, 'variáveis')
       setShowVariableAutocomplete(true)
       setAutocompleteFilter(match[1] || '')
     } else {

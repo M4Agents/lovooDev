@@ -22,7 +22,7 @@ import ReactFlow, {
   ReactFlowProvider
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Save, Play, Pause, Trash2 } from 'lucide-react'
+import { Save, Play, Pause, Trash2, RefreshCw, History } from 'lucide-react'
 
 // Custom Node Components
 import StartNode from './nodes/StartNode'
@@ -33,6 +33,7 @@ import MessageNode from './nodes/MessageNode'
 import DelayNode from './nodes/DelayNode'
 import EndNode from './nodes/EndNode'
 import DistributionNode from './nodes/DistributionNode'
+import ExecuteAgentNode from './nodes/ExecuteAgentNode'
 
 // Custom Edge Component
 import CustomEdge from './edges/CustomEdge'
@@ -53,6 +54,8 @@ import TriggerSelectorModal from './TriggerSelectorModal'
 import TriggerConfigModal from './TriggerConfigModal'
 
 import type { TriggerConfig } from '../../types/automation'
+import { useFlowDebug } from '../../hooks/useFlowDebug'
+import FlowExecutionHistory from './FlowExecutionHistory'
 
 interface FlowCanvasProps {
   flowId: string
@@ -75,7 +78,8 @@ const nodeTypes: NodeTypes = {
   message: MessageNode,
   delay: DelayNode,
   end: EndNode,
-  distribution: DistributionNode
+  distribution: DistributionNode,
+  execute_agent: ExecuteAgentNode
 }
 
 const edgeTypes: EdgeTypes = {
@@ -83,6 +87,7 @@ const edgeTypes: EdgeTypes = {
 }
 
 function FlowCanvasInner({
+  flowId,
   initialNodes = [],
   initialEdges = [],
   isActive,
@@ -94,6 +99,37 @@ function FlowCanvasInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Debug visual: status da última execução por node + histórico
+  const { nodeStatusMap, executions, loading: debugLoading, polling, refresh: refreshDebug } = useFlowDebug(flowId)
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Ref estável para onNodeSelect — evita loops em useEffect
+  const onNodeSelectRef = useRef(onNodeSelect)
+  useEffect(() => { onNodeSelectRef.current = onNodeSelect }, [onNodeSelect])
+
+  // Injetar data.onSelect em todos os nodes carregados do banco (executado uma vez ao montar)
+  useEffect(() => {
+    setNodes(nds =>
+      nds.map(node => {
+        if (node.type === 'start' || node.type === 'end') return node
+        return {
+          ...node,
+          data: { ...node.data, onSelect: () => onNodeSelectRef.current(node) }
+        }
+      })
+    )
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Injetar data.debugStatus em todos os nodes quando nodeStatusMap mudar
+  useEffect(() => {
+    setNodes(nds =>
+      nds.map(node => ({
+        ...node,
+        data: { ...node.data, debugStatus: nodeStatusMap[node.id] ?? null },
+      }))
+    )
+  }, [nodeStatusMap]) // eslint-disable-line react-hooks/exhaustive-deps
   const [isAddTriggerModalOpen, setIsAddTriggerModalOpen] = useState(false)
   const [isTriggerSelectorOpen, setIsTriggerSelectorOpen] = useState(false)
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false)
@@ -346,6 +382,7 @@ function FlowCanvasInner({
           config: {}
         }
       }
+      newNode.data.onSelect = () => onNodeSelectRef.current(newNode)
 
       setNodes((nds) => nds.concat(newNode))
     },
@@ -403,26 +440,16 @@ function FlowCanvasInner({
   const handleMessageConfigSave = (config: any) => {
     if (!editingMessageNode) return
 
-    console.log('🔄 FlowCanvas SALVANDO CONFIG:', {
-      nodeId: editingMessageNode.id,
-      messageType: config.messageType,
-      duration: config.duration,
-      unit: config.unit,
-      fullConfig: config
-    })
-
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === editingMessageNode.id) {
-          const updatedNode = {
+          return {
             ...node,
             data: {
               ...node.data,
               config
             }
           }
-          console.log('✅ Nó atualizado:', updatedNode)
-          return updatedNode
         }
         return node
       })
@@ -477,6 +504,7 @@ function FlowCanvasInner({
         config: {}
       }
     }
+    newNode.data.onSelect = () => onNodeSelectRef.current(newNode)
 
     // Criar edge conectando nó de origem ao novo nó
     const newEdge: Edge = {
@@ -528,6 +556,35 @@ function FlowCanvasInner({
         {/* Toolbar */}
         <Panel position="top-right" className="flex gap-2">
           <button
+            onClick={refreshDebug}
+            disabled={debugLoading}
+            title={polling ? 'Atualizando automaticamente a cada 30s' : 'Atualizar status dos nodes'}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              polling
+                ? 'border-green-400 bg-green-50 text-green-700 hover:bg-green-100'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <RefreshCw className={`w-4 h-4 ${debugLoading ? 'animate-spin' : ''}`} />
+            {polling && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowHistory(h => !h)}
+            title="Ver histórico de execuções"
+            className={`inline-flex items-center px-3 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors ${
+              showHistory
+                ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <History className="w-4 h-4 mr-1.5" />
+            Histórico
+          </button>
+
+          <button
             onClick={handleSave}
             disabled={isSaving}
             className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -565,6 +622,18 @@ function FlowCanvasInner({
             Deletar
           </button>
         </Panel>
+
+        {/* Histórico de execuções */}
+        {showHistory && (
+          <Panel position="bottom-left" className="mb-12">
+            <FlowExecutionHistory
+              executions={executions}
+              loading={debugLoading}
+              onRefresh={refreshDebug}
+              onClose={() => setShowHistory(false)}
+            />
+          </Panel>
+        )}
 
         {/* Status Badge */}
         <Panel position="top-left">

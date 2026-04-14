@@ -2,6 +2,8 @@
 // Endpoint: /api/webhook/lead/[api_key]
 // Método: POST com qualquer JSON contendo dados de formulário
 
+import { dispatchLeadCreatedTrigger } from '../../lib/automation/dispatchLeadCreatedTrigger.js';
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -145,7 +147,11 @@ async function createLeadFromWebhook(params) {
     
     const leadId = rpcResult.lead_id;
     console.log('✅ LEAD CRIADO VIA RPC COM SUCESSO:', leadId);
-    
+
+    // Disparar automação backend (fire-and-forget — nunca bloqueia o webhook)
+    dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'webhook' })
+      .catch(err => console.error('[webhook/lead/[api_key]] automation trigger failed:', err));
+
     console.log('Lead criado com sucesso:', leadId);
     return { success: true, lead_id: leadId };
     
