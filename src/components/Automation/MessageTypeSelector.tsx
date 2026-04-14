@@ -4,10 +4,10 @@
 // Objetivo: Seletor de tipos de mensagem (estilo Datacraz)
 // =====================================================
 
-import { AlignLeft, MessageSquare, Clock, Mic, Paperclip, Link } from 'lucide-react'
+import { AlignLeft, MessageSquare, Mic, Paperclip, Link } from 'lucide-react'
 
 export interface MessageType {
-  id: 'text' | 'user_input' | 'delay' | 'audio' | 'file' | 'dynamic_url'
+  id: 'text' | 'user_input' | 'audio' | 'file' | 'dynamic_url'
   label: string
   icon: React.ReactNode
   description?: string
@@ -28,14 +28,6 @@ export const MESSAGE_TYPES: MessageType[] = [
     label: 'Entrada do usuário',
     icon: <MessageSquare className="w-4 h-4" />,
     description: 'Aguarde resposta do usuário'
-  },
-  {
-    id: 'delay',
-    label: 'Atraso de tempo',
-    icon: <Clock className="w-4 h-4" />,
-    description: 'Use o nó "Espera" no canvas',
-    disabled: true,
-    disabledReason: 'Use o nó Delay'
   },
   {
     id: 'audio',

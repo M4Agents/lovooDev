@@ -843,6 +843,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                 onChange={(e) => setConfig({ ...config, unit: e.target.value })}
                 className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
+                <option value="seconds">Segundos</option>
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
                 <option value="days">Dias</option>
