@@ -778,77 +778,80 @@ async function processMessage(payload) {
 
     console.log('✅ MENSAGEM PROCESSADA VIA FUNÇÃO SEGURA:', savedMessageId);
     
-    // 🤖 VERIFICAR E RETOMAR AUTOMAÇÕES PAUSADAS
-    // Quando lead responde, verificar se há automação aguardando resposta
+    // 🤖 VERIFICAR E RETOMAR AUTOMAÇÕES PAUSADAS (user_input)
+    // Estratégia: busca direta no banco, prioriza lead_id; fallback para qualquer
+    // execução pausada da empresa. Chama continue-execution diretamente para evitar
+    // inconsistência de status que o RPC anterior causava.
     if (direction === 'inbound' && conversationId) {
       try {
-        // Buscar lead_id da conversa via RPC SECURITY DEFINER (bypass RLS)
-        const { data: leadResult, error: leadError } = await supabase
-          .rpc('get_conversation_lead_id', {
-            p_conversation_id: conversationId
-          });
-        
-        if (leadError) {
-          console.error('❌ Erro ao buscar lead_id da conversa:', leadError);
-        } else if (!leadResult?.success) {
-          console.error('❌ Falha ao buscar lead_id:', leadResult?.error);
-        } else {
-          const leadId = leadResult.lead_id;
-          console.log('🤖 Verificando automações pausadas para lead:', leadId);
-          
-          // Buscar e retomar automação pausada via RPC unificada (bypass RLS)
-          const { data: resumeResult, error: resumeError } = await supabase
-            .rpc('find_and_resume_paused_automation', {
-              p_company_id: company.id,
-              p_lead_id: leadId,
-              p_user_response: messageText
-            });
-          
-          if (resumeError) {
-            console.error('❌ Erro ao buscar/retomar automação:', resumeError);
-          } else if (!resumeResult?.found) {
-            console.log('ℹ️ Nenhuma automação pausada encontrada');
-          } else if (!resumeResult?.awaiting_input) {
-            console.log('ℹ️ Execução pausada mas não aguardando input');
-          } else if (resumeResult?.success) {
-            console.log('✅ Execução pausada encontrada:', resumeResult.execution_id);
-            console.log('📝 Retomando com resposta:', messageText);
-            console.log('✅ Automação retomada com sucesso!');
-            console.log('📊 Variável atualizada:', resumeResult.variable_name, '=', messageText);
-            
-            // Chamar endpoint para continuar execução do fluxo
-            try {
-              console.log('🚀 Chamando endpoint para continuar fluxo...');
-              const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app';
-              const resumeEndpoint = `${appBase}/api/automation/resume-execution`;
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-start',message:'iniciando busca de execução pausada',data:{companyId:company.id,inboundLeadId,conversationId,messageText:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
 
-              const resumeResponse = await fetch(resumeEndpoint, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-internal-secret': process.env.INTERNAL_SECRET || ''
-                },
-                body: JSON.stringify({
-                  execution_id: resumeResult.execution_id,
-                  user_response: messageText
-                })
-              });
-              
-              if (resumeResponse.ok) {
-                console.log('✅ Endpoint chamado com sucesso - Fluxo continuando');
-              } else {
-                console.error('❌ Erro ao chamar endpoint:', resumeResponse.status, resumeResponse.statusText);
-              }
-            } catch (endpointError) {
-              console.error('❌ EXCEPTION ao chamar endpoint:', endpointError);
+        // Busca candidatos pausados com _awaiting_input para esta empresa (até 5)
+        const { data: pausedCandidates, error: pausedErr } = await supabase
+          .from('automation_executions')
+          .select('id, lead_id, current_node_id, paused_at')
+          .eq('company_id', company.id)
+          .eq('status', 'paused')
+          .not('variables->_awaiting_input', 'is', null)
+          .order('paused_at', { ascending: false })
+          .limit(5);
+
+        if (pausedErr) {
+          console.error('[webhook][user_input] erro ao buscar execuções pausadas:', pausedErr.message);
+        } else if (!pausedCandidates || pausedCandidates.length === 0) {
+          console.log('[webhook][user_input] nenhuma execução pausada aguardando input');
+        } else {
+          // Prioridade 1: execução cujo lead_id bate com o inboundLeadId
+          // Prioridade 2: execução com lead_id null (trigger sem lead explícito)
+          // Prioridade 3: a mais recente (fallback)
+          let target = null;
+          if (inboundLeadId) {
+            target = pausedCandidates.find(e => e.lead_id == inboundLeadId) || null;
+          }
+          if (!target) {
+            target = pausedCandidates.find(e => e.lead_id === null) || pausedCandidates[0];
+          }
+
+          // #region agent log
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-target',message:'execução candidata selecionada',data:{candidates:pausedCandidates.length,targetId:target?.id,targetLeadId:target?.lead_id,inboundLeadId},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+
+          if (target) {
+            console.log(`[webhook][user_input] retomando execução ${target.id} com resposta do lead ${inboundLeadId}`);
+
+            // Chamar continue-execution diretamente (o status ainda é 'paused' — correto)
+            const appBase = process.env.APP_URL || 'https://loovocrm.vercel.app';
+            const continueEndpoint = `${appBase}/api/automation/continue-execution`;
+
+            const continueRes = await fetch(continueEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': process.env.INTERNAL_SECRET || ''
+              },
+              body: JSON.stringify({
+                execution_id: target.id,
+                user_response: messageText
+              })
+            });
+
+            const continueBody = await continueRes.json().catch(() => ({}));
+
+            // #region agent log
+            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-result',message:'resultado do continue-execution',data:{executionId:target.id,httpStatus:continueRes.status,body:continueBody},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+
+            if (continueRes.ok) {
+              console.log(`[webhook][user_input] ✅ execução ${target.id} retomada com sucesso`);
+            } else {
+              console.error(`[webhook][user_input] ❌ falha ao retomar execução ${target.id}:`, continueRes.status, continueBody);
             }
-          } else {
-            console.error('❌ Falha ao retomar automação:', resumeResult?.message || resumeResult);
           }
         }
       } catch (resumeError) {
-        console.error('❌ EXCEPTION ao retomar automação:', resumeError);
-        // Não falhar o webhook por causa disso - apenas log
+        console.error('[webhook][user_input] EXCEPTION ao retomar automação:', resumeError?.message);
       }
     }
 
