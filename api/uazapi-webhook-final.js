@@ -788,15 +788,17 @@ async function processMessage(payload) {
         fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-start',message:'iniciando busca de execução pausada',data:{companyId:company.id,inboundLeadId,conversationId,messageText:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
 
-        // Busca candidatos pausados com _awaiting_input para esta empresa (até 5)
-        const { data: pausedCandidates, error: pausedErr } = await supabase
+        // Busca execuções pausadas da empresa e filtra _awaiting_input em JS
+        // (filtro JSONB via PostgREST com -> não funciona para IS NOT NULL)
+        const { data: allPaused, error: pausedErr } = await supabase
           .from('automation_executions')
-          .select('id, lead_id, current_node_id, paused_at')
+          .select('id, lead_id, current_node_id, paused_at, variables')
           .eq('company_id', company.id)
           .eq('status', 'paused')
-          .not('variables->_awaiting_input', 'is', null)
           .order('paused_at', { ascending: false })
-          .limit(5);
+          .limit(20);
+
+        const pausedCandidates = (allPaused || []).filter(e => e.variables?._awaiting_input);
 
         if (pausedErr) {
           console.error('[webhook][user_input] erro ao buscar execuções pausadas:', pausedErr.message);
