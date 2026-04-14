@@ -61,10 +61,18 @@ export async function acquireLock(executionId, supabase) {
           .eq('id', executionId)
           .single()
 
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'executionLock.js:PGRST116',message:'lock refused - current state',data:{executionId,ttlCut,current_locked_at:current?.locked_at??null,current_locked_by:current?.locked_by??null},hypothesisId:'H-LOCK',timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
+
         const holder = current?.locked_by ?? 'desconhecido'
         console.warn(`[executionLock] lock recusado — execução ${executionId} já travada por ${holder}`)
         return { acquired: false, reason: `execução já está sendo processada (lock: ${holder})` }
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'executionLock.js:error',message:'unexpected error on UPDATE',data:{executionId,ttlCut,errorCode:error.code,errorMessage:error.message,errorDetails:error.details??null},hypothesisId:'H-LOCK',timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
 
       console.error(`[executionLock] erro ao adquirir lock para ${executionId}:`, error.message)
       return { acquired: false, reason: `erro ao adquirir lock: ${error.message}` }
