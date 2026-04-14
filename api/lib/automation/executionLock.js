@@ -38,55 +38,55 @@ function makeLockId() {
  * atualizar a linha — o PostgreSQL serializa o UPDATE por linha.
  */
 export async function acquireLock(executionId, supabase) {
-  const lockId  = makeLockId()
-  const ttlCut  = new Date(Date.now() - LOCK_TTL_MS).toISOString()
-  const now     = new Date().toISOString()
+  const lockId = makeLockId()
+  const ttlCut = new Date(Date.now() - LOCK_TTL_MS).toISOString()
+  const now    = new Date().toISOString()
 
   try {
-    // Tentar adquirir lock: só atualiza se locked_at for NULL ou expirado
-    const { data, error } = await supabase
+    // Tentativa 1: adquirir lock quando locked_at é NULL (execução nova)
+    // Usa .is() separado — .or('locked_at.is.null,...') não funciona corretamente
+    // com UPDATE no PostgREST desta versão do Supabase.
+    const { data: freshData, error: freshErr } = await supabase
       .from('automation_executions')
       .update({ locked_at: now, locked_by: lockId })
       .eq('id', executionId)
-      .or(`locked_at.is.null,locked_at.lt.${ttlCut}`)
-      .select('id, locked_by, locked_at')
+      .is('locked_at', null)
+      .select('id, locked_by')
       .single()
 
-    if (error) {
-      // PGRST116 = zero rows matched — lock em uso por outra instância
-      if (error.code === 'PGRST116') {
-        const { data: current } = await supabase
-          .from('automation_executions')
-          .select('locked_by, locked_at')
-          .eq('id', executionId)
-          .single()
-
-        // #region agent log
-        console.warn(`[executionLock][debug] PGRST116 — executionId=${executionId} ttlCut=${ttlCut} locked_at=${current?.locked_at??'NULL'} locked_by=${current?.locked_by??'NULL'}`)
-        // #endregion
-
-        const holder = current?.locked_by ?? 'desconhecido'
-        console.warn(`[executionLock] lock recusado — execução ${executionId} já travada por ${holder}`)
-        return { acquired: false, reason: `execução já está sendo processada (lock: ${holder})` }
-      }
-
-      // #region agent log
-      console.error(`[executionLock][debug] unexpected error — executionId=${executionId} code=${error.code} message=${error.message} details=${error.details??'none'}`)
-      // #endregion
-
-      console.error(`[executionLock] erro ao adquirir lock para ${executionId}:`, error.message)
-      return { acquired: false, reason: `erro ao adquirir lock: ${error.message}` }
+    if (!freshErr && freshData?.locked_by === lockId) {
+      console.log(`[executionLock] lock adquirido (null) — execução ${executionId} (lockId: ${lockId})`)
+      return { acquired: true, lockId }
     }
 
-    // Verificar se o lockId retornado é realmente o nosso
-    // (outra instância pode ter ganhado a corrida no mesmo ciclo de clock)
-    if (!data || data.locked_by !== lockId) {
-      console.warn(`[executionLock] condição de corrida — execução ${executionId} travada por outra instância`)
-      return { acquired: false, reason: 'condição de corrida detectada' }
+    // Tentativa 2: adquirir lock expirado (locked_at < TTL)
+    const { data: expiredData, error: expiredErr } = await supabase
+      .from('automation_executions')
+      .update({ locked_at: now, locked_by: lockId })
+      .eq('id', executionId)
+      .lt('locked_at', ttlCut)
+      .select('id, locked_by')
+      .single()
+
+    if (!expiredErr && expiredData?.locked_by === lockId) {
+      console.log(`[executionLock] lock adquirido (expirado) — execução ${executionId} (lockId: ${lockId})`)
+      return { acquired: true, lockId }
     }
 
-    console.log(`[executionLock] lock adquirido — execução ${executionId} (lockId: ${lockId})`)
-    return { acquired: true, lockId }
+    // Nenhuma tentativa funcionou — lock ativo por outra instância
+    const { data: current } = await supabase
+      .from('automation_executions')
+      .select('locked_by, locked_at')
+      .eq('id', executionId)
+      .single()
+
+    // #region agent log
+    console.warn(`[executionLock][debug] lock recusado — executionId=${executionId} locked_at=${current?.locked_at??'NULL'} locked_by=${current?.locked_by??'NULL'} freshErrCode=${freshErr?.code??'none'} expiredErrCode=${expiredErr?.code??'none'}`)
+    // #endregion
+
+    const holder = current?.locked_by ?? 'desconhecido'
+    console.warn(`[executionLock] lock recusado — execução ${executionId} já travada por ${holder}`)
+    return { acquired: false, reason: `execução já está sendo processada (lock: ${holder})` }
 
   } catch (err) {
     console.error(`[executionLock] exceção ao adquirir lock para ${executionId}:`, err?.message)
