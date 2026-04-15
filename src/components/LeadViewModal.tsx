@@ -116,11 +116,12 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
 
   const getOriginLabel = (origin: string) => {
     switch (origin) {
-      case 'landing_page': return 'Landing Page';
-      case 'whatsapp': return 'WhatsApp';
-      case 'manual': return 'Manual';
-      case 'import': return 'Importação';
-      case 'api': return 'API Externa';
+      case 'landing_page':         return 'Landing Page';
+      case 'whatsapp':             return 'WhatsApp';
+      case 'manual':               return 'Manual';
+      case 'import':               return 'Importação';
+      case 'api':                  return 'API Externa';
+      case 'webhook_ultra_simples':return 'Webhook';
       default: return origin;
     }
   };

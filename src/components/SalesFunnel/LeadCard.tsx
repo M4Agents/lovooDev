@@ -202,7 +202,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {isFieldVisible('origin') && lead.origin && (
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
-                  {lead.origin}
+                  {lead.origin === 'webhook_ultra_simples' ? 'Webhook'
+                    : lead.origin === 'landing_page' ? 'Landing Page'
+                    : lead.origin === 'whatsapp' ? 'WhatsApp'
+                    : lead.origin === 'import' ? 'Importação'
+                    : lead.origin}
                 </span>
               </div>
             )}

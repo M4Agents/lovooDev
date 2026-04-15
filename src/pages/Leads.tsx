@@ -353,13 +353,26 @@ export const Leads: React.FC = () => {
     }
   };
 
+  const getOriginLabel = (origin: string) => {
+    switch (origin) {
+      case 'landing_page':          return 'Landing Page';
+      case 'whatsapp':              return 'WhatsApp';
+      case 'manual':                return 'Manual';
+      case 'import':                return 'Importação';
+      case 'api':                   return 'API Externa';
+      case 'webhook_ultra_simples': return 'Webhook';
+      default: return origin;
+    }
+  };
+
   const getOriginColor = (origin: string) => {
     switch (origin) {
-      case 'landing_page': return 'bg-purple-100 text-purple-800';
-      case 'whatsapp': return 'bg-green-100 text-green-800';
-      case 'manual': return 'bg-blue-100 text-blue-800';
-      case 'import': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'landing_page':          return 'bg-purple-100 text-purple-800';
+      case 'whatsapp':              return 'bg-green-100 text-green-800';
+      case 'manual':                return 'bg-blue-100 text-blue-800';
+      case 'import':                return 'bg-orange-100 text-orange-800';
+      case 'webhook_ultra_simples': return 'bg-indigo-100 text-indigo-800';
+      default:                      return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -718,7 +731,7 @@ export const Leads: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
-                      {lead.origin.replace('_', ' ')}
+                      {getOriginLabel(lead.origin)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

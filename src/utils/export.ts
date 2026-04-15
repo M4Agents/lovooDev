@@ -59,7 +59,17 @@ export const prepareLeadsForExport = (leads: any[]) => {
       'Nome': lead.name || '',
       'Email': lead.email || '',
       'Telefone': lead.phone || '',
-      'Origem': lead.origin || '',
+      'Origem': (() => {
+        switch (lead.origin) {
+          case 'webhook_ultra_simples': return 'Webhook';
+          case 'landing_page':         return 'Landing Page';
+          case 'whatsapp':             return 'WhatsApp';
+          case 'import':               return 'Importação';
+          case 'manual':               return 'Manual';
+          case 'api':                  return 'API Externa';
+          default:                     return lead.origin || '';
+        }
+      })(),
       'Status': lead.status || '',
       'Interesse': lead.interest || '',
       'Data Criação': lead.created_at ? new Date(lead.created_at).toLocaleDateString('pt-BR') : '',
