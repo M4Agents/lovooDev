@@ -382,13 +382,21 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
           <div className={`p-2 rounded-lg ${statusCfg.iconBg}`}>
             <Briefcase className={`w-5 h-5 ${statusCfg.iconColor}`} />
           </div>
-          <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-gray-900 truncate">{opportunity.title}</h2>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusCfg.bg} ${statusCfg.color}`}>
                 {statusCfg.icon}
                 {statusCfg.label}
               </span>
+              {(() => {
+                const reentryCount = stageHistory.filter(h => h.move_type === 'lead_reentry').length
+                return reentryCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                    Reengajado ({reentryCount})
+                  </span>
+                ) : null
+              })()}
             </div>
             {opportunity.description && (
               <p className="text-sm text-gray-500 truncate mt-0.5">{opportunity.description}</p>

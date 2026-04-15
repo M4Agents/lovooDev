@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { Clock, Save, Coins, Globe2 } from 'lucide-react'
 import { TimezoneSelector } from './TimezoneSelector'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
+import { LeadReentryConfigSection } from './LeadReentryConfigSection'
 
 const COMMON_TIMEZONE_DEFS = [
   { value: 'America/Sao_Paulo', labelKey: 'timezones.labels.saoPaulo', regionKey: 'timezones.regions.brazil' },
@@ -251,6 +252,9 @@ export const SystemSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Seção: Leads Duplicados e Reentrada */}
+      <LeadReentryConfigSection />
 
       {/* Botão Salvar */}
       <div className="flex gap-3">

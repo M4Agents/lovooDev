@@ -4,6 +4,8 @@
 
 import { dispatchLeadCreatedTrigger }    from '../../lib/automation/dispatchLeadCreatedTrigger.js';
 import { dispatchMessageReceivedTrigger } from '../../lib/automation/dispatchMessageReceivedTrigger.js';
+import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js';
+import { handleLeadReentry } from '../../lib/leads/handleLeadReentry.js';
 
 export default async function handler(req, res) {
   console.error('🚀 WEBHOOK UAZAPI v2.0 - CACHE BUST ATIVO');
@@ -542,6 +544,20 @@ async function processMessage(payload) {
           if (wasCreated && leadId) {
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'whatsapp' })
               .catch(err => console.error('[webhook/uazapi] automation trigger failed:', err));
+          }
+          // Registrar reentrada quando lead já existia (fire-and-forget)
+          if (!wasCreated && leadId) {
+            const supabaseAdmin = getSupabaseAdmin();
+            handleLeadReentry({
+              newLeadId: leadId,      // mesmo lead — sem lead duplicado novo criado
+              existingLeadId: leadId, // reentrada direta pelo WhatsApp
+              companyId: company.id,
+              source: 'whatsapp',
+              externalEventId: payload?.data?.key?.id || payload?.data?.messageId || null,
+              originChannel: 'whatsapp',
+              metadata: { phone: phoneNumber, contact_name: contactName },
+              supabase: supabaseAdmin,
+            }).catch(err => console.error('[webhook/uazapi] handleLeadReentry failed:', err));
           }
 
           // Vincular lead_id à conversa (apenas se ainda não vinculado)

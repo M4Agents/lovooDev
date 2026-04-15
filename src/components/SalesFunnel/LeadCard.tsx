@@ -111,11 +111,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 
             <div className="flex-1 min-w-0 pr-6">
               {/* Título da Oportunidade */}
-              <div className="flex items-center gap-1.5 mb-1">
-                <Briefcase className="w-3.5 h-3.5 text-purple-600" />
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <Briefcase className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
                 <h3 className="font-semibold text-gray-900 truncate text-sm">
                   {opportunity.title}
                 </h3>
+                {(position.reentry_count ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                    Reengajado ({position.reentry_count})
+                  </span>
+                )}
               </div>
 
               {/* Nome do Lead */}

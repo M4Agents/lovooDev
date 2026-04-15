@@ -16,7 +16,7 @@ import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import {
-  LogIn, Trophy, XCircle, RotateCcw,
+  LogIn, Trophy, XCircle, RotateCcw, RefreshCw,
   Clock, AlertCircle, ChevronDown, ChevronUp, Timer,
   TrendingUp, TrendingDown, MoveRight
 } from 'lucide-react'
@@ -70,15 +70,16 @@ function hexToStyle(hex?: string): { bg: string; fg: string } | null {
 // Configurações visuais por move_type
 // =====================================================
 
-type MoveType = 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened'
+type MoveType = 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened' | 'lead_reentry'
 
 function getMoveTypeConfig(t: TFunction): Record<MoveType, { badgeClass: string; label: string }> {
   return {
-    funnel_entry: { badgeClass: 'bg-green-100 text-green-700',   label: t('timeline.moveBadges.funnelEntry') },
-    stage_change: { badgeClass: 'bg-blue-100 text-blue-700',     label: t('timeline.moveBadges.stageChange') },
+    funnel_entry: { badgeClass: 'bg-green-100 text-green-700',    label: t('timeline.moveBadges.funnelEntry') },
+    stage_change: { badgeClass: 'bg-blue-100 text-blue-700',      label: t('timeline.moveBadges.stageChange') },
     won:          { badgeClass: 'bg-emerald-100 text-emerald-700', label: t('timeline.moveBadges.won') },
-    lost:         { badgeClass: 'bg-red-100 text-red-700',       label: t('timeline.moveBadges.lost') },
-    reopened:     { badgeClass: 'bg-amber-100 text-amber-700',   label: t('timeline.moveBadges.reopened') }
+    lost:         { badgeClass: 'bg-red-100 text-red-700',        label: t('timeline.moveBadges.lost') },
+    reopened:     { badgeClass: 'bg-amber-100 text-amber-700',    label: t('timeline.moveBadges.reopened') },
+    lead_reentry: { badgeClass: 'bg-amber-100 text-amber-700',    label: 'Reentrada no funil' }
   }
 }
 
@@ -86,15 +87,16 @@ function getMoveTypeConfig(t: TFunction): Record<MoveType, { badgeClass: string;
 function getStageIcon(entry: OpportunityStageHistory): React.ReactNode {
   const size = 'w-3.5 h-3.5'
   switch (entry.move_type) {
-    case 'funnel_entry': return <LogIn    className={size} />
-    case 'won':          return <Trophy   className={size} />
-    case 'lost':         return <XCircle  className={size} />
+    case 'funnel_entry': return <LogIn     className={size} />
+    case 'won':          return <Trophy    className={size} />
+    case 'lost':         return <XCircle   className={size} />
     case 'reopened':     return <RotateCcw className={size} />
+    case 'lead_reentry': return <RefreshCw className={size} />
     case 'stage_change': {
       const fromPos = entry.from_stage?.position ?? 0
       const toPos   = entry.to_stage?.position   ?? 0
-      if (toPos > fromPos) return <TrendingUp   className={size} />
-      if (toPos < fromPos) return <TrendingDown  className={size} />
+      if (toPos > fromPos) return <TrendingUp  className={size} />
+      if (toPos < fromPos) return <TrendingDown className={size} />
       return <MoveRight className={size} />
     }
     default: return <MoveRight className={size} />
@@ -109,6 +111,12 @@ function getMicrocopy(entry: OpportunityStageHistory, t: TFunction): string {
     case 'won':          return t('timeline.events.closedWon')
     case 'lost':         return t('timeline.events.closedLost')
     case 'reopened':     return t('timeline.events.reopened')
+    case 'lead_reentry': {
+      const source = entry.metadata?.source as string | undefined
+      const channel = entry.metadata?.origin_channel as string | undefined
+      const suffix = channel ?? source
+      return suffix ? `Reentrada no funil via ${suffix}` : 'Reentrada no funil'
+    }
     default:             return t('timeline.events.movedTo', { stage: toName })
   }
 }
@@ -185,14 +193,8 @@ function computeSummary(
   const stageArray        = Array.from(stageDurations.values())
   const uniqueStageCount  = stageArray.length
 
-  // Reentradas: contar to_stage_ids repetidos na timeline
-  const seenStages = new Set<string>()
-  let reentryCount = 0
-  for (const h of history) {
-    if (h.move_type === 'funnel_entry') continue
-    if (seenStages.has(h.to_stage_id)) reentryCount++
-    seenStages.add(h.to_stage_id)
-  }
+  // Reentradas: apenas eventos lead_reentry (registrados pelo handleLeadReentry)
+  const reentryCount = history.filter(h => h.move_type === 'lead_reentry').length
 
   // Etapa mais longa
   let longestStageName:    string | null = null
@@ -388,14 +390,10 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
   const { t } = useTranslation('funnel')
   const [expanded, setExpanded] = useState(false)
 
-  // Calcular reentradas
-  const reentryIds = new Set<string>()
-  const seenStages = new Set<string>()
-  for (const h of history) {
-    if (h.move_type === 'funnel_entry') continue
-    if (seenStages.has(h.to_stage_id)) reentryIds.add(h.id)
-    seenStages.add(h.to_stage_id)
-  }
+  // Calcular reentradas: apenas eventos com move_type === 'lead_reentry'
+  const reentryIds = new Set<string>(
+    history.filter(h => h.move_type === 'lead_reentry').map(h => h.id)
+  )
 
   const summary = computeSummary(history, currentEnteredAt)
 

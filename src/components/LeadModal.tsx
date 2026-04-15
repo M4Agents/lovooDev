@@ -10,6 +10,7 @@ import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername
 import { LeadTagsField } from './LeadTagsField';
 import { Tag as TagType } from '../types/tags';
 import { tagsApi } from '../services/tagsApi';
+import { LeadEntriesSection } from './LeadEntriesSection';
 import {
   X,
   Save,
@@ -112,7 +113,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
-  const [activeTab, setActiveTab] = useState<'lead' | 'company'>('lead');
+  const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'entries'>('lead');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -741,6 +742,19 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 <Building className="w-4 h-4 inline mr-2" />
                 Empresa
               </button>
+              {lead?.id && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('entries')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'entries'
+                      ? 'border-amber-500 text-amber-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Histórico de Entradas
+                </button>
+              )}
             </nav>
           </div>
 
@@ -1436,6 +1450,19 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   Útil para análise de ROI e otimização de investimentos em marketing digital.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Conteúdo da Aba - Histórico de Entradas */}
+          {activeTab === 'entries' && lead?.id && company?.id && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
+                Histórico de Entradas
+              </h3>
+              <p className="text-sm text-gray-500">
+                Registro de cada vez que este lead chegou ao sistema, por qualquer canal.
+              </p>
+              <LeadEntriesSection leadId={lead.id} companyId={company.id} />
             </div>
           )}
 

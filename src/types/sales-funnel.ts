@@ -233,6 +233,7 @@ export interface OpportunityFunnelPosition {
   lead?: LeadCardData
   stage?: FunnelStage
   days_in_stage?: number
+  reentry_count?: number  // count de eventos lead_reentry — fornecido por get_funnel_positions_with_photos
 }
 
 // Alias para compatibilidade (DEPRECATED)
@@ -262,8 +263,9 @@ export interface OpportunityStageHistory {
 
   // Rastreabilidade
   moved_by?: string
-  move_type: 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened'
+  move_type: 'funnel_entry' | 'stage_change' | 'won' | 'lost' | 'reopened' | 'lead_reentry'
   created_at: string
+  metadata?: Record<string, unknown>
 
   // Joins opcionais
   from_stage?: FunnelStage

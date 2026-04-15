@@ -4,6 +4,8 @@
 // Padrão baseado no webhook-visitor que funciona 100%
 
 import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreatedTrigger.js';
+import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
+import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js';
 
 // Função para disparar webhooks avançados automaticamente
 async function triggerAdvancedWebhooks(leadData, companyId) {
@@ -439,9 +441,28 @@ async function createLeadDirectSQL(params) {
       // Não falhar a criação do lead por causa do webhook
     }
     
-    // Disparar automação backend (fire-and-forget — nunca bloqueia o webhook)
-    dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' })
-      .catch(err => console.error('[webhook-lead] automation trigger failed:', err));
+    // Disparar automação backend apenas para leads novos (fire-and-forget)
+    if (!lead.is_duplicate) {
+      dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' })
+        .catch(err => console.error('[webhook-lead] automation trigger failed:', err));
+    }
+
+    // Processar reentrada para leads duplicados (fire-and-forget)
+    if (lead.is_duplicate && lead.duplicate_of_lead_id) {
+      const supabaseAdmin = await getSupabaseAdmin();
+      const originChannel = params.form_data?.utm_source || params.form_data?.origin || null;
+      const payloadRef = { name: detectedFields.name, phone: detectedFields.phone, email: detectedFields.email };
+      handleLeadReentry({
+        newLeadId: lead.lead_id,
+        existingLeadId: lead.duplicate_of_lead_id,
+        companyId: lead.company_id,
+        source: 'webhook',
+        externalEventId: params.form_data?.webhook_id || null,
+        originChannel,
+        metadata: { payload_hash: hashPayload(payloadRef) },
+        supabase: supabaseAdmin,
+      }).catch(err => console.error('[webhook-lead] handleLeadReentry failed:', err));
+    }
 
     return { success: true, lead_id: lead.lead_id };
     

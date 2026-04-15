@@ -6,6 +6,7 @@ import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCrea
 import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
 import { resumeFromNode }                 from './lib/automation/executor.js';
 import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
+import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
 
 // =====================================================
 // NORMALIZAÇÃO DE MESSAGE_TYPE
@@ -639,11 +640,22 @@ async function processMessage(payload) {
         } else if (leadResult && leadResult.success) {
           if (leadResult.created) {
             console.log('✅ LEAD CRIADO AUTOMATICAMENTE:', leadResult.lead_id, '-', senderName);
-            // Disparar automação apenas para leads recém-criados (fire-and-forget)
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId: leadResult.lead_id, source: 'whatsapp' })
               .catch(err => console.error('[uazapi-webhook-final] automation trigger failed:', err));
           } else {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
+            // Registrar reentrada via WhatsApp (fire-and-forget)
+            const supabaseAdmin = getSupabaseAdmin();
+            handleLeadReentry({
+              newLeadId: leadResult.lead_id,
+              existingLeadId: leadResult.lead_id,
+              companyId: company.id,
+              source: 'whatsapp',
+              externalEventId: payload?.data?.key?.id || null,
+              originChannel: 'whatsapp',
+              metadata: { phone: phoneNumber, contact_name: senderName },
+              supabase: supabaseAdmin,
+            }).catch(err => console.error('[uazapi-webhook-final] handleLeadReentry failed:', err));
           }
           
           if (leadResult.lead_id && conversationId) {
