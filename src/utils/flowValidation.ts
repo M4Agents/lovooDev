@@ -204,10 +204,6 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
         break
 
       case 'action':
-        // #region agent log
-        console.log('[DEBUG-3620d6][H1] flowValidation - validando no action', {nodeId:node.id,label:node.data?.label,config});
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'flowValidation.ts:case_action',message:'validando no action',data:{nodeId:node.id,label:node.data?.label,config},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!config.actionType) {
           errors.push({
             nodeId: node.id,

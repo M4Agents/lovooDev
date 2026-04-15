@@ -426,12 +426,6 @@ function FlowCanvasInner({
         return node
       })
 
-      // #region agent log
-      const actionNodes = updatedNodes.filter(n => n.type === 'action')
-      console.log('[DEBUG-3620d6][H1] FlowCanvas.handleSave - nos action que serao validados', {totalNos:updatedNodes.length,actionNodes:actionNodes.map(n=>({id:n.id,label:n.data?.label,config:n.data?.config}))});
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowCanvas.tsx:handleSave',message:'canvas handleSave - nos action que serao validados',data:{totalNos:updatedNodes.length,actionNodes:actionNodes.map(n=>({id:n.id,label:n.data?.label,config:n.data?.config}))},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      
       await onSave(updatedNodes, edges)
     } catch (error) {
       console.error('Erro ao salvar fluxo:', error)

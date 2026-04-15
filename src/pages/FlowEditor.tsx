@@ -256,11 +256,6 @@ export default function FlowEditor() {
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
     if (!flow || !id) return
 
-    // #region agent log
-    console.log('[DEBUG-3620d6][H2-H3] FlowEditor.handleNodeConfigSave chamado', {nodeId,configRecebido:config});
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:entrada',message:'handleNodeConfigSave chamado',data:{nodeId,configRecebido:config},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     let updatedSelectedNode: Node | null = null
     let nodeFoundInFlow = false
 
@@ -271,11 +266,6 @@ export default function FlowEditor() {
           ...node.data.config,
           ...config
         }
-
-        // #region agent log
-        console.log('[DEBUG-3620d6][H2-H3] mergedConfig calculado', {nodeId,nodeType:node.type,configAnterior:node.data.config,configNovo:config,mergedConfig});
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:merge',message:'mergedConfig calculado',data:{nodeId,nodeType:node.type,configAnterior:node.data.config,configNovo:config,mergedConfig},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
 
         const updatedNode = {
           ...node,
@@ -303,10 +293,6 @@ export default function FlowEditor() {
         data: { ...selectedNode.data, config: mergedConfig }
       }
       updatedNodes = [...mappedNodes, updatedSelectedNode]
-      // #region agent log
-      console.log('[DEBUG-3620d6][H2-H3] nó novo adicionado ao flow.nodes', {nodeId,mergedConfig});
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:novoNo',message:'no novo incluido em updatedNodes',data:{nodeId,mergedConfig},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } else {
       updatedNodes = mappedNodes
     }
@@ -317,15 +303,7 @@ export default function FlowEditor() {
         nodes: updatedNodes as any,
         edges: flow.edges as any
       })
-      // #region agent log
-      console.log('[DEBUG-3620d6][H2-H3] saveFlowCanvas SUCESSO', {resultId:result?.id,nodeId,nodeFoundInFlow});
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:supabase',message:'saveFlowCanvas sucesso',data:{resultId:result?.id,nodeId,nodeFoundInFlow},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch (err: any) {
-      // #region agent log
-      console.error('[DEBUG-3620d6][H2-H3] saveFlowCanvas ERRO', {erro:err?.message,nodeId});
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:erro',message:'saveFlowCanvas ERRO',data:{erro:err?.message,nodeId},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.error('Erro ao salvar config do nó:', err)
       return
     }

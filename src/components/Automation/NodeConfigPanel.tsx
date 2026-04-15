@@ -215,10 +215,6 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   if (!selectedNode) return null
 
   const handleSave = () => {
-    // #region agent log
-    console.log('[DEBUG-3620d6][H4-H5] NodeConfigPanel.handleSave chamado', {nodeId:selectedNode.id,nodeType:selectedNode.type,config});
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'NodeConfigPanel.tsx:handleSave',message:'handleSave chamado',data:{nodeId:selectedNode.id,nodeType:selectedNode.type,config},hypothesisId:'H4-H5',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (selectedNode.type === 'action' && !config.actionType) {
       alert('⚠️ Por favor, selecione um tipo de ação antes de salvar.')
       return
