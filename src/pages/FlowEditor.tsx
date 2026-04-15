@@ -333,8 +333,9 @@ export default function FlowEditor() {
     setFlow({ ...flow, nodes: updatedNodes })
 
     // FIX: sincronizar estado interno do ReactFlow com o nó atualizado
+    // Não chamar setSelectedNode aqui — onClose() no NodeConfigPanel já fechou o painel
+    // chamá-lo causaria re-abertura do painel após o save async resolver
     if (updatedSelectedNode) {
-      setSelectedNode(updatedSelectedNode)
       setExternalNodeUpdate(updatedSelectedNode as Node)
     }
   }
