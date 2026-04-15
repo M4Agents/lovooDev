@@ -76,8 +76,11 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
     if (!hasConfig) return 'Clique para configurar ação'
     
     switch (actionType) {
-      case 'add_tag':
-        return `🏷️ ${data.config.newTagName || data.config.tagId ? 'Tag configurada' : '(tag)'}`
+      case 'add_tag': {
+        const tagList = Array.isArray(data.config.tags) ? data.config.tags : []
+        const count = tagList.length || (data.config.tagId || data.config.newTagName ? 1 : 0)
+        return `🏷️ ${count > 0 ? `${count} tag${count > 1 ? 's' : ''} configurada${count > 1 ? 's' : ''}` : '(sem tag)'}`
+      }
       case 'remove_tag':
         return `🗑️ ${data.config.tagId ? 'Tag configurada' : '(tag)'}`
       case 'update_lead':

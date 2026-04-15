@@ -285,56 +285,96 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                   </button>
                 </div>
 
-                {/* ADICIONAR TAG */}
-                {config.actionType === 'add_tag' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Selecionar Tag Existente
-                  </label>
-                  {loadingTags ? (
-                    <div className="text-sm text-gray-500">Carregando tags...</div>
-                  ) : (
-                    <select
-                      value={config.tagId || ''}
-                      onChange={(e) => setConfig({ ...config, tagId: e.target.value, newTagName: '' })}
-                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    >
-                      <option value="">-- Selecione uma tag --</option>
-                      {tags.map(tag => (
-                        <option key={tag.id} value={tag.id}>{tag.name}</option>
+                {/* ADICIONAR TAG — suporta múltiplas tags */}
+                {config.actionType === 'add_tag' && (() => {
+                  // Normalizar legado (tagId / newTagName) para array config.tags
+                  const currentTags: Array<{ tagId?: string; newTagName?: string; tagColor?: string }> =
+                    Array.isArray(config.tags) && config.tags.length > 0
+                      ? config.tags
+                      : (config.tagId || config.newTagName)
+                        ? [{ tagId: config.tagId || undefined, newTagName: config.newTagName || undefined, tagColor: config.tagColor || undefined }]
+                        : []
+
+                  const updateTags = (updated: typeof currentTags) =>
+                    setConfig({ ...config, tags: updated, tagId: undefined, newTagName: undefined, tagColor: undefined })
+
+                  const addEntry = () => updateTags([...currentTags, {}])
+                  const removeEntry = (i: number) => updateTags(currentTags.filter((_, idx) => idx !== i))
+                  const updateEntry = (i: number, patch: Partial<typeof currentTags[0]>) =>
+                    updateTags(currentTags.map((t, idx) => idx === i ? { ...t, ...patch } : t))
+
+                  return (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-gray-700">Tags a adicionar</label>
+
+                      {currentTags.map((entry, i) => (
+                        <div key={i} className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-gray-500">Tag {i + 1}</span>
+                            {currentTags.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeEntry(i)}
+                                className="text-xs text-red-500 hover:text-red-700"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Tag existente */}
+                          {loadingTags ? (
+                            <div className="text-sm text-gray-500">Carregando tags...</div>
+                          ) : (
+                            <select
+                              value={entry.tagId || ''}
+                              onChange={(e) => updateEntry(i, { tagId: e.target.value || undefined, newTagName: undefined })}
+                              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            >
+                              <option value="">-- Tag existente --</option>
+                              {tags.map(tag => (
+                                <option key={tag.id} value={tag.id}>{tag.name}</option>
+                              ))}
+                            </select>
+                          )}
+
+                          <div className="text-center text-gray-400 text-xs">ou crie uma nova</div>
+
+                          {/* Nova tag */}
+                          <input
+                            type="text"
+                            value={entry.tagId ? '' : (entry.newTagName || '')}
+                            disabled={!!entry.tagId}
+                            onChange={(e) => updateEntry(i, { newTagName: e.target.value || undefined, tagId: undefined })}
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                            placeholder="Nome da nova tag"
+                          />
+
+                          {/* Cor apenas para nova tag */}
+                          {!entry.tagId && entry.newTagName && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-gray-500">Cor:</label>
+                              <input
+                                type="color"
+                                value={entry.tagColor || '#3B82F6'}
+                                onChange={(e) => updateEntry(i, { tagColor: e.target.value })}
+                                className="h-7 w-16 rounded border-gray-300"
+                              />
+                            </div>
+                          )}
+                        </div>
                       ))}
-                    </select>
-                  )}
-                </div>
-                <div className="text-center text-gray-500 text-sm">ou</div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Criar Nova Tag
-                  </label>
-                  <input
-                    type="text"
-                    value={config.newTagName || ''}
-                    onChange={(e) => setConfig({ ...config, newTagName: e.target.value, tagId: '' })}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Nome da nova tag"
-                  />
-                </div>
-                {config.newTagName && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Cor da Tag
-                    </label>
-                    <input
-                      type="color"
-                      value={config.tagColor || '#3B82F6'}
-                      onChange={(e) => setConfig({ ...config, tagColor: e.target.value })}
-                      className="w-full h-10 rounded-md border-gray-300 shadow-sm"
-                    />
-                  </div>
-                )}
-              </>
-            )}
+
+                      <button
+                        type="button"
+                        onClick={addEntry}
+                        className="w-full text-sm text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-md py-2 hover:border-blue-500 transition-colors"
+                      >
+                        + Adicionar outra tag
+                      </button>
+                    </div>
+                  )
+                })()}
 
             {/* REMOVER TAG */}
             {config.actionType === 'remove_tag' && (

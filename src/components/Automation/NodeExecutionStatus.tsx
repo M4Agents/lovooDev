@@ -96,8 +96,13 @@ function renderKnownOutput(nodeType: string, output: Record<string, any>): React
       if (output.skipped)             rows.push(<Row key="skip"    label="Ignorado"         value={output.reason ? String(output.reason) : 'Sim'} />)
       if (output.action)              rows.push(<Row key="action"  label="Ação"             value={String(output.action)} />)
       if (output.selectedUserId)      rows.push(<Row key="user"    label="Usuário"          value={String(output.selectedUserId)} />)
-      if (output.tagId || output.newTagId) rows.push(<Row key="tagid" label="Tag ID"      value={String(output.tagId || output.newTagId)} />)
-      if (output.tagName)             rows.push(<Row key="tagname" label="Tag"             value={String(output.tagName)} />)
+      if (Array.isArray(output.tags) && output.tags.length > 0) {
+        const tagSummary = output.tags.map((t: any) => `${t.tagName}${t.alreadyExists ? ' (já existia)' : ''}`).join(', ')
+        rows.push(<Row key="tags" label="Tags" value={tagSummary} />)
+      } else {
+        if (output.tagId || output.newTagId) rows.push(<Row key="tagid" label="Tag ID" value={String(output.tagId || output.newTagId)} />)
+        if (output.tagName)                  rows.push(<Row key="tagname" label="Tag"   value={String(output.tagName)} />)
+      }
       if (output.leadId)              rows.push(<Row key="leadid"  label="Lead ID"          value={String(output.leadId)} />)
       if (output.opportunityId)       rows.push(<Row key="oppid"   label="Oportunidade ID"  value={String(output.opportunityId)} />)
       if ('assignedLead' in output)   rows.push(<Row key="alead"   label="Lead atribuído"   value={output.assignedLead ? '✓ Sim' : '✗ Não'} />)

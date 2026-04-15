@@ -150,54 +150,93 @@ async function assignOpportunityOwner(config, context, supabase) {
 
 // ---------------------------------------------------------------------------
 // Ação: adicionar tag ao lead
+// Suporta múltiplas tags via config.tags[] e compatibilidade com configs legadas
 // ---------------------------------------------------------------------------
 
 const TAG_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F97316']
 
-async function addTag(config, context, supabase) {
-  const leadId = await resolveLeadId(context, supabase)
-  if (!leadId) throw new Error('leadId ausente no contexto')
+/**
+ * Resolve um único descriptor de tag { tagId? newTagName? tagName? tagColor? }
+ * para um registro { id } em lead_tags, criando se necessário.
+ */
+async function resolveOrCreateTag(descriptor, companyId, supabase) {
+  // Caso 1: tag existente por ID
+  if (descriptor.tagId) {
+    const { data: tag } = await supabase
+      .from('lead_tags')
+      .select('id, name')
+      .eq('id', descriptor.tagId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+    if (!tag) throw new Error(`Tag ID "${descriptor.tagId}" não encontrada`)
+    return tag
+  }
 
-  const tagName = config.tagName
-  if (!tagName) throw new Error('tagName não configurado na ação add_tag')
+  // Caso 2: tag por nome (newTagName é o campo da UI atual; tagName é legado)
+  const tagName = descriptor.newTagName || descriptor.tagName
+  if (!tagName) throw new Error('Descriptor de tag sem tagId nem nome')
 
   let { data: tag } = await supabase
     .from('lead_tags')
-    .select('id')
-    .eq('company_id', context.companyId)
+    .select('id, name')
+    .eq('company_id', companyId)
     .eq('name', tagName)
     .eq('is_active', true)
     .maybeSingle()
 
   if (!tag) {
-    const color = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
+    const color = descriptor.tagColor || TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
     const { data: newTag, error: tagError } = await supabase
       .from('lead_tags')
-      .insert({ company_id: context.companyId, name: tagName, color, is_active: true, created_at: new Date().toISOString() })
-      .select('id')
+      .insert({ company_id: companyId, name: tagName, color, is_active: true, created_at: new Date().toISOString() })
+      .select('id, name')
       .single()
-
     if (tagError) throw new Error(`Erro ao criar tag "${tagName}": ${tagError.message}`)
     tag = newTag
   }
 
-  const { data: existing } = await supabase
-    .from('lead_tag_assignments')
-    .select('id')
-    .eq('lead_id', Number(leadId))
-    .eq('tag_id', tag.id)
-    .maybeSingle()
+  return tag
+}
 
-  if (existing) {
-    return { executed: true, action: 'add_tag', leadId, tagName, tagId: tag.id, alreadyExists: true }
+async function addTag(config, context, supabase) {
+  const leadId = await resolveLeadId(context, supabase)
+  if (!leadId) throw new Error('leadId ausente no contexto')
+
+  // Normalizar para array de descriptors — suporta config.tags[] (novo) e campos legados
+  let descriptors = []
+  if (Array.isArray(config.tags) && config.tags.length > 0) {
+    descriptors = config.tags
+  } else if (config.tagId || config.newTagName || config.tagName) {
+    descriptors = [{ tagId: config.tagId, newTagName: config.newTagName, tagName: config.tagName, tagColor: config.tagColor }]
+  } else {
+    throw new Error('Nenhuma tag configurada na ação add_tag')
   }
 
-  const { error } = await supabase
-    .from('lead_tag_assignments')
-    .insert({ lead_id: Number(leadId), tag_id: tag.id, created_at: new Date().toISOString() })
+  const results = []
+  for (const descriptor of descriptors) {
+    const tag = await resolveOrCreateTag(descriptor, context.companyId, supabase)
 
-  if (error) throw new Error(`Erro ao vincular tag ao lead: ${error.message}`)
-  return { executed: true, action: 'add_tag', leadId, tagName, tagId: tag.id }
+    const { data: existing } = await supabase
+      .from('lead_tag_assignments')
+      .select('id')
+      .eq('lead_id', Number(leadId))
+      .eq('tag_id', tag.id)
+      .maybeSingle()
+
+    if (existing) {
+      results.push({ tagId: tag.id, tagName: tag.name, alreadyExists: true })
+      continue
+    }
+
+    const { error } = await supabase
+      .from('lead_tag_assignments')
+      .insert({ lead_id: Number(leadId), tag_id: tag.id, created_at: new Date().toISOString() })
+
+    if (error) throw new Error(`Erro ao vincular tag "${tag.name}" ao lead: ${error.message}`)
+    results.push({ tagId: tag.id, tagName: tag.name })
+  }
+
+  return { executed: true, action: 'add_tag', leadId, tags: results }
 }
 
 // ---------------------------------------------------------------------------
