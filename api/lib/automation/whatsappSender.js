@@ -263,6 +263,10 @@ export async function sendMessageNode(node, context, supabase) {
     )
   }
 
+  // Propagar conversationId para o contexto — permite que nós subsequentes
+  // (ex: attach_agent) usem a conversa criada/resolvida por este nó.
+  context.conversationId = conversationId
+
   // 4. Resolver instância WhatsApp
   const instance = await resolveInstance(conversationId, context.instanceId, supabase)
   if (!instance) {
