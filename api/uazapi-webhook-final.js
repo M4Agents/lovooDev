@@ -906,17 +906,19 @@ async function processMessage(payload) {
         const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
         const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
 
-        // fire-and-forget — mesmo padrão de automations/resume-execution
-        // NÃO usar await: o 200 do webhook não pode depender do agente
-        fetch(agentEventUrl, {
+        // await com timeout — garante que process-conversation-event receba o request
+        // antes da função Vercel terminar. O endpoint retorna 200 rapidamente (~500ms)
+        // após o router executar; execute-agent roda de forma assíncrona lá dentro.
+        await fetch(agentEventUrl, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(agentEventPayload)
+          body:    JSON.stringify(agentEventPayload),
+          signal:  AbortSignal.timeout(8000)
         }).catch(emitError => {
           console.error('🤖 ❌ Falha ao emitir evento de conversação:', emitError.message);
         });
 
-        console.log('🤖 ✅ Evento de conversação emitido (fire-and-forget):', {
+        console.log('🤖 ✅ Evento de conversação emitido (await):', {
           conversation_id:   conversationId,
           uazapi_message_id: messageId,
           company_id:        company.id,
