@@ -230,7 +230,7 @@ async function addTag(config, context, supabase) {
 
     const { error } = await supabase
       .from('lead_tag_assignments')
-      .insert({ lead_id: Number(leadId), tag_id: tag.id, created_at: new Date().toISOString() })
+      .insert({ lead_id: Number(leadId), tag_id: tag.id })
 
     if (error) throw new Error(`Erro ao vincular tag "${tag.name}" ao lead: ${error.message}`)
     results.push({ tagId: tag.id, tagName: tag.name })
