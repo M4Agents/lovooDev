@@ -48,6 +48,19 @@ export default async function handler(req, res) {
   // Buscar entradas do lead com service_role
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  // Verificar se o lead existe e não está soft-deletado antes de retornar entradas
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('id')
+    .eq('id', leadId)
+    .eq('company_id', companyId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (!lead) {
+    return res.status(404).json({ error: 'Lead não encontrado ou inativo' });
+  }
+
   const { data: entries, error } = await supabase
     .from('lead_entries')
     .select('id, source, origin_channel, external_event_id, created_at, metadata')

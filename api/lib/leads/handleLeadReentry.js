@@ -75,6 +75,20 @@ export async function handleLeadReentry({
   supabase,
 }) {
   try {
+    // GUARD: não registrar reentrada em lead soft-deletado
+    const { data: activeLead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('id', existingLeadId)
+      .eq('company_id', companyId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!activeLead) {
+      console.warn(`[handleLeadReentry] Lead ${existingLeadId} está deletado ou não encontrado — reentrada ignorada.`);
+      return { action: 'skipped', skipped: true, reason: 'lead_deleted' };
+    }
+
     const payloadHash = hashPayload({ newLeadId, existingLeadId, source, ...metadata });
     const idempotencyKey = buildIdempotencyKey({
       companyId,
