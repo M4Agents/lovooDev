@@ -644,18 +644,22 @@ async function processMessage(payload) {
               .catch(err => console.error('[uazapi-webhook-final] automation trigger failed:', err));
           } else {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
-            // Registrar reentrada via WhatsApp (fire-and-forget)
+            // Registrar reentrada via WhatsApp — await garante execução completa
             const supabaseAdmin = getSupabaseAdmin();
-            handleLeadReentry({
-              newLeadId: leadResult.lead_id,
-              existingLeadId: leadResult.lead_id,
-              companyId: company.id,
-              source: 'whatsapp',
-              externalEventId: payload?.data?.key?.id || null,
-              originChannel: 'whatsapp',
-              metadata: { phone: phoneNumber, contact_name: senderName },
-              supabase: supabaseAdmin,
-            }).catch(err => console.error('[uazapi-webhook-final] handleLeadReentry failed:', err));
+            try {
+              await handleLeadReentry({
+                newLeadId: leadResult.lead_id,
+                existingLeadId: leadResult.lead_id,
+                companyId: company.id,
+                source: 'whatsapp',
+                externalEventId: payload?.data?.key?.id || null,
+                originChannel: 'whatsapp',
+                metadata: { phone: phoneNumber, contact_name: senderName },
+                supabase: supabaseAdmin,
+              });
+            } catch (err) {
+              console.error('[uazapi-webhook-final] handleLeadReentry failed:', err);
+            }
           }
           
           if (leadResult.lead_id && conversationId) {

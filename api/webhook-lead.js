@@ -447,21 +447,25 @@ async function createLeadDirectSQL(params) {
         .catch(err => console.error('[webhook-lead] automation trigger failed:', err));
     }
 
-    // Processar reentrada para leads duplicados (fire-and-forget)
+    // Processar reentrada para leads duplicados — await garante execução completa antes da resposta
     if (lead.is_duplicate && lead.duplicate_of_lead_id) {
-      const supabaseAdmin = await getSupabaseAdmin();
+      const supabaseAdmin = getSupabaseAdmin();
       const originChannel = params.form_data?.utm_source || params.form_data?.origin || null;
       const payloadRef = { name: detectedFields.name, phone: detectedFields.phone, email: detectedFields.email };
-      handleLeadReentry({
-        newLeadId: lead.lead_id,
-        existingLeadId: lead.duplicate_of_lead_id,
-        companyId: lead.company_id,
-        source: 'webhook',
-        externalEventId: params.form_data?.webhook_id || null,
-        originChannel,
-        metadata: { payload_hash: hashPayload(payloadRef) },
-        supabase: supabaseAdmin,
-      }).catch(err => console.error('[webhook-lead] handleLeadReentry failed:', err));
+      try {
+        await handleLeadReentry({
+          newLeadId: lead.lead_id,
+          existingLeadId: lead.duplicate_of_lead_id,
+          companyId: lead.company_id,
+          source: 'webhook',
+          externalEventId: params.form_data?.webhook_id || null,
+          originChannel,
+          metadata: { payload_hash: hashPayload(payloadRef) },
+          supabase: supabaseAdmin,
+        });
+      } catch (err) {
+        console.error('[webhook-lead] handleLeadReentry failed:', err);
+      }
     }
 
     return { success: true, lead_id: lead.lead_id };

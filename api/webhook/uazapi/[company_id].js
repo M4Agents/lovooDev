@@ -545,19 +545,23 @@ async function processMessage(payload) {
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'whatsapp' })
               .catch(err => console.error('[webhook/uazapi] automation trigger failed:', err));
           }
-          // Registrar reentrada quando lead já existia (fire-and-forget)
+          // Registrar reentrada quando lead já existia — await garante execução completa
           if (!wasCreated && leadId) {
             const supabaseAdmin = getSupabaseAdmin();
-            handleLeadReentry({
-              newLeadId: leadId,      // mesmo lead — sem lead duplicado novo criado
-              existingLeadId: leadId, // reentrada direta pelo WhatsApp
-              companyId: company.id,
-              source: 'whatsapp',
-              externalEventId: payload?.data?.key?.id || payload?.data?.messageId || null,
-              originChannel: 'whatsapp',
-              metadata: { phone: phoneNumber, contact_name: contactName },
-              supabase: supabaseAdmin,
-            }).catch(err => console.error('[webhook/uazapi] handleLeadReentry failed:', err));
+            try {
+              await handleLeadReentry({
+                newLeadId: leadId,
+                existingLeadId: leadId,
+                companyId: company.id,
+                source: 'whatsapp',
+                externalEventId: payload?.data?.key?.id || payload?.data?.messageId || null,
+                originChannel: 'whatsapp',
+                metadata: { phone: phoneNumber, contact_name: contactName },
+                supabase: supabaseAdmin,
+              });
+            } catch (err) {
+              console.error('[webhook/uazapi] handleLeadReentry failed:', err);
+            }
           }
 
           // Vincular lead_id à conversa (apenas se ainda não vinculado)
