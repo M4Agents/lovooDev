@@ -90,7 +90,7 @@ export const LeadReentryConfigSection: React.FC = () => {
   const { company } = useAuth()
   const [config, setConfig] = useState<LeadConfig>({
     enabled: true,
-    duplicate_lead_config: { won: 'EVENT_ONLY', lost: 'REOPEN', open: 'EVENT_ONLY' },
+    duplicate_lead_config: { won: 'NEW_OPPORTUNITY', lost: 'REOPEN', open: 'EVENT_ONLY' },
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

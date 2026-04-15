@@ -192,7 +192,7 @@ async function applyReentryRule({ targetOpp, rules, companyId, existingLeadId, l
   const eventMetadata = { source, lead_entry_id: leadEntryId, origin_channel: originChannel };
 
   if (status === 'won') {
-    const rule = rules.won || 'EVENT_ONLY';
+    const rule = rules.won || 'NEW_OPPORTUNITY';
     if (rule === 'NEW_OPPORTUNITY') {
       const newOppId = await createNewOpportunity({ companyId, existingLeadId, source, supabase });
       if (newOppId) await insertReentryEvent({ supabase, companyId, opportunityId: newOppId, metadata: eventMetadata });

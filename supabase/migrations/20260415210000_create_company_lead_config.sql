@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS company_lead_config (
   enabled               BOOLEAN NOT NULL DEFAULT true,
   -- enabled: feature flag por empresa. false = handleLeadReentry é no-op para esta empresa
   duplicate_lead_config JSONB   NOT NULL DEFAULT '{
-    "won": "EVENT_ONLY",
+    "won": "NEW_OPPORTUNITY",
     "lost": "REOPEN",
     "open": "EVENT_ONLY"
   }',
