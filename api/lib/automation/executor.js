@@ -137,7 +137,7 @@ export async function createExecution(flow, triggerData, companyId, supabase) {
         lead_id:        triggerData.lead_id || triggerData.opportunity?.lead_id || null,
         opportunity_id: triggerData.opportunity_id || triggerData.opportunity?.id || null,
         status:         'running',
-        variables:      {},
+        variables:      triggerData.variables || {},
         executed_nodes: [],
         started_at:     new Date().toISOString(),
       })

@@ -100,6 +100,31 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
       console.log(`${tag} opportunity encontrada: ${opp.id}`)
     }
 
+    // 3b. Enriquecer contexto: campos personalizados do lead
+    let customVariables = {}
+    try {
+      const { data: customValues } = await supabase
+        .from('lead_custom_values')
+        .select('value, lead_custom_fields(field_name, field_type, company_id)')
+        .eq('lead_id', leadId)
+
+      for (const cv of customValues ?? []) {
+        const field = cv.lead_custom_fields
+        if (!field?.field_name || field.company_id !== companyId) continue
+
+        let displayValue = cv.value ?? ''
+        if (field.field_type === 'boolean') {
+          displayValue = cv.value === 'true' ? 'Sim' : 'Não'
+        }
+
+        customVariables[`custom_${field.field_name}`] = displayValue
+      }
+
+      console.log(`${tag} campos personalizados carregados: ${Object.keys(customVariables).length}`)
+    } catch (customErr) {
+      console.warn(`${tag} erro ao carregar campos personalizados (não crítico):`, customErr?.message)
+    }
+
     // 4. Para cada flow compatível: deduplicar, criar execução e processar
     for (const flow of matchedFlows) {
       try {
@@ -121,7 +146,7 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
         }
 
         // Criar execução com contexto enriquecido (opportunity_id carregado do banco)
-        const triggerData = { lead_id: leadId, source, opportunity_id: opp?.id ?? null }
+        const triggerData = { lead_id: leadId, source, opportunity_id: opp?.id ?? null, variables: customVariables }
         const execution = await createExecution(flow, triggerData, companyId, supabase)
 
         if (!execution) {
