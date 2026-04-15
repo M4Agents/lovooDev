@@ -441,18 +441,21 @@ async function createLeadDirectSQL(params) {
       // Não falhar a criação do lead por causa do webhook
     }
     
-    // Disparar automação backend apenas para leads novos (fire-and-forget)
+    // Disparar automação backend apenas para leads novos
     // #region agent log
     console.error(`[DBG-3620d6][H2-dispatch] is_duplicate=${lead.is_duplicate} leadId=${lead.lead_id} companyId=${lead.company_id}`);
     // #endregion
     if (!lead.is_duplicate) {
       // #region agent log
-      console.error(`[DBG-3620d6][H2-dispatch] INICIANDO dispatchLeadCreatedTrigger (fire-and-forget) leadId=${lead.lead_id}`);
+      console.error(`[DBG-3620d6][H2-dispatch] INICIANDO dispatchLeadCreatedTrigger (await) leadId=${lead.lead_id}`);
       // #endregion
-      dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' })
-        .catch(err => console.error('[webhook-lead] automation trigger failed:', err));
+      try {
+        await dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' });
+      } catch (err) {
+        console.error('[webhook-lead] automation trigger failed:', err);
+      }
       // #region agent log
-      console.error(`[DBG-3620d6][H2-dispatch] APÓS start dispatchLeadCreatedTrigger (Promise lançada) leadId=${lead.lead_id}`);
+      console.error(`[DBG-3620d6][H2-dispatch] CONCLUÍDO dispatchLeadCreatedTrigger leadId=${lead.lead_id}`);
       // #endregion
     }
 
