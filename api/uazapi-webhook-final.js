@@ -618,6 +618,50 @@ async function processMessage(payload) {
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;
 
+    // =====================================================
+    // 🔄 COMANDO DE RESET DE MEMÓRIA — /resetar
+    // Apaga o histórico de chat_messages da conversa e
+    // envia confirmação ao lead. Interrompe todo o pipeline
+    // downstream (agente, automações, lead creation).
+    // =====================================================
+    if (direction === 'inbound' && messageText?.trim().toLowerCase() === '/resetar' && conversationId) {
+      try {
+        console.log('🔄 [RESET] Comando /resetar detectado — apagando histórico:', conversationId);
+
+        const supabaseAdmin = getSupabaseAdmin();
+
+        const { error: deleteError } = await supabaseAdmin
+          .from('chat_messages')
+          .delete()
+          .eq('conversation_id', conversationId);
+
+        if (deleteError) {
+          console.error('🔄 [RESET] Erro ao apagar mensagens:', deleteError.message);
+        } else {
+          console.log('🔄 [RESET] Histórico apagado com sucesso');
+        }
+
+        // Buscar token para enviar confirmação via Uazapi
+        const { data: instanceFull } = await supabaseAdmin
+          .from('whatsapp_life_instances')
+          .select('provider_token')
+          .eq('id', instance.id)
+          .maybeSingle();
+
+        if (instanceFull?.provider_token) {
+          fetch('https://lovoo.uazapi.com/send/text', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'token': instanceFull.provider_token },
+            body:    JSON.stringify({ number: phoneNumber, text: '✅ Memória da conversa reiniciada. Pode começar!' })
+          }).catch(e => console.error('🔄 [RESET] Erro ao enviar confirmação:', e.message));
+        }
+
+        return { success: true, message: 'reset:/resetar — histórico apagado' };
+      } catch (resetError) {
+        console.error('🔄 [RESET] Erro inesperado (continuando pipeline normal):', resetError.message);
+      }
+    }
+
     // lead_id resolvido do bloco inbound — acessível após o bloco para o dispatch de message.received
     let inboundLeadId = null;
 
