@@ -123,16 +123,18 @@ export default async function handler(req, res) {
     const appBase      = process.env.APP_URL || 'https://app.lovoocrm.com';
     const executeUrl   = `${appBase}/api/agents/execute-agent`;
 
-    // process-conversation-event agora é awaited pelo webhook (não mais fire-and-forget),
-    // portanto retornamos 200 rapidamente aqui e disparamos execute-agent como
-    // fire-and-forget — execute-agent tem seu próprio ciclo de vida Vercel.
-    fetch(executeUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(decision)
-    }).catch(dispatchError => {
+    // await garante que execute-agent receba e processe o request antes
+    // de process-conversation-event retornar. O webhook já usa AbortSignal.timeout(8s)
+    // que aborta apenas o lado cliente — este server-side continua rodando normalmente.
+    try {
+      await fetch(executeUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(decision)
+      });
+    } catch (dispatchError) {
       console.error('🤖 [EVENT] ❌ Falha ao chamar execute-agent:', dispatchError.message);
-    });
+    }
 
     console.log('🤖 [EVENT] ✅ RouterDecision = processar → execute-agent concluído:', {
       assignment_id:   decision.assignment_id,
