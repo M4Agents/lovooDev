@@ -74,9 +74,6 @@ export async function handleLeadReentry({
   metadata = {},
   supabase,
 }) {
-  // #region agent log
-  console.error('[DBG-3620d6][H-A/B/D] handleLeadReentry START', { newLeadId, existingLeadId, companyId, source, externalEventId });
-  // #endregion
   try {
     const payloadHash = hashPayload({ newLeadId, existingLeadId, source, ...metadata });
     const idempotencyKey = buildIdempotencyKey({
@@ -117,9 +114,6 @@ export async function handleLeadReentry({
     }
 
     const leadEntryId = entryRows?.[0]?.id;
-    // #region agent log
-    console.error('[DBG-3620d6][H-A] lead_entry result', { leadEntryId, entryError: entryError?.message ?? null });
-    // #endregion
     if (!leadEntryId) {
       // Entrada já existia → evento já foi processado anteriormente
       return { action: 'already_processed', skipped: true, reason: 'idempotency_conflict' };
@@ -132,9 +126,6 @@ export async function handleLeadReentry({
       .eq('company_id', companyId)
       .single();
 
-    // #region agent log
-    console.error('[DBG-3620d6][H-A] config read', { enabled: config?.enabled, rules: config?.duplicate_lead_config });
-    // #endregion
     if (!config || !config.enabled) {
       return { action: 'skipped', leadEntryId, skipped: true, reason: 'feature_disabled' };
     }
@@ -163,9 +154,6 @@ export async function handleLeadReentry({
     });
 
     const targetOpp = sorted[0] ?? null;
-    // #region agent log
-    console.error('[DBG-3620d6][H-A] opportunities query', { oppsFound: (opps || []).length, oppsIds: (opps || []).map(o => o.id), targetOpp: targetOpp ? { id: targetOpp.id, status: targetOpp.status } : null });
-    // #endregion
 
     if (!targetOpp) {
       return { action: 'entry_only', leadEntryId, skipped: false, reason: 'no_opportunity' };
@@ -255,15 +243,11 @@ async function applyReentryRule({ targetOpp, rules, companyId, existingLeadId, l
 
 /** Insere evento lead_reentry na opportunity_stage_history */
 async function insertReentryEvent({ supabase, companyId, opportunityId, metadata }) {
-  const { data: pos, error: posError } = await supabase
+  const { data: pos } = await supabase
     .from('opportunity_funnel_positions')
     .select('funnel_id, stage_id')
     .eq('opportunity_id', opportunityId)
     .single();
-
-  // #region agent log
-  console.error('[DBG-3620d6][H-B/D] insertReentryEvent', { opportunityId, pos, posError: posError?.message ?? null });
-  // #endregion
 
   const now = new Date().toISOString();
   const { error } = await supabase
@@ -280,10 +264,6 @@ async function insertReentryEvent({ supabase, companyId, opportunityId, metadata
       move_type: 'lead_reentry',
       metadata,
     });
-
-  // #region agent log
-  console.error('[DBG-3620d6][H-B] osh insert result', { error: error?.message ?? null, errorCode: error?.code ?? null });
-  // #endregion
 
   if (error) {
     console.error('[handleLeadReentry] Erro ao inserir lead_reentry:', error.message);
