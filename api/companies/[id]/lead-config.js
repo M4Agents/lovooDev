@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   // --- GET: qualquer membro pode ler ---
   if (req.method === 'GET') {
     const { data: memberCheck } = await supabaseUser
-      .rpc('auth_user_is_company_member', { company_id: companyId });
+      .rpc('auth_user_is_company_member', { p_company_id: companyId });
 
     if (!memberCheck) return res.status(403).json({ error: 'Acesso negado' });
 
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
   // --- PUT: apenas admin ---
   if (req.method === 'PUT') {
     const { data: adminCheck } = await supabaseUser
-      .rpc('auth_user_is_company_admin', { company_id: companyId });
+      .rpc('auth_user_is_company_admin', { p_company_id: companyId });
 
     if (!adminCheck) return res.status(403).json({ error: 'Permissão de administrador necessária' });
 

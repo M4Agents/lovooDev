@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   });
 
   const { data: memberCheck, error: memberError } = await supabaseUser
-    .rpc('auth_user_is_company_member', { company_id: companyId });
+    .rpc('auth_user_is_company_member', { p_company_id: companyId });
 
   if (memberError || !memberCheck) {
     return res.status(403).json({ error: 'Acesso negado' });
