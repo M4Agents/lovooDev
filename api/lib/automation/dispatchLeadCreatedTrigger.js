@@ -82,7 +82,25 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
 
     console.log(`${tag} ${matchedFlows.length} flow(s) correspondente(s) — iniciando execuções`)
 
-    // 3. Para cada flow compatível: deduplicar, criar execução e processar
+    // 3. Enriquecer contexto: buscar opportunity aberta do lead (criada pelo trigger z_add_lead_to_funnel)
+    // A opportunity já existe no banco — é criada pelo trigger AFTER INSERT ON leads, antes da RPC retornar.
+    const { data: opp } = await supabase
+      .from('opportunities')
+      .select('id')
+      .eq('lead_id', leadId)
+      .eq('company_id', companyId)
+      .eq('status', 'open')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (!opp?.id) {
+      console.warn(`${tag} opportunity não encontrada para lead ${leadId} — ações de oportunidade podem falhar (empresa sem funil configurado?)`)
+    } else {
+      console.log(`${tag} opportunity encontrada: ${opp.id}`)
+    }
+
+    // 4. Para cada flow compatível: deduplicar, criar execução e processar
     for (const flow of matchedFlows) {
       try {
         // Deduplicação: checar execução recente para o mesmo lead + flow
@@ -102,8 +120,8 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
           continue
         }
 
-        // Criar execução real
-        const triggerData = { lead_id: leadId, source }
+        // Criar execução com contexto enriquecido (opportunity_id carregado do banco)
+        const triggerData = { lead_id: leadId, source, opportunity_id: opp?.id ?? null }
         const execution = await createExecution(flow, triggerData, companyId, supabase)
 
         if (!execution) {
