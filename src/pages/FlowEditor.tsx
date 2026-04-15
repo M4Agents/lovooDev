@@ -31,6 +31,7 @@ export default function FlowEditor() {
   const [showTriggerConfig, setShowTriggerConfig] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [tempName, setTempName] = useState('')
+  const [externalNodeUpdate, setExternalNodeUpdate] = useState<Node | null>(null)
   
   // FASE 6.1: Undo/Redo
   const { canUndo, canRedo, undo, redo, takeSnapshot } = useUndoRedo(
@@ -261,28 +262,21 @@ export default function FlowEditor() {
     // #endregion
 
     let updatedSelectedNode: Node | null = null
+    let nodeFoundInFlow = false
 
-    const updatedNodes = flow.nodes.map((node: any) => {
+    const mappedNodes = (flow.nodes as any[]).map((node: any) => {
       if (node.id === nodeId) {
-        // ✅ FIX: Fazer merge correto do config para preservar actionType e outros campos
+        nodeFoundInFlow = true
         const mergedConfig = {
-          ...node.data.config,  // Config anterior
-          ...config              // Novo config (sobrescreve apenas campos enviados)
+          ...node.data.config,
+          ...config
         }
-        
-        console.log('💾 Salvando config do node:', {
-          nodeId,
-          nodeType: node.type,
-          configAnterior: node.data.config,
-          configNovo: config,
-          configFinal: mergedConfig
-        })
 
         // #region agent log
         console.log('[DEBUG-3620d6][H2-H3] mergedConfig calculado', {nodeId,nodeType:node.type,configAnterior:node.data.config,configNovo:config,mergedConfig});
         fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:merge',message:'mergedConfig calculado',data:{nodeId,nodeType:node.type,configAnterior:node.data.config,configNovo:config,mergedConfig},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
         // #endregion
-        
+
         const updatedNode = {
           ...node,
           data: {
@@ -290,26 +284,42 @@ export default function FlowEditor() {
             config: mergedConfig
           }
         }
-        
-        // ✅ FIX: Se for o node selecionado, guardar referência para atualizar selectedNode
+
         if (selectedNode?.id === nodeId) {
           updatedSelectedNode = updatedNode
         }
-        
+
         return updatedNode
       }
       return node
     })
 
-    // Salvar direto sem validação (apenas configuração de nó)
+    // FIX: nó novo adicionado ao canvas ainda não está em flow.nodes — inclui ele
+    let updatedNodes: any[]
+    if (!nodeFoundInFlow && selectedNode) {
+      const mergedConfig = { ...selectedNode.data.config, ...config }
+      updatedSelectedNode = {
+        ...selectedNode,
+        data: { ...selectedNode.data, config: mergedConfig }
+      }
+      updatedNodes = [...mappedNodes, updatedSelectedNode]
+      // #region agent log
+      console.log('[DEBUG-3620d6][H2-H3] nó novo adicionado ao flow.nodes', {nodeId,mergedConfig});
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:novoNo',message:'no novo incluido em updatedNodes',data:{nodeId,mergedConfig},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    } else {
+      updatedNodes = mappedNodes
+    }
+
+    // Salvar no banco
     try {
       const result = await automationApi.saveFlowCanvas(id, {
         nodes: updatedNodes as any,
         edges: flow.edges as any
       })
       // #region agent log
-      console.log('[DEBUG-3620d6][H2-H3] saveFlowCanvas SUCESSO', {resultId:result?.id,nodeId});
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:supabase',message:'saveFlowCanvas sucesso',data:{resultId:result?.id,nodeId},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
+      console.log('[DEBUG-3620d6][H2-H3] saveFlowCanvas SUCESSO', {resultId:result?.id,nodeId,nodeFoundInFlow});
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'FlowEditor.tsx:handleNodeConfigSave:supabase',message:'saveFlowCanvas sucesso',data:{resultId:result?.id,nodeId,nodeFoundInFlow},hypothesisId:'H2-H3',timestamp:Date.now()})}).catch(()=>{});
       // #endregion
     } catch (err: any) {
       // #region agent log
@@ -321,11 +331,11 @@ export default function FlowEditor() {
     }
 
     setFlow({ ...flow, nodes: updatedNodes })
-    
-    // ✅ FIX: Atualizar selectedNode para manter sincronização
+
+    // FIX: sincronizar estado interno do ReactFlow com o nó atualizado
     if (updatedSelectedNode) {
-      console.log('🔄 Atualizando selectedNode com config salvo')
       setSelectedNode(updatedSelectedNode)
+      setExternalNodeUpdate(updatedSelectedNode as Node)
     }
   }
 
@@ -512,6 +522,7 @@ export default function FlowEditor() {
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
             onNodeConfigSave={handleNodeConfigSave}
+            externalNodeUpdate={externalNodeUpdate}
           />
         </div>
         {selectedNode && showTriggerConfig ? (

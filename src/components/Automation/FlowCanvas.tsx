@@ -68,6 +68,7 @@ interface FlowCanvasProps {
   selectedNode: Node | null
   onNodeSelect: (node: Node | null) => void
   onNodeConfigSave: (nodeId: string, config: any) => void
+  externalNodeUpdate?: Node | null
 }
 
 const nodeTypes: NodeTypes = {
@@ -94,7 +95,8 @@ function FlowCanvasInner({
   onSave,
   onToggleActive,
   onDelete,
-  onNodeSelect
+  onNodeSelect,
+  externalNodeUpdate
 }: FlowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -107,6 +109,16 @@ function FlowCanvasInner({
   // Ref estável para onNodeSelect — evita loops em useEffect
   const onNodeSelectRef = useRef(onNodeSelect)
   useEffect(() => { onNodeSelectRef.current = onNodeSelect }, [onNodeSelect])
+
+  // Sincroniza nó editado externamente (via NodeConfigPanel) com o estado interno do ReactFlow
+  useEffect(() => {
+    if (!externalNodeUpdate) return
+    setNodes(nds =>
+      nds.some(n => n.id === externalNodeUpdate.id)
+        ? nds.map(n => n.id === externalNodeUpdate.id ? { ...externalNodeUpdate, data: { ...externalNodeUpdate.data, onSelect: n.data.onSelect, debugStatus: n.data.debugStatus } } : n)
+        : [...nds, { ...externalNodeUpdate, data: { ...externalNodeUpdate.data, onSelect: () => onNodeSelectRef.current(externalNodeUpdate) } }]
+    )
+  }, [externalNodeUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Injetar data.onSelect em todos os nodes carregados do banco (executado uma vez ao montar)
   useEffect(() => {
