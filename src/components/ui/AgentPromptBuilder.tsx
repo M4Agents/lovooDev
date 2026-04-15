@@ -62,7 +62,7 @@ interface AutocompleteState {
 
 // ── Preview (espelha promptAssembler.ts) ─────────────────────────────────────
 
-function assemblePreview(config: PromptConfig): string {
+export function assemblePreview(config: PromptConfig): string {
   const parts: string[] = []
 
   for (const sectionId of SECTION_ORDER) {

@@ -27,7 +27,7 @@ import {
 } from '../../services/companyOwnAgentsApi'
 import { api } from '../../services/api'
 import { PromptEditor } from '../ui/PromptEditor'
-import { AgentPromptBuilder, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
+import { AgentPromptBuilder, assemblePreview, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
 
@@ -79,9 +79,13 @@ type AgentFormProps = {
 function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }: AgentFormProps) {
   const isEdit = Boolean(agent)
 
-  // Determinar modo baseado no agente existente.
-  // Novos agentes sempre iniciam em structured.
-  const isStructured = !isEdit || agent!.prompt_config !== null
+  // Modo inicial: structured para agentes novos ou com prompt_config; free para legados.
+  const initialMode: 'structured' | 'free' = (!isEdit || agent!.prompt_config !== null)
+    ? 'structured'
+    : 'free'
+
+  const [promptMode, setPromptMode]   = useState<'structured' | 'free'>(initialMode)
+  const isStructured                  = promptMode === 'structured'
 
   const [meta, setMeta]           = useState<FormMeta>(isEdit ? agentToMeta(agent!) : emptyMeta())
   const [saving, setSaving]       = useState(false)
@@ -101,17 +105,35 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
     return typeof v === 'number' && v >= 1 && v <= 3 ? v : 1
   })
 
-  // Estado de prompt — modo legacy
+  // Estado de prompt — modo free (texto completo)
   const [legacyPrompt, setLegacyPrompt] = useState<string>(
-    (!isStructured && agent) ? agent.prompt : ''
+    (initialMode === 'free' && agent) ? agent.prompt : ''
   )
 
-  // Estado de prompt — modo structured
+  // Estado de prompt — modo structured (blocos)
   const [promptConfig, setPromptConfig] = useState<PromptConfig>(
-    (isStructured && agent?.prompt_config)
+    (initialMode === 'structured' && agent?.prompt_config)
       ? agent.prompt_config
       : createEmptyPromptConfig()
   )
+
+  function switchToFree() {
+    // Converter blocos → texto: pré-preenche com o preview atual
+    const preview = assemblePreview(promptConfig)
+    setLegacyPrompt(preview)
+    setPromptMode('free')
+  }
+
+  function switchToStructured() {
+    if (legacyPrompt.trim()) {
+      const ok = window.confirm(
+        'Ao mudar para modo blocos, o texto livre será perdido. Deseja continuar?'
+      )
+      if (!ok) return
+    }
+    setPromptConfig(createEmptyPromptConfig())
+    setPromptMode('structured')
+  }
 
   function updateMeta(partial: Partial<FormMeta>) {
     setMeta(prev => ({ ...prev, ...partial }))
@@ -225,17 +247,9 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
   return (
     <form onSubmit={handleSubmit} className="border border-blue-200 rounded-lg bg-blue-50 p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-blue-800">
-            {isEdit ? 'Editar agente' : 'Novo agente conversacional'}
-          </h4>
-          {isStructured && (
-            <p className="text-xs text-blue-600 mt-0.5">Modo builder — prompt montado pelo servidor</p>
-          )}
-          {!isStructured && (
-            <p className="text-xs text-gray-500 mt-0.5">Modo legado — prompt em texto livre</p>
-          )}
-        </div>
+        <h4 className="text-sm font-semibold text-blue-800">
+          {isEdit ? 'Editar agente' : 'Novo agente conversacional'}
+        </h4>
         <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600">
           <X className="w-4 h-4" />
         </button>
@@ -269,12 +283,41 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
         />
       </div>
 
-      {/* Editor de prompt — modo determinado pelo agente */}
+      {/* Editor de prompt — modo selecionável pelo usuário */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          {isStructured ? 'Configuração do prompt' : 'Prompt (system)'}
-          {!isStructured && <span className="text-red-500 ml-0.5">*</span>}
-        </label>
+        {/* Toggle de modo */}
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-medium text-gray-700">
+            {isStructured ? 'Configuração do prompt' : 'Prompt (system)'}
+            {!isStructured && <span className="text-red-500 ml-0.5">*</span>}
+          </label>
+          <div className="flex items-center rounded-md border border-gray-200 overflow-hidden text-xs">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={isStructured ? undefined : switchToStructured}
+              className={`px-3 py-1 transition-colors ${
+                isStructured
+                  ? 'bg-blue-600 text-white font-medium'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Blocos
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={isStructured ? switchToFree : undefined}
+              className={`px-3 py-1 transition-colors ${
+                !isStructured
+                  ? 'bg-blue-600 text-white font-medium'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Texto completo
+            </button>
+          </div>
+        </div>
 
         {isStructured ? (
           <AgentPromptBuilder
@@ -287,7 +330,7 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           <PromptEditor
             value={legacyPrompt}
             onChange={setLegacyPrompt}
-            rows={7}
+            rows={10}
             disabled={saving}
             customFieldVariables={customFieldVariables}
           />
