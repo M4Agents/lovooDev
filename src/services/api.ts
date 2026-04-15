@@ -1548,41 +1548,22 @@ export const api = {
     }
   },
 
-  async getLeadStats(companyId: string) {
-    
+  async getLeadStats(
+    companyId: string,
+    dateRange?: { start: string; end: string }
+  ): Promise<{ totalLeads: number; totalEntries: number }> {
     try {
-      const { data: leads, error } = await supabase
-        .from('leads')
-        .select('status, origin, created_at')
-        .eq('company_id', companyId)
-        .is('deleted_at', null);
+      const { data, error } = await supabase.rpc('get_lead_dashboard_stats', {
+        p_company_id: companyId,
+        p_start_date: dateRange?.start ?? null,
+        p_end_date: dateRange?.end ?? null,
+      });
 
       if (error) throw error;
 
-      const totalLeads = leads?.length || 0;
-      const statusBreakdown = leads?.reduce((acc: Record<string, number>, lead) => {
-        acc[lead.status] = (acc[lead.status] || 0) + 1;
-        return acc;
-      }, {}) || {};
-
-      const originBreakdown = leads?.reduce((acc: Record<string, number>, lead) => {
-        acc[lead.origin] = (acc[lead.origin] || 0) + 1;
-        return acc;
-      }, {}) || {};
-
-      const thisMonth = new Date();
-      thisMonth.setDate(1);
-      const leadsThisMonth = leads?.filter(lead => 
-        new Date(lead.created_at) >= thisMonth
-      ).length || 0;
-
       return {
-        totalLeads,
-        leadsThisMonth,
-        statusBreakdown,
-        originBreakdown,
-        conversionRate: statusBreakdown['convertido'] ? 
-          (statusBreakdown['convertido'] / totalLeads) * 100 : 0
+        totalLeads: (data as any)?.total_leads ?? 0,
+        totalEntries: (data as any)?.total_entries ?? 0,
       };
     } catch (error) {
       console.error('Error in getLeadStats:', error);

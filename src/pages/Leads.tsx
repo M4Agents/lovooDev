@@ -25,13 +25,12 @@ import {
   Mail,
   Calendar,
   User,
-  Building,
-  ExternalLink,
   Download,
   ChevronDown,
   FileText,
   FileSpreadsheet,
-  Tag
+  Tag,
+  ArrowDownUp
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
@@ -63,10 +62,7 @@ interface Lead {
 
 interface LeadStats {
   totalLeads: number;
-  leadsThisMonth: number;
-  statusBreakdown: Record<string, number>;
-  originBreakdown: Record<string, number>;
-  conversionRate: number;
+  totalEntries: number;
 }
 
 export const Leads: React.FC = () => {
@@ -93,16 +89,12 @@ export const Leads: React.FC = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
-  // NOVOS ESTADOS PARA FILTROS AVANÇADOS
-  const [nameFilter, setNameFilter] = useState('');
-  const [phoneFilter, setPhoneFilter] = useState('');
-  const [emailFilter, setEmailFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  // Filtro de período (controle principal)
+  const [dateFilter, setDateFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  
-  // NOVO: Estado para filtro de responsável
+
+  // Filtro de responsável
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
 
@@ -149,20 +141,86 @@ export const Leads: React.FC = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showExportDropdown]);
 
+  const getDateRange = (filter: string, start: string, end: string) => {
+    const now = new Date();
+    switch (filter) {
+      case 'hoje': {
+        const today = new Date();
+        return {
+          start: new Date(today.setHours(0, 0, 0, 0)).toISOString(),
+          end: new Date(today.setHours(23, 59, 59, 999)).toISOString(),
+        };
+      }
+      case 'ontem': {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return {
+          start: new Date(yesterday.setHours(0, 0, 0, 0)).toISOString(),
+          end: new Date(yesterday.setHours(23, 59, 59, 999)).toISOString(),
+        };
+      }
+      case '7dias': {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 7);
+        return { start: d.toISOString(), end: new Date().toISOString() };
+      }
+      case '30dias': {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 30);
+        return { start: d.toISOString(), end: new Date().toISOString() };
+      }
+      case 'estemes': {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { start: d.toISOString(), end: new Date().toISOString() };
+      }
+      case 'mesanterior': {
+        const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const last = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return { start: first.toISOString(), end: last.toISOString() };
+      }
+      case 'personalizado':
+        return start && end
+          ? {
+              start: new Date(start + 'T00:00:00').toISOString(),
+              end: new Date(end + 'T23:59:59').toISOString(),
+            }
+          : null;
+      default:
+        return null;
+    }
+  };
+
+  const getPeriodLabel = (filter: string) => {
+    const labels: Record<string, string> = {
+      all: 'Todo o histórico',
+      hoje: 'Hoje',
+      ontem: 'Ontem',
+      '7dias': 'Últimos 7 dias',
+      '30dias': 'Últimos 30 dias',
+      estemes: 'Este mês',
+      mesanterior: 'Mês anterior',
+      personalizado: 'Período personalizado',
+    };
+    return labels[filter] ?? 'Período selecionado';
+  };
+
   const loadData = async () => {
     if (!company?.id) return;
     
     try {
       setLoading(true);
+      const dateRange = getDateRange(dateFilter, startDate, endDate) ?? undefined;
+
       const [leadsData, statsData] = await Promise.all([
         api.getLeads(company.id, {
           search: searchTerm,
           status: statusFilter || undefined,
           origin: originFilter || undefined,
           responsible_user_id: responsibleFilter || undefined,
+          dateRange,
           limit: 100
         }),
-        api.getLeadStats(company.id)
+        api.getLeadStats(company.id, dateRange)
       ]);
       
       setLeads(leadsData);
@@ -206,87 +264,12 @@ export const Leads: React.FC = () => {
     loadData();
   };
 
-  // NOVAS FUNÇÕES PARA FILTROS AVANÇADOS
-  const getDateRange = (filter: string, start: string, end: string) => {
-    const now = new Date();
-    
-    switch (filter) {
-      case 'hoje':
-        const today = new Date();
-        return {
-          start: new Date(today.setHours(0, 0, 0, 0)).toISOString(),
-          end: new Date(today.setHours(23, 59, 59, 999)).toISOString()
-        };
-      case 'ontem':
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        return {
-          start: new Date(yesterday.setHours(0, 0, 0, 0)).toISOString(),
-          end: new Date(yesterday.setHours(23, 59, 59, 999)).toISOString()
-        };
-      case '7dias':
-        const sevenDaysAgo = new Date(now);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        return {
-          start: sevenDaysAgo.toISOString(),
-          end: new Date().toISOString()
-        };
-      case '30dias':
-        const thirtyDaysAgo = new Date(now);
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return {
-          start: thirtyDaysAgo.toISOString(),
-          end: new Date().toISOString()
-        };
-      case 'personalizado':
-        return start && end ? {
-          start: new Date(start + 'T00:00:00').toISOString(),
-          end: new Date(end + 'T23:59:59').toISOString()
-        } : null;
-      default:
-        return null;
-    }
-  };
-
-  const applyAdvancedFilters = async () => {
-    if (!company?.id) return;
-    
-    try {
-      setLoading(true);
-      const dateRange = getDateRange(dateFilter, startDate, endDate);
-      
-      const [leadsData, statsData] = await Promise.all([
-        api.getLeads(company.id, {
-          search: searchTerm,
-          name: nameFilter,
-          phone: phoneFilter,
-          email: emailFilter,
-          status: statusFilter || undefined,
-          origin: originFilter || undefined,
-          dateRange: dateRange || undefined,
-          limit: 100
-        }),
-        api.getLeadStats(company.id)
-      ]);
-      
-      setLeads(leadsData);
-      setStats(statsData);
-    } catch (error) {
-      console.error('Error applying advanced filters:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const clearAllFilters = () => {
     setSearchTerm('');
-    setNameFilter('');
-    setPhoneFilter('');
-    setEmailFilter('');
     setStatusFilter('');
     setOriginFilter('');
     setResponsibleFilter('');
-    setDateFilter('');
+    setDateFilter('all');
     setStartDate('');
     setEndDate('');
     loadData();
@@ -380,18 +363,6 @@ export const Leads: React.FC = () => {
     }
   };
 
-  const getRecordTypeColor = (recordType: string) => {
-    switch (recordType) {
-      case 'Lead': return 'bg-blue-100 text-blue-800';
-      case 'Oportunidade': return 'bg-orange-100 text-orange-800';
-      case 'Cliente Ativo': return 'bg-green-100 text-green-800';
-      case 'Cliente Inativo': return 'bg-yellow-100 text-yellow-800';
-      case 'Ex-cliente': return 'bg-red-100 text-red-800';
-      case 'Parceiro': return 'bg-purple-100 text-purple-800';
-      case 'Fornecedor': return 'bg-amber-100 text-amber-800';
-      default: return 'bg-blue-100 text-blue-800'; // Fallback para Lead
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
@@ -469,13 +440,8 @@ export const Leads: React.FC = () => {
           <div className="relative">
             <button
               onClick={(event) => {
-                event.stopPropagation(); // Impede que o event listener feche o dropdown
-                console.log('🔍 DEBUG: Botão Exportar clicado!');
-                console.log('🔍 DEBUG: showExportDropdown atual:', showExportDropdown);
-                console.log('🔍 DEBUG: exportLoading atual:', exportLoading);
-                console.log('🔍 DEBUG: setShowExportDropdown função:', typeof setShowExportDropdown);
+                event.stopPropagation();
                 setShowExportDropdown(!showExportDropdown);
-                console.log('🔍 DEBUG: Novo valor deveria ser:', !showExportDropdown);
               }}
               disabled={exportLoading}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
@@ -484,16 +450,9 @@ export const Leads: React.FC = () => {
               {exportLoading ? 'Exportando...' : 'Exportar'}
               <ChevronDown className="w-4 h-4" />
             </button>
-            
-            {(() => {
-              if (showExportDropdown) {
-                console.log('🔍 DEBUG: Dropdown sendo renderizado!');
-              }
-              return showExportDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                  <div className="bg-yellow-100 p-2 text-xs text-yellow-800">
-                    DEBUG: Dropdown visível
-                  </div>
+
+            {showExportDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
                 <button
                   onClick={() => handleExport('csv')}
                   disabled={exportLoading}
@@ -510,9 +469,8 @@ export const Leads: React.FC = () => {
                   <FileSpreadsheet className="w-4 h-4" />
                   Exportar Excel
                 </button>
-                </div>
-              );
-            })()}
+              </div>
+            )}
           </div>
           
           <button
@@ -526,247 +484,166 @@ export const Leads: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total de Leads</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalLeads}</p>
-              </div>
-              <Users className="w-8 h-8 text-blue-600" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Card: Total de Leads */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total de Leads</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                {stats ? stats.totalLeads : '—'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Identidades únicas no sistema</p>
             </div>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Este Mês</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.leadsThisMonth}</p>
-              </div>
-              <Calendar className="w-8 h-8 text-green-600" />
-            </div>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Taxa de Conversão</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.conversionRate.toFixed(1)}%</p>
-              </div>
-              <Building className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Convertidos</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.statusBreakdown['convertido'] || 0}</p>
-              </div>
-              <ExternalLink className="w-8 h-8 text-orange-600" />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Notificações de Duplicatas */}
-      <DuplicateNotifications onMergeRequest={handleMergeRequest} />
-
-      {/* Filters */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200">
-        {/* Header dos Filtros */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
-          <h3 className="text-lg font-medium text-gray-900">Filtros de Pesquisa</h3>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-medium transition-colors"
-            >
-              <Filter className="w-4 h-4" />
-              {showAdvancedFilters ? 'Filtros Simples' : 'Filtros Avançados'}
-            </button>
-            <button
-              onClick={clearAllFilters}
-              className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm transition-colors"
-            >
-              Limpar Filtros
-            </button>
+            <Users className="w-10 h-10 text-blue-600 opacity-80" />
           </div>
         </div>
 
-        {/* Filtros Básicos (sempre visíveis) */}
-        <div className="flex flex-col md:flex-row gap-4 mb-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Buscar por nome, email ou telefone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Todos os Status</option>
-              <option value="novo">Novo</option>
-              <option value="em_qualificacao">Em Qualificação</option>
-              <option value="convertido">Convertido</option>
-              <option value="perdido">Perdido</option>
-            </select>
-            
-            <select
-              value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Todas as Origens</option>
-              <option value="landing_page">Landing Page</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="manual">Manual</option>
-              <option value="import">Importação</option>
-            </select>
-            
-            <select
-              value={responsibleFilter}
-              onChange={(e) => setResponsibleFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Todos os Responsáveis</option>
-              <option value="unassigned">Sem responsável</option>
-              {companyUsers.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.display_name || user.email}
-                </option>
-              ))}
-            </select>
-            
-            <button
-              onClick={handleSearch}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Filter className="w-4 h-4" />
-              Filtrar
-            </button>
-          </div>
-        </div>
-
-        {/* Filtros Avançados (condicionalmente visíveis) */}
-        {showAdvancedFilters && (
-          <div className="border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Filtros Específicos</h4>
-            
-            {/* Linha 1: Filtros específicos por campo */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome
-                </label>
-                <input
-                  type="text"
-                  placeholder="Buscar por nome específico..."
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Telefone
-                </label>
-                <input
-                  type="text"
-                  placeholder="Buscar por telefone..."
-                  value={phoneFilter}
-                  onChange={(e) => setPhoneFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="text"
-                  placeholder="Buscar por email..."
-                  value={emailFilter}
-                  onChange={(e) => setEmailFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Linha 2: Filtros de período */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Período
-                </label>
+        {/* Card: Entradas de Leads */}
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium text-gray-600">Entradas de Leads</p>
+                {/* Seletor de período integrado ao card */}
                 <select
                   value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => {
+                    setDateFilter(e.target.value);
+                    if (e.target.value !== 'personalizado') {
+                      setStartDate('');
+                      setEndDate('');
+                    }
+                  }}
+                  className="text-xs px-2 py-1 border border-gray-200 rounded-md text-gray-600 bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">Qualquer período</option>
+                  <option value="all">Todo o histórico</option>
                   <option value="hoje">Hoje</option>
                   <option value="ontem">Ontem</option>
                   <option value="7dias">Últimos 7 dias</option>
                   <option value="30dias">Últimos 30 dias</option>
-                  <option value="personalizado">Período personalizado</option>
+                  <option value="estemes">Este mês</option>
+                  <option value="mesanterior">Mês anterior</option>
+                  <option value="personalizado">Personalizado</option>
                 </select>
               </div>
-              
+
+              {/* Inputs de data para período personalizado */}
               {dateFilter === 'personalizado' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Data Inicial
-                    </label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Data Final
-                    </label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-400 text-xs">→</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={loadData}
+                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Aplicar
+                  </button>
+                </div>
               )}
-              
-              <div className="flex items-end">
-                <button
-                  onClick={applyAdvancedFilters}
-                  className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Search className="w-4 h-4 inline mr-2" />
-                  Aplicar Filtros
-                </button>
-              </div>
+
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                {stats ? stats.totalEntries : '—'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {getPeriodLabel(dateFilter)} · Inclui novos leads e reentradas
+              </p>
             </div>
+            <ArrowDownUp className="w-10 h-10 text-green-600 opacity-80 flex-shrink-0 ml-4" />
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* Notificações de Duplicatas */}
+      <DuplicateNotifications onMergeRequest={handleMergeRequest} />
+
+      {/* Filtros */}
+      <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+          <h3 className="text-lg font-medium text-gray-900">Filtros de Pesquisa</h3>
+          <button
+            onClick={clearAllFilters}
+            className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm transition-colors"
+          >
+            Limpar Filtros
+          </button>
+        </div>
+
+        {/* Busca geral */}
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Buscar por nome, email ou telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Status · Origem · Responsável · Filtrar */}
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todos os Status</option>
+            <option value="novo">Novo</option>
+            <option value="em_qualificacao">Em Qualificação</option>
+            <option value="convertido">Convertido</option>
+            <option value="perdido">Perdido</option>
+          </select>
+
+          <select
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todas as Origens</option>
+            <option value="landing_page">Landing Page</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="manual">Manual</option>
+            <option value="import">Importação</option>
+            <option value="webhook_ultra_simples">Webhook</option>
+          </select>
+
+          <select
+            value={responsibleFilter}
+            onChange={(e) => setResponsibleFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">Todos os Responsáveis</option>
+            <option value="unassigned">Sem responsável</option>
+            {companyUsers.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.display_name || user.email}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleSearch}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Filter className="w-4 h-4" />
+            Filtrar
+          </button>
+        </div>
       </div>
 
       {/* Leads Table */}
@@ -783,9 +660,6 @@ export const Leads: React.FC = () => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tipo de Registro
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Origem
@@ -840,11 +714,6 @@ export const Leads: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
                       {lead.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRecordTypeColor(lead.record_type || 'Lead')}`}>
-                      {lead.record_type || 'Lead'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
