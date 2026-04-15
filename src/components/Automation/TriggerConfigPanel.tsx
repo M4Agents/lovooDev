@@ -13,6 +13,7 @@ import { useSalesFunnels } from '../../hooks/useSalesFunnels'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { supabase } from '../../lib/supabase'
 import type { TriggerType, ComparisonType, SessionControl, LostReason } from '../../types/automation'
+import { LEAD_SOURCE_OPTIONS, LEAD_SOURCE_ANY } from './leadSourceOptions'
 
 interface TriggerConfigPanelProps {
   selectedNode: Node | null
@@ -852,15 +853,13 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
                   Origem do Lead
                 </label>
                 <select
-                  value={config.source || 'any'}
+                  value={config.source || LEAD_SOURCE_ANY}
                   onChange={(e) => setConfig({ ...config, source: e.target.value })}
                   className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                 >
-                  <option value="any">Qualquer origem</option>
-                  <option value="manual">Criado manualmente</option>
-                  <option value="import">Importação em massa</option>
-                  <option value="whatsapp">Via WhatsApp</option>
-                  <option value="api">Via API / Webhook</option>
+                  {LEAD_SOURCE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   Filtre por como o lead foi criado. "Qualquer origem" dispara em todos os casos.

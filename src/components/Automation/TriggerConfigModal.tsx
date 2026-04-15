@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { useFunnels } from '../../hooks/useFunnels'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
+import { LEAD_SOURCE_OPTIONS, LEAD_SOURCE_ANY } from './leadSourceOptions'
 
 interface TriggerConfigModalProps {
   isOpen: boolean
@@ -618,16 +619,17 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 Origem do lead
               </label>
               <select
-                value={config.source || ''}
+                value={config.source || LEAD_SOURCE_ANY}
                 onChange={(e) => setConfig({ ...config, source: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">Qualquer origem</option>
-                <option value="manual">Manual</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="import">Importação</option>
-                <option value="form">Formulário</option>
+                {LEAD_SOURCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Filtre por como o lead foi criado. "Qualquer origem" dispara em todos os casos.
+              </p>
             </div>
           </div>
         )

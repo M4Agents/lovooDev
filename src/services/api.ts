@@ -878,7 +878,7 @@ export const api = {
           body: JSON.stringify({
             event_type: 'lead.created',
             company_id: lead.company_id,
-            data: { lead_id: lead.id },
+            data: { lead_id: lead.id, source: 'manual' },
           }),
         }).catch(err => console.error('[api.createLead] automation trigger failed:', err))
       }).catch(() => { /* sem sessão — ignora silenciosamente */ })
