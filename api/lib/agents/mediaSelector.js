@@ -44,7 +44,10 @@ export async function mediaSelector(svc, params) {
   } = params
 
   const limit = Math.max(0, Math.min(Number(rawLimit) || 0, 100))
-  if (!svc || !companyId || !itemId || limit === 0) return []
+  if (!svc || !companyId || !itemId || limit === 0) {
+    console.log('[MEDIA:early-exit]', { has_svc: !!svc, company_id: companyId, item_id: itemId, limit })
+    return []
+  }
 
   const usageRole = usageRoleForIntent(intent)
   if (!usageRole) return []

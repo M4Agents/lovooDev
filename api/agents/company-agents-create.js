@@ -25,6 +25,10 @@ import { createClient } from '@supabase/supabase-js';
 import { validatePromptConfig } from '../lib/agents/promptConfigValidator.js';
 import { assemblePrompt }        from '../lib/agents/promptAssembler.js';
 import { VALID_TOOL_NAMES }      from '../lib/agents/validTools.js';
+import {
+  validatePromptConfig as validateFlatConfig,
+  buildPromptFromConfig,
+} from '../lib/agents/promptTemplate.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -147,19 +151,41 @@ export default async function handler(req, res) {
   let finalPromptConfig = null;
 
   if (hasPromptConfig) {
-    // Modo structured: backend valida e monta o prompt
-    const validation = validatePromptConfig(prompt_config);
-    if (!validation.ok) {
-      return res.status(400).json({ success: false, ...validation.payload });
+    // Detecta formato: plano (identity string, sem version) vs. estruturado (version === 1)
+    const isFlatFormat = typeof prompt_config.identity === 'string' && prompt_config.version === undefined;
+
+    if (isFlatFormat) {
+      // Formato plano — valida com promptTemplate.js e gera snapshot sem companyData
+      // (companyData é injetado dinamicamente no runtime pelo agentExecutor)
+      const flatValidation = validateFlatConfig(prompt_config);
+      if (!flatValidation.valid) {
+        return res.status(422).json({
+          success: false,
+          error:   'invalid_prompt_config',
+          details: flatValidation.errors,
+        });
+      }
+
+      // Snapshot do prompt sem companyData — será sobrescrito no runtime
+      finalPrompt       = buildPromptFromConfig(prompt_config, null) ?? '';
+      finalPromptConfig = prompt_config;
+
+    } else {
+      // Formato estruturado (sections + version=1) — validação existente
+      const validation = validatePromptConfig(prompt_config);
+      if (!validation.ok) {
+        return res.status(400).json({ success: false, ...validation.payload });
+      }
+
+      const assembly = assemblePrompt(prompt_config);
+      if (!assembly.ok) {
+        return res.status(400).json({ success: false, ...assembly.payload });
+      }
+
+      finalPrompt       = assembly.result.prompt;
+      finalPromptConfig = prompt_config;
     }
 
-    const assembly = assemblePrompt(prompt_config);
-    if (!assembly.ok) {
-      return res.status(400).json({ success: false, ...assembly.payload });
-    }
-
-    finalPrompt       = assembly.result.prompt;
-    finalPromptConfig = prompt_config;
   } else {
     // Modo legacy: salvar prompt diretamente
     finalPrompt = prompt.trim();

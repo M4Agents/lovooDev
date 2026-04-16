@@ -1,0 +1,107 @@
+/**
+ * promptBuilderApi.ts
+ *
+ * Serviço de comunicação com os endpoints do Prompt Builder e do Agente de Suporte.
+ */
+
+import { supabase } from '../lib/supabase'
+
+// ── Tipos ──────────────────────────────────────────────────────────────────────
+
+export interface FlatPromptConfig {
+  identity:             string
+  objective:            string
+  communication_style?: string
+  commercial_rules?:    string
+  custom_notes?:        string
+}
+
+export interface GeneratePromptPayload {
+  company_id:   string
+  userAnswers?: {
+    objective?:            string
+    communication_style?:  string
+    commercial_rules?:     string
+    custom_notes?:         string
+    language?:             string
+  }
+}
+
+export interface GeneratePromptResult {
+  prompt_config: FlatPromptConfig
+  meta?: {
+    company_name:  string | null
+    catalog_count: number
+  }
+}
+
+export interface ChatMessage {
+  role:    'user' | 'assistant'
+  content: string
+}
+
+// ── Helper ─────────────────────────────────────────────────────────────────────
+
+async function getAuthHeader(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Sessão inválida')
+  return `Bearer ${session.access_token}`
+}
+
+// ── Assembla o prompt a partir dos campos planos (client-side) ─────────────────
+
+export function assemblePromptFromConfig(config: FlatPromptConfig): string {
+  const parts: string[] = []
+
+  parts.push(`## Identidade\n\n${config.identity}`)
+  parts.push(`## Objetivo\n\n${config.objective}`)
+
+  if (config.communication_style?.trim()) {
+    parts.push(`## Estilo de comunicação\n\n${config.communication_style}`)
+  }
+  if (config.commercial_rules?.trim()) {
+    parts.push(`## Regras comerciais\n\n${config.commercial_rules}`)
+  }
+  if (config.custom_notes?.trim()) {
+    parts.push(`## Contexto adicional\n\n${config.custom_notes}`)
+  }
+
+  return parts.join('\n\n---\n\n').trim()
+}
+
+// ── API ────────────────────────────────────────────────────────────────────────
+
+export const promptBuilderApi = {
+
+  async generate(payload: GeneratePromptPayload): Promise<GeneratePromptResult> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/prompt-builder/generate', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify(payload),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? `Erro ao gerar configuração (${res.status})`)
+    }
+    return { prompt_config: json.prompt_config as FlatPromptConfig, meta: json.meta }
+  },
+
+  async runSupportAgent(companyId: string, userMessage: string): Promise<string> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/ai/run', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify({
+        use_id:     'system:support_assistant:agent_config',
+        company_id: companyId,
+        userMessage,
+      }),
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? 'Agente de suporte indisponível')
+    }
+    return json.result as string
+  },
+}

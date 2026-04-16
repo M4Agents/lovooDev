@@ -45,6 +45,7 @@
 import { createClient }         from '@supabase/supabase-js';
 import { runAgentWithConfig }   from './runner.js';
 import { evaluateTransition }   from './flowOrchestrator.js';
+import { buildPromptFromConfig } from './promptTemplate.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -132,10 +133,33 @@ export async function executeAgent(output) {
     company_id:      companyId
   });
 
+  // ── Resolver prompt via prompt_config (se disponível) ────────────────────────
+  // Se o agente tem prompt_config JSONB, monta o prompt a partir do template
+  // estruturado + dados live da empresa. Caso contrário, usa agent.prompt raw.
+  // Fallback garantido: buildPromptFromConfig retorna null em caso de falha.
+  let agentForRunner = output.agent;
+
+  if (output.agent.prompt_config) {
+    const builtPrompt = buildPromptFromConfig(
+      output.agent.prompt_config,
+      output.company_data ?? null
+    );
+
+    if (builtPrompt) {
+      agentForRunner = { ...output.agent, prompt: builtPrompt };
+    } else {
+      console.warn('[PROMPT:config-invalid-fallback]', {
+        agent_id:   output.agent.id,
+        company_id: companyId,
+        fallback:   'using agent.prompt raw',
+      });
+    }
+  }
+
   // ── Executar LLM ─────────────────────────────────────────────────────────────
   let runResult;
   try {
-    runResult = await runAgentWithConfig(output.agent, USE_ID, agentRunCtx);
+    runResult = await runAgentWithConfig(agentForRunner, USE_ID, agentRunCtx);
   } catch (runError) {
     console.error('🤖 [EXEC] ❌ Exceção propagada do runner:', runError.message);
     // Log de falha (fire-and-forget)
@@ -291,8 +315,8 @@ function buildExtraContext(output) {
   }
 
   // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'agentExecutor.js:buildExtraContext-start',message:'montando extra_context — item_of_interest e campos AI',hypothesisId:'H-A,H-C',data:{has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0)},timestamp:Date.now()})}).catch(()=>{});
-  console.log('[DBG-cf8832][EXEC:extra-context]', JSON.stringify({has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0)}));
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'agentExecutor.js:buildExtraContext-start',message:'montando extra_context — item_of_interest e campos AI',hypothesisId:'H-A,H-C',data:{has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0),ambiguous_candidates_count:(output.ambiguous_candidates?.length??0)},timestamp:Date.now()})}).catch(()=>{});
+  console.log('[DBG-cf8832][EXEC:extra-context]', JSON.stringify({has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0),ambiguous_candidates_count:(output.ambiguous_candidates?.length??0)}));
   // #endregion
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
@@ -315,24 +339,82 @@ function buildExtraContext(output) {
     sections.push(`Informações do contato:\n${contactLines.join('\n')}`);
   }
 
-  // ── 3. Catálogo: item em foco ou lista compacta ──────────────────────────
+  // ── 3–5. Comportamento exclusivo — hierarquia: COMPARAÇÃO > RECOMENDAÇÃO > FALLBACK
+  //
+  // Apenas UM comportamento é ativado por turno.
+  // A decisão é tomada em cascata: o primeiro ramo que atende aos critérios
+  // é executado e os demais são ignorados.
+  //
+  // Mapa de decisão:
+  //   COMPARAÇÃO   → isComparison + 2 candidatos
+  //   RECOMENDAÇÃO → candidatos ≥ 2 (sem intenção de comparação) + memória
+  //   DESAMBIGUAÇÃO→ candidatos ≥ 2 (sem intenção de comparação) + sem memória
+  //   ITEM EM FOCO → item único identificado
+  //   FALLBACK     → nenhum item + sem candidatos + sem memória
+  //   LISTA COMPACTA→ nenhum item + sem candidatos + com memória (agente guia naturalmente)
 
-  const itemOfInterest = output.item_of_interest ?? null;
+  const itemOfInterest      = output.item_of_interest ?? null;
+  const ambiguousCandidates = output.ambiguous_candidates ?? [];
+  const isComparison        = output.is_comparison === true;
+  const hasMemory           = hasUsableMemory(output.conversation_memory);
 
-  if (itemOfInterest) {
-    // Item identificado — seção detalhada separando público e interno
+  if (isComparison && ambiguousCandidates.length === 2) {
+    // ── COMPARAÇÃO ───────────────────────────────────────────────────────────
+    // Lead indicou intenção de comparar dois itens.
+    // O agente explica cada item, destaca diferenças e conduz à escolha.
+    // Recomendação NÃO é adicionada — comparação é o comportamento exclusivo.
+    sections.push(formatComparisonContext(ambiguousCandidates));
+    console.log('[CTX:behavior]', { mode: 'comparison', candidates: ambiguousCandidates.map(i => i.name) });
+
+  } else if (ambiguousCandidates.length > 1 && hasStrongContext(output.conversation_memory)) {
+    // ── RECOMENDAÇÃO ─────────────────────────────────────────────────────────
+    // Há múltiplos candidatos E contexto FORTE na memória (objetivo/perfil/experiência).
+    // O agente usa o perfil do lead para sugerir o item mais adequado.
+    // Lista de candidatos é exibida como âncora + instrução de recomendação.
+    sections.push(formatAmbiguousCandidates(ambiguousCandidates));
+    sections.push(formatRecommendationInstruction(ambiguousCandidates));
+    console.log('[CTX:behavior]', {
+      mode:        'recommendation',
+      candidates:  ambiguousCandidates.map(i => i.name),
+      has_summary: Boolean(output.conversation_memory?.summary),
+      facts_count: Object.keys(output.conversation_memory?.facts ?? {}).length,
+    });
+
+  } else if (ambiguousCandidates.length > 1) {
+    // ── DESAMBIGUAÇÃO ────────────────────────────────────────────────────────
+    // Há múltiplos candidatos mas sem memória suficiente para recomendar.
+    // O agente pergunta qual item o lead quer conhecer melhor.
+    sections.push(formatAmbiguousCandidates(ambiguousCandidates));
+    console.log('[CTX:behavior]', { mode: 'disambiguation', candidates: ambiguousCandidates.map(i => i.name) });
+
+  } else if (itemOfInterest) {
+    // ── ITEM EM FOCO ─────────────────────────────────────────────────────────
+    // Um único item foi identificado — exibe seção detalhada com ai_notes.
     sections.push(formatItemInFocus(itemOfInterest));
-  } else {
-    // Sem item específico — lista compacta de produtos e serviços
-    const products = output.catalog?.products ?? [];
-    const services = output.catalog?.services ?? [];
+    console.log('[CTX:behavior]', { mode: 'item_focus', item: itemOfInterest.name });
 
-    const compactItems = [...products, ...services].slice(0, MAX_COMPACT_LIST_ITEMS);
-
+  } else if (!hasMemory) {
+    // ── FALLBACK ─────────────────────────────────────────────────────────────
+    // Sem item, sem candidatos e sem memória. O agente não tem base suficiente.
+    // Exibe lista compacta como referência + instrução para fazer 1 pergunta estratégica.
+    const compactItems = [...(output.catalog?.products ?? []), ...(output.catalog?.services ?? [])]
+      .slice(0, MAX_COMPACT_LIST_ITEMS);
     if (compactItems.length > 0) {
-      const lines = compactItems.map(i => formatCatalogItemCompact(i));
-      sections.push(`Produtos e serviços disponíveis:\n${lines.join('\n')}`);
+      sections.push(`Produtos e serviços disponíveis:\n${compactItems.map(i => formatCatalogItemCompact(i)).join('\n')}`);
     }
+    sections.push(formatFallbackInstruction());
+    console.log('[CTX:behavior]', { mode: 'fallback' });
+
+  } else {
+    // ── LISTA COMPACTA (com memória) ─────────────────────────────────────────
+    // Sem item específico, mas com memória disponível.
+    // O agente conduz naturalmente usando o contexto da conversa.
+    const compactItems = [...(output.catalog?.products ?? []), ...(output.catalog?.services ?? [])]
+      .slice(0, MAX_COMPACT_LIST_ITEMS);
+    if (compactItems.length > 0) {
+      sections.push(`Produtos e serviços disponíveis:\n${compactItems.map(i => formatCatalogItemCompact(i)).join('\n')}`);
+    }
+    console.log('[CTX:behavior]', { mode: 'catalog_list_with_memory' });
   }
 
   return sections.join('\n\n');
@@ -742,6 +824,162 @@ function formatPrice(price) {
 function categoryName(item) {
   // Supabase retorna catalog_categories como objeto { name: '...' } ou null
   return item.catalog_categories?.name ?? null;
+}
+
+/**
+ * Formata o bloco de desambiguação quando múltiplos itens têm score similar.
+ * O agente deve perguntar ao lead qual item deseja em vez de assumir.
+ */
+function formatAmbiguousCandidates(candidates) {
+  const names = candidates.map(i => `- ${i.name}`).join('\n');
+  return [
+    `Possíveis itens de interesse:\n${names}`,
+    `[Instrução] Há múltiplos itens que correspondem ao interesse do lead. Pergunte ao lead qual dos itens acima ele deseja saber mais. Não assuma automaticamente.`,
+  ].join('\n\n');
+}
+
+// ── Recomendação baseada em perfil ────────────────────────────────────────────
+
+/**
+ * Retorna true quando a memória tem conteúdo mínimo utilizável:
+ * summary não-vazio OU pelo menos 1 fact registrado.
+ * Usado para distinguir fallback (sem memória) de lista compacta (com memória).
+ */
+function hasUsableMemory(memory) {
+  if (!memory || typeof memory !== 'object' || Array.isArray(memory)) return false;
+  const hasSummary = typeof memory.summary === 'string' && memory.summary.trim().length > 0;
+  const hasFacts   = memory.facts && typeof memory.facts === 'object'
+    && !Array.isArray(memory.facts) && Object.keys(memory.facts).length > 0;
+  return hasSummary || hasFacts;
+}
+
+// Chaves de facts que indicam contexto forte (objetivo, perfil, experiência do lead).
+const STRONG_FACT_KEYS = ['objetivo', 'interesse_principal', 'experiencia'];
+
+/**
+ * Retorna true quando a memória tem contexto FORTE o suficiente para embasar
+ * uma recomendação — não apenas contexto básico de presença.
+ *
+ * Critérios:
+ *   a) facts contém ao menos uma das chaves fortes (objetivo, interesse_principal,
+ *      experiencia) com valor não-vazio, OU
+ *   b) summary tem ≥40 chars — indica intenção clara registrada pelo LLM
+ *      (nome ou interação inicial geram summaries muito curtos)
+ *
+ * Exemplos que NÃO passam:
+ *   - facts: { nome: "Márcio" }          → nenhuma chave forte
+ *   - summary: "Primeira interação"       → < 40 chars
+ *   - memory vazia                        → false
+ *
+ * Exemplos que PASSAM:
+ *   - facts: { objetivo: "renda extra" }  → chave forte presente
+ *   - summary: "Lead quer mudar de área e já tem experiência em elétrica"  → ≥40 chars
+ */
+function hasStrongContext(memory) {
+  if (!memory || typeof memory !== 'object' || Array.isArray(memory)) return false;
+
+  const facts = memory.facts;
+  if (facts && typeof facts === 'object' && !Array.isArray(facts)) {
+    const hasStrongFact = STRONG_FACT_KEYS.some(
+      key => typeof facts[key] === 'string' && facts[key].trim().length > 0
+    );
+    if (hasStrongFact) return true;
+  }
+
+  // Summary com conteúdo suficiente → intenção clara registrada
+  if (typeof memory.summary === 'string' && memory.summary.trim().length >= 40) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Instrução de qualificação injetada quando não há contexto suficiente
+ * para avançar: sem item identificado, sem candidatos e sem memória.
+ * Orienta o agente a fazer UMA pergunta estratégica para coletar dados
+ * que permitam comparação ou recomendação nos próximos turnos.
+ */
+function formatFallbackInstruction() {
+  return [
+    `[Instrução de Qualificação]\n` +
+    `Não há informações suficientes sobre o objetivo do lead para avançar com segurança.`,
+
+    `Em vez de responder genericamente:\n` +
+    `- NÃO invente respostas\n` +
+    `- NÃO faça recomendações sem base\n` +
+    `- NÃO force decisão`,
+
+    `Faça UMA pergunta estratégica para entender melhor o lead. A pergunta deve buscar identificar:\n` +
+    `- objetivo principal\n` +
+    `- nível de experiência na área\n` +
+    `- motivação ou interesse específico`,
+
+    `Regras:\n` +
+    `- apenas 1 pergunta por vez\n` +
+    `- pergunta simples e direta\n` +
+    `- linguagem natural (estilo WhatsApp)\n` +
+    `- evitar perguntas genéricas como "como posso ajudar?"\n` +
+    `- não repetir pergunta já feita nesta conversa (verificar histórico acima)\n` +
+    `- não mencionar que está coletando informações`,
+  ].join('\n\n');
+}
+
+/**
+ * Instrução dinâmica de recomendação injetada quando:
+ *   - há 2 ou mais candidatos (comparação ou ambiguidade)
+ *   - a memória tem contexto suficiente (summary ou facts)
+ *
+ * A recomendação é baseada no perfil do lead já presente em [MEMÓRIA].
+ * Vem após o bloco de catálogo — complementa, não substitui, comparação/ambiguidade.
+ */
+function formatRecommendationInstruction(candidates) {
+  const names = candidates.map(i => `- ${i.name}`).join('\n');
+
+  return [
+    `[Instrução de Recomendação]\nCom base no perfil e objetivos do lead já registrados em [MEMÓRIA], faça uma recomendação do item mais adequado entre:\n${names}`,
+
+    `Regras:\n` +
+    `- NÃO inventar informações — use apenas o que estiver na conversa ou na memória\n` +
+    `- NÃO assumir com certeza absoluta — usar linguagem sugerida ("parece que", "faz mais sentido")\n` +
+    `- Justificar brevemente o motivo da recomendação\n` +
+    `- Conectar a recomendação ao objetivo já declarado pelo lead\n` +
+    `- Manter tom consultivo, nunca agressivo`,
+
+    `Estrutura da resposta:\n` +
+    `1. Retomar brevemente o objetivo do lead (com base na memória)\n` +
+    `2. Indicar o item mais adequado\n` +
+    `3. Explicar o porquê (1–2 frases)\n` +
+    `4. Finalizar com pergunta direcionada`,
+  ].join('\n\n');
+}
+
+/**
+ * Formata o bloco de comparação quando o lead está comparando dois itens.
+ * Inclui dados básicos de cada item e instrução para conduzir a escolha.
+ */
+function formatComparisonContext(candidates) {
+  const itemBlocks = candidates.map(item => {
+    const lines = [`• ${item.name}`];
+
+    if (item.description) {
+      lines.push(`  ${truncate(item.description, MAX_DESCRIPTION_CHARS)}`);
+    }
+
+    if (item.ai_notes) {
+      lines.push(`  [Orientação] ${truncate(item.ai_notes, MAX_AI_NOTES_CHARS)}`);
+    }
+
+    const availLabel = item.availability_status === 'available' ? null : item.availability_status;
+    if (availLabel) lines.push(`  Disponibilidade: ${availLabel}`);
+
+    return lines.join('\n');
+  });
+
+  return [
+    `O lead está comparando os seguintes itens:\n\n${itemBlocks.join('\n\n')}`,
+    `[Instrução] Responda comparando de forma simples:\n- o que cada um é\n- principais diferenças\n- para quem cada um é mais indicado\n\nFinalize ajudando o lead a escolher, com uma pergunta direcionada.`,
+  ].join('\n\n');
 }
 
 /**

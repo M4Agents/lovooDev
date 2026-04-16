@@ -25,6 +25,11 @@ export const AGENT_USE_META: Record<string, AgentUseMeta> = {
     fallback_mode:    'static',
     risk_level:       'high',
   },
+  'system:support_assistant:agent_config': {
+    requires_context: false,
+    fallback_mode:    'static',
+    risk_level:       'medium',
+  },
   // Agente conversacional WhatsApp — resolvido via company_agent_assignments.
   // Sem fallback estático: se OpenAI falhar, nenhuma mensagem é enviada.
   'chat:conversational_agent:whatsapp': {
@@ -55,6 +60,8 @@ export const VALID_USE_IDS = new Set<string>([
   'services:field_writer:unavailable_behavior',
   'agents:context_builder:instructions',
   'system:support_assistant:general_help',
+  // Agente de suporte ao usuário na tela de configuração de agentes
+  'system:support_assistant:agent_config',
   // Agente conversacional — usado por runAgentWithConfig (bypassa resolver)
   'chat:conversational_agent:whatsapp',
 ])

@@ -1,5 +1,9 @@
 import { supabase } from '../lib/supabase'
 import type { PromptConfig } from '../../api/lib/agents/variablesCatalog'
+import type { FlatPromptConfig } from './promptBuilderApi'
+
+// Union dos dois formatos de prompt_config aceitos pelo backend
+export type AnyPromptConfig = PromptConfig | FlatPromptConfig
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -12,7 +16,7 @@ export interface CompanyAgent {
   name:           string
   description:    string | null
   prompt:         string
-  prompt_config:  PromptConfig | null
+  prompt_config:  AnyPromptConfig | null
   prompt_version: number
   model:          string
   knowledge_mode: AgentKnowledgeMode
@@ -27,9 +31,9 @@ export interface CreateCompanyAgentPayload {
   company_id:     string
   name:           string
   description?:   string
-  // modo legacy: enviar prompt; modo structured: enviar prompt_config (nunca ambos)
+  // modo legacy: enviar prompt; modo builder: enviar prompt_config (nunca ambos)
   prompt?:        string
-  prompt_config?: PromptConfig
+  prompt_config?: AnyPromptConfig
   model?:         string
   knowledge_mode?: AgentKnowledgeMode
   is_active?:     boolean
@@ -42,9 +46,9 @@ export interface UpdateCompanyAgentPayload {
   agent_id:        string
   name?:           string
   description?:    string
-  // modo legacy: enviar prompt; modo structured: enviar prompt_config + prompt_version (nunca ambos)
+  // modo legacy: enviar prompt; modo builder: enviar prompt_config + prompt_version (nunca ambos)
   prompt?:         string
-  prompt_config?:  PromptConfig
+  prompt_config?:  AnyPromptConfig
   prompt_version?: number
   model?:          string
   knowledge_mode?: AgentKnowledgeMode

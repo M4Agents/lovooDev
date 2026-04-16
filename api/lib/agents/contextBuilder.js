@@ -37,12 +37,37 @@ import {
   buildAllVariables,
   applyPolicyVariables,
 } from '../utils/policyVariables.js';
-import { matchCatalogItem } from './catalogMatcher.js';
+import { matchCatalogItem, findComparisonItems } from './catalogMatcher.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const MESSAGES_LIMIT   = 20;
 const MAX_CATALOG_ITEMS = 30;
+
+// ── Detecção de intenção de comparação ────────────────────────────────────────
+
+// Padrões normalizados (sem acentos, lowercase) indicadores de comparação.
+const COMPARISON_PATTERNS = [
+  'diferenca', 'diferente', 'diferenca entre',
+  'qual melhor', 'qual e melhor', 'qual seria melhor',
+  ' ou ', ' vs ', 'versus',
+  'vale mais a pena', 'mais indicado',
+  'qual devo', 'qual escolher', 'entre os dois', 'entre as duas',
+  'comparar', 'comparacao',
+];
+
+/**
+ * Retorna true quando a mensagem indica intenção de comparação entre itens.
+ * Opera sobre a mensagem já normalizada (lowercase + sem acentos).
+ */
+function hasComparisonIntent(message) {
+  if (!message) return false;
+  const normalized = message
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return COMPARISON_PATTERNS.some(p => normalized.includes(p));
+}
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 
@@ -187,16 +212,94 @@ export async function buildContext(orchestratorContext) {
   // ── Identificar item de interesse (catalog matcher) ───────────────────────
   // Matching feito sobre o catálogo já filtrado (preços respeitam policy).
   // Não acessa banco — usa apenas o catálogo já carregado.
+  //
+  // Prioridade de detecção:
+  //   1. Intenção de comparação (mensagem atual com padrões "ou/vs/diferença"):
+  //      a. Matcher padrão retornou exatamente 2 candidatos → comparação direta
+  //      b. Matcher padrão sem resultado → findComparisonItems (relaxado, ≥1 token)
+  //         e retornou exatamente 2 itens → comparação
+  //   2. Ambiguidade padrão (>1 candidato sem intenção de comparação)
+  //   3. Item único identificado pelo matcher padrão
+  //   4. Fallback multi-mensagem (últimas 5 inbound — só se nenhuma das anteriores)
 
   const userMessage = orchestratorContext.event.message_text ?? '';
-  const itemOfInterest = matchCatalogItem(userMessage, catalog);
 
-  if (itemOfInterest) {
-    console.log('🤖 [CTX] 🎯 Item de interesse identificado:', {
-      name:   itemOfInterest.name,
-      status: itemOfInterest.availability_status,
-      company_id: companyId,
-    });
+  // Etapa 1: matcher padrão na mensagem atual (exato → token → fuzzy)
+  const { bestMatch: currentMatch, topCandidates: currentCandidates, isAmbiguous: currentAmbiguous } =
+    matchCatalogItem(userMessage, catalog);
+
+  let itemOfInterest      = null;
+  let ambiguousCandidates = [];
+  let isComparison        = false;
+
+  const comparisonIntent = hasComparisonIntent(userMessage);
+
+  if (comparisonIntent) {
+    // Verificar se o matcher padrão já entregou exatamente 2 candidatos
+    if (currentAmbiguous && currentCandidates.length === 2) {
+      isComparison        = true;
+      ambiguousCandidates = currentCandidates;
+      console.log('[CTX:comparison]', {
+        source:     'standard_match',
+        candidates: currentCandidates.map(i => i.name),
+        company_id: companyId,
+      });
+    } else if (!currentMatch && !currentAmbiguous) {
+      // Matcher padrão não encontrou nada — tentar matcher relaxado
+      const comparisonItems = findComparisonItems(userMessage, catalog);
+      if (comparisonItems.length === 2) {
+        isComparison        = true;
+        ambiguousCandidates = comparisonItems;
+        console.log('[CTX:comparison]', {
+          source:     'relaxed_match',
+          candidates: comparisonItems.map(i => i.name),
+          company_id: companyId,
+        });
+      }
+    }
+    // Se não encontrou 2 itens para comparar, cai no fluxo normal abaixo
+  }
+
+  if (!isComparison) {
+    if (currentAmbiguous) {
+      // Múltiplos itens com score similar — agente deve perguntar ao lead
+      ambiguousCandidates = currentCandidates;
+      console.log('[CTX:ambiguous]', {
+        candidates:  currentCandidates.map(i => i.name),
+        company_id:  companyId,
+      });
+    } else if (currentMatch) {
+      itemOfInterest = currentMatch;
+      console.log('🤖 [CTX] 🎯 Item de interesse identificado (mensagem atual):', {
+        name:       itemOfInterest.name,
+        status:     itemOfInterest.availability_status,
+        company_id: companyId,
+      });
+    } else {
+      // Fallback multi-mensagem
+      // Só ativa quando a mensagem atual não produz match E não há ambiguidade.
+      // Itera as últimas 5 mensagens inbound da mais recente para a mais antiga.
+      const inboundHistory = recentMessages
+        .filter(m => m.direction === 'inbound')
+        .slice(-5)
+        .reverse();
+
+      for (const msg of inboundHistory) {
+        const { bestMatch: fallbackMatch, isAmbiguous: fallbackAmbiguous } =
+          matchCatalogItem(msg.content, catalog);
+
+        // Pula mensagens anteriores que também eram ambíguas
+        if (fallbackAmbiguous || !fallbackMatch) continue;
+
+        itemOfInterest = fallbackMatch;
+        console.log('[CTX:item-fallback]', {
+          source:     'previous_message',
+          item:       fallbackMatch.name,
+          company_id: companyId,
+        });
+        break;
+      }
+    }
   }
 
   // #region agent log
@@ -234,6 +337,7 @@ export async function buildContext(orchestratorContext) {
     agent: {
       id:             agent.id,
       prompt:         processedAgentPrompt, // variáveis já substituídas
+      prompt_config:  agent.prompt_config ?? null, // estrutura JSONB para buildPromptFromConfig
       knowledge_mode: agent.knowledge_mode,
       knowledge_base: agent.knowledge_base,
       model:          agent.model,
@@ -255,7 +359,13 @@ export async function buildContext(orchestratorContext) {
 
     catalog,
 
-    item_of_interest: itemOfInterest ?? null,
+    item_of_interest:     itemOfInterest ?? null,
+
+    // Candidatos relevantes para ambiguidade ou comparação.
+    // Quando ambiguous_candidates.length > 0, item_of_interest é null.
+    // is_comparison distingue entre os dois modos de renderização.
+    ambiguous_candidates: ambiguousCandidates,
+    is_comparison:        isComparison,
 
     user_message: userMessage,
 
@@ -272,6 +382,10 @@ export async function buildContext(orchestratorContext) {
     // Escrita exclusivamente pelo agentExecutor (LLM). Nunca por webhooks.
     // Usado pelo agentExecutor para: injetar no prompt e fazer merge pós-resposta.
     conversation_memory: contactMemory,
+
+    // Dados live da empresa executora — usados por buildPromptFromConfig no agentExecutor.
+    // Nunca usados para autorização — apenas para contexto do prompt (Seção B).
+    company_data: childCompany ?? null,
 
     metadata: {
       company_id:    companyId,
@@ -291,6 +405,9 @@ export async function buildContext(orchestratorContext) {
     products_count:      output.catalog.products.length,
     services_count:      output.catalog.services.length,
     item_of_interest:    itemOfInterest?.name ?? null,
+    is_comparison:       isComparison,
+    is_ambiguous:        !isComparison && ambiguousCandidates.length > 0,
+    ambiguous_count:     ambiguousCandidates.length,
     conversation_id:     conversationId,
     company_id:          companyId,
   });
@@ -301,10 +418,12 @@ export async function buildContext(orchestratorContext) {
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
 async function fetchAgentConfig(svc, { agentId, companyId }) {
+  const SELECT_AGENT = 'id, prompt, prompt_config, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config, allowed_tools';
+
   // Tentativa 1: busca filtrando pelo company_id do evento (caminho normal)
   const { data, error } = await svc
     .from('lovoo_agents')
-    .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config, allowed_tools')
+    .select(SELECT_AGENT)
     .eq('id', agentId)
     .eq('company_id', companyId)
     .eq('is_active', true)
@@ -318,7 +437,7 @@ async function fetchAgentConfig(svc, { agentId, companyId }) {
   // Nota: service_role bypassa RLS — este fallback é seguro pois não expõe dados ao cliente.
   const { data: fallback, error: fallbackErr } = await svc
     .from('lovoo_agents')
-    .select('id, prompt, knowledge_mode, knowledge_base, knowledge_base_config, model, model_config, allowed_tools')
+    .select(SELECT_AGENT)
     .eq('id', agentId)
     .eq('is_active', true)
     .maybeSingle();
@@ -513,6 +632,7 @@ async function fetchChildCompanyData(svc, companyId) {
       country_code, telefone_principal,
       email_principal, site_principal, ramo_atividade
     `)
+    // ai_profile e descricao_empresa serão adicionados após a migration correspondente
     .eq('id', companyId)
     .maybeSingle();
 

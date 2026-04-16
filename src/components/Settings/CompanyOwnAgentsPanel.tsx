@@ -30,6 +30,7 @@ import { PromptEditor } from '../ui/PromptEditor'
 import { AgentPromptBuilder, assemblePreview, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
+import { PromptBuilderWizard } from './PromptBuilderWizard'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -561,7 +562,10 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
   const [agents, setAgents]                        = useState<CompanyAgent[]>([])
   const [loading, setLoading]                      = useState(true)
   const [error, setError]                          = useState<string | null>(null)
-  const [showForm, setShowForm]                    = useState(false)
+  // 'wizard' = fluxo guiado (padrão para novos agentes)
+  // 'form'   = formulário avançado
+  // null     = nenhum formulário aberto
+  const [createMode, setCreateMode]                = useState<'wizard' | 'form' | null>(null)
   const [customFieldVariables, setCustomFieldVars] = useState<PromptVariable[]>([])
 
   useEffect(() => {
@@ -587,7 +591,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
 
   function handleCreated(agent: CompanyAgent) {
     setAgents(prev => [...prev, agent])
-    setShowForm(false)
+    setCreateMode(null)
   }
 
   function handleUpdated(updated: CompanyAgent) {
@@ -608,9 +612,9 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
           </div>
         </div>
 
-        {!showForm && (
+        {!createMode && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => setCreateMode('wizard')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600
                        text-white rounded-md hover:bg-blue-700 transition-colors"
           >
@@ -620,13 +624,23 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
         )}
       </div>
 
-      {/* Formulário de criação */}
-      {showForm && (
+      {/* Wizard guiado (padrão para novos agentes) */}
+      {createMode === 'wizard' && (
+        <PromptBuilderWizard
+          companyId={companyId}
+          onSaved={handleCreated}
+          onAdvanced={() => setCreateMode('form')}
+          onCancel={() => setCreateMode(null)}
+        />
+      )}
+
+      {/* Formulário avançado (configuração manual) */}
+      {createMode === 'form' && (
         <AgentForm
           companyId={companyId}
           customFieldVariables={customFieldVariables}
           onSaved={handleCreated}
-          onCancel={() => setShowForm(false)}
+          onCancel={() => setCreateMode(null)}
         />
       )}
 
@@ -663,7 +677,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
       )}
 
       {/* Estado vazio */}
-      {!loading && !error && agents.length === 0 && !showForm && (
+      {!loading && !error && agents.length === 0 && !createMode && (
         <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
           <Bot className="w-10 h-10 text-gray-300" />
           <p className="text-sm font-medium text-gray-600">Nenhum agente criado ainda</p>
@@ -671,7 +685,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
             Crie seu primeiro agente conversacional para configurar o atendimento automático pelo WhatsApp.
           </p>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => setCreateMode('wizard')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-blue-300
                        text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
           >
