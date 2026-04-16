@@ -87,6 +87,25 @@ export const promptBuilderApi = {
     return { prompt_config: json.prompt_config as FlatPromptConfig, meta: json.meta }
   },
 
+  async sandboxChat(payload: {
+    company_id:    string
+    messages:      ChatMessage[]
+    prompt_config: FlatPromptConfig
+    agent_name?:   string
+  }): Promise<string> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/ai/sandbox', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify(payload),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? `Erro no sandbox (${res.status})`)
+    }
+    return json.reply as string
+  },
+
   async runSupportAgent(companyId: string, userMessage: string): Promise<string> {
     const auth = await getAuthHeader()
     const res  = await fetch('/api/ai/run', {

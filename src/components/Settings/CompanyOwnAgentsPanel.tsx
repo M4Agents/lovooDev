@@ -30,7 +30,7 @@ import { PromptEditor } from '../ui/PromptEditor'
 import { AgentPromptBuilder, assemblePreview, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
-import { PromptBuilderWizard } from './PromptBuilderWizard'
+import { AgentCreationModal } from './AgentCreationModal'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -654,15 +654,14 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
         )}
       </div>
 
-      {/* Wizard guiado (padrão para novos agentes) */}
-      {createMode === 'wizard' && (
-        <PromptBuilderWizard
-          companyId={companyId}
-          onSaved={handleCreated}
-          onAdvanced={() => setCreateMode('form')}
-          onCancel={() => setCreateMode(null)}
-        />
-      )}
+      {/* Modal premium de criação de agente (modo guiado) */}
+      <AgentCreationModal
+        isOpen={createMode === 'wizard'}
+        onClose={() => setCreateMode(null)}
+        companyId={companyId}
+        onSaved={handleCreated}
+        onAdvanced={() => setCreateMode('form')}
+      />
 
       {/* Formulário avançado (configuração manual) */}
       {createMode === 'form' && (

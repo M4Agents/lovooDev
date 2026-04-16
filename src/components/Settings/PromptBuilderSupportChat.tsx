@@ -1,8 +1,11 @@
 /**
  * PromptBuilderSupportChat
  *
- * Chat lateral simples para o Agente de Suporte durante a criação de agentes.
- * Exibe um botão flutuante que abre um painel de chat.
+ * Chat com o Agente de Suporte durante a criação de agentes.
+ *
+ * Modos de renderização:
+ *   - Padrão (standalone): botão flutuante fixed que abre um painel. Usado no modo inline.
+ *   - Drawer (`asDrawer`): painel completo sem botão, controlado pelo pai. Usado no AgentCreationModal.
  */
 
 import { useRef, useState, useEffect } from 'react'
@@ -11,10 +14,17 @@ import { promptBuilderApi, type ChatMessage } from '../../services/promptBuilder
 
 interface Props {
   companyId: string
+  /**
+   * Quando `true`, renderiza como painel de altura total sem botão flutuante.
+   * O pai controla visibilidade via CSS (transform). Requer `onClose`.
+   */
+  asDrawer?: boolean
+  onClose?:  () => void
 }
 
-export function PromptBuilderSupportChat({ companyId }: Props) {
-  const [open, setOpen]       = useState(false)
+// ── Lógica compartilhada de chat ───────────────────────────────────────────────
+
+function useChatState(companyId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role:    'assistant',
@@ -25,9 +35,11 @@ export function PromptBuilderSupportChat({ companyId }: Props) {
   const [loading, setLoading] = useState(false)
   const endRef                = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, open])
+  function scrollToEnd() {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => { scrollToEnd() }, [messages])
 
   async function handleSend() {
     const text = input.trim()
@@ -58,73 +70,114 @@ export function PromptBuilderSupportChat({ companyId }: Props) {
     }
   }
 
+  return { messages, input, setInput, loading, endRef, handleSend, handleKey }
+}
+
+// ── Painel de mensagens (compartilhado) ───────────────────────────────────────
+
+function ChatPanel({
+  messages, input, setInput, loading, endRef, handleSend, handleKey,
+}: ReturnType<typeof useChatState>) {
+  return (
+    <>
+      {/* Mensagens */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+              msg.role === 'user'
+                ? 'bg-blue-600 text-white rounded-br-sm'
+                : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
+            }`}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-gray-200 rounded-xl rounded-bl-sm px-3 py-2">
+              <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+            </div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-gray-200 px-3 py-2 flex gap-2 bg-white flex-shrink-0">
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          disabled={loading}
+          placeholder="Escreva sua dúvida..."
+          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5
+                     focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+        />
+        <button
+          onClick={() => void handleSend()}
+          disabled={loading || !input.trim()}
+          className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700
+                     disabled:opacity-40 transition-colors"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ── Componente principal ───────────────────────────────────────────────────────
+
+export function PromptBuilderSupportChat({ companyId, asDrawer = false, onClose }: Props) {
+  const chat = useChatState(companyId)
+  // Usado apenas no modo standalone; ignorado no modo drawer
+  const [open, setOpen] = useState(false)
+
+  // ── Modo drawer (controlado pelo AgentCreationModal) ──────────────────────
+  if (asDrawer) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-blue-600 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-white" />
+            <span className="text-sm font-semibold text-white">Assistente de configuração</span>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Fechar assistente"
+            className="text-blue-200 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <ChatPanel {...chat} />
+      </div>
+    )
+  }
+
+  // ── Modo standalone — botão flutuante (usado no wizard inline) ────────────
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {/* Painel do chat */}
+      {/* Painel flutuante */}
       {open && (
-        <div className="w-80 flex flex-col bg-white border border-gray-200 rounded-xl shadow-xl
-                        overflow-hidden" style={{ height: '420px' }}>
+        <div className="w-80 flex flex-col bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
+          style={{ height: '420px' }}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-blue-600">
+          <div className="flex items-center justify-between px-4 py-3 bg-blue-600 flex-shrink-0">
             <div className="flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-white" />
               <span className="text-sm font-semibold text-white">Assistente de configuração</span>
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="text-blue-200 hover:text-white transition-colors"
-            >
+            <button onClick={() => setOpen(false)} className="text-blue-200 hover:text-white transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Mensagens */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-sm'
-                    : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
-                }`}>
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-white border border-gray-200 rounded-xl rounded-bl-sm px-3 py-2">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                </div>
-              </div>
-            )}
-            <div ref={endRef} />
-          </div>
-
-          {/* Input */}
-          <div className="border-t border-gray-200 px-3 py-2 flex gap-2 bg-white">
-            <input
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              disabled={loading}
-              placeholder="Escreva sua dúvida..."
-              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5
-                         focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
-            />
-            <button
-              onClick={() => void handleSend()}
-              disabled={loading || !input.trim()}
-              className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700
-                         disabled:opacity-40 transition-colors"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
+          <ChatPanel {...chat} />
         </div>
       )}
 

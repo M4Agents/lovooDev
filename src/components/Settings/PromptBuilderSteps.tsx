@@ -2,12 +2,17 @@
  * PromptBuilderSteps
  *
  * Sub-componentes das etapas 2, 3 e 4 do PromptBuilderWizard.
- *   StepDetectedData  — Etapa 2: exibe dados detectados automaticamente
- *   StepUserAnswers   — Etapa 3: perguntas de configuração (4 campos opcionais)
- *   StepPreview       — Etapa 4: preview editável por bloco + salvar
+ *   StepDetectedData  — Etapa 2: dados detectados com badges de inteligência
+ *   StepUserAnswers   — Etapa 3: configuração guiada com loading progressivo
+ *   StepPreview       — Etapa 4: layout 2 colunas com preview ao vivo
+ *   PromptLivePreview — Sub-componente do preview ao vivo (direita no Step 4)
  */
 
-import { ArrowLeft, ArrowRight, Building2, CheckCircle, Loader2, Package, Phone, Globe, Sparkles } from 'lucide-react'
+import { useEffect, useDeferredValue, useState } from 'react'
+import {
+  ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
+  Eye, Loader2, Package, Phone, Globe, Sparkles,
+} from 'lucide-react'
 import type { Company } from '../../lib/supabase'
 import type { FlatPromptConfig } from '../../services/promptBuilderApi'
 
@@ -22,6 +27,96 @@ export type UserAnswers = {
   custom_notes:         string
 }
 
+// ── Helper para saudação de prévia ────────────────────────────────────────────
+
+function buildPreviewGreeting(agentName?: string, companyName?: string): string {
+  if (agentName && companyName) return `Oi! 😊 Sou ${agentName}, da ${companyName}. Como posso te ajudar?`
+  if (agentName)                return `Oi! 😊 Sou ${agentName}. Como posso te ajudar?`
+  if (companyName)              return `Oi! 😊 Sou o assistente da ${companyName}. Como posso te ajudar?`
+  return ''
+}
+
+// ── Preview ao vivo — renderiza o config como cartão visual ───────────────────
+
+const PREVIEW_SECTIONS: { field: keyof FlatPromptConfig; icon: string; title: string }[] = [
+  { field: 'identity',            icon: '🤖', title: 'Identidade' },
+  { field: 'objective',           icon: '🎯', title: 'Objetivo' },
+  { field: 'communication_style', icon: '💬', title: 'Comunicação' },
+  { field: 'commercial_rules',    icon: '📋', title: 'Regras' },
+  { field: 'custom_notes',        icon: '📝', title: 'Informações' },
+]
+
+function PromptLivePreview({
+  config, agentName, companyName,
+}: {
+  config:       FlatPromptConfig
+  agentName?:   string
+  companyName?: string
+}) {
+  const sections = PREVIEW_SECTIONS.filter(s => config[s.field]?.trim())
+  const greeting = buildPreviewGreeting(agentName, companyName)
+
+  return (
+    <div className="flex flex-col border border-blue-100 rounded-xl overflow-hidden shadow-sm">
+      {/* Header do card */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center text-sm">
+            🤖
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-white">Como seu agente vai atuar</p>
+            <p className="text-xs text-blue-200">É assim que ele vai se apresentar e trabalhar.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Saudação — prévia do primeiro contato */}
+      {greeting && (
+        <div className="px-4 pt-4 pb-1">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl rounded-bl-sm px-3 py-2.5">
+            <p className="text-sm text-blue-800 italic leading-relaxed">{greeting}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Seções do preview */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-gradient-to-b from-blue-50/40 to-white">
+        {sections.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+            <Eye className="w-6 h-6 text-gray-300" />
+            <p className="text-xs text-gray-400">
+              O preview aparece conforme você preenche os campos ao lado.
+            </p>
+          </div>
+        ) : (
+          sections.map(({ field, icon, title }) => (
+            <div key={field} className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm leading-none">{icon}</span>
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  {title}
+                </span>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed pl-6 whitespace-pre-wrap">
+                {config[field]}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Footer de confiança */}
+      <div className="border-t border-blue-100 px-4 py-2.5 bg-white flex-shrink-0">
+        <p className="text-xs text-gray-400 flex items-center gap-1.5">
+          <Check className="w-3 h-3 text-green-500" />
+          Configuração gerada com os dados da sua empresa
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Etapa 2 — Dados detectados automaticamente ────────────────────────────────
 
 export function StepDetectedData({
@@ -33,10 +128,13 @@ export function StepDetectedData({
   onBack:         () => void
   onContinue:     () => void
 }) {
-  const hasCompany = Boolean(company?.nome_fantasia ?? company?.name)
+  const hasCompany  = Boolean(company?.nome_fantasia ?? company?.name)
+  const hasItems    = !loadingCatalog && catalogItems.length > 0
+  const emptyCatalog = !loadingCatalog && catalogItems.length === 0
 
   return (
     <div className="space-y-4">
+      {/* Banner principal */}
       <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
         <p className="text-sm font-medium text-blue-800">
           Encontramos essas informações automaticamente no seu sistema.
@@ -45,6 +143,25 @@ export function StepDetectedData({
           Elas serão usadas para personalizar seu agente sem que você precise digitar novamente.
         </p>
       </div>
+
+      {/* Badges de inteligência */}
+      {(hasCompany || hasItems) && (
+        <div className="flex flex-wrap gap-2">
+          {hasCompany && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200
+                             text-green-700 text-xs rounded-full font-medium">
+              <Check className="w-3 h-3" /> Empresa identificada
+            </span>
+          )}
+          {hasItems && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200
+                             text-green-700 text-xs rounded-full font-medium">
+              <Check className="w-3 h-3" />
+              {catalogItems.length} {catalogItems.length === 1 ? 'item' : 'itens'} no catálogo
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Dados da empresa */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -99,9 +216,7 @@ export function StepDetectedData({
           <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
             Produtos / Serviços
           </span>
-          {!loadingCatalog && catalogItems.length > 0 && (
-            <CheckCircle className="w-3.5 h-3.5 text-green-500 ml-auto" />
-          )}
+          {hasItems && <CheckCircle className="w-3.5 h-3.5 text-green-500 ml-auto" />}
         </div>
 
         <div className="px-4 py-3">
@@ -110,7 +225,7 @@ export function StepDetectedData({
               <Loader2 className="w-4 h-4 animate-spin" />
               Carregando catálogo...
             </div>
-          ) : catalogItems.length > 0 ? (
+          ) : hasItems ? (
             <>
               <div className="flex flex-wrap gap-1.5">
                 {catalogItems.slice(0, 8).map(item => (
@@ -129,13 +244,22 @@ export function StepDetectedData({
                 Para editar, acesse <span className="font-medium">Configurações &rsaquo; Catálogo</span>
               </p>
             </>
-          ) : (
-            <p className="text-sm text-gray-400 italic">
-              Nenhum produto ou serviço cadastrado ainda.
-            </p>
-          )}
+          ) : emptyCatalog ? (
+            <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
+              <p className="text-sm text-amber-700 font-medium">Nenhum produto ou serviço cadastrado.</p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                Seu agente ainda pode ser criado. Cadastre o catálogo depois em{' '}
+                <span className="font-medium">Configurações &rsaquo; Catálogo</span>.
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {/* Frase de confiança */}
+      <p className="text-sm font-medium text-gray-700 text-center py-1">
+        ✨ Seu agente já pode ser criado com essas informações.
+      </p>
 
       <div className="flex items-center justify-between pt-1">
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
@@ -165,6 +289,13 @@ const COMM_STYLES = [
   { value: 'entusiasmado',  label: 'Entusiasmado e motivacional' },
 ]
 
+const LOADING_MESSAGES = [
+  'Analisando sua empresa...',
+  'Lendo seu catálogo...',
+  'Montando a configuração...',
+  'Quase pronto...',
+]
+
 export function StepUserAnswers({
   answers, setAnswers, onBack, onGenerate, generating, error,
 }: {
@@ -175,6 +306,17 @@ export function StepUserAnswers({
   generating: boolean
   error:      string | null
 }) {
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
+
+  // Cicla pelas mensagens de loading enquanto a geração está em andamento
+  useEffect(() => {
+    if (!generating) { setLoadingMsgIdx(0); return }
+    const id = setInterval(() => {
+      setLoadingMsgIdx(i => Math.min(i + 1, LOADING_MESSAGES.length - 1))
+    }, 1800)
+    return () => clearInterval(id)
+  }, [generating])
+
   function update(field: keyof UserAnswers, value: string) {
     setAnswers({ ...answers, [field]: value })
   }
@@ -193,10 +335,12 @@ export function StepUserAnswers({
         <textarea
           value={answers.objective}
           onChange={e => update('objective', e.target.value)}
+          disabled={generating}
           rows={2}
           placeholder="Ex: Atender leads do WhatsApp, tirar dúvidas sobre nossos cursos e encaminhar interessados para matrícula."
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400"
+                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
+                     disabled:opacity-50 disabled:bg-gray-50"
         />
       </div>
 
@@ -207,8 +351,10 @@ export function StepUserAnswers({
         <select
           value={answers.communication_style}
           onChange={e => update('communication_style', e.target.value)}
+          disabled={generating}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                     focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white
+                     disabled:opacity-50 disabled:bg-gray-50"
         >
           {COMM_STYLES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
@@ -221,10 +367,12 @@ export function StepUserAnswers({
         <textarea
           value={answers.commercial_rules}
           onChange={e => update('commercial_rules', e.target.value)}
+          disabled={generating}
           rows={2}
           placeholder="Ex: Não oferecer desconto sem aprovação. Sempre perguntar o nome antes de enviar proposta."
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400"
+                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
+                     disabled:opacity-50 disabled:bg-gray-50"
         />
       </div>
 
@@ -235,10 +383,12 @@ export function StepUserAnswers({
         <textarea
           value={answers.custom_notes}
           onChange={e => update('custom_notes', e.target.value)}
+          disabled={generating}
           rows={2}
           placeholder="Ex: Atendemos somente na região de SP. Parcelamos em até 12x sem juros no cartão."
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400"
+                     focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
+                     disabled:opacity-50 disabled:bg-gray-50"
         />
       </div>
 
@@ -248,17 +398,24 @@ export function StepUserAnswers({
         </div>
       )}
 
-      {/* Feedback de progresso visível durante a geração */}
+      {/* Loading progressivo */}
       {generating && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3.5">
           <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-blue-800">
-              Analisando sua empresa e montando seu agente...
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-blue-800 transition-all">
+              {LOADING_MESSAGES[loadingMsgIdx]}
             </p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              Isso leva alguns segundos. Por favor, aguarde.
-            </p>
+            <div className="flex gap-1 mt-2">
+              {LOADING_MESSAGES.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 rounded-full transition-all duration-500 ${
+                    i <= loadingMsgIdx ? 'bg-blue-500 flex-1' : 'bg-blue-100 flex-1'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -275,7 +432,7 @@ export function StepUserAnswers({
                      text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors font-medium"
         >
           {generating
-            ? <><Loader2 className="w-4 h-4 animate-spin" /> Aguardando...</>
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando...</>
             : <><Sparkles className="w-4 h-4" /> Gerar configuração do agente</>
           }
         </button>
@@ -284,7 +441,7 @@ export function StepUserAnswers({
   )
 }
 
-// ── Etapa 4 — Preview editável ─────────────────────────────────────────────────
+// ── Etapa 4 — Preview premium com 2 colunas ───────────────────────────────────
 
 const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: number; required?: boolean }[] = [
   { field: 'identity',            label: 'Identidade do agente',  rows: 3, required: true },
@@ -296,32 +453,37 @@ const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: numb
 
 export function StepPreview({
   config, setConfig,
-  catalogCount, companyName,
-  onBack, onSave, saving, error,
+  catalogCount, companyName, agentName,
+  onBack, onSave, onTest, saving, error,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
   catalogCount: number
   companyName:  string
+  agentName:    string
   onBack:       () => void
   onSave:       () => void
+  onTest?:      () => void
   saving:       boolean
   error:        string | null
 }) {
+  // Preview atualiza com prioridade menor para não bloquear a edição
+  const deferredConfig = useDeferredValue(config)
+
   function update(field: keyof FlatPromptConfig, value: string) {
     setConfig({ ...config, [field]: value })
   }
 
-  const canSave = config.identity?.trim().length >= 20 && config.objective?.trim().length >= 20
+  const canSave = (config.identity?.trim().length ?? 0) >= 20 && (config.objective?.trim().length ?? 0) >= 20
 
   return (
     <div className="space-y-4">
-      {/* Resumo do que foi detectado */}
+      {/* Resumo dos dados */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { icon: '🏢', label: 'Empresa', value: companyName || '—' },
-          { icon: '📦', label: 'Catálogo', value: catalogCount > 0 ? `${catalogCount} itens` : 'Sem itens' },
-          { icon: '✅', label: 'Configuração', value: 'Gerada' },
+          { icon: '🏢', label: 'Empresa',       value: companyName || '—' },
+          { icon: '📦', label: 'Catálogo',      value: catalogCount > 0 ? `${catalogCount} itens` : 'Sem itens' },
+          { icon: '✅', label: 'Configuração',  value: 'Gerada' },
         ].map(item => (
           <div key={item.label} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-center">
             <p className="text-base">{item.icon}</p>
@@ -331,6 +493,7 @@ export function StepPreview({
         ))}
       </div>
 
+      {/* Banner de confiança */}
       <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
         <p className="text-sm font-semibold text-green-800">
           Seu agente já está pronto para atender seus clientes. 🎉
@@ -340,27 +503,42 @@ export function StepPreview({
         </p>
       </div>
 
-      {/* Blocos editáveis */}
-      <div className="space-y-3">
-        {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
-          <div key={field}>
-            <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-              {label}
-              {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
-            </label>
-            <textarea
-              value={config[field] ?? ''}
-              onChange={e => update(field, e.target.value)}
-              rows={rows}
-              className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
-                          focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                required && !config[field]?.trim()
-                  ? 'border-red-200 bg-red-50 focus:ring-red-300'
-                  : 'border-gray-200'
-              }`}
-            />
-          </div>
-        ))}
+      {/* Layout 2 colunas — edição à esquerda, preview à direita */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+        {/* Esquerda: blocos editáveis */}
+        <div className="space-y-3">
+          {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
+            <div key={field}>
+              <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                {label}
+                {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
+              </label>
+              <textarea
+                value={config[field] ?? ''}
+                onChange={e => update(field, e.target.value)}
+                disabled={saving}
+                rows={rows}
+                className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
+                            focus:outline-none focus:ring-2 focus:ring-blue-400
+                            disabled:opacity-50 disabled:bg-gray-50 ${
+                  required && !config[field]?.trim()
+                    ? 'border-red-200 bg-red-50 focus:ring-red-300'
+                    : 'border-gray-200'
+                }`}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Direita: preview ao vivo */}
+        <div className="lg:sticky lg:top-4">
+          <PromptLivePreview
+            config={deferredConfig}
+            agentName={agentName}
+            companyName={companyName}
+          />
+        </div>
       </div>
 
       {error && (
@@ -369,22 +547,35 @@ export function StepPreview({
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
         <button onClick={onBack} disabled={saving}
           className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 disabled:opacity-40">
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
-        <button
-          onClick={onSave}
-          disabled={saving || !canSave}
-          className="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white
-                     text-sm rounded-lg hover:bg-green-700 disabled:opacity-40 transition-colors font-medium"
-        >
-          {saving
-            ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
-            : '✓ Salvar agente'
-          }
-        </button>
+        <div className="flex items-center gap-2">
+          {onTest && (
+            <button
+              onClick={onTest}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-50 text-violet-700
+                         text-sm rounded-lg hover:bg-violet-100 disabled:opacity-40
+                         transition-colors font-medium border border-violet-200"
+            >
+              🧪 Testar agente
+            </button>
+          )}
+          <button
+            onClick={onSave}
+            disabled={saving || !canSave}
+            className="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white
+                       text-sm rounded-lg hover:bg-green-700 disabled:opacity-40 transition-colors font-medium"
+          >
+            {saving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+              : <><Check className="w-4 h-4" /> Salvar agente</>
+            }
+          </button>
+        </div>
       </div>
     </div>
   )
