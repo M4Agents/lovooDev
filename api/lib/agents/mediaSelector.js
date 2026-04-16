@@ -161,5 +161,11 @@ export async function mediaSelector(svc, params) {
       type: p.media_type === 'video' ? 'video' : 'image',
     })
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'mediaSelector.js:result',message:'resultado da seleção de mídias',hypothesisId:'H-E',data:{company_id:companyId,item_id:itemId,item_type:itemType,intent,usage_role:usageRole,primary_rows_found:primaryRows.length,picked_before_url:picked.length,out_with_url:out.length,limit},timestamp:Date.now()})}).catch(()=>{});
+  console.log('[DBG-cf8832][MEDIA:result]', JSON.stringify({company_id:companyId,item_id:itemId,item_type:itemType,intent,usage_role:usageRole,primary_rows_found:primaryRows.length,picked_before_url:picked.length,out_with_url:out.length,limit}));
+  // #endregion
+
   return out
 }
