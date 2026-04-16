@@ -108,6 +108,14 @@ export async function buildContext(orchestratorContext) {
     console.error('🤖 [CTX] ⚠️  Falha ao buscar mensagens (continuando):', messagesResult.reason?.message);
   }
 
+  // Limite dinâmico: reduz para 10 quando memória com summary existe.
+  // Fetched sempre com MESSAGES_LIMIT=20; o slice é feito aqui pós-fase-1
+  // sem custo extra de DB. Economia: ~200-400 tokens em conversas com memória.
+  const contactMemory = contactResult.status === 'fulfilled' ? (contactResult.value?.memory ?? null) : null;
+  if (contactMemory?.summary) {
+    recentMessages = recentMessages.slice(0, 10);
+  }
+
   // ── Contato / Lead ────────────────────────────────────────────────────────
 
   const emptyContact = { lead_id: null, name: null, phone: null };
@@ -255,6 +263,11 @@ export async function buildContext(orchestratorContext) {
     // Phase 3: oportunidade travada pelo flowOrchestrator para esta conversa
     locked_opportunity_id: orchestratorContext.locked_opportunity_id ?? null,
 
+    // Memória conversacional — lida de chat_conversations.memory.
+    // Escrita exclusivamente pelo agentExecutor (LLM). Nunca por webhooks.
+    // Usado pelo agentExecutor para: injetar no prompt e fazer merge pós-resposta.
+    conversation_memory: contactMemory,
+
     metadata: {
       company_id:    companyId,
       assignment_id: orchestratorContext.assignment_id,
@@ -349,16 +362,16 @@ async function fetchRecentMessages(svc, { conversationId, companyId }) {
  * Retorna custom_values para buildCustomFieldVariables.
  */
 async function fetchContact(svc, { conversationId, companyId }) {
-  // Passo 1: buscar conversa para obter lead_id e contato
+  // Passo 1: buscar conversa para obter lead_id, contato e memória conversacional
   const { data: conv, error: convError } = await svc
     .from('chat_conversations')
-    .select('lead_id, contact_phone, contact_name')
+    .select('lead_id, contact_phone, contact_name, memory')
     .eq('id', conversationId)
     .eq('company_id', companyId)
     .maybeSingle();
 
   if (convError) throw new Error(`fetchContact (conv): ${convError.message}`);
-  if (!conv) return { lead_id: null, name: null, phone: null, custom_values: [] };
+  if (!conv) return { lead_id: null, name: null, phone: null, custom_values: [], memory: null };
 
   if (!conv.lead_id) {
     return {
@@ -366,6 +379,7 @@ async function fetchContact(svc, { conversationId, companyId }) {
       name:    conv.contact_name ?? null,
       phone:   conv.contact_phone ?? null,
       custom_values: [],
+      memory:  conv.memory ?? null,
     };
   }
 
@@ -391,6 +405,7 @@ async function fetchContact(svc, { conversationId, companyId }) {
       name:          conv.contact_name ?? null,
       phone:         conv.contact_phone ?? null,
       custom_values: [],
+      memory:        conv.memory ?? null,
     };
   }
 
@@ -400,6 +415,7 @@ async function fetchContact(svc, { conversationId, companyId }) {
       name:          conv.contact_name ?? null,
       phone:         conv.contact_phone ?? null,
       custom_values: [],
+      memory:        conv.memory ?? null,
     };
   }
 
@@ -421,6 +437,8 @@ async function fetchContact(svc, { conversationId, companyId }) {
     origin:       lead.origin       ?? null,
     // Campos personalizados para buildCustomFieldVariables
     custom_values: lead.lead_custom_values ?? [],
+    // Memória conversacional — lida da conversa, nunca do lead
+    memory:       conv.memory ?? null,
   };
 }
 

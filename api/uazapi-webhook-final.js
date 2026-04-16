@@ -619,46 +619,208 @@ async function processMessage(payload) {
     const savedMessageId = webhookResult.message_id;
 
     // =====================================================
-    // 🔄 COMANDO DE RESET DE MEMÓRIA — /resetar
-    // Apaga o histórico de chat_messages da conversa e
-    // envia confirmação ao lead. Interrompe todo o pipeline
-    // downstream (agente, automações, lead creation).
+    // IMPORTANTE: Memória conversacional NÃO pode ser escrita por webhooks.
+    // Apenas o agentExecutor (via LLM) pode atualizar chat_conversations.memory.
+    // Exceção: /confirmar_reset limpa memory = '{}' como reset total de sistema.
     // =====================================================
-    if (direction === 'inbound' && messageText?.trim().toLowerCase() === '/resetar' && conversationId) {
-      try {
-        console.log('🔄 [RESET] Comando /resetar detectado — apagando histórico:', conversationId);
 
-        const supabaseAdmin = getSupabaseAdmin();
+    // =====================================================
+    // COMANDOS DE SISTEMA — /resetar e /confirmar_reset
+    //
+    // Interceptados aqui, ANTES de qualquer pipeline downstream.
+    // Nunca chegam ao agentExecutor, emitter de eventos ou automações.
+    // return early em todos os caminhos de execução.
+    //
+    // Fluxo:
+    //   /resetar         → SET reset_pending = true → pede confirmação
+    //   /confirmar_reset → verifica pending + expiração → executa reset completo
+    // =====================================================
 
-        const { error: deleteError } = await supabaseAdmin
-          .from('chat_messages')
-          .delete()
-          .eq('conversation_id', conversationId);
+    if (direction === 'inbound' && conversationId) {
+      const trimmedCommand = messageText?.trim().toLowerCase();
 
-        if (deleteError) {
-          console.error('🔄 [RESET] Erro ao apagar mensagens:', deleteError.message);
-        } else {
-          console.log('🔄 [RESET] Histórico apagado com sucesso');
+      // ── /resetar — solicitar confirmação ───────────────────────────────────
+      if (trimmedCommand === '/resetar') {
+        try {
+          console.log('[RESET] /resetar detectado — aguardando confirmação:', {
+            conversation_id: conversationId,
+            company_id:      company.id,
+          });
+
+          const supabaseAdmin = getSupabaseAdmin();
+
+          // Marcar reset pendente + atualizar updated_at para controle de expiração
+          const { error: pendingError } = await supabaseAdmin
+            .from('chat_conversations')
+            .update({ reset_pending: true, updated_at: new Date().toISOString() })
+            .eq('id', conversationId)
+            .eq('company_id', company.id);
+
+          if (pendingError) {
+            console.error('[RESET] Erro ao marcar reset_pending:', pendingError.message);
+          }
+
+          // Buscar token e enviar pedido de confirmação (fire-and-forget)
+          const { data: instanceFull } = await supabaseAdmin
+            .from('whatsapp_life_instances')
+            .select('provider_token')
+            .eq('id', instance.id)
+            .maybeSingle();
+
+          if (instanceFull?.provider_token) {
+            fetch('https://lovoo.uazapi.com/send/text', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'token': instanceFull.provider_token },
+              body:    JSON.stringify({
+                number: phoneNumber,
+                text:   'Tem certeza que deseja reiniciar a conversa?\nDigite /confirmar_reset para continuar.',
+              }),
+            }).catch(e => console.error('[RESET] Erro ao enviar confirmação:', e.message));
+          }
+
+          return { success: true, message: 'reset:/resetar — aguardando confirmação' };
+        } catch (err) {
+          console.error('[RESET] Erro inesperado em /resetar:', err.message);
         }
+      }
 
-        // Buscar token para enviar confirmação via Uazapi
-        const { data: instanceFull } = await supabaseAdmin
-          .from('whatsapp_life_instances')
-          .select('provider_token')
-          .eq('id', instance.id)
-          .maybeSingle();
+      // ── /confirmar_reset — executar reset completo ─────────────────────────
+      if (trimmedCommand === '/confirmar_reset') {
+        try {
+          console.log('[RESET] /confirmar_reset detectado — verificando solicitação:', {
+            conversation_id: conversationId,
+            company_id:      company.id,
+          });
 
-        if (instanceFull?.provider_token) {
-          fetch('https://lovoo.uazapi.com/send/text', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'token': instanceFull.provider_token },
-            body:    JSON.stringify({ number: phoneNumber, text: '✅ Memória da conversa reiniciada. Pode começar!' })
-          }).catch(e => console.error('🔄 [RESET] Erro ao enviar confirmação:', e.message));
+          const supabaseAdmin = getSupabaseAdmin();
+
+          // Helper: busca token e envia resposta via Uazapi
+          const sendReply = async (text) => {
+            const { data: inst } = await supabaseAdmin
+              .from('whatsapp_life_instances')
+              .select('provider_token')
+              .eq('id', instance.id)
+              .maybeSingle();
+
+            if (inst?.provider_token) {
+              fetch('https://lovoo.uazapi.com/send/text', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'token': inst.provider_token },
+                body:    JSON.stringify({ number: phoneNumber, text }),
+              }).catch(e => console.error('[RESET] Erro ao enviar resposta:', e.message));
+            }
+          };
+
+          // Buscar estado atual: reset_pending + updated_at (para expiração)
+          const { data: conv, error: convError } = await supabaseAdmin
+            .from('chat_conversations')
+            .select('reset_pending, updated_at')
+            .eq('id', conversationId)
+            .eq('company_id', company.id)
+            .maybeSingle();
+
+          if (convError || !conv) {
+            console.error('[RESET] Erro ao buscar estado da conversa:', convError?.message);
+            await sendReply('Erro ao verificar solicitação de reset.');
+            return { success: true, message: 'reset:/confirmar_reset — erro na leitura' };
+          }
+
+          // Verificar se há reset pendente
+          if (!conv.reset_pending) {
+            console.log('[RESET] Nenhum reset pendente:', { conversation_id: conversationId });
+            await sendReply('Nenhuma solicitação de reset encontrada.');
+            return { success: true, message: 'reset:/confirmar_reset — nenhum pending' };
+          }
+
+          // Verificar expiração (10 minutos a partir de updated_at)
+          const RESET_EXPIRY_MS = 10 * 60 * 1000;
+          const updatedAt  = conv.updated_at ? new Date(conv.updated_at).getTime() : 0;
+          const isExpired  = updatedAt > 0 && (Date.now() - updatedAt) > RESET_EXPIRY_MS;
+
+          if (isExpired) {
+            console.log('[RESET] Solicitação expirada:', {
+              conversation_id: conversationId,
+              updated_at:      conv.updated_at,
+            });
+            // Limpar flag expirado sem executar reset
+            await supabaseAdmin
+              .from('chat_conversations')
+              .update({ reset_pending: false })
+              .eq('id', conversationId)
+              .eq('company_id', company.id);
+
+            await sendReply('Solicitação expirada. Digite /resetar novamente.');
+            return { success: true, message: 'reset:/confirmar_reset — expirado' };
+          }
+
+          // ── Executar reset completo ───────────────────────────────────────
+
+          // 1. Apagar histórico de mensagens
+          const { error: deleteError } = await supabaseAdmin
+            .from('chat_messages')
+            .delete()
+            .eq('conversation_id', conversationId);
+
+          if (deleteError) {
+            console.error('[RESET] Erro ao apagar mensagens:', deleteError.message);
+          }
+
+          // 2. Limpar memória e desativar pending
+          //    Filtro reset_pending = true: anti-execução-duplicada
+          const { error: memError } = await supabaseAdmin
+            .from('chat_conversations')
+            .update({ memory: {}, reset_pending: false })
+            .eq('id', conversationId)
+            .eq('company_id', company.id)
+            .eq('reset_pending', true);
+
+          if (memError) {
+            console.error('[RESET] Erro ao limpar memória:', memError.message);
+          }
+
+          // 3. Abandonar conversation_flow_states ativos
+          const { error: flowError } = await supabaseAdmin
+            .from('conversation_flow_states')
+            .update({ status: 'abandoned', completed_at: new Date().toISOString() })
+            .eq('conversation_id', conversationId)
+            .eq('company_id', company.id)
+            .neq('status', 'abandoned');
+
+          if (flowError) {
+            console.error('[RESET] Erro ao abandonar flow states:', flowError.message);
+          }
+
+          // 4. Encerrar agent_conversation_sessions ativas
+          const { error: sessionError } = await supabaseAdmin
+            .from('agent_conversation_sessions')
+            .update({
+              status:     'ended',
+              end_reason: 'manual_reset',
+              ended_at:   new Date().toISOString(),
+            })
+            .eq('conversation_id', conversationId)
+            .eq('company_id', company.id)
+            .eq('status', 'active');
+
+          if (sessionError) {
+            console.error('[RESET] Erro ao encerrar sessões:', sessionError.message);
+          }
+
+          console.log('[RESET]', {
+            conversation_id:  conversationId,
+            company_id:       company.id,
+            action:           'executed',
+            messages_deleted: !deleteError,
+            memory_cleared:   !memError,
+            flow_abandoned:   !flowError,
+            session_closed:   !sessionError,
+          });
+
+          await sendReply('Pronto! Conversa reiniciada. Vamos começar do zero 😊');
+          return { success: true, message: 'reset:/confirmar_reset — concluído' };
+        } catch (err) {
+          console.error('[RESET] Erro inesperado em /confirmar_reset:', err.message);
         }
-
-        return { success: true, message: 'reset:/resetar — histórico apagado' };
-      } catch (resetError) {
-        console.error('🔄 [RESET] Erro inesperado (continuando pipeline normal):', resetError.message);
       }
     }
 
