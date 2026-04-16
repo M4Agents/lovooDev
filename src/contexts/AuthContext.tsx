@@ -156,7 +156,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchCompany = async (userId: string, forceSuper: boolean = false) => {
     const capturedUserId = userId;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'AuthContext.tsx:fetchCompany:entry',message:'guard check',data:{company_id_in_closure:company?.id??null,forceSuper,guard_would_return:(!!company && !!company.id && !forceSuper)},timestamp:Date.now(),runId:'nav-debug',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+
     if (company && company.id && !forceSuper) {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'AuthContext.tsx:fetchCompany:guard-triggered',message:'retorno antecipado pelo guard — company ainda na closure',data:{company_id:company.id},timestamp:Date.now(),runId:'nav-debug',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -345,6 +352,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshCompany = async () => {
     if (!user) return;
     if (isFetchingCompany) return;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'AuthContext.tsx:refreshCompany',message:'antes de setCompany(null)',data:{company_id_in_closure:company?.id??null,isFetchingCompany},timestamp:Date.now(),runId:'nav-debug',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
 
     // Forçar recarregamento completo, limpando o guard de "já carregado"
     setCompany(null);
