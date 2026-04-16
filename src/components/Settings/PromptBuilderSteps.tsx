@@ -503,11 +503,12 @@ export function StepPreview({
         </p>
       </div>
 
-      {/* Layout 2 colunas — edição à esquerda, preview à direita */}
+      {/* Layout 2 colunas — edição à esquerda, preview à direita
+       *  min-w-0 nas colunas evita overflow horizontal no grid dentro do modal. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
         {/* Esquerda: blocos editáveis */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
             <div key={field}>
               <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
@@ -531,8 +532,9 @@ export function StepPreview({
           ))}
         </div>
 
-        {/* Direita: preview ao vivo */}
-        <div className="lg:sticky lg:top-4">
+        {/* Direita: preview ao vivo
+         *  min-w-0 evita overflow; sem sticky (o modal scrolls, não a página). */}
+        <div className="min-w-0">
           <PromptLivePreview
             config={deferredConfig}
             agentName={agentName}

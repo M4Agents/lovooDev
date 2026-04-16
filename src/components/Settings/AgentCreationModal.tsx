@@ -218,20 +218,19 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
         </div>
 
         {/* Stepper mobile (abaixo do header) */}
-        <div className="sm:hidden px-5 py-3 border-b border-gray-100 bg-white">
+        <div className="sm:hidden flex-shrink-0 px-5 py-3 border-b border-gray-100 bg-white">
           <PromptBuilderStepper current={step} />
         </div>
 
-        {/* ── Body + Drawer ────────────────────────────────────────────────── */}
-        {/* Wrapper relativo para posicionar o drawer sobre o conteúdo */}
-        <div className="flex-1 relative overflow-hidden">
+        {/* ── Body + Drawer ─────────────────────────────────────────────────
+         *  min-h-0 é essencial: sem ele, flex-1 herda min-height: auto do
+         *  conteúdo filho e ultrapassa o max-h do container, quebrando o scroll.
+         *  O overflow-hidden clippa o drawer absoluto dentro dos limites do body.
+         ──────────────────────────────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 relative overflow-hidden">
 
-          {/* Conteúdo scrollável do wizard */}
-          <div
-            className={`h-full overflow-y-auto transition-all duration-200 ${
-              isSupportOpen && showSupport ? 'sm:mr-80' : ''
-            }`}
-          >
+          {/* Conteúdo scrollável do wizard — ocupa 100% e rola internamente */}
+          <div className="h-full overflow-y-auto">
             <PromptBuilderWizard
               companyId={companyId}
               onSaved={handleSaved}
@@ -243,7 +242,10 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
             />
           </div>
 
-          {/* Drawer do Assistente de Configuração */}
+          {/* Drawer do Assistente de Configuração
+           *  Posicionado absolute sobre o conteúdo — NÃO empurra nem redimensiona
+           *  o wizard. O conteúdo principal mantém largura original sempre.
+           ── */}
           {showSupport && (
             <div
               className={`
