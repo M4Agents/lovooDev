@@ -284,12 +284,24 @@ export function buildPromptFromConfig(config, companyData = null) {
       companyLines.push(`Contato: ${contatos.join(' | ')}.`);
     }
 
-    // Campos opcionais do ai_profile
-    const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
-
-    if (profile.business_hours) {
-      companyLines.push(`Horário de atendimento: ${profile.business_hours}.`);
+    // Horário de atendimento — fonte preferencial: coluna direta horario_atendimento.
+    // Fallback temporário: ai_profile.business_hours (compatibilidade com registros antigos).
+    if (cd.horario_atendimento) {
+      companyLines.push(`Horário de atendimento: ${cd.horario_atendimento}.`);
+    } else {
+      const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
+      if (profile.business_hours) {
+        companyLines.push(`Horário de atendimento: ${profile.business_hours}.`);
+      }
     }
+
+    // Ponto de referência — coluna direta ponto_referencia
+    if (cd.ponto_referencia) {
+      companyLines.push(`Ponto de referência: ${cd.ponto_referencia}.`);
+    }
+
+    // Campos opcionais remanescentes do ai_profile
+    const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
 
     if (profile.descricao) {
       companyLines.push(String(profile.descricao).trim());

@@ -161,6 +161,7 @@ export const Settings: React.FC = () => {
     data_fundacao: '',
     site_principal: '',
     descricao_empresa: '',
+    horario_atendimento: '',
     
     // Endereço
     cep: '',
@@ -172,6 +173,7 @@ export const Settings: React.FC = () => {
     estado: '',
     pais: 'Brasil',
     endereco_correspondencia: null,
+    ponto_referencia: '',
     
     // Contatos
     telefone_principal: '',
@@ -224,6 +226,7 @@ export const Settings: React.FC = () => {
         data_fundacao: company.data_fundacao || '',
         site_principal: company.site_principal || '',
         descricao_empresa: company.descricao_empresa || '',
+        horario_atendimento: company.horario_atendimento || '',
         
         // Endereço
         cep: company.cep || '',
@@ -235,6 +238,7 @@ export const Settings: React.FC = () => {
         estado: company.estado || '',
         pais: company.pais || 'Brasil',
         endereco_correspondencia: company.endereco_correspondencia || null,
+        ponto_referencia: company.ponto_referencia || '',
         
         // Contatos
         telefone_principal: company.telefone_principal || '',
@@ -2736,6 +2740,21 @@ export const Settings: React.FC = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Horário de Atendimento
+                    <span className="ml-1 text-xs text-slate-400 font-normal">(usado pelo agente de IA)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.horario_atendimento}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, horario_atendimento: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="Ex: Seg–Sex das 8h às 18h, Sáb das 8h às 12h"
+                    maxLength={300}
+                  />
+                </div>
+
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   <h4 className="font-medium text-orange-900 mb-2">{t('company.account.title')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -2886,6 +2905,21 @@ export const Settings: React.FC = () => {
                       placeholder={t('company.placeholders.country')}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Ponto de Referência
+                    <span className="ml-1 text-xs text-slate-400 font-normal">(usado pelo agente de IA)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={companyData.ponto_referencia}
+                    onChange={(e) => setCompanyData(prev => ({ ...prev, ponto_referencia: e.target.value }))}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ex: Próximo ao metrô Jabaquara, em frente ao Shopping"
+                    maxLength={300}
+                  />
                 </div>
 
                 <button

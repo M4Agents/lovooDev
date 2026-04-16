@@ -630,7 +630,8 @@ async function fetchChildCompanyData(svc, companyId) {
       id, name, nome_fantasia, timezone, default_currency,
       pais, cidade, estado, cep, logradouro, bairro, numero,
       country_code, telefone_principal,
-      email_principal, site_principal, ramo_atividade
+      email_principal, site_principal, ramo_atividade,
+      ponto_referencia, horario_atendimento
     `)
     // ai_profile e descricao_empresa serão adicionados após a migration correspondente
     .eq('id', companyId)

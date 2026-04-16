@@ -52,6 +52,7 @@ export type Company = {
   data_fundacao?: string;
   site_principal?: string;
   descricao_empresa?: string;
+  horario_atendimento?: string;
   
   // Endereço
   cep?: string;
@@ -63,6 +64,7 @@ export type Company = {
   estado?: string;
   pais?: string;
   endereco_correspondencia?: any;
+  ponto_referencia?: string;
   
   // Contatos
   telefone_principal?: string;

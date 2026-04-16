@@ -54,6 +54,9 @@ const ALLOWED_FIELDS = new Set([
   'webhook_url',
   'ai_profile',
   'timezone',
+  // Campos para agentes de IA conversacional e Prompt Builder
+  'ponto_referencia',
+  'horario_atendimento',
 ]);
 
 // Campos estruturais que nunca podem ser alterados por esta rota.
@@ -68,15 +71,17 @@ const BLOCKED_FIELDS = new Set([
 
 // Validações de formato para campos críticos (apenas quando presentes e não vazios).
 const FIELD_VALIDATORS = {
-  email_principal:  (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-  email_comercial:  (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-  email_financeiro: (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-  email_suporte:    (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-  cnpj:             (v) => typeof v === 'string' && /^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v.trim()),
-  site_principal:   (v) => typeof v === 'string' && v.trim().length <= 500,
+  email_principal:    (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_comercial:    (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_financeiro:   (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_suporte:      (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  cnpj:               (v) => typeof v === 'string' && /^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v.trim()),
+  site_principal:     (v) => typeof v === 'string' && v.trim().length <= 500,
   telefone_principal: (v) => typeof v === 'string' && v.trim().length <= 30,
-  telefone_secundario: (v) => typeof v === 'string' && v.trim().length <= 30,
-  cep:              (v) => typeof v === 'string' && /^\d{5}-?\d{3}$/.test(v.trim()),
+  telefone_secundario:(v) => typeof v === 'string' && v.trim().length <= 30,
+  cep:                (v) => typeof v === 'string' && /^\d{5}-?\d{3}$/.test(v.trim()),
+  ponto_referencia:   (v) => typeof v === 'string' && v.trim().length <= 300,
+  horario_atendimento:(v) => typeof v === 'string' && v.trim().length <= 300,
 };
 
 function buildSafeUpdates(rawUpdates) {
@@ -201,7 +206,15 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Permissão insuficiente para atualizar esta empresa' });
   }
 
-  // 6. Operação final com service_role (sem RLS, pois autorização já foi validada acima)
+  // 6. Normalizar campos de texto livre antes de persistir
+  const TEXT_FREE_FIELDS = ['ponto_referencia', 'horario_atendimento'];
+  for (const field of TEXT_FREE_FIELDS) {
+    if (typeof safe[field] === 'string') {
+      safe[field] = safe[field].trim().replace(/\s{2,}/g, ' ') || null;
+    }
+  }
+
+  // 7. Operação final com service_role (sem RLS, pois autorização já foi validada acima)
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   const { data, error } = await supabase

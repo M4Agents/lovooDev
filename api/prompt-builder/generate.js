@@ -94,7 +94,8 @@ async function fetchCompanyData(companyId) {
       id, name, nome_fantasia, ramo_atividade,
       cidade, estado, pais,
       logradouro, numero, bairro, cep,
-      telefone_principal, email_principal, site_principal
+      telefone_principal, email_principal, site_principal,
+      ponto_referencia, horario_atendimento
     `)
     .eq('id', companyId)
     .maybeSingle();
@@ -143,9 +144,11 @@ function formatCompanyContext(company) {
   const location = [company.cidade, company.estado].filter(Boolean).join(', ');
   if (location)                lines.push(`Localização: ${location}`);
 
-  if (company.telefone_principal) lines.push(`Telefone: ${company.telefone_principal}`);
-  if (company.email_principal)    lines.push(`E-mail: ${company.email_principal}`);
-  if (company.site_principal)     lines.push(`Site: ${company.site_principal}`);
+  if (company.telefone_principal)   lines.push(`Telefone: ${company.telefone_principal}`);
+  if (company.email_principal)      lines.push(`E-mail: ${company.email_principal}`);
+  if (company.site_principal)       lines.push(`Site: ${company.site_principal}`);
+  if (company.horario_atendimento)  lines.push(`Horário de atendimento: ${company.horario_atendimento}`);
+  if (company.ponto_referencia)     lines.push(`Ponto de referência: ${company.ponto_referencia}`);
 
   return lines.length > 0 ? lines.join('\n') : 'Dados básicos não preenchidos.';
 }
