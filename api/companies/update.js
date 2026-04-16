@@ -9,23 +9,51 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunl
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Campos que o frontend pode enviar — qualquer outro é silenciosamente descartado.
+// Nomes alinhados com as colunas reais da tabela companies.
 const ALLOWED_FIELDS = new Set([
+  // Identificação
+  'name',
   'nome_fantasia',
   'razao_social',
   'cnpj',
-  'telefone',
-  'email',
-  'site',
-  'endereco',
+  'inscricao_estadual',
+  'inscricao_municipal',
+  'tipo_empresa',
+  'porte_empresa',
+  'ramo_atividade',
+  'data_fundacao',
+  'descricao_empresa',
+  // Endereço
+  'cep',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
   'cidade',
   'estado',
-  'cep',
-  'ramo_atividade',
-  'horario_funcionamento',
+  'pais',
+  'endereco_correspondencia',
+  // Contato
+  'telefone_principal',
+  'telefone_secundario',
+  'whatsapp',
+  'email_principal',
+  'email_comercial',
+  'email_financeiro',
+  'email_suporte',
+  // Online
+  'site_principal',
+  'url_google_business',
+  'redes_sociais',
+  'dominios_secundarios',
+  'urls_landing_pages',
+  // Responsáveis
+  'responsavel_principal',
+  'contato_financeiro',
+  // Integração / IA
   'webhook_url',
   'ai_profile',
-  'logo_url',
-  'descricao_empresa',
+  'timezone',
 ]);
 
 // Campos estruturais que nunca podem ser alterados por esta rota.
@@ -38,13 +66,17 @@ const BLOCKED_FIELDS = new Set([
   'is_active',
 ]);
 
-// Validações de formato para campos críticos (apenas quando presentes).
+// Validações de formato para campos críticos (apenas quando presentes e não vazios).
 const FIELD_VALIDATORS = {
-  email: (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-  cnpj:  (v) => typeof v === 'string' && /^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v.trim()),
-  site:  (v) => typeof v === 'string' && v.trim().length <= 500,
-  telefone: (v) => typeof v === 'string' && v.trim().length <= 30,
-  cep:   (v) => typeof v === 'string' && /^\d{5}-?\d{3}$/.test(v.trim()),
+  email_principal:  (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_comercial:  (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_financeiro: (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  email_suporte:    (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+  cnpj:             (v) => typeof v === 'string' && /^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v.trim()),
+  site_principal:   (v) => typeof v === 'string' && v.trim().length <= 500,
+  telefone_principal: (v) => typeof v === 'string' && v.trim().length <= 30,
+  telefone_secundario: (v) => typeof v === 'string' && v.trim().length <= 30,
+  cep:              (v) => typeof v === 'string' && /^\d{5}-?\d{3}$/.test(v.trim()),
 };
 
 function buildSafeUpdates(rawUpdates) {

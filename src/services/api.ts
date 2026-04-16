@@ -773,7 +773,7 @@ export const api = {
     if (!token) throw new Error('Sessão inválida');
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'api.ts:updateCompany:entry',message:'campos enviados ao endpoint',data:{companyId,fields:Object.keys(updates),logradouro:updates.logradouro,numero:updates.numero,bairro:updates.bairro,complemento:updates.complemento,email_principal:updates.email_principal,telefone_principal:updates.telefone_principal,site_principal:updates.site_principal},timestamp:Date.now(),runId:'run1',hypothesisId:'A+B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'api.ts:updateCompany:entry',message:'campos enviados ao endpoint',data:{companyId,fields:Object.keys(updates),logradouro:updates.logradouro,numero:updates.numero,bairro:updates.bairro,complemento:updates.complemento,email_principal:updates.email_principal,telefone_principal:updates.telefone_principal,site_principal:updates.site_principal},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A+B'})}).catch(()=>{});
     // #endregion
 
     const res = await fetch('/api/companies/update', {
@@ -788,7 +788,7 @@ export const api = {
     const json = await res.json();
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'api.ts:updateCompany:response',message:'resposta do endpoint',data:{status:res.status,ok:res.ok,company_logradouro:json?.company?.logradouro,company_fields:json?.company?Object.keys(json.company):null,error:json?.error,details:json?.details},timestamp:Date.now(),runId:'run1',hypothesisId:'A+B+D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'api.ts:updateCompany:response',message:'resposta do endpoint',data:{status:res.status,ok:res.ok,company_logradouro:json?.company?.logradouro,company_email_principal:json?.company?.email_principal,error:json?.error,details:json?.details},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A+B+D'})}).catch(()=>{});
     // #endregion
 
     if (!res.ok) {
