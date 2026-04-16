@@ -203,15 +203,22 @@ export const api = {
   },
 
   async updateCompanyWebhook(companyId: string, webhookUrl: string) {
-    const { data, error } = await supabase
-      .from('companies')
-      .update({ webhook_url: webhookUrl })
-      .eq('id', companyId)
-      .select()
-      .single();
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
 
-    if (error) throw error;
-    return data;
+    const res = await fetch('/api/companies/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ companyId, updates: { webhook_url: webhookUrl } }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw json;
+    return json.company;
   },
 
   async getWebhookLogs(companyId: string, limit: number = 50) {
@@ -761,27 +768,26 @@ export const api = {
   },
 
   async updateCompany(companyId: string, updates: any) {
-    console.log('API: updateCompany called with:', { companyId, updates });
-    
-    try {
-      const { data, error } = await supabase
-        .from('companies')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', companyId)
-        .select()
-        .single();
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
 
-      if (error) throw error;
-      
-      console.log('API: Company updated successfully:', data);
-      return data;
-    } catch (error) {
-      console.error('Error in updateCompany:', error);
-      throw error;
+    const res = await fetch('/api/companies/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ companyId, updates }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      console.error('Error in updateCompany:', json);
+      throw json;
     }
+
+    return json.company;
   },
 
   // Leads Management Functions
