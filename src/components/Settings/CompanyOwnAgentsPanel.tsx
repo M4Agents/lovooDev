@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Bot, ChevronDown, ChevronUp, Loader2, Plus, RefreshCw, Save, X } from 'lucide-react'
+import { Bot, ChevronDown, ChevronUp, Loader2, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import {
   companyOwnAgentsApi,
   ConflictError,
@@ -446,12 +446,14 @@ type AgentCardProps = {
   companyId:            string
   customFieldVariables: PromptVariable[]
   onUpdated:            (agent: CompanyAgent) => void
+  onDeleted:            (agentId: string) => void
 }
 
-function AgentCard({ agent, companyId, customFieldVariables, onUpdated }: AgentCardProps) {
+function AgentCard({ agent, companyId, customFieldVariables, onUpdated, onDeleted }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing]   = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const isStructured = agent.prompt_config !== null
 
@@ -468,6 +470,18 @@ function AgentCard({ agent, companyId, customFieldVariables, onUpdated }: AgentC
       // silencioso — o card não recarrega se falhar
     } finally {
       setToggling(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Excluir o agente "${agent.name}"? Esta ação não pode ser desfeita.`)) return
+    setDeleting(true)
+    try {
+      await companyOwnAgentsApi.delete(companyId, agent.id)
+      onDeleted(agent.id)
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao excluir agente.')
+      setDeleting(false)
     }
   }
 
@@ -525,6 +539,18 @@ function AgentCard({ agent, companyId, customFieldVariables, onUpdated }: AgentC
                        text-blue-700 hover:bg-blue-50 transition-colors"
           >
             Editar
+          </button>
+
+          <button
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            title="Excluir agente"
+            className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
+          >
+            {deleting
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Trash2 className="w-4 h-4" />
+            }
           </button>
 
           <button
@@ -596,6 +622,10 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
 
   function handleUpdated(updated: CompanyAgent) {
     setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+  }
+
+  function handleDeleted(agentId: string) {
+    setAgents(prev => prev.filter(a => a.id !== agentId))
   }
 
   return (
@@ -671,6 +701,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
               companyId={companyId}
               customFieldVariables={customFieldVariables}
               onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
             />
           ))}
         </div>

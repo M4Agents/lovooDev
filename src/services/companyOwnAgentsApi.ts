@@ -112,6 +112,19 @@ export const companyOwnAgentsApi = {
     return handleResponse<CompanyAgent>(res)
   },
 
+  async delete(companyId: string, agentId: string): Promise<void> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/agents/company-agents-delete', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify({ company_id: companyId, agent_id: agentId })
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      throw new Error(json.error ?? `Erro HTTP ${res.status}`)
+    }
+  },
+
   async update(payload: UpdateCompanyAgentPayload): Promise<CompanyAgent> {
     const auth = await getAuthHeader()
     // #region agent log
