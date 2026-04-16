@@ -325,10 +325,6 @@ export const Settings: React.FC = () => {
       
       console.log('🔄 Salvando dados da empresa:', { companyId: company.id, updateData });
 
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'Settings.tsx:handleSaveCompany',message:'updateData antes de enviar',data:{fields:Object.keys(updateData),logradouro:updateData.logradouro,endereco:updateData.endereco,numero:updateData.numero,bairro:updateData.bairro,complemento:updateData.complemento},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A+B'})}).catch(()=>{});
-      // #endregion
-
       await api.updateCompany(company.id, updateData);
       await refreshCompany();
       
