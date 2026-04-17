@@ -84,18 +84,15 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
     const cs = window.getComputedStyle(el)
     const parentEl = el.parentElement
     const parentCs = parentEl ? window.getComputedStyle(parentEl) : null
-    console.log('[DBG:cf8832] AgentCreationModal scroll container', {
+    console.log('[DBG:cf8832][post-fix] AgentCreationModal scroll container', {
       step,
       scrollHeight:  el.scrollHeight,
       clientHeight:  el.clientHeight,
-      offsetHeight:  el.offsetHeight,
       overflows:     el.scrollHeight > el.clientHeight,
       overflowY:     cs.overflowY,
       height:        cs.height,
-      parentOverflow:  parentCs?.overflow  ?? 'n/a',
       parentOverflowY: parentCs?.overflowY ?? 'n/a',
       parentHeight:    parentEl?.clientHeight ?? 'n/a',
-      scrollbarWidth:  cs.scrollbarWidth ?? 'n/a',
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, isOpen])
@@ -259,12 +256,13 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
          *  conteúdo filho e ultrapassa o max-h do container, quebrando o scroll.
          *  O overflow-hidden clippa o drawer absoluto dentro dos limites do body.
          ──────────────────────────────────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 relative overflow-hidden">
+        {/* flex flex-col necessário para que o filho flex-1 min-h-0 tenha referência de altura */}
+        <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
 
-          {/* Conteúdo scrollável do wizard — ocupa 100% e rola internamente */}
+          {/* Conteúdo scrollável do wizard — flex-1 min-h-0 em vez de h-full para funcionar corretamente em flex */}
           <div
             ref={scrollRef}
-            className="h-full overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
+            className="flex-1 min-h-0 overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
                           [&::-webkit-scrollbar]:w-1.5
                           [&::-webkit-scrollbar-track]:bg-transparent
                           [&::-webkit-scrollbar-thumb]:bg-gray-300

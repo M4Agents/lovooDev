@@ -216,7 +216,7 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
         wouldOverflow: sc ? (sc.scrollHeight > sc.clientHeight) : 'n/a',
       },
     }
-    console.log('[DBG:cf8832] ConversationImportStep after analysis', payload.data)
+    console.log('[DBG:cf8832][post-fix] ConversationImportStep after analysis', payload.data)
   }, [status])
   // #endregion
 
