@@ -233,7 +233,12 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
         <div className="flex-1 min-h-0 relative overflow-hidden">
 
           {/* Conteúdo scrollável do wizard — ocupa 100% e rola internamente */}
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
+                          [&::-webkit-scrollbar]:w-1.5
+                          [&::-webkit-scrollbar-track]:bg-transparent
+                          [&::-webkit-scrollbar-thumb]:bg-gray-300
+                          [&::-webkit-scrollbar-thumb]:rounded-full
+                          [&::-webkit-scrollbar-thumb:hover]:bg-gray-400">
             <PromptBuilderWizard
               companyId={companyId}
               onSaved={handleSaved}
@@ -244,6 +249,13 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
               onTest={handleTest}
             />
           </div>
+
+          {/* Gradiente inferior — indica ao usuário que há mais conteúdo abaixo */}
+          <div
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none
+                       bg-gradient-to-t from-white/90 to-transparent z-[5]"
+          />
 
           {/* Drawer do Assistente de Configuração
            *  Posicionado absolute sobre o conteúdo — NÃO empurra nem redimensiona
