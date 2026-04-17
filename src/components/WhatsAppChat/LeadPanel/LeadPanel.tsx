@@ -819,7 +819,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         {/* Seletor de Instância de Envio - MODERNIZADO */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
-            <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
+            <img src="/images/emails/wpp.png" alt="WhatsApp" className="w-4 h-4" />
             {t('leadPanel.contact.sendingInstance')}
           </label>
           
@@ -1346,7 +1346,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           {/* Seleção de Instância WhatsApp */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-              <img src="https://lovoocrm.com/images/wpp.png" alt="WhatsApp" className="w-4 h-4" />
+              <img src="/images/emails/wpp.png" alt="WhatsApp" className="w-4 h-4" />
               {t('leadPanel.schedule.whatsappInstance')}
             </label>
             {loadingInstances ? (
