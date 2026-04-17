@@ -84,31 +84,19 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
     const cs = window.getComputedStyle(el)
     const parentEl = el.parentElement
     const parentCs = parentEl ? window.getComputedStyle(parentEl) : null
-    const payload = {
-      sessionId: 'cf8832', runId: 'run1',
-      hypothesisId: 'A-B-C-D-E',
-      location: 'AgentCreationModal.tsx:scrollRef',
-      message: 'scroll container metrics',
-      timestamp: Date.now(),
-      data: {
-        step,
-        // Hipótese B e D — altura real do container vs conteúdo
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-        offsetHeight: el.offsetHeight,
-        overflows: el.scrollHeight > el.clientHeight,
-        // Hipótese A — CSS overflow aplicado
-        overflowY: cs.overflowY,
-        // Hipótese C — pai tem overflow hidden?
-        parentOverflow: parentCs?.overflow ?? 'n/a',
-        parentOverflowY: parentCs?.overflowY ?? 'n/a',
-        parentHeight: parentEl?.clientHeight ?? 'n/a',
-        // Hipótese A e E — scrollbar webkit aplicada?
-        scrollbarWidth: cs.scrollbarWidth ?? 'n/a',
-        webkitScrollbarWidth: (cs as Record<string,string>)['-webkit-scrollbar-width'] ?? 'n/a',
-      },
-    }
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify(payload)}).catch(()=>{})
+    console.log('[DBG:cf8832] AgentCreationModal scroll container', {
+      step,
+      scrollHeight:  el.scrollHeight,
+      clientHeight:  el.clientHeight,
+      offsetHeight:  el.offsetHeight,
+      overflows:     el.scrollHeight > el.clientHeight,
+      overflowY:     cs.overflowY,
+      height:        cs.height,
+      parentOverflow:  parentCs?.overflow  ?? 'n/a',
+      parentOverflowY: parentCs?.overflowY ?? 'n/a',
+      parentHeight:    parentEl?.clientHeight ?? 'n/a',
+      scrollbarWidth:  cs.scrollbarWidth ?? 'n/a',
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, isOpen])
   // #endregion

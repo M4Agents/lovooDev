@@ -216,7 +216,7 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
         wouldOverflow: sc ? (sc.scrollHeight > sc.clientHeight) : 'n/a',
       },
     }
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify(payload)}).catch(()=>{})
+    console.log('[DBG:cf8832] ConversationImportStep after analysis', payload.data)
   }, [status])
   // #endregion
 
