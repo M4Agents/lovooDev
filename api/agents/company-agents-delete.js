@@ -118,6 +118,44 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── Verificar dependências bloqueantes (company_agent_assignments) ────────
+  //
+  // company_agent_assignments tem ON DELETE RESTRICT em agent_id.
+  // Se houver registros, o DELETE do banco seria rejeitado com FK violation.
+  // Retornamos 409 com mensagem acionável antes mesmo de tentar.
+
+  const { data: assignments, error: assignmentsErr } = await supabaseAdmin
+    .from('company_agent_assignments')
+    .select('id, display_name, channel')
+    .eq('agent_id', agent_id);
+
+  if (assignmentsErr) {
+    console.error('[company-agents/delete] Erro ao verificar assignments:', assignmentsErr.message);
+    return res.status(500).json({ success: false, error: 'Erro ao verificar dependências do agente.' });
+  }
+
+  if (assignments && assignments.length > 0) {
+    const names = assignments
+      .map(a => `"${a.display_name}" (canal: ${a.channel})`)
+      .join(', ');
+
+    console.warn('[company-agents/delete] DELETE bloqueado por assignments:', {
+      agent_id,
+      total: assignments.length,
+      assignments: assignments.map(a => ({ id: a.id, display_name: a.display_name, channel: a.channel }))
+    });
+
+    return res.status(409).json({
+      success: false,
+      error: `Este agente está vinculado a ${assignments.length} configuração(ões) de canal: ${names}. Remova o vínculo nas configurações do agente antes de excluir.`,
+      blocking_assignments: assignments.map(a => ({
+        id:           a.id,
+        display_name: a.display_name,
+        channel:      a.channel
+      }))
+    });
+  }
+
   // ── DELETE físico ─────────────────────────────────────────────────────────
 
   const { error: deleteErr } = await supabaseAdmin
