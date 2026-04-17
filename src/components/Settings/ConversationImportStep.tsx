@@ -6,7 +6,7 @@
  * O sistema retorna insights estruturados que pré-preenchem os campos do wizard.
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   CheckCircle2,
@@ -187,10 +187,43 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
     setFiles([])
   }
 
+  // #region agent log — debug scroll
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (status !== 'success') return
+    const el = rootRef.current
+    if (!el) return
+    // Mede o próprio componente e percorre DOM até encontrar o scroll container
+    let scrollContainer: HTMLElement | null = el.parentElement
+    while (scrollContainer && getComputedStyle(scrollContainer).overflowY !== 'auto' && getComputedStyle(scrollContainer).overflowY !== 'scroll') {
+      scrollContainer = scrollContainer.parentElement
+    }
+    const sc = scrollContainer
+    const payload = {
+      sessionId: 'cf8832', runId: 'run1',
+      hypothesisId: 'B-D',
+      location: 'ConversationImportStep.tsx:rootRef',
+      message: 'component height after analysis shown',
+      timestamp: Date.now(),
+      data: {
+        componentScrollHeight: el.scrollHeight,
+        componentOffsetHeight: el.offsetHeight,
+        scrollContainerFound: !!sc,
+        scrollContainerTag: sc?.tagName ?? 'none',
+        scrollContainerScrollHeight: sc?.scrollHeight ?? 'n/a',
+        scrollContainerClientHeight: sc?.clientHeight ?? 'n/a',
+        scrollContainerOverflowY: sc ? getComputedStyle(sc).overflowY : 'n/a',
+        wouldOverflow: sc ? (sc.scrollHeight > sc.clientHeight) : 'n/a',
+      },
+    }
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify(payload)}).catch(()=>{})
+  }, [status])
+  // #endregion
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
+    <div ref={rootRef} className="space-y-4">
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">

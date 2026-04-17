@@ -15,7 +15,7 @@
  *   - Step 4 (preview 2 colunas): max-w-6xl
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { HelpCircle, Sparkles, Check, X } from 'lucide-react'
 import { PromptBuilderStepper } from './PromptBuilderStepper'
@@ -51,6 +51,10 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   const [sandboxIsSaved, setSandboxIsSaved]     = useState(false)
   const [sandboxAgentId, setSandboxAgentId]     = useState<string | null>(null)
 
+  // #region agent log — debug scroll
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // #endregion
+
   // Animação de entrada / saída e lock do scroll do body
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +75,43 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   useEffect(() => {
     if (step < 3 || step > 4) setSupport(false)
   }, [step])
+
+  // #region agent log — debug scroll
+  useEffect(() => {
+    if (!isOpen) return
+    const el = scrollRef.current
+    if (!el) return
+    const cs = window.getComputedStyle(el)
+    const parentEl = el.parentElement
+    const parentCs = parentEl ? window.getComputedStyle(parentEl) : null
+    const payload = {
+      sessionId: 'cf8832', runId: 'run1',
+      hypothesisId: 'A-B-C-D-E',
+      location: 'AgentCreationModal.tsx:scrollRef',
+      message: 'scroll container metrics',
+      timestamp: Date.now(),
+      data: {
+        step,
+        // Hipótese B e D — altura real do container vs conteúdo
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        offsetHeight: el.offsetHeight,
+        overflows: el.scrollHeight > el.clientHeight,
+        // Hipótese A — CSS overflow aplicado
+        overflowY: cs.overflowY,
+        // Hipótese C — pai tem overflow hidden?
+        parentOverflow: parentCs?.overflow ?? 'n/a',
+        parentOverflowY: parentCs?.overflowY ?? 'n/a',
+        parentHeight: parentEl?.clientHeight ?? 'n/a',
+        // Hipótese A e E — scrollbar webkit aplicada?
+        scrollbarWidth: cs.scrollbarWidth ?? 'n/a',
+        webkitScrollbarWidth: (cs as Record<string,string>)['-webkit-scrollbar-width'] ?? 'n/a',
+      },
+    }
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify(payload)}).catch(()=>{})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, isOpen])
+  // #endregion
 
   // Fechar com Escape (confirmação se houver progresso)
   useEffect(() => {
@@ -233,12 +274,15 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
         <div className="flex-1 min-h-0 relative overflow-hidden">
 
           {/* Conteúdo scrollável do wizard — ocupa 100% e rola internamente */}
-          <div className="h-full overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
+          <div
+            ref={scrollRef}
+            className="h-full overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
                           [&::-webkit-scrollbar]:w-1.5
                           [&::-webkit-scrollbar-track]:bg-transparent
                           [&::-webkit-scrollbar-thumb]:bg-gray-300
                           [&::-webkit-scrollbar-thumb]:rounded-full
-                          [&::-webkit-scrollbar-thumb:hover]:bg-gray-400">
+                          [&::-webkit-scrollbar-thumb:hover]:bg-gray-400"
+          >
             <PromptBuilderWizard
               companyId={companyId}
               onSaved={handleSaved}
