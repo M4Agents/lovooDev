@@ -5,6 +5,7 @@
 // NÃO MODIFICA componentes existentes
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { ChevronDown, Bot } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
@@ -69,6 +70,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Controle de estado da IA na conversa
   const [aiState, setAiState] = useState<string | null>(null)
   const [aiStateLoading, setAiStateLoading] = useState(false)
+  const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
+  const aiDropdownRef = useRef<HTMLDivElement>(null)
   
   // Limpar qualquer cache existente que possa estar corrompido
   useEffect(() => {
@@ -109,6 +112,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     },
     [conversationId, aiState]
   )
+
+  // Fechar dropdown de IA ao clicar fora
+  useEffect(() => {
+    if (!aiDropdownOpen) return
+    function handleClickOutside(e: MouseEvent) {
+      if (aiDropdownRef.current && !aiDropdownRef.current.contains(e.target as Node)) {
+        setAiDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [aiDropdownOpen])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -1015,36 +1030,118 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </span>
             )}
 
-            {/* Controle de estado IA — exibir somente se a conversa tiver agente atribuído */}
+            {/* Controle de estado IA — botão compacto com dropdown */}
             {conversation?.ai_assignment_id && aiState && (() => {
-              const badgeConfig: Record<string, { dot: string; label: string }> = {
-                ai_active:   { dot: 'bg-green-500',  label: 'IA Ativa'   },
-                ai_paused:   { dot: 'bg-yellow-400', label: 'IA Pausada' },
-                ai_inactive: { dot: 'bg-gray-400',   label: 'IA Inativa' }
+              type AiStateKey = 'ai_active' | 'ai_paused' | 'ai_inactive'
+
+              const stateConfig: Record<AiStateKey, {
+                dot:         string
+                pulse:       boolean
+                label:       string
+                description: string
+                pill:        string
+              }> = {
+                ai_active:   {
+                  dot:         'bg-green-500',
+                  pulse:       true,
+                  label:       'IA Ativa',
+                  description: 'Respondendo automaticamente',
+                  pill:        'bg-green-50 border-green-200 text-green-700 hover:bg-green-100',
+                },
+                ai_paused:   {
+                  dot:         'bg-amber-400',
+                  pulse:       false,
+                  label:       'IA Pausada',
+                  description: 'Humano assumiu o controle',
+                  pill:        'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+                },
+                ai_inactive: {
+                  dot:         'bg-red-400',
+                  pulse:       false,
+                  label:       'IA Desligada',
+                  description: 'Agente removido da conversa',
+                  pill:        'bg-red-50 border-red-200 text-red-700 hover:bg-red-100',
+                },
               }
-              const actionConfig: Record<string, { next: 'ai_active' | 'ai_paused' | 'ai_inactive'; label: string }> = {
-                ai_active:   { next: 'ai_paused',   label: 'Pausar IA'   },
-                ai_paused:   { next: 'ai_active',   label: 'Retomar IA'  },
-                ai_inactive: { next: 'ai_active',   label: 'Ativar IA'   }
-              }
-              const badge  = badgeConfig[aiState]
-              const action = actionConfig[aiState]
-              if (!badge || !action) return null
+
+              const allOptions: { state: AiStateKey; label: string; description: string }[] = [
+                { state: 'ai_active',   label: 'Ativar IA',     description: 'Responde automaticamente'    },
+                { state: 'ai_paused',   label: 'Pausar IA',     description: 'Humano assume o controle'    },
+                { state: 'ai_inactive', label: 'Desligar IA',   description: 'Remove o agente da conversa' },
+              ]
+
+              const current = stateConfig[aiState as AiStateKey]
+              if (!current) return null
+
               return (
-                <div className="flex items-center space-x-2">
-                  {/* Badge de estado */}
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                    <span className={`w-2 h-2 rounded-full ${badge.dot}`} />
-                    {badge.label}
-                  </span>
-                  {/* Botão de ação */}
+                <div className="relative" ref={aiDropdownRef}>
+                  {/* Botão compacto */}
                   <button
-                    onClick={() => handleAiStateChange(action.next)}
+                    onClick={() => setAiDropdownOpen(v => !v)}
                     disabled={aiStateLoading}
-                    className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${current.pill}`}
+                    title={current.label}
                   >
-                    {aiStateLoading ? '...' : action.label}
+                    {aiStateLoading ? (
+                      <span className="w-2 h-2 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    ) : (
+                      <span className="relative flex items-center justify-center w-2 h-2">
+                        {current.pulse && (
+                          <span className={`absolute inline-flex w-full h-full rounded-full opacity-75 animate-ping ${current.dot}`} />
+                        )}
+                        <span className={`relative inline-flex w-2 h-2 rounded-full ${current.dot}`} />
+                      </span>
+                    )}
+                    <Bot className="w-3 h-3" />
+                    <span>IA</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${aiDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
+
+                  {/* Dropdown */}
+                  {aiDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="px-3 py-2 border-b border-gray-50">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Status do Agente</p>
+                      </div>
+                      {allOptions.map(({ state, label, description }) => {
+                        const cfg   = stateConfig[state]
+                        const isCurrent = state === aiState
+                        return (
+                          <button
+                            key={state}
+                            disabled={aiStateLoading || isCurrent}
+                            onClick={() => {
+                              setAiDropdownOpen(false)
+                              if (!isCurrent) handleAiStateChange(state)
+                            }}
+                            className={`w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors
+                              ${isCurrent
+                                ? 'bg-gray-50 cursor-default'
+                                : 'hover:bg-gray-50 cursor-pointer'
+                              }`}
+                          >
+                            <span className="relative flex items-center justify-center w-2.5 h-2.5 mt-1 flex-shrink-0">
+                              {cfg.pulse && isCurrent && (
+                                <span className={`absolute inline-flex w-full h-full rounded-full opacity-60 animate-ping ${cfg.dot}`} />
+                              )}
+                              <span className={`relative inline-flex w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-semibold ${isCurrent ? 'text-gray-900' : 'text-gray-700'}`}>
+                                {isCurrent ? cfg.label : label}
+                              </p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{description}</p>
+                            </div>
+                            {isCurrent && (
+                              <svg className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             })()}

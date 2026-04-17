@@ -469,7 +469,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
       <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
-        <h2 className="text-xl font-bold text-gray-800 mb-2">📚 {t('biblioteca.title')}</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">{t('biblioteca.title')}</h2>
         <p className="text-sm text-gray-600">{t('biblioteca.subtitle')}</p>
       </div>
       
