@@ -37,7 +37,7 @@ type Status = 'idle' | 'loading' | 'success' | 'error'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const MAX_FILES      = 3
+const MAX_FILES      = 10
 const MAX_SIZE_MB    = 2
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
@@ -190,23 +190,62 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="space-y-1">
+      <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-blue-500" />
+          <MessageSquare className="w-4 h-4 text-blue-500 shrink-0" />
           <h4 className="text-sm font-semibold text-gray-800">
             Importar conversas reais do WhatsApp
           </h4>
-          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium shrink-0">
             opcional
           </span>
         </div>
-        <p className="text-xs text-gray-500 leading-relaxed">
-          Envie conversas exportadas do WhatsApp para o sistema identificar o tom,
-          as perguntas frequentes e os padrões de atendimento da sua empresa.
-          Esses dados pré-preencherão os campos do agente automaticamente.
+
+        <p className="text-xs text-gray-600 leading-relaxed">
+          Envie conversas exportadas do WhatsApp para que o sistema entenda como
+          sua empresa atende na prática.
         </p>
+
+        {/* O que identificamos */}
+        <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 space-y-2">
+          <p className="text-xs font-medium text-gray-600">Com base nessas conversas, identificamos:</p>
+          <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {[
+              'Tom de comunicação',
+              'Perguntas frequentes',
+              'Objeções dos clientes',
+              'Padrões de condução de vendas',
+            ].map(item => (
+              <li key={item} className="flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-1 h-1 rounded-full bg-blue-400 shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500 pt-0.5 border-t border-gray-200">
+            Essas informações pré-preenchem automaticamente os campos do seu agente de IA.
+          </p>
+        </div>
+
+        {/* Dicas */}
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-500">💡 Para melhores resultados:</p>
+          <ul className="space-y-0.5">
+            {[
+              'Conversas reais com início, meio e possível fechamento',
+              'Inclua trocas com dúvidas, objeções e negociações',
+              'Recomendado: pelo menos 10+ trocas relevantes',
+              `Até ${MAX_FILES} arquivos .txt por vez (exportados do WhatsApp)`,
+            ].map(tip => (
+              <li key={tip} className="flex items-start gap-1.5 text-xs text-gray-500">
+                <span className="text-gray-300 shrink-0 mt-px">–</span>
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       {/* Dropzone */}
@@ -374,7 +413,7 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
       <div className="flex items-center justify-between pt-1">
         <button
           onClick={onSkip}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
         >
           <SkipForward className="w-3.5 h-3.5" />
           Pular esta etapa
@@ -424,10 +463,13 @@ export function ConversationImportStep({ companyId, onAnalyzed, onSkip }: Props)
       </div>
 
       {/* Nota de privacidade */}
-      <p className="text-xs text-gray-400 text-center border-t border-gray-100 pt-3">
-        Os arquivos são processados apenas para gerar a análise e não são armazenados.
-        Nomes, telefones e dados pessoais são anonimizados antes da análise.
-      </p>
+      <div className="flex items-start gap-1.5 border-t border-gray-100 pt-3">
+        <span className="text-xs shrink-0">🔒</span>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          <span className="font-medium text-gray-500">Privacidade:</span>{' '}
+          Seus dados são anonimizados automaticamente e não são armazenados.
+        </p>
+      </div>
     </div>
   )
 }

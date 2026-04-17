@@ -35,9 +35,9 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB por arquivo
-const MAX_FILES           = 3;
+const MAX_FILES           = 10;
 const MIN_MESSAGES        = 10;
-const MAX_MESSAGES_LLM    = 250;
+const MAX_MESSAGES_LLM    = 400;
 
 // ── Autenticação ──────────────────────────────────────────────────────────────
 
@@ -79,8 +79,9 @@ async function validateCaller(req, companyId) {
 function parseMultipart(req) {
   return new Promise((resolve, reject) => {
     const form = formidable({
-      maxFiles:    MAX_FILES,
-      maxFileSize: MAX_FILE_SIZE_BYTES,
+      maxFiles:       MAX_FILES,
+      maxFileSize:    MAX_FILE_SIZE_BYTES,
+      maxTotalFileSize: MAX_FILES * MAX_FILE_SIZE_BYTES,
       keepExtensions: true,
     });
 
@@ -202,7 +203,7 @@ async function callLLM(conversationText, companyId) {
   const response = await openai.chat.completions.create({
     model:       settings?.model ?? 'gpt-4.1-mini',
     temperature: 0.3,
-    max_tokens:  1600,
+    max_tokens:  2000,
     messages: [
       { role: 'system', content: system },
       { role: 'user',   content: user   },
