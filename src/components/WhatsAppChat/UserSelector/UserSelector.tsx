@@ -104,6 +104,9 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                 <p className="font-medium text-gray-900 truncate">
                   {selectedUserData.display_name || selectedUserData.email}
                 </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {selectedUserData.display_name ? selectedUserData.email : ''}
+                </p>
               </div>
             </>
           ) : (
