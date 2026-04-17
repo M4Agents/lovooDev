@@ -27,6 +27,8 @@ import {
   type CatalogItem,
   type UserAnswers,
 } from './PromptBuilderSteps'
+import { ConversationImportStep } from './ConversationImportStep'
+import type { ConversationAnalysis } from '../../services/promptBuilderApi'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -242,8 +244,8 @@ function StepSuccess({
 export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, insideModal, onStepChange, onTest }: Props) {
   const { company }                     = useAuth()
 
-  // Etapas: 1=Básico, 2=Dados, 3=Config, 4=Preview, 5=Sucesso
-  const [step, setStep]                 = useState<1|2|3|4|5>(1)
+  // Etapas: 0=ImportConversas(opcional), 1=Básico, 2=Dados, 3=Config, 4=Preview, 5=Sucesso
+  const [step, setStep]                 = useState<0|1|2|3|4|5>(0)
 
   // Referência estável para onStepChange (evita re-registrar o effect a cada render)
   const onStepChangeRef = useRef(onStepChange)
@@ -262,6 +264,9 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   // Catálogo (carregado na montagem)
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
   const [loadingCatalog, setLoading]    = useState(true)
+
+  // Etapa 0 — análise de conversas importadas
+  const [conversationAnalysis, setConversationAnalysis] = useState<ConversationAnalysis | null>(null)
 
   // Etapa 3
   const [answers, setAnswers]           = useState<UserAnswers>({
@@ -343,13 +348,50 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     }
   }
 
-  function handleReset() {
+  /** Aceita a análise das conversas e pré-preenche os campos do wizard. */
+  function handleConversationAnalyzed(analysis: ConversationAnalysis) {
+    setConversationAnalysis(analysis)
+
+    const spc = analysis.suggested_prompt_config
+    const dp  = analysis.detected_patterns
+
+    setAnswers(prev => {
+      if (spc) {
+        // Usar suggested_prompt_config diretamente quando disponível
+        return {
+          objective:           prev.objective           || spc.objective           || '',
+          communication_style: prev.communication_style || spc.communication_style || '',
+          commercial_rules:    prev.commercial_rules    || spc.commercial_rules    || '',
+          custom_notes:        prev.custom_notes        || spc.custom_notes        || '',
+        }
+      }
+
+      // Fallback: montar campos manualmente a partir de detected_patterns
+      const questions  = dp?.frequent_customer_questions?.slice(0, 3).join('; ') ?? ''
+      const objections = dp?.objections?.slice(0, 3).join('; ')                  ?? ''
+
+      return {
+        objective:           prev.objective           || analysis.analysis_summary || '',
+        communication_style: prev.communication_style || dp?.tone                 || '',
+        commercial_rules:    prev.commercial_rules    || '',
+        custom_notes:        prev.custom_notes        || [
+          questions  ? `Perguntas frequentes dos clientes: ${questions}`   : '',
+          objections ? `Objeções recorrentes identificadas: ${objections}` : '',
+        ].filter(Boolean).join('\n') || '',
+      }
+    })
+
     setStep(1)
+  }
+
+  function handleReset() {
+    setStep(0)
     setAgentName('')
     setAssistantName('')
     setModel('gpt-4.1-mini')
     setLanguage('pt-BR')
     setAnswers({ objective: '', communication_style: '', commercial_rules: '', custom_notes: '' })
+    setConversationAnalysis(null)
     setPromptConfig(null)
     setError(null)
     setSavedAgent(null)
@@ -362,18 +404,26 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   // ── Conteúdo interno (compartilhado entre modo inline e modal) ────────────
 
   const contextBar = step >= 2 && step <= 4 && (
-    <div className="flex items-center gap-4 px-5 py-2 border-b border-gray-100 bg-white text-xs text-gray-500">
-      <span className="flex items-center gap-1">
-        <Bot className="w-3.5 h-3.5 text-blue-500" />
-        {agentName}
-      </span>
-      {companyName && (
+    <div className="border-b border-gray-100 bg-white">
+      <div className="flex items-center gap-4 px-5 py-2 text-xs text-gray-500">
         <span className="flex items-center gap-1">
-          🏢 {companyName}
+          <Bot className="w-3.5 h-3.5 text-blue-500" />
+          {agentName}
         </span>
-      )}
-      {catalogItems.length > 0 && (
-        <span>📦 {catalogItems.length} {catalogItems.length === 1 ? 'item' : 'itens'}</span>
+        {companyName && (
+          <span className="flex items-center gap-1">
+            🏢 {companyName}
+          </span>
+        )}
+        {catalogItems.length > 0 && (
+          <span>📦 {catalogItems.length} {catalogItems.length === 1 ? 'item' : 'itens'}</span>
+        )}
+      </div>
+      {conversationAnalysis && step === 3 && (
+        <div className="flex items-center gap-2 px-5 py-1.5 bg-blue-50 border-t border-blue-100 text-xs text-blue-700">
+          <span>💬</span>
+          <span>Campos pré-preenchidos com base nas conversas importadas. Revise e ajuste antes de gerar.</span>
+        </div>
       )}
     </div>
   )
@@ -381,6 +431,14 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   // ── Bloco de steps — reutilizado nos dois modos de renderização ──────────
   const stepsContent = (
     <>
+      {step === 0 && (
+        <ConversationImportStep
+          companyId={companyId}
+          onAnalyzed={handleConversationAnalyzed}
+          onSkip={() => setStep(1)}
+        />
+      )}
+
       {step === 1 && (
         <StepBasic
           name={agentName}          setName={setAgentName}

@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function PromptBuilderStepper({ current }: Props) {
-  if (current >= 5) return null
+  if (current <= 0 || current >= 5) return null
 
   return (
     <div className="flex items-center gap-0">

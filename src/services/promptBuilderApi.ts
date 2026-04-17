@@ -70,6 +70,41 @@ export interface SandboxRunResult {
   rag_notice?:             string | null
 }
 
+/** Padrões detectados nas conversas importadas do WhatsApp. */
+export interface ConversationDetectedPatterns {
+  tone:                        string
+  greeting_examples:           string[]
+  frequent_customer_questions: string[]
+  attendant_questions:         string[]
+  objections:                  string[]
+  objection_responses:         string[]
+  closing_patterns:            string[]
+  handoff_triggers:            string[]
+  terms_to_avoid:              string[]
+}
+
+/** Análise estruturada de conversas WhatsApp importadas. */
+export interface ConversationAnalysis {
+  analysis_summary:      string
+  detected_patterns:     ConversationDetectedPatterns
+  suggested_prompt_config: {
+    identity:            string
+    objective:           string
+    communication_style: string
+    commercial_rules:    string
+    custom_notes:        string
+  } | null
+}
+
+/** Resposta do endpoint analyze-conversations. */
+export interface AnalyzeConversationsResult {
+  conversation_analysis: ConversationAnalysis
+  quality: {
+    score: number
+    label: 'boa' | 'razoável' | 'insuficiente'
+  }
+}
+
 // ── Helper ─────────────────────────────────────────────────────────────────────
 
 async function getAuthHeader(): Promise<string> {
@@ -165,6 +200,41 @@ export const promptBuilderApi = {
       tool_events:            (json.tool_events as SandboxToolEvent[]) ?? [],
       updated_sandbox_memory: (json.updated_sandbox_memory as SandboxMemory | null) ?? null,
       rag_notice:             json.rag_notice ?? null,
+    }
+  },
+
+  /**
+   * Envia arquivos .txt de conversas WhatsApp para análise.
+   * Retorna insights estruturados para pré-preencher o Prompt Builder.
+   * Nenhum arquivo é armazenado — processamento stateless.
+   */
+  async analyzeConversations(
+    companyId: string,
+    files: File[],
+  ): Promise<AnalyzeConversationsResult> {
+    const auth = await getAuthHeader()
+
+    const formData = new FormData()
+    formData.append('company_id', companyId)
+    for (const file of files) {
+      formData.append('conversations', file)
+    }
+
+    const res = await fetch(`/api/prompt-builder/analyze-conversations?company_id=${encodeURIComponent(companyId)}`, {
+      method:  'POST',
+      headers: { Authorization: auth },
+      body:    formData,
+      signal:  AbortSignal.timeout(30_000),
+    })
+
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? `Erro ao analisar conversas (${res.status})`)
+    }
+
+    return {
+      conversation_analysis: json.conversation_analysis as ConversationAnalysis,
+      quality:               json.quality,
     }
   },
 
