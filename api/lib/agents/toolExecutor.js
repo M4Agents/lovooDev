@@ -1076,6 +1076,95 @@ const TOOL_HANDLERS = {
  * }} context
  * @returns {Promise<Array<{ tool_call_id: string, tool_name: string, result: any, success: boolean, is_critical: boolean }>>}
  */
+// ── Sandbox: execução simulada sem efeitos colaterais ─────────────────────────
+
+/**
+ * Executa tool calls em modo sandbox — sem DB, sem CRM, sem WhatsApp.
+ * Retorna resultados simulados para o LLM continuar o second turn normalmente,
+ * e um array de eventos legíveis para exibição na UI.
+ *
+ * GARANTIA: nenhum handler real é chamado. Nenhuma tabela é escrita.
+ * Guard duplo: verificado aqui E no runner (options.sandboxMode).
+ */
+export async function executeToolCallsSandbox(toolCalls, context) {
+  if (!toolCalls?.length) return { toolResults: [], events: [] }
+
+  const events = []
+  const toolResults = []
+
+  for (const toolCall of toolCalls) {
+    const toolName = toolCall.function?.name ?? 'unknown'
+
+    let rawArgs = {}
+    try {
+      rawArgs = JSON.parse(toolCall.function?.arguments ?? '{}')
+    } catch {
+      rawArgs = {}
+    }
+
+    events.push({
+      tool:      toolName,
+      args:      rawArgs,
+      simulated: true,
+      label:     buildSandboxToolLabel(toolName, rawArgs),
+    })
+
+    toolResults.push({
+      tool_call_id: toolCall.id,
+      tool_name:    toolName,
+      result:       { success: true, simulated: true },
+      success:      true,
+      is_critical:  CRITICAL_TOOLS.has(toolName),
+    })
+  }
+
+  return { toolResults, events }
+}
+
+/**
+ * Gera uma frase descritiva legível para cada tool simulada.
+ */
+function buildSandboxToolLabel(toolName, args) {
+  const labelMap = {
+    request_handoff:    () => {
+      const reason = args.reason ? `: "${String(args.reason).slice(0, 80)}"` : ''
+      return `O agente transferiria esta conversa para um humano${reason}`
+    },
+    add_note:           () => {
+      const text = String(args.text ?? '').slice(0, 100)
+      return `O agente registraria uma nota: "${text}"`
+    },
+    add_tag:            () => `O agente adicionaria a tag: "${args.tag_name ?? ''}"`,
+    remove_tag:         () => `O agente removeria a tag: "${args.tag_name ?? ''}"`,
+    update_lead:        () => {
+      const fields = args.fields ? Object.keys(args.fields).join(', ') : '?'
+      return `O agente atualizaria o contato (campos: ${fields})`
+    },
+    create_activity:    () => {
+      const title = String(args.title ?? '').slice(0, 80)
+      return `O agente criaria uma atividade: "${title}"`
+    },
+    move_opportunity:   () => `O agente moveria a oportunidade de etapa no funil`,
+    update_opportunity: () => {
+      const fields = args.fields ? Object.keys(args.fields).join(', ') : '?'
+      return `O agente atualizaria a oportunidade (campos: ${fields})`
+    },
+    schedule_contact:   () => {
+      const when = args.scheduled_at ?? '?'
+      return `O agente agendaria um contato para ${when}`
+    },
+    send_media:         () => {
+      const intent = args.intent ?? 'imagem/vídeo'
+      return `O agente enviaria uma mídia (${intent}) referente ao produto em foco`
+    },
+  }
+
+  const fn = labelMap[toolName]
+  return fn ? fn() : `O agente executaria a ação: ${toolName}`
+}
+
+// ── Executor principal ────────────────────────────────────────────────────────
+
 export async function executeToolCalls(toolCalls, context) {
   if (!toolCalls?.length) return []
 

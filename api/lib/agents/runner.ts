@@ -34,7 +34,7 @@ import { retrieveAgentContext } from './retriever.js'
 import { writeExecutionLog, type ExecutionLogEntry } from './logger.js'
 import { estimateCost } from './pricing.js'
 import { getToolsForAgent } from './toolDefinitions.js'
-import { executeToolCalls } from './toolExecutor.js'
+import { executeToolCalls, executeToolCallsSandbox } from './toolExecutor.js'
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -104,6 +104,14 @@ export type ToolCallResult = {
   is_critical:  boolean
 }
 
+/** Evento de tool simulada em modo sandbox (sem efeitos reais). */
+export type SandboxToolEvent = {
+  tool:      string
+  args:      Record<string, unknown>
+  simulated: true
+  label:     string
+}
+
 export type AgentRunSuccess = {
   ok: true
   result: string
@@ -112,6 +120,8 @@ export type AgentRunSuccess = {
   fallback: false
   /** Resultados das tool calls executadas nesta rodada. Vazio se agente sem tools ou sem chamadas. */
   tool_results: ToolCallResult[]
+  /** Eventos de tools simuladas (sandbox_mode only). Undefined em execuções reais. */
+  sandbox_tool_events?: SandboxToolEvent[]
 }
 
 export type AgentRunFallback = {
@@ -443,8 +453,9 @@ function handleFallback(
 export async function runAgentWithConfig(
   agent: ResolvedAgent,
   useId: string,
-  ctx: AgentRunContext
-): Promise<AgentRunResult & { input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null; estimated_cost_usd?: number | null }> {
+  ctx: AgentRunContext,
+  options?: { sandboxMode?: boolean }
+): Promise<AgentRunResult & { input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null; estimated_cost_usd?: number | null; sandbox_tool_events?: SandboxToolEvent[] }> {
   // Verifica disponibilidade da OpenAI (mesma lógica do runAgent)
   if (!isOpenAIApiKeyConfigured()) {
     return { ok: false, errorCode: 'openai_not_configured', use_id: useId }
@@ -560,6 +571,7 @@ export async function runAgentWithConfig(
     let totalTokensCount  = firstCompletion.usage?.total_tokens      ?? null
     // Hoistado para o escopo do try — acessível no return final
     let toolResults: ToolCallResult[] = []
+    let sandboxToolEvents: SandboxToolEvent[] | undefined = undefined
 
     // Se o LLM retornou tool calls, executa e faz second turn
     if (hasTools && toolCalls.length > 0) {
@@ -574,7 +586,14 @@ export async function runAgentWithConfig(
         model_config:          (agent.model_config as Record<string, unknown> | undefined) ?? ctx.model_config ?? {},
       }
 
-      toolResults = (await executeToolCalls(toolCalls as any, toolContext)) as ToolCallResult[]
+      if (options?.sandboxMode) {
+        // Guard duplo: sandbox_mode bloqueia todos os efeitos reais
+        const sandboxResult = await executeToolCallsSandbox(toolCalls as any, toolContext)
+        toolResults        = sandboxResult.toolResults as ToolCallResult[]
+        sandboxToolEvents  = sandboxResult.events
+      } else {
+        toolResults = (await executeToolCalls(toolCalls as any, toolContext)) as ToolCallResult[]
+      }
 
       // Monta mensagens para o second turn
       const toolResultMessages: Parameters<typeof client.chat.completions.create>[0]['messages'] = [
@@ -623,17 +642,19 @@ export async function runAgentWithConfig(
     const estimatedCost = estimateCost(agent.model, totalInputTokens, totalOutputTokens)
 
     return {
-      ok:                 true,
-      result:             finalResult,
-      agent_id:           agent.id,
-      use_id:             useId,
-      fallback:           false,
+      ok:                  true,
+      result:              finalResult,
+      agent_id:            agent.id,
+      use_id:              useId,
+      fallback:            false,
       // Resultados das tools executadas — usados pelo agentExecutor para evaluateTransition
-      tool_results:       toolResults as ToolCallResult[],
-      input_tokens:       totalInputTokens,
-      output_tokens:      totalOutputTokens,
-      total_tokens:       totalTokensCount,
-      estimated_cost_usd: estimatedCost,
+      tool_results:        toolResults as ToolCallResult[],
+      // Presente apenas em sandbox_mode — undefined em execuções reais
+      sandbox_tool_events: sandboxToolEvents,
+      input_tokens:        totalInputTokens,
+      output_tokens:       totalOutputTokens,
+      total_tokens:        totalTokensCount,
+      estimated_cost_usd:  estimatedCost,
     }
   } catch {
     return { ok: false, errorCode: 'openai_execution_failed', use_id: useId }

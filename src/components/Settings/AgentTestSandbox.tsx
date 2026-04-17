@@ -1,16 +1,29 @@
 /**
  * AgentTestSandbox
  *
- * Chat interativo para testar o agente em modo sandbox — sem salvar dados,
- * sem criar conversas reais, sem dependência do banco além da autenticação.
+ * Sandbox real do agente: usa o mesmo runtime de produção (companyData,
+ * catálogo, knowledge_base, tools) mas em modo completamente isolado.
  *
- * Usa a configuração atual em memória (prompt_config) para simular como
- * o agente vai se comportar quando for publicado.
+ * Diferenças do sandbox básico:
+ *   - Chama /api/ai/sandbox-run (não /api/ai/sandbox)
+ *   - Mantém sandboxMemory entre turnos (estado local, nunca salvo)
+ *   - Renderiza tool_events como cards visuais antes da resposta
+ *   - Aceita agent_id para usar knowledge_base do agente salvo
+ *   - Exibe nota quando RAG não está disponível no sandbox
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Bot, FlaskConical, Loader2, RotateCcw, Save, Send } from 'lucide-react'
-import { promptBuilderApi, type ChatMessage, type FlatPromptConfig } from '../../services/promptBuilderApi'
+import {
+  ArrowLeft, Bot, FlaskConical, Loader2, RotateCcw,
+  Save, Send, Zap, AlertCircle,
+} from 'lucide-react'
+import {
+  promptBuilderApi,
+  type ChatMessage,
+  type FlatPromptConfig,
+  type SandboxMemory,
+  type SandboxToolEvent,
+} from '../../services/promptBuilderApi'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -19,26 +32,34 @@ interface Props {
   promptConfig: FlatPromptConfig
   agentName:    string
   companyName:  string
+  agentId?:     string | null   // ID do agente salvo (para knowledge_base)
   onBack:       () => void
   onSave?:      () => void
   isSaved?:     boolean
+}
+
+// Mensagem do chat inclui tool_events opcionais (exibidos antes da resposta)
+interface DisplayMessage extends ChatMessage {
+  tool_events?: SandboxToolEvent[]
 }
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 
 export function AgentTestSandbox({
   companyId, promptConfig, agentName, companyName,
-  onBack, onSave, isSaved = false,
+  agentId = null, onBack, onSave, isSaved = false,
 }: Props) {
   const greeting = buildGreeting(agentName, companyName)
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages]           = useState<DisplayMessage[]>([
     { role: 'assistant', content: greeting },
   ])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const endRef                  = useRef<HTMLDivElement | null>(null)
+  const [input, setInput]                 = useState('')
+  const [loading, setLoading]             = useState(false)
+  const [error, setError]                 = useState<string | null>(null)
+  const [sandboxMemory, setSandboxMemory] = useState<SandboxMemory | null>(null)
+  const [ragNotice, setRagNotice]         = useState<string | null>(null)
+  const endRef                            = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -48,22 +69,39 @@ export function AgentTestSandbox({
     const text = input.trim()
     if (!text || loading) return
 
-    const userMsg: ChatMessage = { role: 'user', content: text }
-    const nextMessages = [...messages, userMsg]
+    const userMsg: DisplayMessage = { role: 'user', content: text }
+    // Histórico sem tool_events (API só recebe role + content)
+    const apiMessages: ChatMessage[] = [
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: text },
+    ]
 
-    setMessages(nextMessages)
+    setMessages(prev => [...prev, userMsg])
     setInput('')
     setError(null)
     setLoading(true)
 
     try {
-      const reply = await promptBuilderApi.sandboxChat({
-        company_id:    companyId,
-        messages:      nextMessages,
-        prompt_config: promptConfig,
-        agent_name:    agentName,
+      const result = await promptBuilderApi.sandboxRunChat({
+        company_id:      companyId,
+        messages:        apiMessages,
+        prompt_config:   promptConfig,
+        agent_name:      agentName || undefined,
+        sandbox_memory:  sandboxMemory,
+        agent_id:        agentId,
       })
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+
+      const agentMsg: DisplayMessage = {
+        role:        'assistant',
+        content:     result.reply,
+        tool_events: result.tool_events.length > 0 ? result.tool_events : undefined,
+      }
+
+      setMessages(prev => [...prev, agentMsg])
+      setSandboxMemory(result.updated_sandbox_memory)
+
+      if (result.rag_notice) setRagNotice(result.rag_notice)
+
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Não consegui responder. Tente novamente.')
     } finally {
@@ -82,7 +120,16 @@ export function AgentTestSandbox({
     setMessages([{ role: 'assistant', content: greeting }])
     setInput('')
     setError(null)
+    setSandboxMemory(null)
+    setRagNotice(null)
   }
+
+  // Limite visual de memória: exibe até 8 turnos, mas mantém objeto completo internamente
+  const MAX_DISPLAY_TURNS = 8
+  const displayedTurns = sandboxMemory?.interaction_count
+    ? Math.min(sandboxMemory.interaction_count, MAX_DISPLAY_TURNS)
+    : 0
+  const hasMemory = displayedTurns > 0
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -99,13 +146,14 @@ export function AgentTestSandbox({
               <p className="text-sm font-semibold text-gray-900 truncate">
                 Teste do agente
               </p>
-              <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium
-                               whitespace-nowrap flex-shrink-0">
-                Modo simulação
+              <span className="text-xs bg-violet-600 text-white px-2 py-0.5 rounded-full font-medium
+                               whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5" />
+                Simulação avançada
               </span>
             </div>
             <p className="text-xs text-gray-500 truncate">
-              Converse com <span className="font-medium">{agentName || 'seu agente'}</span> antes de salvar
+              Runtime completo — catálogo, ferramentas e memória ativos
             </p>
           </div>
         </div>
@@ -142,8 +190,9 @@ export function AgentTestSandbox({
         </div>
       </div>
 
-      {/* ── Contexto do agente ───────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-5 py-2 border-b border-gray-100 bg-white text-xs text-gray-500">
+      {/* ── Barra de contexto ────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-5 py-2 border-b border-gray-100 bg-white text-xs text-gray-500
+                      flex-shrink-0">
         <span className="flex items-center gap-1">
           <Bot className="w-3.5 h-3.5 text-violet-500" />
           <span className="font-medium text-gray-700">{agentName || '—'}</span>
@@ -153,31 +202,69 @@ export function AgentTestSandbox({
             🏢 {companyName}
           </span>
         )}
+
+        {/* Indicador de memória acumulada (limitado visualmente a 8 turnos) */}
+        {hasMemory && (
+          <span className="flex items-center gap-1 text-violet-600 font-medium">
+            🧠 Últimos {displayedTurns} turno{displayedTurns !== 1 ? 's' : ''} considerados
+          </span>
+        )}
+
         <span className="ml-auto text-gray-400 italic">
           Simulação isolada — nada é salvo
         </span>
       </div>
 
+      {/* ── Aviso de RAG não disponível (quando aplicável) ──────────────── */}
+      {ragNotice && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 border-b border-amber-100
+                        text-xs text-amber-700 flex-shrink-0">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {ragNotice}
+        </div>
+      )}
+
       {/* ── Mensagens ────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50/50">
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50/50 min-h-0">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' && (
-              <div className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5">
-                <Bot className="w-3.5 h-3.5 text-violet-600" />
+          <div key={i}>
+            {/* Bloco de tools simuladas (antes da resposta do agente) */}
+            {msg.role === 'assistant' && msg.tool_events && msg.tool_events.length > 0 && (
+              <div className="mb-2">
+                {/* Cabeçalho de agrupamento quando há múltiplas tools no turno */}
+                {msg.tool_events.length > 1 && (
+                  <p className="ml-8 mb-1 text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+                    Ações do agente neste turno
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {msg.tool_events.map((ev, j) => (
+                    <SandboxToolCard key={j} event={ev} />
+                  ))}
+                </div>
               </div>
             )}
-            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-              msg.role === 'user'
-                ? 'bg-blue-600 text-white rounded-br-sm'
-                : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
-            }`}>
-              {msg.content}
+
+            {/* Bolha da mensagem */}
+            <div className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {msg.role === 'assistant' && (
+                <div className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center
+                                flex-shrink-0 mb-0.5">
+                  <Bot className="w-3.5 h-3.5 text-violet-600" />
+                </div>
+              )}
+              <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-blue-600 text-white rounded-br-sm'
+                  : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+              }`}>
+                {msg.content}
+              </div>
             </div>
           </div>
         ))}
 
-        {/* Loading indicator */}
+        {/* Loading */}
         {loading && (
           <div className="flex items-end gap-2 justify-start">
             <div className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -193,11 +280,20 @@ export function AgentTestSandbox({
           </div>
         )}
 
-        {/* Erro */}
+        {/* Erro — com botão para limpar e tentar novamente */}
         {error && !loading && (
           <div className="flex justify-center">
-            <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-2 text-xs text-red-600">
-              {error}
+            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 text-xs text-red-700
+                            flex items-center gap-3 max-w-sm">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-red-400" />
+              <span className="flex-1">{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="underline whitespace-nowrap text-red-500 hover:text-red-700
+                           transition-colors font-medium"
+              >
+                Tentar novamente
+              </button>
             </div>
           </div>
         )}
@@ -228,6 +324,51 @@ export function AgentTestSandbox({
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Card de tool simulada ──────────────────────────────────────────────────────
+
+function SandboxToolCard({ event }: { event: SandboxToolEvent }) {
+  const iconMap: Record<string, string> = {
+    request_handoff:    '🔁',
+    add_note:           '📝',
+    add_tag:            '🏷️',
+    remove_tag:         '🏷️',
+    update_lead:        '👤',
+    create_activity:    '📅',
+    move_opportunity:   '📊',
+    update_opportunity: '📊',
+    schedule_contact:   '⏰',
+    send_media:         '🖼️',
+  }
+
+  const colorMap: Record<string, string> = {
+    request_handoff:    'bg-amber-50 border-amber-200 text-amber-800',
+    add_note:           'bg-blue-50 border-blue-200 text-blue-800',
+    add_tag:            'bg-purple-50 border-purple-200 text-purple-800',
+    remove_tag:         'bg-gray-50 border-gray-200 text-gray-700',
+    update_lead:        'bg-teal-50 border-teal-200 text-teal-800',
+    create_activity:    'bg-indigo-50 border-indigo-200 text-indigo-800',
+    move_opportunity:   'bg-green-50 border-green-200 text-green-800',
+    update_opportunity: 'bg-green-50 border-green-200 text-green-800',
+    schedule_contact:   'bg-orange-50 border-orange-200 text-orange-800',
+    send_media:         'bg-pink-50 border-pink-200 text-pink-800',
+  }
+
+  const icon  = iconMap[event.tool]  ?? '⚙️'
+  const color = colorMap[event.tool] ?? 'bg-gray-50 border-gray-200 text-gray-700'
+
+  return (
+    <div className={`ml-8 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${color}`}>
+      <span className="flex-shrink-0 mt-0.5">{icon}</span>
+      <div className="min-w-0">
+        <p className="font-medium leading-snug">{event.label}</p>
+      </div>
+      <span className="ml-auto flex-shrink-0 text-[10px] opacity-60 font-medium uppercase tracking-wide">
+        Simulado
+      </span>
     </div>
   )
 }

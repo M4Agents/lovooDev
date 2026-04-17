@@ -40,6 +40,36 @@ export interface ChatMessage {
   content: string
 }
 
+/** Evento de tool simulada retornado pelo sandbox real. */
+export interface SandboxToolEvent {
+  tool:      string
+  args:      Record<string, unknown>
+  simulated: true
+  label:     string
+}
+
+/** Objeto de memória acumulada entre os turnos do sandbox real. */
+export interface SandboxMemory {
+  v?:                   number
+  summary:              string
+  facts?:               Record<string, string>
+  intents?:             string[]
+  objections?:          string[]
+  open_loops?:          string[]
+  conversation_stage?:  string
+  interaction_count?:   number
+  last_interaction_at?: string
+  updated_at?:          string
+}
+
+/** Resposta completa do sandbox real. */
+export interface SandboxRunResult {
+  reply:                   string
+  tool_events:             SandboxToolEvent[]
+  updated_sandbox_memory:  SandboxMemory | null
+  rag_notice?:             string | null
+}
+
 // ── Helper ─────────────────────────────────────────────────────────────────────
 
 async function getAuthHeader(): Promise<string> {
@@ -104,6 +134,38 @@ export const promptBuilderApi = {
       throw new Error(json.error ?? `Erro no sandbox (${res.status})`)
     }
     return json.reply as string
+  },
+
+  /**
+   * Sandbox real: usa o runtime completo do agente (companyData, catálogo,
+   * knowledge_base, tools simuladas, memória entre turnos).
+   * Nenhum dado é persistido — completamente isolado de produção.
+   */
+  async sandboxRunChat(payload: {
+    company_id:      string
+    messages:        ChatMessage[]
+    prompt_config:   FlatPromptConfig
+    agent_name?:     string
+    sandbox_memory?: SandboxMemory | null
+    agent_id?:       string | null
+  }): Promise<SandboxRunResult> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/ai/sandbox-run', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(18_000), // margem acima do timeout do servidor (15s)
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? `Erro no sandbox real (${res.status})`)
+    }
+    return {
+      reply:                  json.reply as string,
+      tool_events:            (json.tool_events as SandboxToolEvent[]) ?? [],
+      updated_sandbox_memory: (json.updated_sandbox_memory as SandboxMemory | null) ?? null,
+      rag_notice:             json.rag_notice ?? null,
+    }
   },
 
   async runSupportAgent(companyId: string, userMessage: string): Promise<string> {

@@ -49,6 +49,7 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   const [sandboxAgentName, setSandboxAgentName] = useState('')
   const [sandboxCompanyName, setSandboxCompany] = useState('')
   const [sandboxIsSaved, setSandboxIsSaved]     = useState(false)
+  const [sandboxAgentId, setSandboxAgentId]     = useState<string | null>(null)
 
   // Animação de entrada / saída e lock do scroll do body
   useEffect(() => {
@@ -100,6 +101,8 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
 
   function handleSaved(agent: CompanyAgent) {
     setSandboxIsSaved(true)
+    // Ao salvar, armazena o agent_id para que o sandbox use a knowledge_base real
+    setSandboxAgentId(agent.id ?? null)
     onSaved(agent)
   }
 
@@ -271,6 +274,7 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
                 promptConfig={sandboxConfig}
                 agentName={sandboxAgentName}
                 companyName={sandboxCompanyName}
+                agentId={sandboxAgentId}
                 isSaved={sandboxIsSaved}
                 onBack={() => setSandboxOpen(false)}
                 onSave={!sandboxIsSaved ? doClose : undefined}
