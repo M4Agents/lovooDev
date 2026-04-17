@@ -64,7 +64,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
 
   // Gerar avatar com foto real ou inicial do nome
   const UserAvatar: React.FC<{ user: CompanyUser; size?: 'sm' | 'md' }> = ({ user, size = 'md' }) => {
-    const sizeClasses = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-base'
+    const sizeClasses = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-sm'
     const initial = (user.display_name || user.email).charAt(0).toUpperCase()
     
     // Se tem foto, mostrar imagem real
@@ -92,14 +92,14 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between ${
+        className={`w-full px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {selectedUserData ? (
             <>
-              <UserAvatar user={selectedUserData} size="md" />
+              <UserAvatar user={selectedUserData} size="sm" />
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900 truncate">
                   {selectedUserData.display_name || selectedUserData.email}
@@ -108,8 +108,8 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
             </>
           ) : (
             <>
-              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5 text-gray-400" />
+              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-gray-400" />
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-gray-500">Sem responsável</p>
@@ -118,7 +118,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
           )}
         </div>
         <ChevronDown 
-          className={`w-5 h-5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+          className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
             isOpen ? 'rotate-180' : ''
           }`}
         />
@@ -126,18 +126,18 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
 
       {/* Dropdown */}
       {isOpen && !disabled && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
           {/* Opção "Sem responsável" */}
           {showNoneOption && (
             <button
               onClick={() => handleSelect('')}
               className={`
-                w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors
+                w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                 ${!selectedUser ? 'bg-blue-50' : ''}
               `}
             >
-              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5 text-gray-400" />
+              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-gray-400" />
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900">
@@ -157,7 +157,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
 
           {/* Lista de Usuários */}
           {users.length === 0 ? (
-            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+            <div className="px-4 py-6 text-center text-gray-500 text-sm">
               Nenhum usuário disponível
             </div>
           ) : (
@@ -166,11 +166,11 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                 key={user.id}
                 onClick={() => handleSelect(user.id)}
                 className={`
-                  w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors
+                  w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                   ${selectedUser === user.id ? 'bg-blue-50' : ''}
                 `}
               >
-                <UserAvatar user={user} size="md" />
+                <UserAvatar user={user} size="sm" />
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-medium text-gray-900 truncate">
                     {user.display_name || user.email}

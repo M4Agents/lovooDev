@@ -889,8 +889,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           )}
         </div>
 
-        {/* Botão Editar Lead - MODERNIZADO */}
-        <div className="space-y-2">
+        {/* Botão Editar Lead */}
+        <div className="flex justify-end">
           <button
             onClick={() => {
               if (contact && conversation) {
@@ -898,9 +898,9 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                 onOpenLeadModal(leadData)
               }
             }}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2 font-medium"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all duration-150"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
             {t('leadPanel.contact.editLeadFull')}

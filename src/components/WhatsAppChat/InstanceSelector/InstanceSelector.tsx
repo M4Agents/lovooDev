@@ -72,12 +72,12 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
       {/* Botão Principal */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between"
+        className="w-full px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between"
       >
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {selectedInstance === 'all' ? (
             <>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
                 📱
               </div>
               <div className="flex-1 min-w-0 text-left">
@@ -95,7 +95,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
                 profilePictureUrl={selectedInstanceData.profile_picture_url}
                 profileName={selectedInstanceData.profile_name}
                 instanceName={selectedInstanceData.instance_name}
-                size="md"
+                size="sm"
               />
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900 truncate">
@@ -111,7 +111,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
           )}
         </div>
         <ChevronDown 
-          className={`w-5 h-5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+          className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
             isOpen ? 'rotate-180' : ''
           }`}
         />
@@ -119,17 +119,17 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
           {/* Opção "Todas" */}
           {showAllOption && (
             <button
               onClick={() => handleSelect('all')}
               className={`
-                w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors
+                w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                 ${selectedInstance === 'all' ? 'bg-blue-50' : ''}
               `}
             >
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
                 📱
               </div>
               <div className="flex-1 min-w-0 text-left">
@@ -153,7 +153,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
 
           {/* Lista de Instâncias */}
           {instances.length === 0 ? (
-            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+            <div className="px-4 py-6 text-center text-gray-500 text-sm">
               {t('instanceSelector.empty')}
             </div>
           ) : (
@@ -162,7 +162,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
                 key={instance.id}
                 onClick={() => handleSelect(instance.id)}
                 className={`
-                  w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors
+                  w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                   ${selectedInstance === instance.id ? 'bg-blue-50' : ''}
                 `}
               >
@@ -170,7 +170,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
                   profilePictureUrl={instance.profile_picture_url}
                   profileName={instance.profile_name}
                   instanceName={instance.instance_name}
-                  size="md"
+                  size="sm"
                 />
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-medium text-gray-900 truncate">
