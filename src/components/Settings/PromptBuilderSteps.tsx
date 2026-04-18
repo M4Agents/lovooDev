@@ -607,6 +607,32 @@ export function StepPreview({
             </div>
           )}
 
+          {/* Dialog de confirmação — aparece no mesmo lugar do botão, topo da coluna */}
+          {!advancedManualActive && showAdvancedConfirm && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 space-y-2">
+              <p className="text-sm font-semibold text-amber-800">Ativar Edição Avançada?</p>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                Esta ação é <strong>irreversível</strong> para este agente. O fluxo assistido por IA não ficará
+                mais disponível — todos os campos serão editados manualmente por você.
+                A injeção dinâmica de dados (empresa, catálogo, etc.) continua funcionando normalmente.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={handleConfirmAdvanced}
+                  className="px-3 py-1.5 text-xs font-semibold bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+                >
+                  Confirmar — ativar edição avançada
+                </button>
+                <button
+                  onClick={() => setShowAdvancedConfirm(false)}
+                  className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {advancedManualActive ? (
             /* Modo avançado: textarea único com marcadores de seção */
             <div className="space-y-2">
@@ -679,32 +705,6 @@ export function StepPreview({
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700">
           {error}
-        </div>
-      )}
-
-      {/* Dialog de confirmação para ativação de modo avançado */}
-      {showAdvancedConfirm && (
-        <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 space-y-2">
-          <p className="text-sm font-semibold text-amber-800">Ativar Edição Avançada?</p>
-          <p className="text-xs text-amber-700 leading-relaxed">
-            Esta ação é <strong>irreversível</strong> para este agente. O fluxo assistido por IA não ficará
-            mais disponível — todos os campos serão editados manualmente por você.
-            A injeção dinâmica de dados (empresa, catálogo, etc.) continua funcionando normalmente.
-          </p>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={handleConfirmAdvanced}
-              className="px-3 py-1.5 text-xs font-semibold bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
-            >
-              Confirmar — ativar edição avançada
-            </button>
-            <button
-              onClick={() => setShowAdvancedConfirm(false)}
-              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
         </div>
       )}
 
