@@ -1,11 +1,14 @@
 // =====================================================
 // POST /api/agents/documents/upload
 //
-// Upload de documento RAG para um Agente Lovoo global.
-// Acesso restrito: empresa pai + admin/super_admin.
+// Upload de documento RAG para agentes (global ou Company Agent).
+//
+// Acesso:
+//   - Agentes globais (Lovoo): empresa pai + admin/super_admin
+//   - Company Agents: membership ativa na empresa do agente + admin+
 //
 // Fluxo:
-//   1. Autenticação e permissão (empresa pai)
+//   1. Auth empresa pai (backward compat) OU auth company agent (fallback)
 //   2. Parse multipart (formidable)
 //   3. Validação de tipo e tamanho
 //   4. SHA-256 calculado server-side
@@ -22,7 +25,9 @@ import { createHash, randomUUID } from 'crypto'
 import { readFile, unlink } from 'fs/promises'
 import { formidable } from 'formidable'
 import type { IncomingMessage, ServerResponse } from 'http'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
+import { assertCanManageAgentDocuments } from '../../lib/agents/agentDocumentsAuth.js'
 import { uploadDocumentFile, deleteDocumentFile } from '../../lib/agents/storage.js'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -72,20 +77,25 @@ export default async function handler(
     return jsonError(res, 405, 'Método não permitido')
   }
 
-  // ── 1. Autenticação e permissão ───────────────────────────────────────────
+  // ── 1. Auth empresa pai (backward compat para agentes globais Lovoo) ────────
+  //
+  // Se o caller for da empresa pai → fluxo original inalterado.
+  // Se não (Company Agent de empresa filha) → tentamos auth por agente após
+  // parsear o form (precisamos do agent_id para validar ownership).
 
-  const auth = await assertCanManageOpenAIIntegration(req as Parameters<typeof assertCanManageOpenAIIntegration>[0])
-  if (!auth.ok) {
-    return jsonError(res, auth.status, auth.message)
-  }
+  const parentAuth = await assertCanManageOpenAIIntegration(
+    req as Parameters<typeof assertCanManageOpenAIIntegration>[0]
+  )
 
   // ── 2. Parse multipart ────────────────────────────────────────────────────
+  //
+  // Feito antes da validação final de auth quando parentAuth falha,
+  // pois precisamos do agent_id do form para o guard de Company Agent.
 
   const form = formidable({
     maxFileSize: MAX_FILE_SIZE_BYTES,
     maxFiles: 1,
     keepExtensions: true,
-    // Não persistir em disco além do necessário
     maxTotalFileSize: MAX_FILE_SIZE_BYTES,
   })
 
@@ -118,6 +128,27 @@ export default async function handler(
     return jsonError(res, 400, 'Arquivo não enviado. Use o campo "file" no FormData.')
   }
 
+  // ── 1b. Auth fallback — Company Agent ─────────────────────────────────────
+  //
+  // Se o caller não é da empresa pai, verifica se tem admin role na empresa
+  // dona do agente. Usa service_role para todas as operações de banco
+  // (não depende de RLS de empresas filhas).
+
+  let effectiveClient: SupabaseClient
+
+  if (parentAuth.ok) {
+    effectiveClient = parentAuth.supabase
+  } else {
+    const companyAgentAuth = await assertCanManageAgentDocuments(
+      req as Parameters<typeof assertCanManageAgentDocuments>[0],
+      agentId.trim()
+    )
+    if (!companyAgentAuth.ok) {
+      return jsonError(res, companyAgentAuth.status, companyAgentAuth.message)
+    }
+    effectiveClient = companyAgentAuth.svcSupabase
+  }
+
   // ── 4. Validar tipo MIME ──────────────────────────────────────────────────
 
   const mimeType = uploadedFile.mimetype ?? ''
@@ -146,27 +177,13 @@ export default async function handler(
 
   const contentHash = createHash('sha256').update(fileBuffer).digest('hex')
 
-  // ── 7. Validar existência do agente (via JWT + RLS) ───────────────────────
-  //
-  // auth.supabase usa o JWT do usuário. O RLS de lovoo_agents garante que
-  // somente agentes da empresa pai são acessíveis para este usuário.
-
-  const { data: agent, error: agentErr } = await auth.supabase
-    .from('lovoo_agents')
-    .select('id')
-    .eq('id', agentId.trim())
-    .maybeSingle()
-
-  if (agentErr || !agent) {
-    return jsonError(res, 404, 'Agente não encontrado ou sem permissão de acesso')
-  }
-
-  // ── 8. Detectar duplicidade por content_hash ──────────────────────────────
+  // ── 7. Detectar duplicidade por content_hash ──────────────────────────────
   //
   // Regra MVP: se já existe documento com mesmo agent_id + content_hash,
   // não criar duplicata. Retornar informação do existente.
+  // A existência do agente foi validada pelo auth guard (parentAuth ou companyAgentAuth).
 
-  const { data: existingDoc } = await auth.supabase
+  const { data: existingDoc } = await effectiveClient
     .from('lovoo_agent_documents')
     .select('id, name, status, version, chunk_count')
     .eq('agent_id', agentId.trim())
@@ -205,7 +222,7 @@ export default async function handler(
 
   // ── 10. Inserir em lovoo_agent_documents ──────────────────────────────────
 
-  const { data: doc, error: insertErr } = await auth.supabase
+  const { data: doc, error: insertErr } = await effectiveClient
     .from('lovoo_agent_documents')
     .insert({
       id:           documentId,

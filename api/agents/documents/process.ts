@@ -2,7 +2,9 @@
 // POST /api/agents/documents/process
 //
 // Pipeline de processamento de documento RAG.
-// Acesso restrito: empresa pai + admin/super_admin.
+// Acesso:
+//   - Agentes globais (Lovoo): empresa pai + admin/super_admin
+//   - Company Agents: membership ativa na empresa do agente + admin+
 //
 // Fluxo (Opção B — zero downtime de conhecimento):
 //   1.  Autenticação e permissão
@@ -26,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { assertCanManageOpenAIIntegration } from '../../lib/openai/auth.js'
+import { assertCanManageAgentDocuments } from '../../lib/agents/agentDocumentsAuth.js'
 import { downloadDocumentFile } from '../../lib/agents/storage.js'
 import { extractText, splitIntoChunks } from '../../lib/agents/chunker.js'
 import { getOpenAIClient } from '../../lib/openai/client.js'
@@ -67,12 +70,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     return jsonError(res, 405, 'Método não permitido')
   }
 
-  // ── 1. Autenticação ───────────────────────────────────────────────────────
+  // ── 1. Auth empresa pai (backward compat para agentes globais Lovoo) ────────
 
-  const auth = await assertCanManageOpenAIIntegration(req)
-  if (!auth.ok) {
-    return jsonError(res, auth.status, auth.message)
-  }
+  const parentAuth = await assertCanManageOpenAIIntegration(req)
 
   // ── 2. Validar body ───────────────────────────────────────────────────────
 
@@ -83,10 +83,46 @@ export default async function handler(req: any, res: any): Promise<void> {
     return jsonError(res, 400, 'Campo obrigatório ausente: document_id')
   }
 
-  // ── 3. Buscar documento ───────────────────────────────────────────────────
-  // Usa JWT do usuário — RLS garante acesso apenas a documentos da empresa pai.
+  // ── 3. Buscar documento e resolver auth final ────────────────────────────
+  //
+  // Se o caller é da empresa pai → usa auth.supabase (RLS aplicado).
+  // Se não → usa service_role para buscar o agente_id do documento,
+  //           depois valida ownership via assertCanManageAgentDocuments,
+  //           e continua com svcSupabase (service_role explícito).
 
-  const { data: doc, error: fetchErr } = await auth.supabase
+  let effectiveClient: SupabaseClient
+
+  if (parentAuth.ok) {
+    effectiveClient = parentAuth.supabase
+  } else {
+    // Precisamos do agent_id do documento para validar ownership.
+    // Usa service_role temporário para essa lookup sem depender de RLS.
+    const svcTemp = getServiceClient()
+    if (!svcTemp) {
+      return jsonError(res, 500, 'Configuração de servidor incompleta')
+    }
+
+    const { data: docForAuth } = await svcTemp
+      .from('lovoo_agent_documents')
+      .select('agent_id')
+      .eq('id', documentId)
+      .maybeSingle()
+
+    if (!docForAuth) {
+      return jsonError(res, 404, 'Documento não encontrado')
+    }
+
+    const companyAgentAuth = await assertCanManageAgentDocuments(req, docForAuth.agent_id)
+    if (!companyAgentAuth.ok) {
+      return jsonError(res, companyAgentAuth.status, companyAgentAuth.message)
+    }
+
+    effectiveClient = companyAgentAuth.svcSupabase
+  }
+
+  // ── 3b. Buscar documento completo ─────────────────────────────────────────
+
+  const { data: doc, error: fetchErr } = await effectiveClient
     .from('lovoo_agent_documents')
     .select('id, agent_id, name, storage_path, file_type, status, version, pending_version, content_hash')
     .eq('id', documentId)
@@ -109,7 +145,7 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   const nextVersion = (doc.version as number) + 1
 
-  const { data: locked, error: lockErr } = await auth.supabase
+  const { data: locked, error: lockErr } = await effectiveClient
     .from('lovoo_agent_documents')
     .update({
       status:               'processing',
@@ -133,7 +169,7 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   const svc = getServiceClient()
   if (!svc) {
-    await rollback(auth.supabase, svc, documentId, nextVersion, 'Supabase service_role não configurado')
+    await rollback(effectiveClient, svc, documentId, nextVersion, 'Supabase service_role não configurado')
     return jsonError(res, 500, 'Configuração de servidor incompleta')
   }
 
@@ -207,7 +243,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     // Após este UPDATE, o retriever passa a usar os novos chunks.
     // O filtro "c.doc_version = d.version" na RPC garantirá isso.
 
-    const { error: promoteErr } = await auth.supabase
+    const { error: promoteErr } = await effectiveClient
       .from('lovoo_agent_documents')
       .update({
         version:          nextVersion,
@@ -257,7 +293,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     // 3. Limpar pending_version
     // Chunks antigos permanecem intactos — retriever continua funcionando.
 
-    await rollback(auth.supabase, svc, documentId, nextVersion, message)
+    await rollback(effectiveClient, svc, documentId, nextVersion, message)
 
     return jsonError(res, 500, `Processamento falhou: ${message}`)
   }

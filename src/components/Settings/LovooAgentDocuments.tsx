@@ -16,7 +16,9 @@ import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import type { LovooAgentDocument } from '../../types/lovoo-agents'
 
 type Props = {
-  agentId: string
+  agentId:       string
+  /** Callback opcional — disparado sempre que a lista de documentos muda. */
+  onDocsChange?: (docs: LovooAgentDocument[]) => void
 }
 
 const STALE_THRESHOLD_MS = 15 * 60 * 1_000
@@ -33,7 +35,7 @@ function isProcessingStale(doc: LovooAgentDocument): boolean {
   return Date.now() - new Date(doc.processing_started_at).getTime() > STALE_THRESHOLD_MS
 }
 
-export const LovooAgentDocuments: React.FC<Props> = ({ agentId }) => {
+export const LovooAgentDocuments: React.FC<Props> = ({ agentId, onDocsChange }) => {
   const { t, i18n } = useTranslation('agents')
 
   const [docs,         setDocs]         = useState<LovooAgentDocument[]>([])
@@ -59,6 +61,13 @@ export const LovooAgentDocuments: React.FC<Props> = ({ agentId }) => {
       setLoading(false)
     }
   }, [agentId, t])
+
+  // Notifica o parent sempre que a lista de documentos muda.
+  const onDocsChangeRef = useRef(onDocsChange)
+  onDocsChangeRef.current = onDocsChange
+  useEffect(() => {
+    onDocsChangeRef.current?.(docs)
+  }, [docs])
 
   useEffect(() => {
     void loadDocs()

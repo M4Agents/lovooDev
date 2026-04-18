@@ -29,6 +29,10 @@ import {
   validatePromptConfig as validateFlatConfig,
   buildPromptFromConfig,
 } from '../lib/agents/promptTemplate.js';
+import {
+  detectOperationalContent,
+  OPERATIONAL_SCORE_THRESHOLD,
+} from '../lib/agents/kbContentValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -103,11 +107,19 @@ export default async function handler(req, res) {
     prompt,
     prompt_config,
     model,
+    knowledge_base,
     knowledge_mode,
     is_active,
     model_config,
     allowed_tools,
   } = req.body ?? {};
+
+  // Validação e sanitização da base de conhecimento
+  const KB_MAX_LENGTH = 5000;
+  const rawKb = typeof knowledge_base === 'string' ? knowledge_base.trim() : '';
+  const finalKnowledgeBase = rawKb.length > 0
+    ? rawKb.slice(0, KB_MAX_LENGTH)
+    : null;
 
   // ── Validação básica ───────────────────────────────────────────────────────
 
@@ -195,6 +207,28 @@ export default async function handler(req, res) {
 
   const sanitizedTools = sanitizeAllowedTools(allowed_tools);
 
+  // Detecção de conteúdo operacional indevido na KB (logging apenas — não bloqueia)
+  if (finalKnowledgeBase) {
+    const kbCheck = detectOperationalContent(finalKnowledgeBase);
+    if (kbCheck.score >= OPERATIONAL_SCORE_THRESHOLD) {
+      console.warn('[KB_VALIDATOR] kb_operational_content_detected', {
+        type:       'kb_operational_content_detected',
+        company_id: auth.callerCompanyId,
+        agent_id:   null,  // ainda não criado
+        score:      kbCheck.score,
+        flags:      kbCheck.flags,
+        kb_length:  finalKnowledgeBase.length,
+        timestamp:  new Date().toISOString(),
+      });
+    }
+  }
+
+  // knowledge_mode derivado do conteúdo da KB quando não especificado explicitamente:
+  // KB presente → 'inline'; KB ausente → 'none'
+  const resolvedKbMode = VALID_KNOWLEDGE_MODES.includes(knowledge_mode)
+    ? knowledge_mode
+    : (finalKnowledgeBase ? 'inline' : 'none');
+
   const insertPayload = {
     company_id:     auth.callerCompanyId,   // SEMPRE do JWT — nunca do body
     agent_type:     'conversational',        // SEMPRE forçado
@@ -204,7 +238,8 @@ export default async function handler(req, res) {
     prompt_config:  finalPromptConfig,
     prompt_version: 1,
     model:          typeof model === 'string' && model.trim() ? model.trim() : DEFAULT_MODEL,
-    knowledge_mode: VALID_KNOWLEDGE_MODES.includes(knowledge_mode) ? knowledge_mode : 'none',
+    knowledge_base: finalKnowledgeBase,
+    knowledge_mode: resolvedKbMode,
     is_active:      is_active === false ? false : true,
     model_config:   (typeof model_config === 'object' && model_config !== null) ? model_config : {}
   };
@@ -218,7 +253,7 @@ export default async function handler(req, res) {
   const { data: agent, error: insertErr } = await supabaseAdmin
     .from('lovoo_agents')
     .insert(insertPayload)
-    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, created_at, updated_at')
+    .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_base, knowledge_mode, model_config, allowed_tools, agent_type, company_id, created_at, updated_at')
     .single();
 
   if (insertErr) {

@@ -308,14 +308,18 @@ export async function runAgent(
   }
 
   // 5c. Base de conhecimento inline (modes: inline, hybrid)
+  // Conteúdo complementar — dados do sistema (Seção B + extra_context) têm prioridade absoluta.
   if (
     (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
     agent.knowledge_base?.trim()
   ) {
-    systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
+    systemParts.push(
+      `\n\nBase de conhecimento (conteúdo complementar — se houver conflito com dados do sistema, os dados do sistema têm prioridade absoluta):\n${agent.knowledge_base.trim()}`
+    )
   }
 
   // 5d. Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  // Documentos são conteúdo complementar — prioridade inferior aos dados do sistema.
   if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
     // A query combina a mensagem do usuário com o extra_context, pois o
     // embedding deve representar o mesmo conteúdo que será enviado ao LLM.
@@ -329,7 +333,9 @@ export async function runAgent(
     )
 
     if (contextText) {
-      systemParts.push(`\n\n${contextText}`)
+      systemParts.push(
+        `\n\nDocumentos complementares (conteúdo de apoio via busca semântica — se houver conflito com dados do sistema, os dados do sistema têm prioridade absoluta):\n${contextText}`
+      )
     }
     // Se o retriever não retornar chunks (sem documentos, embedding falhou, etc.)
     // o runner continua normalmente sem injetar contexto RAG — sem erro.
@@ -493,14 +499,18 @@ export async function runAgentWithConfig(
   }
 
   // [3] Base de conhecimento inline (modes: inline, hybrid)
+  // Conteúdo complementar — dados do sistema (Seção B + extra_context) têm prioridade absoluta.
   if (
     (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
     agent.knowledge_base?.trim()
   ) {
-    systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
+    systemParts.push(
+      `\n\nBase de conhecimento (conteúdo complementar — se houver conflito com dados do sistema, os dados do sistema têm prioridade absoluta):\n${agent.knowledge_base.trim()}`
+    )
   }
 
   // [4] Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  // Documentos são conteúdo complementar — prioridade inferior aos dados do sistema.
   if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
     const ragQuery = [ctx.userMessage, ctx.extra_context?.trim()]
       .filter(Boolean)
@@ -512,7 +522,9 @@ export async function runAgentWithConfig(
     )
 
     if (contextText) {
-      systemParts.push(`\n\n${contextText}`)
+      systemParts.push(
+        `\n\nDocumentos complementares (conteúdo de apoio via busca semântica — se houver conflito com dados do sistema, os dados do sistema têm prioridade absoluta):\n${contextText}`
+      )
     }
   }
 

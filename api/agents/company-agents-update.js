@@ -38,6 +38,10 @@ import {
   validatePromptConfig as validateFlatConfig,
   buildPromptFromConfig,
 } from '../lib/agents/promptTemplate.js';
+import {
+  detectOperationalContent,
+  OPERATIONAL_SCORE_THRESHOLD,
+} from '../lib/agents/kbContentValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -113,11 +117,20 @@ export default async function handler(req, res) {
     prompt_config,
     prompt_version,
     model,
+    knowledge_base,
     knowledge_mode,
     is_active,
     model_config,
     allowed_tools,
   } = req.body ?? {};
+
+  // Validação e sanitização da base de conhecimento
+  const KB_MAX_LENGTH = 5000;
+  const kbProvided = typeof knowledge_base !== 'undefined';
+  const rawKb = kbProvided && typeof knowledge_base === 'string' ? knowledge_base.trim() : '';
+  const finalKnowledgeBase = kbProvided
+    ? (rawKb.length > 0 ? rawKb.slice(0, KB_MAX_LENGTH) : null)
+    : undefined; // undefined = não alterar no banco
 
   // ── Validação mínima ───────────────────────────────────────────────────────
 
@@ -259,6 +272,31 @@ export default async function handler(req, res) {
     updatePayload.model = model.trim();
   }
 
+  // Detecção de conteúdo operacional indevido na KB (logging apenas — não bloqueia)
+  if (finalKnowledgeBase) {
+    const kbCheck = detectOperationalContent(finalKnowledgeBase);
+    if (kbCheck.score >= OPERATIONAL_SCORE_THRESHOLD) {
+      console.warn('[KB_VALIDATOR] kb_operational_content_detected', {
+        type:       'kb_operational_content_detected',
+        company_id: auth.callerCompanyId,
+        agent_id:   agent_id,
+        score:      kbCheck.score,
+        flags:      kbCheck.flags,
+        kb_length:  finalKnowledgeBase.length,
+        timestamp:  new Date().toISOString(),
+      });
+    }
+  }
+
+  if (finalKnowledgeBase !== undefined) {
+    updatePayload.knowledge_base = finalKnowledgeBase;
+    // Deriva knowledge_mode automaticamente se não foi especificado:
+    // KB presente → 'inline'; KB removida (null) → 'none'
+    if (knowledge_mode === undefined) {
+      updatePayload.knowledge_mode = finalKnowledgeBase ? 'inline' : 'none';
+    }
+  }
+
   if (knowledge_mode !== undefined) {
     updatePayload.knowledge_mode = VALID_KNOWLEDGE_MODES.includes(knowledge_mode) ? knowledge_mode : 'none';
   }
@@ -311,7 +349,7 @@ export default async function handler(req, res) {
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
       .eq('prompt_version', prompt_version)    // OPTIMISTIC LOCK
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_base, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
       .maybeSingle();
 
     if (updateErr) {
@@ -343,7 +381,7 @@ export default async function handler(req, res) {
       .eq('id', agent_id)
       .eq('company_id', auth.callerCompanyId)  // cross-tenant guard
       .eq('agent_type', 'conversational')
-      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
+      .select('id, name, description, is_active, model, prompt, prompt_config, prompt_version, knowledge_base, knowledge_mode, model_config, allowed_tools, agent_type, company_id, updated_at')
       .single();
 
     if (updateErr) {

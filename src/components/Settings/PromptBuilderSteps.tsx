@@ -8,12 +8,14 @@
  *   PromptLivePreview — Sub-componente do preview ao vivo (direita no Step 4)
  */
 
-import { useEffect, useDeferredValue, useState } from 'react'
+import { useCallback, useEffect, useDeferredValue, useRef, useState } from 'react'
 import { AgentTestSandbox } from './AgentTestSandbox'
+import { LovooAgentDocuments } from './LovooAgentDocuments'
 import {
   ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
-  Eye, Loader2, Package, Phone, Globe, Sparkles,
+  Eye, FileText, Loader2, Package, Phone, Globe, Sparkles,
 } from 'lucide-react'
+import type { LovooAgentDocument } from '../../types/lovoo-agents'
 import type { Company } from '../../lib/supabase'
 import type { FlatPromptConfig } from '../../services/promptBuilderApi'
 
@@ -499,6 +501,8 @@ export function StepPreview({
   advancedManualActive, onActivateAdvancedManual,
   advancedText, setAdvancedText,
   companyId, agentId,
+  knowledgeBase, setKnowledgeBase,
+  hasActiveDocs, onHasActiveDocsChange,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
@@ -519,6 +523,12 @@ export function StepPreview({
   /** Necessário para o sandbox inline no modo avançado */
   companyId: string
   agentId?:  string | null
+  /** Base de conhecimento complementar — campo separado, não faz parte do prompt_config */
+  knowledgeBase:    string
+  setKnowledgeBase: (v: string) => void
+  /** Documentos RAG — presença de docs ativos (ready | processing) */
+  hasActiveDocs:          boolean
+  onHasActiveDocsChange:  (v: boolean) => void
 }) {
   // Preview do modo normal — atualiza com prioridade menor
   const deferredConfig       = useDeferredValue(config)
@@ -528,6 +538,20 @@ export function StepPreview({
 
   // Controle do dialog de confirmação para ativação do modo avançado
   const [showAdvancedConfirm, setShowAdvancedConfirm] = useState(false)
+
+  // Painel da base de conhecimento — expandido automaticamente se já houver conteúdo
+  const [kbOpen, setKbOpen] = useState(() => knowledgeBase.trim().length > 0)
+
+  // Verificação de dados operacionais na KB (soft warning, não bloqueia)
+  const KB_MAX = 5000
+  const KB_WARN_PATTERNS = [
+    /\(\d{2}\)\s*\d{4,5}-?\d{4}/,             // telefone BR
+    /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/, // email
+    /https?:\/\//,                              // URL
+    /R\$\s*\d+/,                               // valor monetário BRL
+    /\d+[.,]\d{2,}/,                           // número decimal (possível preço)
+  ]
+  const kbHasOperationalData = KB_WARN_PATTERNS.some(r => r.test(knowledgeBase))
 
   function update(field: keyof FlatPromptConfig, value: string) {
     setConfig({ ...config, [field]: value })
@@ -702,6 +726,90 @@ export function StepPreview({
         </div>
       </div>
 
+      {/* ── Base de conhecimento complementar ──────────────────────────────── */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {/* Cabeçalho colapsável */}
+        <button
+          type="button"
+          onClick={() => setKbOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100
+                     transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base leading-none">📚</span>
+            <span className="text-sm font-semibold text-gray-700">Base de conhecimento</span>
+            <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+            {knowledgeBase.trim().length > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700
+                               text-xs rounded-full font-medium ml-1">
+                Ativa
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-xs ml-2 flex-shrink-0">
+            {kbOpen ? '▲ Fechar' : '▼ Abrir'}
+          </span>
+        </button>
+
+        {kbOpen && (
+          <div className="px-4 py-4 space-y-3 bg-white">
+            {/* Descrição */}
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-blue-800 leading-relaxed">
+              <strong>Para que serve:</strong> adicione conteúdo complementar que o agente pode consultar —
+              FAQs, políticas de garantia, procedimentos internos, fichas técnicas, roteiros de objeções,
+              informações institucionais.<br />
+              <strong className="text-red-700">Não inclua:</strong> preços, estoque, disponibilidade,
+              contatos, horário ou endereço. Esses dados vêm automaticamente do sistema e têm prioridade
+              sobre qualquer conteúdo desta seção.
+            </div>
+
+            {/* Warning de dados operacionais */}
+            {kbHasOperationalData && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800">
+                <span className="flex-shrink-0 mt-0.5">⚠️</span>
+                <span>
+                  Detectamos dados que podem ser operacionais (telefone, e-mail, URL ou valor monetário).
+                  Esses dados mudam com frequência — use apenas o que está cadastrado no sistema para evitar
+                  informações desatualizadas.
+                </span>
+              </div>
+            )}
+
+            {/* Textarea */}
+            <div className="relative">
+              <textarea
+                value={knowledgeBase}
+                onChange={e => setKnowledgeBase(e.target.value.slice(0, KB_MAX))}
+                disabled={saving}
+                rows={6}
+                placeholder={
+                  'Exemplos:\n' +
+                  '- Pergunta: Como funciona a garantia? → Resposta: Nosso produto tem 12 meses de garantia contra defeitos de fabricação...\n' +
+                  '- Política de devolução: o cliente tem até 7 dias corridos para solicitar a troca...\n' +
+                  '- Procedimento de segunda via: o cliente deve enviar CPF + nota fiscal por e-mail...'
+                }
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-y
+                           leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-400
+                           placeholder:text-gray-400 disabled:opacity-50 disabled:bg-gray-50"
+              />
+              {/* Contador de caracteres */}
+              <p className={`text-right text-xs mt-1 ${
+                knowledgeBase.length >= KB_MAX ? 'text-red-500 font-semibold' : 'text-gray-400'
+              }`}>
+                {knowledgeBase.length.toLocaleString('pt-BR')} / {KB_MAX.toLocaleString('pt-BR')} caracteres
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Documentos RAG ──────────────────────────────────────────────────── */}
+      <AgentDocumentsSection
+        agentId={agentId ?? null}
+        saving={saving}
+        onHasActiveDocsChange={onHasActiveDocsChange}
+      />
+
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700">
           {error}
@@ -744,6 +852,126 @@ export function StepPreview({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── AgentDocumentsSection ─────────────────────────────────────────────────────
+//
+// Seção colapsável de documentos RAG dentro do modal de Company Agent.
+// Reutiliza LovooAgentDocuments e notifica o wizard sobre presença de docs ativos.
+//
+// agentId == null → agente ainda não salvo → exibe CTA para salvar primeiro.
+
+function AgentDocumentsSection({
+  agentId,
+  saving,
+  onHasActiveDocsChange,
+}: {
+  agentId:               string | null
+  saving:                boolean
+  onHasActiveDocsChange: (v: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [activeBadge, setActiveBadge] = useState<{ ready: number; processing: number } | null>(null)
+
+  const handleDocsChange = useCallback(
+    (docs: LovooAgentDocument[]) => {
+      const ready      = docs.filter(d => d.status === 'ready').length
+      const processing = docs.filter(d => d.status === 'processing' || d.status === 'pending').length
+      setActiveBadge({ ready, processing })
+      onHasActiveDocsChange(ready > 0 || processing > 0)
+      // Auto-expande o painel se houver documentos carregados
+      if (ready + processing > 0) setOpen(true)
+    },
+    [onHasActiveDocsChange]
+  )
+
+  const hasAny = activeBadge !== null && (activeBadge.ready + activeBadge.processing) > 0
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      {/* Cabeçalho colapsável */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100
+                   transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <FileText className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-gray-700">Documentos</span>
+          <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+
+          {activeBadge && activeBadge.processing > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700
+                             text-xs rounded-full font-medium ml-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Processando...
+            </span>
+          )}
+          {activeBadge && activeBadge.ready > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700
+                             text-xs rounded-full font-medium ml-1">
+              {activeBadge.ready} doc{activeBadge.ready > 1 ? 's' : ''} ativo{activeBadge.ready > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <span className="text-gray-400 text-xs ml-2 flex-shrink-0">
+          {open ? '▲ Fechar' : '▼ Abrir'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="bg-white">
+          {/* Descrição */}
+          <div className="px-4 pt-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-blue-800 leading-relaxed">
+              <strong>Para que serve:</strong> adicione arquivos <code className="font-mono">.txt</code> ou{' '}
+              <code className="font-mono">.md</code> para que o agente consulte automaticamente durante o atendimento.
+              Use para manuais extensos, políticas longas ou bases de conhecimento estruturadas que não cabem
+              no campo de texto acima.<br />
+              <strong className="text-red-700">Os dados do sistema (preços, catálogo, horário) continuam sendo
+              a fonte de verdade</strong> — os documentos são apenas conteúdo de apoio.
+            </div>
+
+            {hasAny && (
+              <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg
+                              px-3 py-2.5 text-xs text-amber-800">
+                <span className="flex-shrink-0 mt-0.5">⚠️</span>
+                <span>
+                  Documentos em processamento podem não ser consultados pelo agente ainda.
+                  Aguarde o status <strong>Ativo</strong> antes de testar.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {agentId ? (
+            /* Agente já salvo — exibe lista + upload */
+            <div className="px-4 pb-4 pt-3">
+              <LovooAgentDocuments
+                agentId={agentId}
+                onDocsChange={handleDocsChange}
+              />
+            </div>
+          ) : (
+            /* Agente novo — CTA para salvar primeiro */
+            <div className="px-4 pb-4 pt-3">
+              <div className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed
+                              border-gray-200 rounded-xl text-center">
+                <FileText className="w-8 h-8 text-gray-300" />
+                <p className="text-sm text-gray-500 font-medium">
+                  Para adicionar documentos, salve o agente primeiro.
+                </p>
+                <p className="text-xs text-gray-400">
+                  Clique em <strong>Salvar agente</strong> abaixo e depois reabra para editar.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

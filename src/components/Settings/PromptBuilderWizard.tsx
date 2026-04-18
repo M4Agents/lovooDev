@@ -348,6 +348,18 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     return null
   })
 
+  // Base de conhecimento complementar (campo livre, opcional, máx 5000 chars)
+  // Persiste em knowledge_base na tabela lovoo_agents.
+  // Não faz parte do prompt_config — injetada separadamente no runtime pelo runner.
+  const [knowledgeBase, setKnowledgeBase] = useState<string>(
+    initialAgent?.knowledge_base ?? ''
+  )
+
+  // Documentos RAG — presença de documentos ativos (status ready | processing).
+  // Atualizado pelo AgentDocumentsSection via callback onHasActiveDocsChange.
+  // Usado apenas para derivar knowledge_mode no save.
+  const [hasActiveDocs, setHasActiveDocs] = useState<boolean>(false)
+
   // Modo de edição avançada — editável manualmente sem regeneração por IA.
   // Persiste em model_config.editing_mode = 'advanced_manual'.
   // Irreversível por agente: uma vez ativado, nunca volta ao fluxo assistido.
@@ -462,6 +474,16 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
         ? { ...baseModelConfig, editing_mode: 'advanced_manual' }
         : baseModelConfig
 
+      // knowledge_base e knowledge_mode — derivados automaticamente:
+      //   KB + docs → 'hybrid' | KB only → 'inline' | docs only → 'rag' | neither → 'none'
+      const kbTrimmed    = knowledgeBase.trim()
+      const kbPayload    = kbTrimmed || undefined
+      const kbModePayload: 'none' | 'inline' | 'rag' | 'hybrid' =
+        kbTrimmed && hasActiveDocs ? 'hybrid'
+        : kbTrimmed               ? 'inline'
+        : hasActiveDocs           ? 'rag'
+        : 'none'
+
       if (isEditMode && initialAgent?.id) {
         // Modo edição — atualiza agente existente
         const payload: UpdateCompanyAgentPayload = {
@@ -471,17 +493,21 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           model,
           prompt_config:  effectiveConfig,
           prompt_version: (initialAgent.prompt_version ?? 0) + 1,
+          knowledge_base: kbPayload ?? '',   // string vazia → backend trata como null
+          knowledge_mode: kbModePayload,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.update(payload)
       } else {
         // Modo criação — cria novo agente
         const payload: CreateCompanyAgentPayload = {
-          company_id:    companyId,
-          name:          agentName.trim(),
+          company_id:     companyId,
+          name:           agentName.trim(),
           model,
-          prompt_config: effectiveConfig,
-          model_config:  Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
+          prompt_config:  effectiveConfig,
+          knowledge_base: kbPayload,
+          knowledge_mode: kbModePayload,
+          model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.create(payload)
       }
@@ -550,6 +576,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     setAnswers({ objective: '', communication_style: '', commercial_rules: '', custom_notes: '' })
     setConversationAnalysis(null)
     setPromptConfig(null)
+    setKnowledgeBase('')
     setError(null)
     setSavedAgent(null)
   }
@@ -647,6 +674,10 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           setAdvancedText={setAdvancedText}
           companyId={companyId}
           agentId={initialAgent?.id ?? null}
+          knowledgeBase={knowledgeBase}
+          setKnowledgeBase={setKnowledgeBase}
+          hasActiveDocs={hasActiveDocs}
+          onHasActiveDocsChange={setHasActiveDocs}
         />
       )}
 
