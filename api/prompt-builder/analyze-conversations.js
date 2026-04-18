@@ -369,7 +369,15 @@ function buildCustomNotes(dp) {
     '- Se o cliente perguntar muito de uma vez, escolha o ponto mais relevante',
   );
 
-  // ── P3: QUALIFICAÇÃO (variável — attendant_questions) ────────────────────
+  // ── P3: ELEVAÇÃO DE VALOR (fixo) — prioridade alta para garantir comportamento de venda
+  allSections.push(
+    'ELEVAÇÃO DE VALOR:\n' +
+    '- Não apenas informe — gere percepção de valor antes de revelar detalhes\n' +
+    '- Conecte cada produto ou serviço ao objetivo específico do cliente\n' +
+    '- Use benefícios e resultados concretos, não só características',
+  );
+
+  // ── P4: QUALIFICAÇÃO (variável — attendant_questions) ────────────────────
   const questions = dp.attendant_questions?.filter(Boolean) ?? [];
   if (questions.length) {
     const qList = questions.slice(0, 5).map(q => `- "${q}"`).join('\n');
@@ -382,7 +390,7 @@ function buildCustomNotes(dp) {
     );
   }
 
-  // ── P4: OBJEÇÕES (variável — objections + objection_responses) ───────────
+  // ── P5: OBJEÇÕES (variável — objections + objection_responses) ───────────
   const objections = dp.objections?.filter(Boolean) ?? [];
   const responses  = dp.objection_responses?.filter(Boolean) ?? [];
   if (objections.length) {
@@ -400,7 +408,7 @@ function buildCustomNotes(dp) {
     );
   }
 
-  // ── P5: FECHAMENTO (variável + CTAs fixos) ───────────────────────────────
+  // ── P6: FECHAMENTO (variável + CTAs fixos) ───────────────────────────────
   const closings = dp.closing_patterns?.filter(Boolean) ?? [];
   const closingLines = closings.length
     ? closings.slice(0, 3).map(c => `- ${c}`).join('\n') + '\n'
@@ -412,22 +420,14 @@ function buildCustomNotes(dp) {
     '- Nunca encerre sem uma próxima ação concreta e clara',
   );
 
-  // ── P6: DÚVIDAS FREQUENTES (variável — frequent_customer_questions) ──────
+  // ── P7: DÚVIDAS FREQUENTES (variável — frequent_customer_questions) ──────
   const customerQuestions = dp.frequent_customer_questions?.filter(Boolean) ?? [];
   if (customerQuestions.length) {
     const cqList = customerQuestions.slice(0, 5).map(q => `- ${q}`).join('\n');
     allSections.push(`DÚVIDAS FREQUENTES:\nEsteja preparado para responder:\n${cqList}`);
   }
 
-  // ── P7: ELEVAÇÃO DE VALOR (fixo) ─────────────────────────────────────────
-  allSections.push(
-    'ELEVAÇÃO DE VALOR:\n' +
-    '- Não apenas informe — gere percepção de valor antes de revelar detalhes\n' +
-    '- Conecte cada produto ou serviço ao objetivo específico do cliente\n' +
-    '- Use benefícios e resultados concretos, não só características',
-  );
-
-  // ── P8: NÍVEL DE CONSCIÊNCIA (fixo) ──────────────────────────────────────
+  // ── P8: NÍVEL DE CONSCIÊNCIA (fixo) ─────────────────────────────────────
   allSections.push(
     'NÍVEL DE CONSCIÊNCIA:\n' +
     '- Curioso: faça perguntas para entender contexto e elevar o interesse\n' +
