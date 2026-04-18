@@ -135,6 +135,7 @@ Os papéis possíveis são apenas:
     "tone": "string",
     "greeting_examples": ["string"],
     "frequent_customer_questions": ["string"],
+    "frequent_customer_answers": ["string"],
     "attendant_questions": ["string"],
     "objections": ["string"],
     "objection_responses": ["string"],
@@ -161,19 +162,24 @@ REGRAS DE ANÁLISE:
 
 4. frequent_customer_questions: até 5 padrões de perguntas do CLIENTE. Não copiar literal — abstrair o padrão.
 
-5. attendant_questions: até 5 perguntas usadas pelo ATENDENTE para qualificar ou conduzir o cliente.
+5. frequent_customer_answers: até 5 respostas típicas do ATENDENTE às perguntas frequentes do CLIENTE,
+   alinhadas pelo mesmo índice de frequent_customer_questions. Represente a ESTRATÉGIA de resposta
+   (ex: "Reforça o valor antes de informar o prazo"), não texto literal. Remova nomes, valores
+   numéricos, pedidos e contatos específicos. Se não houver resposta clara para uma pergunta, use "".
 
-6. objections: até 5 objeções recorrentes levantadas pelo CLIENTE.
+6. attendant_questions: até 5 perguntas usadas pelo ATENDENTE para qualificar ou conduzir o cliente.
 
-7. objection_responses: até 5 padrões de resposta do ATENDENTE às objeções. Foco em estratégia, não texto literal.
+7. objections: até 5 objeções recorrentes levantadas pelo CLIENTE.
 
-8. closing_patterns: até 5 formas de fechamento ou encaminhamento usadas pelo ATENDENTE.
+8. objection_responses: até 5 padrões de resposta do ATENDENTE às objeções. Foco em estratégia, não texto literal.
 
-9. handoff_triggers: situações onde o atendimento foi transferido para humano ou outra etapa. Se não houver, use [].
+9. closing_patterns: até 5 formas de fechamento ou encaminhamento usadas pelo ATENDENTE.
 
-10. terms_to_avoid: até 5 comportamentos ou frases inadequadas observadas. Se não houver, use [].
+10. handoff_triggers: situações onde o atendimento foi transferido para humano ou outra etapa. Se não houver, use [].
 
-11. suggested_prompt_config: preencher com base nos padrões identificados:
+11. terms_to_avoid: até 5 comportamentos ou frases inadequadas observadas. Se não houver, use [].
+
+12. suggested_prompt_config: preencher com base nos padrões identificados:
 - identity: quem o agente deve ser (evite mencionar IA)
 - objective: objetivo comercial do atendimento
 - communication_style: estilo e tom de comunicação ideal
@@ -246,6 +252,73 @@ function safeArray(val, maxItems = 5, maxLen = 120) {
     seen.add(key);
     result.push(s);
     if (result.length >= maxItems) break;
+  }
+
+  return result;
+}
+
+// Padrões para remover dados específicos (nomes, valores, contatos, pedidos)
+const ANSWER_STRIP_PATTERNS = [
+  /\b\d{2,}[.,]\d{3}([.,]\d{2})?\b/g,        // valores monetários (1.200,00 / 1200.00)
+  /R\$\s*[\d.,]+/gi,                           // R$ explícito
+  /\b\d{8,}\b/g,                               // pedidos / números longos
+  /\b\d{2}\/\d{2}\/\d{2,4}\b/g,               // datas específicas
+  /\(\d{2}\)\s*\d{4,5}-?\d{4}/g,              // telefones
+  /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, // emails
+];
+
+// Respostas consideradas inúteis para o prompt do agente
+const VAGUE_ANSWER_PATTERNS = [
+  /^(ok|sim|não|tá|ta|blz|beleza|certo|entendido|claro|com certeza)\.?$/i,
+  /^(olá|oi|boa tarde|bom dia|boa noite)!?\.?$/i,
+];
+
+/**
+ * Sanitiza um array de respostas de atendente:
+ * - Remove dados específicos (valores, datas, pedidos, contatos)
+ * - Remove respostas vagas ou irrelevantes
+ * - Limita a 200 chars por item
+ * - Alinha com frequent_customer_questions: índices sem resposta válida → ""
+ *
+ * @param {any[]} val      - Array bruto do LLM
+ * @param {number} maxItems - Máximo de itens (deve ser igual ao de questions)
+ */
+function safeAnswerArray(val, maxItems = 5) {
+  if (!Array.isArray(val)) return [];
+
+  const result = [];
+
+  for (let i = 0; i < maxItems; i++) {
+    const raw = val[i];
+    if (!raw && raw !== '') {
+      result.push('');
+      continue;
+    }
+
+    let s = String(raw).trim();
+
+    // Remover dados específicos
+    for (const pattern of ANSWER_STRIP_PATTERNS) {
+      s = s.replace(pattern, '');
+    }
+    s = s.replace(/\s{2,}/g, ' ').trim();
+
+    // Limitar tamanho
+    s = s.slice(0, 200);
+
+    // Ignorar respostas vagas ou muito curtas após sanitização
+    const isVague = VAGUE_ANSWER_PATTERNS.some(p => p.test(s));
+    if (!s || s.length < 10 || isVague) {
+      result.push('');
+      continue;
+    }
+
+    result.push(s);
+  }
+
+  // Remover trailing "" para não inflar o array além das questions existentes
+  while (result.length > 0 && result[result.length - 1] === '') {
+    result.pop();
   }
 
   return result;
@@ -420,11 +493,21 @@ function buildCustomNotes(dp) {
     '- Nunca encerre sem uma próxima ação concreta e clara',
   );
 
-  // ── P7: DÚVIDAS FREQUENTES (variável — frequent_customer_questions) ──────
+  // ── P7: DÚVIDAS FREQUENTES (variável — frequent_customer_questions + frequent_customer_answers) ──
   const customerQuestions = dp.frequent_customer_questions?.filter(Boolean) ?? [];
   if (customerQuestions.length) {
-    const cqList = customerQuestions.slice(0, 5).map(q => `- ${q}`).join('\n');
-    allSections.push(`DÚVIDAS FREQUENTES:\nEsteja preparado para responder:\n${cqList}`);
+    const customerAnswers = dp.frequent_customer_answers ?? [];
+    const qaPairs = customerQuestions.slice(0, 5).map((q, i) => {
+      const a = typeof customerAnswers[i] === 'string' && customerAnswers[i].trim()
+        ? ` → ${customerAnswers[i].trim()}`
+        : '';
+      return `- ${q}${a}`;
+    }).join('\n');
+    allSections.push(
+      'DÚVIDAS FREQUENTES (baseadas em conversas reais):\n' +
+      'Use como referência de abordagem, não copie literalmente:\n' +
+      qaPairs,
+    );
   }
 
   // ── P8: NÍVEL DE CONSCIÊNCIA (fixo) ─────────────────────────────────────
@@ -487,10 +570,14 @@ function normalizeAnalysis(raw) {
 
   const dp = raw.detected_patterns ?? {};
 
+  const normalizedQuestions = safeArray(dp.frequent_customer_questions);
+
   const detected_patterns = {
     tone:                        safeString(dp.tone, 120),
     greeting_examples:           safeArray(dp.greeting_examples),
-    frequent_customer_questions: safeArray(dp.frequent_customer_questions),
+    frequent_customer_questions: normalizedQuestions,
+    // safeAnswerArray alinha por índice com questions e sanitiza dados específicos
+    frequent_customer_answers:   safeAnswerArray(dp.frequent_customer_answers, normalizedQuestions.length),
     attendant_questions:         safeArray(dp.attendant_questions),
     objections:                  safeArray(dp.objections),
     objection_responses:         safeArray(dp.objection_responses),

@@ -75,6 +75,8 @@ export interface ConversationDetectedPatterns {
   tone:                        string
   greeting_examples:           string[]
   frequent_customer_questions: string[]
+  /** Respostas estratégicas do atendente, alinhadas por índice com frequent_customer_questions. */
+  frequent_customer_answers:   string[]
   attendant_questions:         string[]
   objections:                  string[]
   objection_responses:         string[]
