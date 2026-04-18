@@ -26,20 +26,12 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'duplicate-notifications.js:GET',message:'Buscando notificações com service_role',data:{companyId,hasServiceKey:!!supabaseServiceKey},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
-
       const { data: notifications, error } = await supabase
         .from('duplicate_notifications')
         .select('id, lead_id, duplicate_of_lead_id, reason, created_at')
         .eq('company_id', companyId)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
-
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'duplicate-notifications.js:GET_result',message:'Resultado query duplicate_notifications',data:{count:notifications?.length,error:error?.message},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
 
       if (error) {
         return res.status(500).json({ error: 'Erro ao buscar notificações', details: error.message });
@@ -59,10 +51,6 @@ export default async function handler(req, res) {
             p_lead_ids: Array.from(leadIds),
             p_company_id: companyId
           });
-
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3620d6'},body:JSON.stringify({sessionId:'3620d6',location:'duplicate-notifications.js:RPC_result',message:'Resultado RPC get_leads_for_notifications',data:{leadsCount:leads?.length,leadsError:leadsError?.message},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
 
         if (leadsError) {
           console.error('Erro ao buscar leads:', leadsError);

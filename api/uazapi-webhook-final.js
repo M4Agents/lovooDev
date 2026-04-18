@@ -1008,10 +1008,6 @@ async function processMessage(payload) {
     // inconsistência de status que o RPC anterior causava.
     if (direction === 'inbound' && conversationId) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-start',message:'iniciando busca de execução pausada',data:{companyId:company.id,inboundLeadId,conversationId,messageText:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
         console.log('[webhook][user_input] v3 — buscando via RPC SECURITY DEFINER', { companyId: company.id, inboundLeadId });
 
         // Usa RPC SECURITY DEFINER para bypass do RLS (client anon não acessa diretamente)
@@ -1029,10 +1025,6 @@ async function processMessage(payload) {
           console.log('[webhook][user_input] nenhuma execução pausada aguardando input');
         } else {
           const target = { id: pausedResult.execution_id, lead_id: pausedResult.lead_id };
-
-          // #region agent log
-          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-target',message:'execução candidata selecionada via RPC',data:{targetId:target?.id,targetLeadId:target?.lead_id,inboundLeadId},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
 
           if (target) {
             console.log(`[webhook][user_input] retomando execução ${target.id} com resposta do lead ${inboundLeadId}`);
@@ -1060,10 +1052,6 @@ async function processMessage(payload) {
               if (flowErr || !flow) {
                 console.error(`[webhook][user_input] ❌ flow ${execution.flow_id} não encontrado:`, flowErr?.message);
               } else {
-                // #region agent log
-                fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'25e06b'},body:JSON.stringify({sessionId:'25e06b',location:'uazapi-webhook-final.js:resume-direct',message:'chamando resumeFromNode diretamente',data:{executionId:target.id,nodeId:execution.current_node_id,userResponse:messageText?.substring(0,80)},timestamp:Date.now()})}).catch(()=>{});
-                // #endregion
-
                 await resumeFromNode(execution, flow, execution.current_node_id, supabaseAdmin, messageText);
                 console.log(`[webhook][user_input] ✅ execução ${target.id} retomada com sucesso`);
               }

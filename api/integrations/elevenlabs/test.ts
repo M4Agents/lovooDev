@@ -61,29 +61,6 @@ export default async function handler(req: any, res: any) {
     })
     clearTimeout(t)
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f28051' },
-      body: JSON.stringify({
-        sessionId: 'f28051',
-        hypothesisId: 'H1-elevenlabs-http',
-        location: 'elevenlabs/test.ts:afterFetch',
-        message: 'elevenlabs_v1_user_status',
-        data: { status: r.status, ok: r.ok },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    console.log(
-      JSON.stringify({
-        hypothesisId: 'H1-elevenlabs-http',
-        message: 'elevenlabs_v1_user_status',
-        data: { status: r.status, ok: r.ok },
-        timestamp: Date.now(),
-      })
-    )
-    // #endregion
-
     if (r.ok) {
       res.status(200).json({ ok: true })
       return

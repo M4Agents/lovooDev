@@ -314,10 +314,6 @@ function buildExtraContext(output) {
     sections.push(memorySection);
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'agentExecutor.js:buildExtraContext-start',message:'montando extra_context — item_of_interest e campos AI',hypothesisId:'H-A,H-C',data:{has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0),ambiguous_candidates_count:(output.ambiguous_candidates?.length??0)},timestamp:Date.now()})}).catch(()=>{});
-  console.log('[DBG-cf8832][EXEC:extra-context]', JSON.stringify({has_item_of_interest:Boolean(output.item_of_interest),item_name:output.item_of_interest?.name??null,has_ai_notes:Boolean(output.item_of_interest?.ai_notes),ai_notes_snippet:(output.item_of_interest?.ai_notes||'').slice(0,80),has_ai_unavailable_guidance:Boolean(output.item_of_interest?.ai_unavailable_guidance),availability_status:output.item_of_interest?.availability_status??null,products_in_catalog:(output.catalog?.products?.length??0),services_in_catalog:(output.catalog?.services?.length??0),ambiguous_candidates_count:(output.ambiguous_candidates?.length??0)}));
-  // #endregion
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
   const messages = output.conversation?.recent_messages ?? [];

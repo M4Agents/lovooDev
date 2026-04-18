@@ -313,10 +313,6 @@ export async function buildContext(orchestratorContext) {
     }
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'contextBuilder.js:catalog-match',message:'catálogo e match de item',hypothesisId:'H-A,H-B',data:{company_id:companyId,products_count:catalog.products.length,services_count:catalog.services.length,item_of_interest_name:itemOfInterest?.name??null,item_of_interest_has_ai_notes:itemOfInterest?Boolean(itemOfInterest.ai_notes):null,item_of_interest_has_ai_unavailable:itemOfInterest?Boolean(itemOfInterest.ai_unavailable_guidance):null,user_message_snippet:(userMessage||'').slice(0,80),catalog_names:[...catalog.products,...catalog.services].map(i=>i.name).slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
-  console.log('[DBG-cf8832][CTX:catalog-match]', JSON.stringify({products_count:catalog.products.length,services_count:catalog.services.length,item_of_interest_name:itemOfInterest?.name??null,item_has_ai_notes:itemOfInterest?Boolean(itemOfInterest.ai_notes):null,item_has_ai_unavailable:itemOfInterest?Boolean(itemOfInterest.ai_unavailable_guidance):null,user_message_snippet:(userMessage||'').slice(0,80),catalog_names:[...catalog.products,...catalog.services].map(i=>i.name).slice(0,10)}));
-  // #endregion
 
   // ── Montar mapa de variáveis (empresa executora + produto em foco) ─────────
   // Variáveis da EMPRESA EXECUTORA — nunca da empresa-pai.

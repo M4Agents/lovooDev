@@ -543,10 +543,6 @@ export async function runAgentWithConfig(
   const toolDefinitions = getToolsForAgent(agentAllowedTools)
   const hasTools = toolDefinitions.length > 0
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'runner.ts:tools-config',message:'tools configuradas para o agente',hypothesisId:'H-D',data:{agent_id:agent.id,allowed_tools:agentAllowedTools,has_send_media:agentAllowedTools.includes('send_media'),total_tools_declared:toolDefinitions.length,has_item_of_interest:Boolean(ctx.item_of_interest),item_name:(ctx.item_of_interest as any)?.name??null},timestamp:Date.now()})}).catch(()=>{});
-  console.log('[DBG-cf8832][RUNNER:tools-config]', JSON.stringify({agent_id:agent.id,allowed_tools:agentAllowedTools,has_send_media:agentAllowedTools.includes('send_media'),total_tools_declared:toolDefinitions.length,has_item_of_interest:Boolean(ctx.item_of_interest),item_name:(ctx.item_of_interest as any)?.name??null}));
-  // #endregion
 
   // Executa via OpenAI
   try {
