@@ -488,15 +488,24 @@ type AgentCardProps = {
   customFieldVariables: PromptVariable[]
   onUpdated:            (agent: CompanyAgent) => void
   onDeleted:            (agentId: string) => void
+  /** Abre o AgentCreationModal em modo edição para agentes no formato flat */
+  onEditInWizard?:      (agent: CompanyAgent) => void
 }
 
-function AgentCard({ agent, companyId, customFieldVariables, onUpdated, onDeleted }: AgentCardProps) {
+function AgentCard({ agent, companyId, customFieldVariables, onUpdated, onDeleted, onEditInWizard }: AgentCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing]   = useState(false)
   const [toggling, setToggling] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const isStructured = agent.prompt_config !== null
+  // Agentes com formato flat (criados pelo novo wizard) têm identity mas não sections
+  const isFlatAgent = (
+    agent.prompt_config !== null &&
+    typeof agent.prompt_config === 'object' &&
+    'identity' in (agent.prompt_config as object) &&
+    !('sections' in (agent.prompt_config as object))
+  )
 
   async function handleToggle() {
     setToggling(true)
@@ -575,7 +584,7 @@ function AgentCard({ agent, companyId, customFieldVariables, onUpdated, onDelete
           </button>
 
           <button
-            onClick={() => setEditing(true)}
+            onClick={() => isFlatAgent && onEditInWizard ? onEditInWizard(agent) : setEditing(true)}
             className="text-xs px-2 py-0.5 rounded-full border border-blue-300
                        text-blue-700 hover:bg-blue-50 transition-colors"
           >
@@ -633,6 +642,8 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
   // 'form'   = formulário avançado
   // null     = nenhum formulário aberto
   const [createMode, setCreateMode]                = useState<'wizard' | 'form' | null>(null)
+  // Agente sendo editado no wizard (formato flat). null = nenhum agente em edição via wizard
+  const [editingAgentInWizard, setEditingAgentInWizard] = useState<CompanyAgent | null>(null)
   const [customFieldVariables, setCustomFieldVars] = useState<PromptVariable[]>([])
 
   useEffect(() => {
@@ -659,6 +670,11 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
   function handleCreated(agent: CompanyAgent) {
     setAgents(prev => [...prev, agent])
     setCreateMode(null)
+  }
+
+  function handleUpdatedFromWizard(updated: CompanyAgent) {
+    setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+    setEditingAgentInWizard(null)
   }
 
   function handleUpdated(updated: CompanyAgent) {
@@ -704,6 +720,16 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
         onAdvanced={() => setCreateMode('form')}
       />
 
+      {/* Modal de edição de agente criado pelo wizard (formato flat) */}
+      <AgentCreationModal
+        isOpen={editingAgentInWizard !== null}
+        onClose={() => setEditingAgentInWizard(null)}
+        companyId={companyId}
+        agent={editingAgentInWizard ?? undefined}
+        onSaved={handleUpdatedFromWizard}
+        onAdvanced={() => setEditingAgentInWizard(null)}
+      />
+
       {/* Formulário avançado (configuração manual) */}
       {createMode === 'form' && (
         <AgentForm
@@ -742,6 +768,7 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
               customFieldVariables={customFieldVariables}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
+              onEditInWizard={setEditingAgentInWizard}
             />
           ))}
         </div>

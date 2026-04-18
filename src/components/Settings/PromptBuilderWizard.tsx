@@ -17,7 +17,7 @@ import { Bot, Check, Sparkles } from 'lucide-react'
 import { supabase, type Company } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { promptBuilderApi, type FlatPromptConfig } from '../../services/promptBuilderApi'
-import { companyOwnAgentsApi, type CompanyAgent, type CreateCompanyAgentPayload } from '../../services/companyOwnAgentsApi'
+import { companyOwnAgentsApi, type CompanyAgent, type CreateCompanyAgentPayload, type UpdateCompanyAgentPayload } from '../../services/companyOwnAgentsApi'
 import { PromptBuilderStepper } from './PromptBuilderStepper'
 import { PromptBuilderSupportChat } from './PromptBuilderSupportChat'
 import {
@@ -47,6 +47,12 @@ interface Props {
    * Se ausente, o botão "Testar agente" não é exibido.
    */
   onTest?: (config: FlatPromptConfig, agentName: string, companyName: string) => void
+  /**
+   * Agente existente a ser editado (modo edição).
+   * Quando presente, abre no Step 4 com os dados do agente pré-carregados
+   * e usa update() em vez de create() ao salvar.
+   */
+  initialAgent?: CompanyAgent
 }
 
 const AVAILABLE_MODELS = [
@@ -172,12 +178,13 @@ function StepBasic({
 // ── Etapa 5 — Sucesso ─────────────────────────────────────────────────────────
 
 function StepSuccess({
-  agentName, onView, onReset, onTest,
+  agentName, onView, onReset, onTest, isEditMode,
 }: {
-  agentName: string
-  onView:    () => void
-  onReset:   () => void
-  onTest?:   () => void
+  agentName:   string
+  onView:      () => void
+  onReset:     () => void
+  onTest?:     () => void
+  isEditMode?: boolean
 }) {
   return (
     <div className="flex flex-col items-center text-center py-8 gap-6">
@@ -187,15 +194,20 @@ function StepSuccess({
 
       <div className="space-y-2">
         <h4 className="text-lg font-semibold text-gray-900">
-          Agente criado com sucesso!
+          {isEditMode ? 'Agente atualizado com sucesso!' : 'Agente criado com sucesso!'}
         </h4>
         <p className="text-sm font-medium text-gray-600">
-          <span className="text-gray-900 font-semibold">{agentName}</span> já está pronto
-          para conversar com seus clientes 🎉
+          <span className="text-gray-900 font-semibold">{agentName}</span>{' '}
+          {isEditMode
+            ? 'foi atualizado e já está pronto para conversar com seus clientes 🎉'
+            : 'já está pronto para conversar com seus clientes 🎉'
+          }
         </p>
-        <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
-          Conecte ao WhatsApp nas configurações de integração para começar a receber mensagens.
-        </p>
+        {!isEditMode && (
+          <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
+            Conecte ao WhatsApp nas configurações de integração para começar a receber mensagens.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2.5 w-full max-w-xs">
@@ -204,7 +216,7 @@ function StepSuccess({
           className="w-full px-4 py-2.5 bg-blue-600 text-white text-sm rounded-lg
                      hover:bg-blue-700 transition-colors font-semibold shadow-sm"
         >
-          Ver agente
+          {isEditMode ? 'Fechar' : 'Ver agente'}
         </button>
         {onTest ? (
           <button
@@ -228,12 +240,14 @@ function StepSuccess({
             </span>
           </button>
         )}
-        <button
-          onClick={onReset}
-          className="w-full px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors"
-        >
-          Criar outro agente
-        </button>
+        {!isEditMode && (
+          <button
+            onClick={onReset}
+            className="w-full px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors"
+          >
+            Criar outro agente
+          </button>
+        )}
       </div>
     </div>
   )
@@ -241,11 +255,18 @@ function StepSuccess({
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
-export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, insideModal, onStepChange, onTest }: Props) {
-  const { company }                     = useAuth()
+// Extrai o nome do assistente do campo identity se foi inserido como "Você se chama X. ..."
+function extractAssistantName(identity: string): string {
+  const match = identity.match(/^Você se chama ([^.]+)\./i)
+  return match ? match[1].trim() : ''
+}
 
-  // Etapas: 0=ImportConversas(opcional), 1=Básico, 2=Dados, 3=Config, 4=Preview, 5=Sucesso
-  const [step, setStep]                 = useState<0|1|2|3|4|5>(0)
+export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, insideModal, onStepChange, onTest, initialAgent }: Props) {
+  const { company }                     = useAuth()
+  const isEditMode                      = Boolean(initialAgent)
+
+  // Em modo edição, iniciar direto no Step 4 (Preview com dados existentes)
+  const [step, setStep]                 = useState<0|1|2|3|4|5>(isEditMode ? 4 : 0)
 
   // Referência estável para onStepChange (evita re-registrar o effect a cada render)
   const onStepChangeRef = useRef(onStepChange)
@@ -254,11 +275,15 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   // Notifica o modal pai sempre que o step muda
   useEffect(() => { onStepChangeRef.current?.(step) }, [step])
 
-  // Etapa 1 — nome interno
-  const [agentName, setAgentName]       = useState('')
-  // Etapa 1 — nome persona do assistente (opcional, não salvo diretamente)
-  const [assistantName, setAssistantName] = useState('')
-  const [model, setModel]               = useState('gpt-4.1-mini')
+  // Etapa 1 — nome interno (pré-preenchido em modo edição)
+  const [agentName, setAgentName]       = useState(initialAgent?.name ?? '')
+  // Etapa 1 — nome persona do assistente (extraído do identity em modo edição)
+  const [assistantName, setAssistantName] = useState(
+    initialAgent?.prompt_config
+      ? extractAssistantName(String((initialAgent.prompt_config as Record<string,unknown>).identity ?? ''))
+      : ''
+  )
+  const [model, setModel]               = useState(initialAgent?.model ?? 'gpt-4.1-mini')
   const [language, setLanguage]         = useState('pt-BR')
 
   // Catálogo (carregado na montagem)
@@ -273,8 +298,16 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     objective: '', communication_style: '', commercial_rules: '', custom_notes: '',
   })
 
-  // Etapa 4
-  const [promptConfig, setPromptConfig] = useState<FlatPromptConfig | null>(null)
+  // Etapa 4 — em modo edição, pré-carregar o prompt_config existente
+  const [promptConfig, setPromptConfig] = useState<FlatPromptConfig | null>(() => {
+    if (!initialAgent?.prompt_config) return null
+    const pc = initialAgent.prompt_config as Record<string, unknown>
+    // Aceitar apenas formato flat (criado pelo wizard); sections format não é compatível
+    if ('identity' in pc && !('sections' in pc)) {
+      return pc as FlatPromptConfig
+    }
+    return null
+  })
 
   // Estados globais
   const [generating, setGenerating]     = useState(false)
@@ -332,13 +365,30 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     setError(null)
     setSaving(true)
     try {
-      const payload: CreateCompanyAgentPayload = {
-        company_id:    companyId,
-        name:          agentName.trim(),
-        model,
-        prompt_config: promptConfig,
+      let saved: CompanyAgent
+
+      if (isEditMode && initialAgent?.id) {
+        // Modo edição — atualiza agente existente
+        const payload: UpdateCompanyAgentPayload = {
+          company_id:     companyId,
+          agent_id:       initialAgent.id,
+          name:           agentName.trim() || initialAgent.name,
+          model,
+          prompt_config:  promptConfig,
+          prompt_version: (initialAgent.prompt_version ?? 0) + 1,
+        }
+        saved = await companyOwnAgentsApi.update(payload)
+      } else {
+        // Modo criação — cria novo agente
+        const payload: CreateCompanyAgentPayload = {
+          company_id:    companyId,
+          name:          agentName.trim(),
+          model,
+          prompt_config: promptConfig,
+        }
+        saved = await companyOwnAgentsApi.create(payload)
       }
-      const saved = await companyOwnAgentsApi.create(payload)
+
       setSavedAgent(saved)
       setStep(5)
     } catch (err: unknown) {
@@ -490,6 +540,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
       {step === 5 && savedAgent && (
         <StepSuccess
           agentName={savedAgent.name}
+          isEditMode={isEditMode}
           onView={() => onSaved(savedAgent)}
           onReset={handleReset}
           onTest={onTest && promptConfig

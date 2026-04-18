@@ -33,12 +33,16 @@ interface Props {
   companyId:  string
   onSaved:    (agent: CompanyAgent) => void
   onAdvanced: () => void
+  /** Agente existente para edição. Se presente, abre no wizard em modo edição. */
+  agent?:     CompanyAgent
 }
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 
-export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdvanced }: Props) {
-  const [step, setStep]               = useState<number>(1)
+export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdvanced, agent }: Props) {
+  const isEditMode = Boolean(agent)
+
+  const [step, setStep]               = useState<number>(isEditMode ? 4 : 1)
   const [showConfirm, setShowConfirm] = useState(false)
   const [visible, setVisible]         = useState(false)
   const [isSupportOpen, setSupport]   = useState(false)
@@ -55,6 +59,8 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      // Em modo edição começa no step 4 (preview com dados existentes)
+      setStep(isEditMode ? 4 : 1)
       const raf = requestAnimationFrame(() => setVisible(true))
       return () => cancelAnimationFrame(raf)
     } else {
@@ -65,7 +71,7 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
       setSandboxOpen(false)
     }
     return () => { document.body.style.overflow = '' }
-  }, [isOpen])
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fechar suporte quando sair dos steps 3–4
   useEffect(() => {
@@ -87,7 +93,8 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   }, [isOpen, step, isSupportOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleRequestClose() {
-    if (step > 2 && step < 5) {
+    // Em modo edição, step 4 não exige confirmação (usuário pode fechar livremente)
+    if (!isEditMode && step > 2 && step < 5) {
       setShowConfirm(true)
     } else {
       doClose()
@@ -100,11 +107,11 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
     onClose()
   }
 
-  function handleSaved(agent: CompanyAgent) {
+  function handleSaved(savedAgent: CompanyAgent) {
     setSandboxIsSaved(true)
     // Ao salvar, armazena o agent_id para que o sandbox use a knowledge_base real
-    setSandboxAgentId(agent.id ?? null)
-    onSaved(agent)
+    setSandboxAgentId(savedAgent.id ?? null)
+    onSaved(savedAgent)
   }
 
   function handleTest(config: FlatPromptConfig, agentName: string, companyName: string) {
@@ -177,11 +184,17 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">
-                {isSuccess ? 'Agente criado com sucesso!' : 'Criar novo agente'}
+                {isSuccess
+                  ? (isEditMode ? 'Agente atualizado!' : 'Agente criado com sucesso!')
+                  : (isEditMode ? `Editar agente${agent?.name ? `: ${agent.name}` : ''}` : 'Criar novo agente')
+                }
               </p>
               {!isSuccess && (
                 <p className="text-xs text-gray-500 hidden sm:block">
-                  O sistema detecta os dados da sua empresa automaticamente
+                  {isEditMode
+                    ? 'Ajuste o prompt e salve para atualizar o comportamento do agente'
+                    : 'O sistema detecta os dados da sua empresa automaticamente'
+                  }
                 </p>
               )}
             </div>
@@ -252,6 +265,7 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
               insideModal
               onStepChange={setStep}
               onTest={handleTest}
+              initialAgent={agent}
             />
           </div>
 
