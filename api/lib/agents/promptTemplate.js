@@ -11,19 +11,26 @@
 //   normalizeField(value)             → normaliza espaços e aspas
 //   validatePromptConfig(config)      → valida schema do prompt_config
 //   sanitizePromptConfig(config, mode)→ bloqueia padrões perigosos
+//   sanitizeLegacyOperationalData(c) → remove dados operacionais congelados (on-read)
 //   buildPromptFromConfig(config, cd) → monta agent.prompt final
 //
 // DESIGN:
-//   - prompt_config armazena APENAS intenção do usuário (5 campos)
+//   - prompt_config armazena APENAS comportamento (5 campos)
 //   - companyData é injetado em runtime (sempre fresco, nunca salvo no config)
 //   - Seção A: identidade + objetivo + estilo + regras + notas (prompt_config)
-//   - Seção B: dados da empresa (companies — não editável pelo usuário)
+//   - Seção B: dados da empresa (companies — fonte de verdade, não editável pelo usuário)
+//
+// SEPARAÇÃO DE RESPONSABILIDADE (REGRA DE OURO):
+//   - prompt_config → comportamento, tom, estratégia, regras comerciais
+//   - companyData   → telefone, e-mail, site, horário, endereço, descrição (runtime)
+//   - extra_context → catálogo, ai_notes, disponibilidade, lead (runtime)
 //
 // SEGURANÇA:
 //   - sanitizePromptConfig em modo 'save' lança erro ao detectar padrão proibido
 //   - sanitizePromptConfig em modo 'mount' omite campo e loga [PROMPT:sanitize-block]
+//   - sanitizeLegacyOperationalData remove dados operacionais de configs antigos on-read
 //   - Campos do cliente NUNCA controlam framing — apenas conteúdo das seções
-//   - Seção B sempre ao final — identidade já estabelecida antes
+//   - Seção B sempre ao final e precedida de instrução de fonte de verdade
 //
 // COMPATIBILIDADE:
 //   - Agentes com prompt_config=null continuam usando agent.prompt raw sem mudança
@@ -187,17 +194,95 @@ export function sanitizePromptConfig(config, mode = 'mount') {
   return result;
 }
 
+// ── sanitizeLegacyOperationalData ────────────────────────────────────────────
+
+/**
+ * Remove dados operacionais que podem ter sido congelados em prompt_config de
+ * agentes criados antes da correção arquitetural (versões anteriores do generate.js
+ * enviavam telefone, e-mail, site e horário ao LLM que os embutia nos campos).
+ *
+ * Aplicado em modo on-read (nunca modifica o banco): o config retornado é
+ * temporário, usado apenas para montar o prompt final. O valor persistido
+ * no banco não é alterado.
+ *
+ * Padrões removidos por regex — conservadores para evitar falsos positivos:
+ *   - Telefones: (xx) xxxxx-xxxx, +55 11 99999-9999, etc.
+ *   - E-mails: word@domain.ext
+ *   - URLs: http(s)://... e domínios com .com/.br/.net/.io
+ *   - Horários isolados: "9h às 18h", "09:00 às 18:00", "segunda a sexta"
+ *
+ * Cada match é substituído por string vazia. Espaços duplos resultantes são
+ * compactados. Campos que ficarem vazios após a limpeza são removidos.
+ *
+ * @param {object} config - prompt_config original (não é mutado)
+ * @returns {object} config limpo (novo objeto)
+ */
+export function sanitizeLegacyOperationalData(config) {
+  if (!config || typeof config !== 'object') return config;
+
+  const OPERATIONAL_PATTERNS = [
+    // Telefones brasileiros — formatos variados
+    /(\+?55\s?)?(\(?\d{2}\)?\s?)(\d{4,5}[-\s]?\d{4})/g,
+    // E-mails
+    /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,
+    // URLs e domínios
+    /https?:\/\/[^\s,)]+/g,
+    /\bwww\.[^\s,)]+/g,
+    /\b[a-zA-Z0-9\-]+\.(com\.br|com|com\.br|net|io|org|br)\b/g,
+    // Horários de funcionamento — padrões comuns em pt-BR
+    /\b\d{1,2}[h:]\d{0,2}\s*(às|a|até|-)\s*\d{1,2}[h:]\d{0,2}\b/gi,
+    /\b(segunda|terça|quarta|quinta|sexta|sábado|domingo|seg|ter|qua|qui|sex|sáb|dom)[\s\-a]+(a|à|até|segunda|terça|quarta|quinta|sexta|sábado|domingo|seg|ter|qua|qui|sex|sáb|dom)\b/gi,
+  ];
+
+  const result = {};
+  let removedCount = 0;
+
+  for (const field of KNOWN_FIELDS) {
+    const value = config[field];
+    if (typeof value !== 'string') {
+      if (value !== undefined) result[field] = value;
+      continue;
+    }
+
+    let cleaned = value;
+    for (const pattern of OPERATIONAL_PATTERNS) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    // Compactar espaços e pontuação residual
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+    if (cleaned !== value) {
+      removedCount++;
+      console.log('[PROMPT:legacy-sanitize]', { field, original_len: value.length, cleaned_len: cleaned.length });
+    }
+
+    if (cleaned.length >= 10) {
+      result[field] = cleaned;
+    }
+    // Se ficou vazio ou muito curto após a limpeza, omite o campo (não quebra o runtime)
+  }
+
+  if (removedCount > 0) {
+    console.warn('[PROMPT:legacy-operational-data-removed]', { fields_affected: removedCount });
+  }
+
+  return result;
+}
+
 // ── buildPromptFromConfig ─────────────────────────────────────────────────────
 
 /**
  * Monta o agent.prompt a partir de prompt_config + dados live da empresa.
  *
- * Seção A — Intenção do usuário (de prompt_config):
+ * Seção A — Comportamento do agente (de prompt_config):
  *   Identidade, objetivo, estilo de comunicação, regras comerciais, notas.
+ *   Sanitização on-read remove dados operacionais congelados em configs legados.
  *
  * Seção B — Contexto da empresa (de companyData, injetado pelo sistema):
- *   Nome, localização, contatos, horário, diferenciais, descrição.
+ *   Nome, localização, contatos, horário, descrição.
+ *   FONTE DE VERDADE: dados vêm exclusivamente das colunas diretas de companies.
  *   Nunca editável pelo usuário. Sempre fresco — lido em runtime, não salvo.
+ *   Precedida de instrução explícita ao LLM sobre fonte de verdade.
  *
  * Retorna null quando:
  *   - config é null/undefined → caller usa agent.prompt raw (backward-compat)
@@ -217,10 +302,15 @@ export function buildPromptFromConfig(config, companyData = null) {
     return null;
   }
 
-  // 2. Sanitizar (modo mount — nunca lança, apenas omite campos problemáticos)
-  const clean = sanitizePromptConfig(config, 'mount');
+  // 2. Sanitizar padrões perigosos (modo mount — nunca lança, apenas omite)
+  const afterSanitize = sanitizePromptConfig(config, 'mount');
 
-  // 3. Normalizar
+  // 3. Sanitização on-read de dados operacionais congelados (legado)
+  //    Remove telefones, e-mails, URLs e horários que gerações antigas possam
+  //    ter embutido nos campos. Não altera o banco — apenas o prompt montado.
+  const clean = sanitizeLegacyOperationalData(afterSanitize);
+
+  // 4. Normalizar
   const norm = {};
   for (const field of KNOWN_FIELDS) {
     norm[field] = typeof clean[field] === 'string'
@@ -228,7 +318,7 @@ export function buildPromptFromConfig(config, companyData = null) {
       : clean[field];
   }
 
-  // ── Seção A: Intenção do usuário ──────────────────────────────────────────
+  // ── Seção A: Comportamento do agente ─────────────────────────────────────
   const parts = [];
 
   parts.push(`Você é ${norm.identity}.`);
@@ -246,7 +336,12 @@ export function buildPromptFromConfig(config, companyData = null) {
     parts.push(`\nContexto adicional sobre o negócio: ${norm.custom_notes}`);
   }
 
-  // ── Seção B: Contexto da empresa (dados live — não editável pelo usuário) ─
+  // ── Seção B: Dados da empresa (fonte de verdade — runtime, nunca salvo) ──
+  //
+  // Usa exclusivamente colunas diretas da tabela companies.
+  // Fontes legadas (ai_profile.business_hours, ai_profile.descricao,
+  // ai_profile.diferenciais, cd.whatsapp) foram removidas — as colunas
+  // diretas horario_atendimento e descricao_empresa são a fonte correta.
   if (companyData && typeof companyData === 'object') {
     const cd = companyData;
     const companyLines = [];
@@ -272,49 +367,38 @@ export function buildPromptFromConfig(config, companyData = null) {
       companyLines.push(`Endereço: ${endParts.join(', ')}${cepStr}.`);
     }
 
-    // Contatos
+    // Contatos (apenas colunas diretas — whatsapp removido: coberto por telefone_principal)
     const contatos = [];
     if (cd.telefone_principal) contatos.push(cd.telefone_principal);
-    if (cd.whatsapp && cd.whatsapp !== cd.telefone_principal) {
-      contatos.push(`WhatsApp: ${cd.whatsapp}`);
-    }
-    if (cd.email_principal) contatos.push(cd.email_principal);
-    if (cd.site_principal) contatos.push(cd.site_principal);
+    if (cd.email_principal)    contatos.push(cd.email_principal);
+    if (cd.site_principal)     contatos.push(cd.site_principal);
     if (contatos.length > 0) {
       companyLines.push(`Contato: ${contatos.join(' | ')}.`);
     }
 
-    // Horário de atendimento — fonte preferencial: coluna direta horario_atendimento.
-    // Fallback temporário: ai_profile.business_hours (compatibilidade com registros antigos).
+    // Horário de atendimento — coluna direta (fallback ai_profile removido)
     if (cd.horario_atendimento) {
       companyLines.push(`Horário de atendimento: ${cd.horario_atendimento}.`);
-    } else {
-      const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
-      if (profile.business_hours) {
-        companyLines.push(`Horário de atendimento: ${profile.business_hours}.`);
-      }
     }
 
-    // Ponto de referência — coluna direta ponto_referencia
+    // Ponto de referência
     if (cd.ponto_referencia) {
       companyLines.push(`Ponto de referência: ${cd.ponto_referencia}.`);
     }
 
-    // Descrição da empresa — coluna direta; fallback para ai_profile.descricao (legado)
-    const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
-
+    // Descrição da empresa — coluna direta (fallback ai_profile removido)
     if (cd.descricao_empresa) {
       companyLines.push(String(cd.descricao_empresa).trim());
-    } else if (profile.descricao) {
-      companyLines.push(String(profile.descricao).trim());
-    }
-
-    if (profile.diferenciais) {
-      companyLines.push(`Diferenciais: ${profile.diferenciais}.`);
     }
 
     if (companyLines.length > 0) {
-      parts.push('\n\n---\n' + companyLines.join('\n'));
+      // Instrução de fonte de verdade: garante que o LLM priorize estes dados
+      // sobre qualquer informação que possa ter ficado congelada na Seção A.
+      parts.push(
+        '\n\n---\n' +
+        'DADOS DA EMPRESA (fonte de verdade — sempre use estes, nunca invente ou reutilize outros):\n' +
+        companyLines.join('\n')
+      );
     }
   }
 

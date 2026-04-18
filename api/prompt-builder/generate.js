@@ -88,14 +88,16 @@ async function validateCaller(req, companyId) {
 // ── Fetchers de dados do sistema ──────────────────────────────────────────────
 
 async function fetchCompanyData(companyId) {
+  // Dados estáveis da empresa — usados apenas para persona e nicho do agente.
+  // Dados operacionais (telefone, e-mail, site, horário, endereço) são
+  // injetados em runtime via buildPromptFromConfig(Seção B) e NÃO devem
+  // entrar aqui para evitar congelamento no prompt_config gerado.
   const { data, error } = await supabaseAdmin
     .from('companies')
     .select(`
       id, name, nome_fantasia, ramo_atividade,
-      cidade, estado, pais,
-      logradouro, numero, bairro, cep,
-      telefone_principal, email_principal, site_principal,
-      ponto_referencia, horario_atendimento
+      cidade, estado,
+      descricao_empresa
     `)
     .eq('id', companyId)
     .maybeSingle();
@@ -105,7 +107,10 @@ async function fetchCompanyData(companyId) {
 }
 
 async function fetchCatalogSummary(companyId) {
-  const baseSelect = 'name, description, ai_notes, catalog_categories ( name )';
+  // ai_notes é dado operacional (instruções de como agir com cada produto) —
+  // injetado em runtime via extra_context e NÃO deve entrar na geração para
+  // evitar congelamento de comportamento específico no prompt_config.
+  const baseSelect = 'name, description, catalog_categories ( name )';
 
   const [productsRes, servicesRes] = await Promise.allSettled([
     supabaseAdmin
@@ -135,6 +140,9 @@ async function fetchCatalogSummary(companyId) {
 function formatCompanyContext(company) {
   if (!company) return 'Dados da empresa não disponíveis.';
 
+  // Apenas contexto estável — nome, nicho, localização e descrição.
+  // Dados operacionais (telefone, e-mail, site, horário, endereço) são
+  // injetados automaticamente em runtime e não devem constar aqui.
   const lines = [];
   const nome  = company.nome_fantasia || company.name;
 
@@ -144,11 +152,7 @@ function formatCompanyContext(company) {
   const location = [company.cidade, company.estado].filter(Boolean).join(', ');
   if (location)                lines.push(`Localização: ${location}`);
 
-  if (company.telefone_principal)   lines.push(`Telefone: ${company.telefone_principal}`);
-  if (company.email_principal)      lines.push(`E-mail: ${company.email_principal}`);
-  if (company.site_principal)       lines.push(`Site: ${company.site_principal}`);
-  if (company.horario_atendimento)  lines.push(`Horário de atendimento: ${company.horario_atendimento}`);
-  if (company.ponto_referencia)     lines.push(`Ponto de referência: ${company.ponto_referencia}`);
+  if (company.descricao_empresa) lines.push(`Descrição: ${String(company.descricao_empresa).trim()}`);
 
   return lines.length > 0 ? lines.join('\n') : 'Dados básicos não preenchidos.';
 }
@@ -156,12 +160,13 @@ function formatCompanyContext(company) {
 function formatCatalogContext(items) {
   if (!items || items.length === 0) return 'Nenhum item de catálogo cadastrado.';
 
+  // ai_notes não entra na geração — é comportamento operacional por produto,
+  // injetado em runtime via extra_context pelo agentExecutor.
   return items.map(item => {
     const cat   = item.catalog_categories?.name;
     const label = cat ? `${item.name} (${cat})` : item.name;
     const desc  = item.description ? ` — ${item.description.slice(0, 120)}` : '';
-    const notes = item.ai_notes    ? ` [Nota IA: ${item.ai_notes.slice(0, 80)}]` : '';
-    return `• ${label}${desc}${notes}`;
+    return `• ${label}${desc}`;
   }).join('\n');
 }
 
@@ -193,7 +198,7 @@ identity, objective, communication_style, commercial_rules, custom_notes
 
 REGRAS CRÍTICAS:
 - Retorne APENAS JSON válido, sem texto adicional, sem markdown, sem explicações
-- Use os dados da empresa como base principal (nome, área, localização, contatos)
+- Use os dados da empresa para entender o negócio (nome, área, localização, descrição)
 - Use o catálogo como referência do que é vendido ou oferecido pela empresa
 - Use as respostas do usuário apenas como complemento e refinamento
 - NÃO invente informações que não estejam nos dados fornecidos
@@ -201,12 +206,20 @@ REGRAS CRÍTICAS:
 - NÃO mencione termos técnicos do sistema (prompts, pipeline, contexto extra, etc.)
 - Campos opcionais podem ser omitidos (string vazia ou ausentes) se não houver informação
 
+DADOS QUE NÃO DEVEM APARECER NOS CAMPOS GERADOS:
+Os campos abaixo são injetados automaticamente pelo sistema em cada atendimento.
+NÃO os inclua em nenhum campo do JSON gerado — eles serão contraditos ou duplicados:
+- telefone, celular, WhatsApp, e-mail, site ou URL
+- horário de atendimento ou funcionamento
+- endereço, CEP, bairro, cidade (como dado específico de contato)
+- instruções de indisponibilidade ou estoque de produtos específicos
+
 DEFINIÇÃO DOS CAMPOS:
 - identity: descrição concisa de quem é o agente e sua especialidade (obrigatório, 20–500 chars)
 - objective: objetivo principal do agente em uma frase clara (obrigatório, 20–300 chars)
 - communication_style: tom e estilo de comunicação desejado (opcional, 10–300 chars)
-- commercial_rules: regras comerciais específicas, ex: não informar preços (opcional, 10–500 chars)
-- custom_notes: informações adicionais sobre o negócio relevantes para as conversas (opcional, 10–800 chars)
+- commercial_rules: regras comerciais estratégicas, ex: não informar preços sem elevar valor (opcional, 10–500 chars)
+- custom_notes: comportamento estratégico e padrões de condução das conversas (opcional, 10–800 chars)
 
 FORMATO DE RESPOSTA (único formato aceito — sem nada antes ou depois):
 {"identity":"...","objective":"...","communication_style":"...","commercial_rules":"...","custom_notes":"..."}`;
