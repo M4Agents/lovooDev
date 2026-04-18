@@ -171,7 +171,15 @@ export async function buildContext(orchestratorContext) {
 
   // ── ID da empresa-pai (para buscar policy) ────────────────────────────────
 
-  const parentCompanyId = parentIdResult.status === 'fulfilled' ? parentIdResult.value : null;
+  let parentCompanyId = null;
+  if (parentIdResult.status === 'rejected') {
+    console.warn('🤖 [CTX] ⚠️  Falha ao buscar ID da empresa-pai:', parentIdResult.reason?.message);
+  } else {
+    parentCompanyId = parentIdResult.value ?? null;
+    if (!parentCompanyId) {
+      console.warn('🤖 [CTX] ⚠️  Empresa-pai não encontrada (company_type=parent) — agente executará sem diretrizes globais de IA.');
+    }
+  }
 
   // ── Fase 2: policy + oportunidade (dependem de Fase 1) ───────────────────
 
@@ -186,10 +194,13 @@ export async function buildContext(orchestratorContext) {
   // SEGURANÇA: conteúdo da policy NUNCA é logado.
 
   let rawSystemPolicy = null;
-  if (policyResult.status === 'fulfilled') {
-    rawSystemPolicy = policyResult.value ?? null;
-  } else {
+  if (policyResult.status === 'rejected') {
     console.warn('🤖 [CTX] ⚠️  Falha ao buscar policy (continuando sem diretriz):', policyResult.reason?.message);
+  } else {
+    rawSystemPolicy = policyResult.value ?? null;
+    if (parentCompanyId && !rawSystemPolicy) {
+      console.warn('🤖 [CTX] ⚠️  Nenhuma policy de governança ativa para a empresa-pai — agente executará sem diretrizes globais de IA.', { parentCompanyId });
+    }
   }
 
   // ── Oportunidade ativa ────────────────────────────────────────────────────

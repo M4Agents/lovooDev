@@ -295,13 +295,19 @@ export async function runAgent(
   const knowledgeMode = agent.knowledge_mode ?? 'inline'
   const systemParts: string[] = []
 
-  // 5a. Prompt base do agente (sempre presente quando configurado)
+  // 5a. Diretriz global de governança — sempre no TOPO, antes de tudo.
+  // Injetada apenas se presente; nunca logada ou exposta.
+  if (ctx.system_policy?.trim()) {
+    systemParts.push(ctx.system_policy.trim() + '\n\n---\n\n')
+  }
+
+  // 5b. Prompt base do agente (sempre presente quando configurado)
   // Variáveis do contexto ({{chave}}) são substituídas antes de montar o prompt.
   if (agent.prompt?.trim()) {
     systemParts.push(substituteVariables(agent.prompt.trim(), ctx.variables))
   }
 
-  // 5b. Base de conhecimento inline (modes: inline, hybrid)
+  // 5c. Base de conhecimento inline (modes: inline, hybrid)
   if (
     (knowledgeMode === 'inline' || knowledgeMode === 'hybrid') &&
     agent.knowledge_base?.trim()
@@ -309,7 +315,7 @@ export async function runAgent(
     systemParts.push(`\n\nBase de conhecimento:\n${agent.knowledge_base.trim()}`)
   }
 
-  // 5c. Contexto RAG via retriever vetorial (modes: rag, hybrid)
+  // 5d. Contexto RAG via retriever vetorial (modes: rag, hybrid)
   if (knowledgeMode === 'rag' || knowledgeMode === 'hybrid') {
     // A query combina a mensagem do usuário com o extra_context, pois o
     // embedding deve representar o mesmo conteúdo que será enviado ao LLM.
@@ -329,7 +335,7 @@ export async function runAgent(
     // o runner continua normalmente sem injetar contexto RAG — sem erro.
   }
 
-  // 5d. Contexto de execução (extra_context, ex.: tela atual para support_assistant)
+  // 5e. Contexto de execução (extra_context, ex.: tela atual para support_assistant)
   if (ctx.extra_context?.trim()) {
     systemParts.push(`\n\nContexto atual:\n${ctx.extra_context.trim()}`)
   }
