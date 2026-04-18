@@ -55,8 +55,8 @@ const KNOWN_FIELDS = Object.keys(PROMPT_CONFIG_SCHEMA);
 // Conteúdo legítimo de negócio ("Não informe preços", "Seja educado") é permitido.
 
 const BLOCKED_PATTERNS = [
-  // Script de fluxo sequencial com 3+ passos numerados
-  { pattern: /(\d+\s*[.)]\s+\w.+\n){3,}/m,                            label: 'sequential_script'   },
+  // Script de fluxo sequencial com 5+ passos numerados (3 era muito restritivo para conteúdo legítimo gerado por LLM)
+  { pattern: /(\d+\s*[.)]\s+\w.+\n){5,}/m,                            label: 'sequential_script'   },
 
   // Override de instruções do sistema
   { pattern: /ignore\s+(as\s+)?(instru[çc][õo]es|regras|sistema)/i,   label: 'system_override'     },

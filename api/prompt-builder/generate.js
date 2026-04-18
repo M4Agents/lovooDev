@@ -461,18 +461,53 @@ Use exatamente este formato:
     });
   }
 
-  // ── 9. Sanitizar (modo save — lança se bloqueado) ──────────────────────────
+  // ── 9. Sanitizar (modo save — retry se bloqueado pelo LLM) ───────────────────
+  //
+  // O conteúdo bloqueado foi gerado pelo próprio LLM (não pelo usuário).
+  // Em vez de retornar 422, fazemos um retry multi-turn instruindo o LLM a evitar
+  // o padrão problemático. Apenas após o retry falhar retornamos erro.
 
   let sanitized;
+  let sanitizeBlocked = null;
+
   try {
     sanitized = sanitizePromptConfig(extracted, 'save');
-  } catch (blocked) {
-    console.warn('[PROMPT_BUILDER] Sanitização bloqueada:', blocked);
-    return res.status(422).json({
-      success: false,
-      error:   'invalid_prompt_config',
-      details: [blocked],
-    });
+  } catch (firstBlocked) {
+    sanitizeBlocked = firstBlocked;
+    console.warn('[PROMPT_BUILDER:sanitize-retry]', firstBlocked, '— tentando regenerar sem o padrão bloqueado');
+
+    const sanitizeRetryMsg = `O campo "${firstBlocked.field}" que você gerou contém um padrão não permitido (${firstBlocked.reason}). \
+Regere o JSON agora SEM listas numeradas (1. 2. 3.), SEM passos sequenciais e SEM scripts de fluxo. \
+Use texto corrido, bullets com hífen (-) ou parágrafos. Mantenha o restante igual. Retorne APENAS o JSON válido.`;
+
+    try {
+      const sanitizeRetryOutput = await callBuilderLLM(
+        client,
+        openaiSettings.model,
+        openaiSettings.timeout_ms,
+        systemPrompt,
+        userMessage,
+        [
+          { role: 'assistant', content: rawOutput },
+          { role: 'user',      content: sanitizeRetryMsg },
+        ]
+      );
+      const reparsed = tryParseJSON(sanitizeRetryOutput);
+      if (reparsed) {
+        const reExtracted = extractKnownFields(reparsed);
+        sanitized = sanitizePromptConfig(reExtracted, 'mount'); // mount: omite campo problemático em vez de lançar
+        sanitizeBlocked = null;
+        console.log('[PROMPT_BUILDER:sanitize-retry-ok]', { company_id, fields: Object.keys(sanitized) });
+      }
+    } catch (retryErr) {
+      console.error('[PROMPT_BUILDER:sanitize-retry-error]', retryErr?.message);
+    }
+
+    // Se ainda bloqueado após retry, usa 'mount' no original (omite campo problemático e continua)
+    if (sanitizeBlocked) {
+      console.warn('[PROMPT_BUILDER:sanitize-fallback]', sanitizeBlocked, '— usando mount (campo omitido)');
+      sanitized = sanitizePromptConfig(extracted, 'mount');
+    }
   }
 
   // ── 10. Normalizar campos ──────────────────────────────────────────────────
