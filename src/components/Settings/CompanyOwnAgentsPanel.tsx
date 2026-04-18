@@ -32,6 +32,40 @@ import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
 import { AgentCreationModal } from './AgentCreationModal'
 
+// ── Detecção e conversão de formatos de prompt_config ─────────────────────────
+//
+// Existem dois formatos de prompt_config:
+//   Flat    — { identity: string, objective: string, ... }   (novo wizard)
+//   Sections — { version, mode, sections: { identity: {...} } } (editor antigo)
+//
+// Agentes criados pelo AgentCreationModal usam o formato flat.
+// O AgentPromptBuilder só aceita o formato sections.
+// Detectamos o formato e convertemos flat → sections antes de passar ao builder.
+
+function isFlatPromptConfig(pc: unknown): boolean {
+  return (
+    pc !== null &&
+    typeof pc === 'object' &&
+    'identity' in (pc as object) &&
+    !('sections' in (pc as object))
+  )
+}
+
+function flatToSectionsConfig(flat: Record<string, unknown>): PromptConfig {
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  return {
+    version:  1,
+    mode:     'structured',
+    sections: {
+      identity:            { enabled: true,                content: str(flat.identity) },
+      objective:           { enabled: true,                content: str(flat.objective) },
+      communication_style: { enabled: !!flat.communication_style, content: str(flat.communication_style) },
+      commercial_rules:    { enabled: !!flat.commercial_rules,    content: str(flat.commercial_rules) },
+      custom_notes:        { enabled: !!flat.custom_notes,        content: str(flat.custom_notes) },
+    },
+  }
+}
+
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const AVAILABLE_MODELS = [
@@ -85,13 +119,6 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
     ? 'structured'
     : 'free'
 
-  // #region agent log
-  if (isEdit && agent) {
-    const pc = agent.prompt_config
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'CompanyOwnAgentsPanel.tsx:84',message:'AgentForm init — prompt_config format',hypothesisId:'H-A',data:{isNull: pc === null, keys: pc ? Object.keys(pc) : null, hasSections: pc && typeof pc === 'object' && 'sections' in pc, hasIdentityFlat: pc && typeof pc === 'object' && 'identity' in pc, initialMode},timestamp:Date.now()})}).catch(()=>{})
-  }
-  // #endregion
-
   const [promptMode, setPromptMode]   = useState<'structured' | 'free'>(initialMode)
   const isStructured                  = promptMode === 'structured'
 
@@ -119,14 +146,17 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
   )
 
   // Estado de prompt — modo structured (blocos)
+  // Se o agente tem prompt_config no formato flat (criado pelo novo wizard),
+  // converte para o formato sections antes de passar ao AgentPromptBuilder.
   const [promptConfig, setPromptConfig] = useState<PromptConfig>(() => {
-    const resolved = (initialMode === 'structured' && agent?.prompt_config)
-      ? agent.prompt_config as PromptConfig
-      : createEmptyPromptConfig()
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'CompanyOwnAgentsPanel.tsx:119',message:'promptConfig resolved value',hypothesisId:'H-A',data:{resolvedKeys: Object.keys(resolved), hasSections: 'sections' in resolved, sectionsValue: 'sections' in resolved ? Object.keys((resolved as any).sections ?? {}) : 'NO_SECTIONS'},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
-    return resolved
+    if (initialMode === 'structured' && agent?.prompt_config) {
+      const pc = agent.prompt_config
+      if (isFlatPromptConfig(pc)) {
+        return flatToSectionsConfig(pc as Record<string, unknown>)
+      }
+      return pc as PromptConfig
+    }
+    return createEmptyPromptConfig()
   })
 
   function switchToFree() {
