@@ -251,6 +251,213 @@ function safeArray(val, maxItems = 5, maxLen = 120) {
   return result;
 }
 
+// ── Prompt Assembler — closer de alta conversão ───────────────────────────────
+//
+// Transforma detected_patterns em um prompt_config comportamental rico.
+// Duas camadas:
+//   Fixa    — regras universais de vendas consultivas (sempre presentes)
+//   Variável — personalização a partir dos padrões detectados da empresa
+//
+// NÃO usa os campos suggested_prompt_config do LLM como texto final —
+// usa-os apenas como fallback de identity quando os padrões estão vazios.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function trunc(str, max) {
+  return String(str ?? '').slice(0, max);
+}
+
+function buildIdentity(rawIdentity, tone, closingPatterns) {
+  // Preferir o identity do LLM se for substancial (já captura nicho/empresa)
+  if (rawIdentity && rawIdentity.trim().length >= 30) {
+    // Enriquecer com tom se não mencionado
+    const base = rawIdentity.trim();
+    const hasTone = tone && base.toLowerCase().includes(tone.toLowerCase().split(' ')[0]);
+    const suffix = !hasTone && tone
+      ? ` Seu tom é ${tone}, sempre buscando criar conexão genuína e gerar confiança.`
+      : '';
+    return trunc(base + suffix, 500);
+  }
+
+  // Fallback: construir a partir do tom e padrão de fechamento
+  const closingCtx = closingPatterns?.length
+    ? ` com foco em conduzi-lo até ${closingPatterns[0]}`
+    : '';
+  const toneDesc = tone || 'consultivo e próximo';
+  return trunc(
+    `Especialista em atendimento e vendas consultivas${closingCtx}. ` +
+    `Seu tom é ${toneDesc}, sempre buscando criar conexão e gerar confiança genuína.`,
+    500,
+  );
+}
+
+function buildObjective(rawObjective, closingPatterns) {
+  const closing = closingPatterns?.length
+    ? closingPatterns.slice(0, 2).join(' ou ')
+    : 'agendamento com especialista ou fechamento direto';
+
+  // Se o LLM gerou um objetivo substancial, enriquecê-lo com foco em conversão
+  if (rawObjective && rawObjective.trim().length >= 20) {
+    return trunc(rawObjective.trim(), 300);
+  }
+
+  return trunc(
+    `Entender o momento do cliente, identificar sua necessidade real e conduzi-lo ` +
+    `até uma ação concreta (${closing}) — apenas quando demonstrar interesse real, ` +
+    `sem pressão prematura.`,
+    300,
+  );
+}
+
+function buildCommunicationStyle(tone, greetingExamples, rawStyle) {
+  const toneBase = tone || 'consultivo e próximo';
+
+  // Regras fixas de comportamento comunicacional (sempre presentes)
+  const fixedRules =
+    `Tom ${toneBase}, como conversa natural de WhatsApp — linguagem simples e próxima. ` +
+    `Faça apenas uma pergunta por vez, de forma natural e contextual — nunca múltiplas ` +
+    `perguntas na mesma mensagem. Não entregue todas as informações de uma vez: responda ` +
+    `o suficiente para gerar interesse e avançar, gerando curiosidade antes de explicar tudo.`;
+
+  return trunc(fixedRules, 300);
+}
+
+function buildCommercialRules(objections, objectionResponses, closingPatterns, rawRules) {
+  // Regras fixas (sempre presentes)
+  const fixedRules =
+    `Nunca informe preço sem o cliente solicitar. Quando solicitado: primeiro reforce ` +
+    `o valor e os benefícios, só então responda. Não liste produtos ou serviços diretamente ` +
+    `— conecte cada solução ao objetivo real do cliente. Avance para fechamento ou ` +
+    `agendamento apenas quando houver engajamento e interesse demonstrado.`;
+
+  // Regras variáveis a partir dos padrões de objeção detectados
+  const objParts = [];
+  if (objections?.length && objectionResponses?.length) {
+    const count = Math.min(objections.length, objectionResponses.length, 2);
+    for (let i = 0; i < count; i++) {
+      objParts.push(`${objections[i]}: ${objectionResponses[i]}`);
+    }
+  } else if (objections?.length) {
+    objParts.push(`Ao surgir ${objections[0]}: reforce o valor antes de negociar`);
+  }
+
+  const variablePart = objParts.length ? ' ' + objParts.join('. ') + '.' : '';
+
+  return trunc(fixedRules + variablePart, 500);
+}
+
+function buildCustomNotes(dp) {
+  const parts = [];
+
+  // ── Blocos fixos de comportamento (sempre presentes) ─────────────────────
+
+  parts.push(
+    'CONDUÇÃO DA CONVERSA:\n' +
+    '- Conduza ativamente — não reaja de forma passiva ao cliente\n' +
+    '- Use cada resposta como ponte para a próxima etapa\n' +
+    '- Evite respostas fechadas; avance sempre com intenção',
+  );
+
+  parts.push(
+    'CONTROLE DE INFORMAÇÃO:\n' +
+    '- Responda o suficiente para gerar interesse, não para esgotar o assunto\n' +
+    '- Revele informações gradualmente conforme o engajamento cresce\n' +
+    '- Se o cliente perguntar muito de uma vez, escolha o ponto mais relevante',
+  );
+
+  parts.push(
+    'ELEVAÇÃO DE VALOR:\n' +
+    '- Não apenas informe — gere percepção de valor antes de revelar detalhes\n' +
+    '- Conecte cada produto ou serviço ao objetivo específico do cliente\n' +
+    '- Use benefícios e resultados concretos, não só características',
+  );
+
+  parts.push(
+    'NÍVEL DE CONSCIÊNCIA:\n' +
+    '- Curioso: faça perguntas para entender contexto e elevar o interesse\n' +
+    '- Interessado: aprofunde benefícios conectados ao objetivo dele\n' +
+    '- Pronto: conduza para ação diretamente, sem mais delongas',
+  );
+
+  // ── Blocos variáveis a partir dos padrões detectados ─────────────────────
+
+  // Qualificação — perguntas do atendente
+  const questions = dp.attendant_questions?.filter(Boolean) ?? [];
+  if (questions.length) {
+    const qList = questions.slice(0, 3).map(q => `- "${q}"`).join('\n');
+    parts.push(`QUALIFICAÇÃO:\n${qList}`);
+  } else {
+    // Fallback genérico quando não há perguntas detectadas
+    parts.push(
+      'QUALIFICAÇÃO:\n' +
+      '- "O que te motivou a buscar isso agora?"\n' +
+      '- "Qual seu principal objetivo com isso?"',
+    );
+  }
+
+  // Objeções
+  const objections = dp.objections?.filter(Boolean) ?? [];
+  const responses  = dp.objection_responses?.filter(Boolean) ?? [];
+  if (objections.length) {
+    const objLines = objections.slice(0, 3).map((obj, i) => {
+      const resp = responses[i] ? `: ${responses[i]}` : ': reforce o valor e traga segurança';
+      return `- ${obj}${resp}`;
+    }).join('\n');
+    parts.push(`OBJEÇÕES:\n${objLines}`);
+  } else {
+    parts.push(
+      'OBJEÇÕES:\n' +
+      '- Ao identificar dúvida ou resistência: não confronte — reforce valor e traga segurança',
+    );
+  }
+
+  // Mídia (fixo — regras estratégicas de uso)
+  parts.push(
+    'USO DE MÍDIA:\n' +
+    '- Apresentação: início ou construção de contexto\n' +
+    '- Demonstração: quando houver interesse confirmado\n' +
+    '- Depoimentos: ao surgir dúvida ou objeção\n' +
+    '- Antes e depois: para reforçar resultado e elevar valor\n' +
+    '- Máximo 2 mídias por mensagem, sempre com contextualização',
+  );
+
+  // Fechamento — padrões da empresa + frases de convite fixas
+  const closings = dp.closing_patterns?.filter(Boolean) ?? [];
+  const closingLines = closings.length
+    ? closings.slice(0, 2).map(c => `- ${c}`).join('\n') + '\n'
+    : '';
+  parts.push(
+    'FECHAMENTO:\n' +
+    closingLines +
+    '- Use convites naturais: "faz sentido pra você?", "vamos avançar nisso?"\n' +
+    '- Nunca encerre sem uma próxima ação concreta e clara',
+  );
+
+  // Truncar para o limite do campo (1500 chars)
+  return parts.join('\n\n').slice(0, 1500);
+}
+
+/**
+ * Monta um suggested_prompt_config rico e comportamental a partir dos
+ * detected_patterns extraídos pelo LLM.
+ *
+ * @param {object} dp         - detected_patterns normalizados
+ * @param {string} summary    - analysis_summary do LLM
+ * @param {object} rawConfig  - suggested_prompt_config bruto do LLM (fallback)
+ */
+function assemblePromptConfig(dp, summary, rawConfig = {}) {
+  const tone = dp.tone || 'consultivo e próximo';
+
+  return {
+    identity:            buildIdentity(rawConfig.identity, tone, dp.closing_patterns),
+    objective:           buildObjective(rawConfig.objective, dp.closing_patterns),
+    communication_style: buildCommunicationStyle(tone, dp.greeting_examples, rawConfig.communication_style),
+    commercial_rules:    buildCommercialRules(dp.objections, dp.objection_responses, dp.closing_patterns, rawConfig.commercial_rules),
+    custom_notes:        buildCustomNotes(dp),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function normalizeAnalysis(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -269,16 +476,12 @@ function normalizeAnalysis(raw) {
   };
 
   const rawConfig = raw.suggested_prompt_config ?? {};
-  const suggested_prompt_config = {
-    identity:             safeString(rawConfig.identity,            500),
-    objective:            safeString(rawConfig.objective,           300),
-    communication_style:  safeString(rawConfig.communication_style, 300),
-    commercial_rules:     safeString(rawConfig.commercial_rules,    500),
-    custom_notes:         safeString(rawConfig.custom_notes,        800),
-  };
 
-  // Validar o suggested_prompt_config — se inválido, retornar null para não
-  // poluir o builder com dados inconsistentes
+  // Usar o assembler comportamental no lugar do pass-through direto do LLM.
+  // O assembler combina regras fixas de vendas consultivas com os padrões
+  // detectados, gerando um prompt_config rico e personalizado.
+  const suggested_prompt_config = assemblePromptConfig(detected_patterns, raw.analysis_summary, rawConfig);
+
   const validation    = validatePromptConfig(suggested_prompt_config);
   const configIsValid = validation.valid || validation.errors?.every(e => e.reason !== 'required');
 

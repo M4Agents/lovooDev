@@ -37,7 +37,7 @@ const PROMPT_CONFIG_SCHEMA = {
   objective:           { required: true,  minLength: 20, maxLength: 300 },
   communication_style: { required: false, minLength: 10, maxLength: 300 },
   commercial_rules:    { required: false, minLength: 10, maxLength: 500 },
-  custom_notes:        { required: false, minLength: 10, maxLength: 800 },
+  custom_notes:        { required: false, minLength: 10, maxLength: 1500 },
 };
 
 const KNOWN_FIELDS = Object.keys(PROMPT_CONFIG_SCHEMA);
