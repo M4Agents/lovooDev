@@ -145,6 +145,68 @@ function sanitizeMessages(rawMessages) {
     .slice(-(MAX_HISTORY_TURNS * 2));
 }
 
+// ── Enriquecimento de tool_events com mídia real (sandbox only) ───────────────
+//
+// Injeta media_url e media_type nos eventos send_media usando uma query
+// READ-ONLY ao catálogo da empresa. Usa cache por usage_role para evitar
+// queries repetidas no mesmo turno. Nunca envia mídia externamente.
+
+const INTENT_TO_USAGE_ROLE = {
+  presentation: 'hero',
+  proof:        'testimonial',
+  detail:       'demo',
+};
+
+async function enrichMediaToolEvents(svc, companyId, events) {
+  if (!events.length || !svc || !companyId) return events;
+
+  // Cache por usage_role dentro desta execução para evitar queries duplicadas.
+  const cache = {};
+
+  async function fetchMediaForRole(usageRole) {
+    if (Object.prototype.hasOwnProperty.call(cache, usageRole)) return cache[usageRole];
+
+    try {
+      const { data } = await svc
+        .from('catalog_item_media')
+        .select('media_type, company_media_library!inner(preview_url)')
+        .eq('company_id', companyId)
+        .eq('usage_role',  usageRole)
+        .eq('is_active',   true)
+        .eq('use_in_ai',   true)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const result = data?.company_media_library?.preview_url
+        ? { media_url: data.company_media_library.preview_url, media_type: data.media_type ?? 'image' }
+        : null;
+
+      cache[usageRole] = result;
+      return result;
+    } catch {
+      cache[usageRole] = null;
+      return null;
+    }
+  }
+
+  const enriched = [];
+  for (const ev of events) {
+    if (ev.tool !== 'send_media') {
+      enriched.push(ev);
+      continue;
+    }
+    const usageRole = INTENT_TO_USAGE_ROLE[ev.args?.intent] ?? 'hero';
+    const media = await fetchMediaForRole(usageRole);
+    enriched.push(media
+      ? { ...ev, args: { ...ev.args, media_url: media.media_url, media_type: media.media_type } }
+      : ev
+    );
+  }
+  return enriched;
+}
+
 // ── Carregamento de dados da empresa ─────────────────────────────────────────
 
 async function loadCompanyData(svc, companyId) {
@@ -537,9 +599,14 @@ export default async function handler(req, res) {
     ? composerResult.output.blocks.map(b => b.content).filter(Boolean)
     : [finalReply];
 
-  // ── 10. Retornar resposta ───────────────────────────────────────────────────
+  // ── 10. Enriquecer eventos send_media com preview de mídia real ─────────────
+  //
+  // Lookup READ-ONLY em catalog_item_media + company_media_library para obter
+  // uma URL de mídia real da empresa, filtrada por company_id e usage_role.
+  // Sem envio externo — apenas injeção de media_url/media_type nos args do evento.
+  // Cache por usage_role evita queries repetidas no mesmo turno.
 
-  const toolEvents = runResult.sandbox_tool_events ?? [];
+  const toolEvents = await enrichMediaToolEvents(svc, companyId, runResult.sandbox_tool_events ?? []);
 
   // Indicar na UI se o agente real usa RAG mas o sandbox está com inline/none
   const ragActive  = agentKnowledge?.knowledge_mode === 'rag' || agentKnowledge?.knowledge_mode === 'hybrid';

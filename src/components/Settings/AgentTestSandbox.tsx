@@ -380,15 +380,46 @@ function SandboxToolCard({ event }: { event: SandboxToolEvent }) {
   const icon  = iconMap[event.tool]  ?? '⚙️'
   const color = colorMap[event.tool] ?? 'bg-gray-50 border-gray-200 text-gray-700'
 
+  // Campos de mídia enriquecidos pelo backend (send_media apenas)
+  const mediaUrl  = event.tool === 'send_media' ? (event.args.media_url as string | undefined) : undefined
+  const mediaType = (event.args.media_type as string | undefined) ?? 'image'
+  const isVideo   = mediaType === 'video'
+
   return (
-    <div className={`ml-8 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${color}`}>
-      <span className="flex-shrink-0 mt-0.5">{icon}</span>
-      <div className="min-w-0">
-        <p className="font-medium leading-snug">{event.label}</p>
+    <div className={`ml-8 rounded-lg border text-xs overflow-hidden ${color}`}>
+      {/* Linha de label (igual ao design original) */}
+      <div className="flex items-start gap-2 px-3 py-2">
+        <span className="flex-shrink-0 mt-0.5">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium leading-snug">{event.label}</p>
+          {/* Fallback: sem URL e sem vídeo → indica que não há prévia disponível */}
+          {event.tool === 'send_media' && !mediaUrl && (
+            <p className="mt-0.5 opacity-60 text-[10px]">
+              Nenhuma mídia encontrada para este tipo no catálogo
+            </p>
+          )}
+        </div>
+        <span className="ml-auto flex-shrink-0 text-[10px] opacity-60 font-medium uppercase tracking-wide">
+          Simulado
+        </span>
       </div>
-      <span className="ml-auto flex-shrink-0 text-[10px] opacity-60 font-medium uppercase tracking-wide">
-        Simulado
-      </span>
+
+      {/* Preview de imagem real da empresa (send_media com URL, não vídeo) */}
+      {mediaUrl && !isVideo && (
+        <img
+          src={mediaUrl}
+          alt="Prévia da mídia que seria enviada pelo agente"
+          className="w-full max-h-48 object-cover border-t border-pink-200"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+        />
+      )}
+
+      {/* Fallback textual para vídeos (sem preview) */}
+      {mediaUrl && isVideo && (
+        <p className="px-3 pb-2 pt-1 text-[10px] opacity-60 border-t border-pink-200">
+          Vídeo disponível (não pré-visualizado aqui)
+        </p>
+      )}
     </div>
   )
 }
