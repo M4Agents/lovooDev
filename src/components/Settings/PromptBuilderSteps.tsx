@@ -16,6 +16,46 @@ import {
 import type { Company } from '../../lib/supabase'
 import type { FlatPromptConfig } from '../../services/promptBuilderApi'
 
+// ── Helpers exportados para o modo de edição avançada ─────────────────────────
+
+const ADVANCED_SECTIONS: { key: string; field: keyof FlatPromptConfig }[] = [
+  { key: 'IDENTIDADE',             field: 'identity'            },
+  { key: 'OBJETIVO',               field: 'objective'           },
+  { key: 'ESTILO DE COMUNICAÇÃO',  field: 'communication_style' },
+  { key: 'REGRAS DE ATENDIMENTO',  field: 'commercial_rules'    },
+  { key: 'INFORMAÇÕES ADICIONAIS', field: 'custom_notes'        },
+]
+
+/** Monta os 5 campos do prompt_config em um único texto editável com marcadores de seção. */
+export function buildAdvancedText(config: FlatPromptConfig): string {
+  return ADVANCED_SECTIONS
+    .map(({ key, field }) => `[${key}]\n${config[field] ?? ''}`)
+    .join('\n\n')
+}
+
+/**
+ * Parseia um texto com marcadores [SEÇÃO] de volta para os 5 campos do prompt_config.
+ * Tolerante a texto sem marcadores — vai para custom_notes.
+ */
+export function parseAdvancedText(text: string): FlatPromptConfig {
+  const config: FlatPromptConfig = { identity: '', objective: '', communication_style: '', commercial_rules: '', custom_notes: '' }
+  const sectionMap: Record<string, keyof FlatPromptConfig> = {
+    'IDENTIDADE':             'identity',
+    'OBJETIVO':               'objective',
+    'ESTILO DE COMUNICAÇÃO':  'communication_style',
+    'REGRAS DE ATENDIMENTO':  'commercial_rules',
+    'INFORMAÇÕES ADICIONAIS': 'custom_notes',
+  }
+  const parts = text.split(/\[([^\]]+)\]/)
+  for (let i = 1; i < parts.length; i += 2) {
+    const markerKey = parts[i]?.trim()
+    const content   = parts[i + 1]?.trim() ?? ''
+    const field     = sectionMap[markerKey]
+    if (field) config[field] = content
+  }
+  return config
+}
+
 // ── Tipos compartilhados ───────────────────────────────────────────────────────
 
 export interface CatalogItem { id: string; name: string }
@@ -338,7 +378,7 @@ export function StepUserAnswers({
           disabled={generating}
           rows={2}
           placeholder="Ex: Atender leads do WhatsApp, tirar dúvidas sobre nossos cursos e encaminhar interessados para matrícula."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y
                      focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
                      disabled:opacity-50 disabled:bg-gray-50"
         />
@@ -370,7 +410,7 @@ export function StepUserAnswers({
           disabled={generating}
           rows={2}
           placeholder="Ex: Não oferecer desconto sem aprovação. Sempre perguntar o nome antes de enviar proposta."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y
                      focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
                      disabled:opacity-50 disabled:bg-gray-50"
         />
@@ -386,7 +426,7 @@ export function StepUserAnswers({
           disabled={generating}
           rows={2}
           placeholder="Ex: Atendemos somente na região de SP. Parcelamos em até 12x sem juros no cartão."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y
                      focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-400
                      disabled:opacity-50 disabled:bg-gray-50"
         />
@@ -456,6 +496,7 @@ export function StepPreview({
   catalogCount, companyName, agentName,
   onBack, onSave, onTest, saving, error,
   advancedManualActive, onActivateAdvancedManual,
+  advancedText, setAdvancedText,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
@@ -468,13 +509,17 @@ export function StepPreview({
   onTest?:      () => void
   saving:       boolean
   error:        string | null
-  /** Indica que este agente está em modo de edição avançada (irreversível). */
   advancedManualActive:     boolean
-  /** Callback para ativar o modo avançado — chamado após confirmação do usuário. */
   onActivateAdvancedManual: () => void
+  /** Texto livre do modo avançado (concatenação dos 5 campos com marcadores) */
+  advancedText:    string
+  setAdvancedText: (v: string) => void
 }) {
-  // Preview atualiza com prioridade menor para não bloquear a edição
-  const deferredConfig = useDeferredValue(config)
+  // Preview do modo normal — atualiza com prioridade menor
+  const deferredConfig       = useDeferredValue(config)
+  // Preview do modo avançado — parseia o texto bruto (deferred para não travar edição)
+  const deferredAdvancedText = useDeferredValue(advancedText)
+  const deferredParsedConfig = advancedManualActive ? parseAdvancedText(deferredAdvancedText) : null
 
   // Controle do dialog de confirmação para ativação do modo avançado
   const [showAdvancedConfirm, setShowAdvancedConfirm] = useState(false)
@@ -488,7 +533,10 @@ export function StepPreview({
     onActivateAdvancedManual()
   }
 
-  const canSave = (config.identity?.trim().length ?? 0) >= 20 && (config.objective?.trim().length ?? 0) >= 20
+  const previewConfig = deferredParsedConfig ?? deferredConfig
+  const canSave = advancedManualActive
+    ? advancedText.trim().length > 20
+    : (config.identity?.trim().length ?? 0) >= 20 && (config.objective?.trim().length ?? 0) >= 20
 
   return (
     <div className="space-y-4">
@@ -521,47 +569,88 @@ export function StepPreview({
 
       {/* Badge de modo avançado */}
       {advancedManualActive && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
-          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Edição Avançada</span>
-          <span className="text-blue-300">·</span>
-          <span className="text-xs text-blue-600">Edição manual ativa — sem regeneração por IA. Os campos abaixo são a fonte de verdade do agente.</span>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-1">
+          <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">
+            ✏️ Edição Avançada ativa
+          </p>
+          <p className="text-xs text-blue-700 leading-relaxed">
+            O conteúdo do prompt é editado manualmente por você.{' '}
+            <strong>Dados de empresa, produtos e serviços cadastrados no sistema continuam sendo
+            injetados automaticamente em cada atendimento</strong> — o que vale sempre é o que
+            está no cadastro, independentemente do que estiver escrito aqui. Não é necessário
+            (nem recomendado) copiar informações do cadastro para este campo.
+          </p>
         </div>
       )}
 
-      {/* Layout 2 colunas — edição à esquerda, preview à direita
-       *  min-w-0 nas colunas evita overflow horizontal no grid dentro do modal. */}
+      {/* Layout 2 colunas — edição à esquerda, preview à direita */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-        {/* Esquerda: blocos editáveis */}
+        {/* Esquerda: modo normal (5 campos) ou modo avançado (textarea único) */}
         <div className="space-y-3 min-w-0">
-          {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
-            <div key={field}>
-              <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                {label}
-                {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
-              </label>
-              <textarea
-                value={config[field] ?? ''}
-                onChange={e => update(field, e.target.value)}
+
+          {/* Botão de ativação — acima do primeiro campo, azul, apenas no modo normal */}
+          {!advancedManualActive && !showAdvancedConfirm && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowAdvancedConfirm(true)}
                 disabled={saving}
-                rows={rows}
-                className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
-                            focus:outline-none focus:ring-2 focus:ring-blue-400
-                            disabled:opacity-50 disabled:bg-gray-50 ${
-                  required && !config[field]?.trim()
-                    ? 'border-red-200 bg-red-50 focus:ring-red-300'
-                    : 'border-gray-200'
-                }`}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 disabled:opacity-40 transition-colors"
+              >
+                Ativar edição avançada
+              </button>
+            </div>
+          )}
+
+          {advancedManualActive ? (
+            /* Modo avançado: textarea único com marcadores de seção */
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Mantenha os marcadores <code className="bg-gray-100 px-1 rounded">[IDENTIDADE]</code>,{' '}
+                <code className="bg-gray-100 px-1 rounded">[OBJETIVO]</code> etc. para preservar a estrutura do agente.
+              </p>
+              <textarea
+                value={advancedText}
+                onChange={e => setAdvancedText(e.target.value)}
+                disabled={saving}
+                rows={22}
+                className="w-full border border-blue-200 rounded-lg px-3 py-3 text-sm resize-y
+                           leading-relaxed font-mono focus:outline-none focus:ring-2 focus:ring-blue-400
+                           disabled:opacity-50 disabled:bg-gray-50 bg-blue-50/30"
               />
             </div>
-          ))}
+          ) : (
+            /* Modo normal: 5 campos separados */
+            <>
+              {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
+                <div key={field}>
+                  <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    {label}
+                    {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
+                  </label>
+                  <textarea
+                    value={config[field] ?? ''}
+                    onChange={e => update(field, e.target.value)}
+                    disabled={saving}
+                    rows={rows}
+                    className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
+                                focus:outline-none focus:ring-2 focus:ring-blue-400
+                                disabled:opacity-50 disabled:bg-gray-50 ${
+                      required && !config[field]?.trim()
+                        ? 'border-red-200 bg-red-50 focus:ring-red-300'
+                        : 'border-gray-200'
+                    }`}
+                  />
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
-        {/* Direita: preview ao vivo
-         *  min-w-0 evita overflow; sem sticky (o modal scrolls, não a página). */}
+        {/* Direita: preview ao vivo (usa config parseada em modo avançado) */}
         <div className="min-w-0">
           <PromptLivePreview
-            config={deferredConfig}
+            config={previewConfig}
             agentName={agentName}
             companyName={companyName}
           />
@@ -601,21 +690,12 @@ export function StepPreview({
       )}
 
       <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
-        {/* Esquerda: Voltar (oculto em modo avançado) ou ativar edição avançada */}
-        <div className="flex items-center gap-3">
+        {/* Esquerda: Voltar — oculto em modo avançado (irreversível) */}
+        <div>
           {onBack && (
             <button onClick={onBack} disabled={saving}
               className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 disabled:opacity-40">
               <ArrowLeft className="w-4 h-4" /> Voltar
-            </button>
-          )}
-          {!advancedManualActive && !showAdvancedConfirm && (
-            <button
-              onClick={() => setShowAdvancedConfirm(true)}
-              disabled={saving}
-              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 disabled:opacity-40 transition-colors"
-            >
-              Ativar edição avançada
             </button>
           )}
         </div>

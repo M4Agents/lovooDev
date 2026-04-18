@@ -24,6 +24,8 @@ import {
   StepDetectedData,
   StepUserAnswers,
   StepPreview,
+  buildAdvancedText,
+  parseAdvancedText,
   type CatalogItem,
   type UserAnswers,
 } from './PromptBuilderSteps'
@@ -353,6 +355,18 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     () => initialAgent?.model_config?.editing_mode === 'advanced_manual'
   )
 
+  // Texto livre do modo avançado — os 5 campos concatenados com marcadores de seção.
+  // Inicializado apenas quando o modo avançado já está ativo ao carregar o agente.
+  const [advancedText, setAdvancedText] = useState<string>(() => {
+    const isAdvanced = initialAgent?.model_config?.editing_mode === 'advanced_manual'
+    if (!isAdvanced) return ''
+    const pc = initialAgent?.prompt_config as Record<string, unknown> | undefined
+    if (pc && 'identity' in pc && !('sections' in pc)) {
+      return buildAdvancedText(pc as FlatPromptConfig)
+    }
+    return ''
+  })
+
   // Estados globais
   const [generating, setGenerating]     = useState(false)
   const [saving, setSaving]             = useState(false)
@@ -424,7 +438,19 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   }
 
   async function handleSave() {
-    if (!promptConfig) return
+    // Em modo avançado, parseia o texto livre de volta para prompt_config.
+    // Em modo normal, usa promptConfig diretamente.
+    const effectiveConfig: FlatPromptConfig | null = advancedManualActive
+      ? (() => {
+          const parsed = parseAdvancedText(advancedText)
+          // Garante campos obrigatórios com fallback do promptConfig anterior
+          if (!parsed.identity?.trim())  parsed.identity  = promptConfig?.identity  ?? 'Agente de atendimento'
+          if (!parsed.objective?.trim()) parsed.objective = promptConfig?.objective ?? 'Atender clientes'
+          return parsed
+        })()
+      : promptConfig
+
+    if (!effectiveConfig) return
     setError(null)
     setSaving(true)
     try {
@@ -443,7 +469,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           agent_id:       initialAgent.id,
           name:           agentName.trim() || initialAgent.name,
           model,
-          prompt_config:  promptConfig,
+          prompt_config:  effectiveConfig,
           prompt_version: (initialAgent.prompt_version ?? 0) + 1,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
@@ -454,7 +480,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           company_id:    companyId,
           name:          agentName.trim(),
           model,
-          prompt_config: promptConfig,
+          prompt_config: effectiveConfig,
           model_config:  Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.create(payload)
@@ -472,9 +498,10 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   /**
    * Ativa o modo de edição avançada para este agente.
    * Irreversível: o flag é salvo em model_config na próxima vez que handleSave rodar.
-   * O conteúdo de promptConfig NÃO é resetado — o usuário edita os campos existentes.
+   * Inicializa advancedText com os 5 campos do promptConfig atual concatenados.
    */
   function activateAdvancedManual() {
+    if (promptConfig) setAdvancedText(buildAdvancedText(promptConfig))
     setAdvancedManualActive(true)
   }
 
@@ -616,6 +643,8 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           error={error}
           advancedManualActive={advancedManualActive}
           onActivateAdvancedManual={activateAdvancedManual}
+          advancedText={advancedText}
+          setAdvancedText={setAdvancedText}
         />
       )}
 

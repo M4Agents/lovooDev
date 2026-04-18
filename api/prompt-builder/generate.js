@@ -52,9 +52,6 @@ const MAX_CATALOG_ITEMS = 15;
  * custom_notes aceita 1500 chars para preservar o output completo do assembler (P1–P9).
  * Os outros campos seguem os limites do schema (identity e objective não são userAnswers).
  */
-// #region agent log
-console.log('[DBG-cf8832][A] generate.js carregado — módulo ok');
-// #endregion
 const ANSWER_MAX_BY_FIELD = {
   objective:           300,
   communication_style: 300,
@@ -354,16 +351,9 @@ export default async function handler(req, res) {
     has_answers:  Object.keys(userAnswers).length > 0,
   });
 
-  // #region agent log
-  console.log('[DBG-cf8832][A-D] handler executou — auth ok', { company_id, role: auth.role });
-  // #endregion
-
   // ── 3. Verificar OpenAI ─────────────────────────────────────────────────────
 
   const openaiSettings = await fetchParentOpenAISettingsForSystem();
-  // #region agent log
-  console.log('[DBG-cf8832][C] openai settings', { enabled: openaiSettings?.enabled, model: openaiSettings?.model });
-  // #endregion
   if (!openaiSettings.enabled) {
     return res.status(503).json({ success: false, error: 'Serviço de IA não disponível.' });
   }
@@ -383,13 +373,7 @@ export default async function handler(req, res) {
       fetchCompanyData(company_id),
       fetchCatalogSummary(company_id),
     ]);
-    // #region agent log
-    console.log('[DBG-cf8832][B] dados buscados', { has_company: Boolean(companyData), catalog_count: catalogItems.length, company_keys: companyData ? Object.keys(companyData) : [] });
-    // #endregion
   } catch (fetchErr) {
-    // #region agent log
-    console.error('[DBG-cf8832][B] ERRO fetch dados', fetchErr?.message);
-    // #endregion
     console.error('[PROMPT_BUILDER] Erro ao buscar dados:', fetchErr.message);
     return res.status(500).json({ success: false, error: 'Erro ao carregar dados da empresa.' });
   }
@@ -482,13 +466,7 @@ Use exatamente este formato:
   let sanitized;
   try {
     sanitized = sanitizePromptConfig(extracted, 'save');
-    // #region agent log
-    console.log('[DBG-cf8832][D] sanitize ok', { fields: Object.keys(sanitized) });
-    // #endregion
   } catch (blocked) {
-    // #region agent log
-    console.error('[DBG-cf8832][D] sanitize BLOQUEADO', String(blocked));
-    // #endregion
     console.warn('[PROMPT_BUILDER] Sanitização bloqueada:', blocked);
     return res.status(422).json({
       success: false,
