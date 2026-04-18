@@ -294,6 +294,9 @@ async function processMessage(payload) {
     
     // 🎬 PROCESSAR MÍDIA ANTES DE CHAMAR RPC (CORREÇÃO CRÍTICA)
     let finalMediaUrl = mediaUrl;
+    // Buffer de áudio capturado para transcrição posterior (apenas áudio sem texto)
+    let capturedAudioBuffer = null;
+    let capturedAudioMime   = null;
     if (isMediaMessage && mediaUrl) {
       console.log('🎬 PROCESSANDO MÍDIA ANTES DO RPC:', { mediaUrl: mediaUrl.substring(0, 80) + '...', rawMediaType });
       
@@ -484,6 +487,15 @@ async function processMessage(payload) {
             } else {
               console.error('⚠️ SEM MEDIAKEY: Usando buffer original');
             }
+
+            // [AUDIO] Capturar buffer para transcrição posterior (escopo externo)
+            {
+              const _rawType = (rawMediaType || message.messageType || '').toLowerCase();
+              if (['ptt', 'audiomessage', 'audio'].includes(_rawType) && !messageText) {
+                capturedAudioBuffer = finalBuffer;
+                capturedAudioMime   = message.content?.mimetype || 'audio/ogg';
+              }
+            }
             
             // Detectar formato e gerar nome do arquivo (CORREÇÃO: usar mimetype do payload)
             const { S3Storage } = await import('../src/services/aws/s3Storage.js');
@@ -586,7 +598,26 @@ async function processMessage(payload) {
       normalized: normalizedType,
       isMedia: isMediaMessage
     });
-    
+
+    // ── [AUDIO TRANSCRIPTION] ────────────────────────────────────────────────
+    // Transcreve áudio via Whisper-1 de forma invisível ao usuário.
+    // Pré-condições: tipo audio, sem texto existente, buffer disponível.
+    // Fallback: se falhar, messageText permanece '' — comportamento atual.
+    if (normalizedType === 'audio' && !messageText && capturedAudioBuffer) {
+      try {
+        const { transcribeAudioBuffer } = await import('./lib/openai/audioTranscriber.js');
+        const transcript = await transcribeAudioBuffer(capturedAudioBuffer, capturedAudioMime);
+        if (transcript) {
+          messageText = transcript;
+          console.info('[WEBHOOK] audio transcribed', { company_id: company?.id, chars: transcript.length });
+        }
+      } catch (transcriptionErr) {
+        console.warn('[WEBHOOK] audio transcription error (non-fatal)', { error: transcriptionErr.message });
+        // Fallback: messageText permanece '' — agente não responde (comportamento atual)
+      }
+    }
+    // ── [/AUDIO TRANSCRIPTION] ───────────────────────────────────────────────
+
     // Restante do código...
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
