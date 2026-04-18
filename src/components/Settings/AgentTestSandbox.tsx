@@ -33,9 +33,11 @@ interface Props {
   agentName:    string
   companyName:  string
   agentId?:     string | null   // ID do agente salvo (para knowledge_base)
-  onBack:       () => void
+  onBack?:      () => void      // opcional: oculta botão Voltar quando não fornecido
   onSave?:      () => void
   isSaved?:     boolean
+  /** Modo embutido: oculta botões de navegação (Voltar / Salvar agente). */
+  compact?:     boolean
 }
 
 // Mensagem do chat inclui tool_events opcionais (exibidos antes da resposta)
@@ -47,7 +49,7 @@ interface DisplayMessage extends ChatMessage {
 
 export function AgentTestSandbox({
   companyId, promptConfig, agentName, companyName,
-  agentId = null, onBack, onSave, isSaved = false,
+  agentId = null, onBack, onSave, isSaved = false, compact = false,
 }: Props) {
   const greeting = buildGreeting(agentName, companyName)
 
@@ -168,16 +170,19 @@ export function AgentTestSandbox({
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600
-                       bg-white border border-gray-200 rounded-lg hover:bg-gray-50
-                       transition-colors font-medium"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Voltar
-          </button>
-          {!isSaved && onSave && (
+          {/* Voltar e Salvar ocultos no modo compacto (embutido no Step 4) */}
+          {!compact && onBack && (
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600
+                         bg-white border border-gray-200 rounded-lg hover:bg-gray-50
+                         transition-colors font-medium"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Voltar
+            </button>
+          )}
+          {!compact && !isSaved && onSave && (
             <button
               onClick={onSave}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white

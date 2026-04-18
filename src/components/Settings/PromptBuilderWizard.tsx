@@ -645,6 +645,8 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           onActivateAdvancedManual={activateAdvancedManual}
           advancedText={advancedText}
           setAdvancedText={setAdvancedText}
+          companyId={companyId}
+          agentId={initialAgent?.id ?? null}
         />
       )}
 

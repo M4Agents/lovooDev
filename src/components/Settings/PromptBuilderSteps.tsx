@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useDeferredValue, useState } from 'react'
+import { AgentTestSandbox } from './AgentTestSandbox'
 import {
   ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
   Eye, Loader2, Package, Phone, Globe, Sparkles,
@@ -497,6 +498,7 @@ export function StepPreview({
   onBack, onSave, onTest, saving, error,
   advancedManualActive, onActivateAdvancedManual,
   advancedText, setAdvancedText,
+  companyId, agentId,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
@@ -514,6 +516,9 @@ export function StepPreview({
   /** Texto livre do modo avançado (concatenação dos 5 campos com marcadores) */
   advancedText:    string
   setAdvancedText: (v: string) => void
+  /** Necessário para o sandbox inline no modo avançado */
+  companyId: string
+  agentId?:  string | null
 }) {
   // Preview do modo normal — atualiza com prioridade menor
   const deferredConfig       = useDeferredValue(config)
@@ -647,13 +652,27 @@ export function StepPreview({
           )}
         </div>
 
-        {/* Direita: preview ao vivo (usa config parseada em modo avançado) */}
+        {/* Direita: sandbox inline no modo avançado; preview ao vivo no modo normal */}
         <div className="min-w-0">
-          <PromptLivePreview
-            config={previewConfig}
-            agentName={agentName}
-            companyName={companyName}
-          />
+          {advancedManualActive ? (
+            /* Sandbox embutido — usa o config parseado do textarea em tempo quase-real */
+            <div className="border border-violet-200 rounded-xl overflow-hidden shadow-sm h-full min-h-[520px] flex flex-col">
+              <AgentTestSandbox
+                compact
+                companyId={companyId}
+                promptConfig={previewConfig}
+                agentName={agentName}
+                companyName={companyName}
+                agentId={agentId ?? null}
+              />
+            </div>
+          ) : (
+            <PromptLivePreview
+              config={previewConfig}
+              agentName={agentName}
+              companyName={companyName}
+            />
+          )}
         </div>
       </div>
 
