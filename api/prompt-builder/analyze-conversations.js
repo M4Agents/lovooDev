@@ -346,94 +346,118 @@ function buildCommercialRules(objections, objectionResponses, closingPatterns, r
 }
 
 function buildCustomNotes(dp) {
-  const parts = [];
+  const MAX = 1500;
 
-  // ── Blocos fixos de comportamento (sempre presentes) ─────────────────────
+  // Seções definidas em ordem de prioridade.
+  // As de maior prioridade entram primeiro; as menores só entram se couber.
+  // Nunca cortamos no meio de uma seção — o corte é sempre limpo entre blocos.
+  const allSections = [];
 
-  parts.push(
+  // ── P1: CONDUÇÃO (fixa) ───────────────────────────────────────────────────
+  allSections.push(
     'CONDUÇÃO DA CONVERSA:\n' +
     '- Conduza ativamente — não reaja de forma passiva ao cliente\n' +
     '- Use cada resposta como ponte para a próxima etapa\n' +
     '- Evite respostas fechadas; avance sempre com intenção',
   );
 
-  parts.push(
+  // ── P2: CONTROLE DE INFORMAÇÃO (fixo) ────────────────────────────────────
+  allSections.push(
     'CONTROLE DE INFORMAÇÃO:\n' +
     '- Responda o suficiente para gerar interesse, não para esgotar o assunto\n' +
     '- Revele informações gradualmente conforme o engajamento cresce\n' +
     '- Se o cliente perguntar muito de uma vez, escolha o ponto mais relevante',
   );
 
-  parts.push(
-    'ELEVAÇÃO DE VALOR:\n' +
-    '- Não apenas informe — gere percepção de valor antes de revelar detalhes\n' +
-    '- Conecte cada produto ou serviço ao objetivo específico do cliente\n' +
-    '- Use benefícios e resultados concretos, não só características',
-  );
-
-  parts.push(
-    'NÍVEL DE CONSCIÊNCIA:\n' +
-    '- Curioso: faça perguntas para entender contexto e elevar o interesse\n' +
-    '- Interessado: aprofunde benefícios conectados ao objetivo dele\n' +
-    '- Pronto: conduza para ação diretamente, sem mais delongas',
-  );
-
-  // ── Blocos variáveis a partir dos padrões detectados ─────────────────────
-
-  // Qualificação — perguntas do atendente
+  // ── P3: QUALIFICAÇÃO (variável — attendant_questions) ────────────────────
   const questions = dp.attendant_questions?.filter(Boolean) ?? [];
   if (questions.length) {
-    const qList = questions.slice(0, 3).map(q => `- "${q}"`).join('\n');
-    parts.push(`QUALIFICAÇÃO:\n${qList}`);
+    const qList = questions.slice(0, 5).map(q => `- "${q}"`).join('\n');
+    allSections.push(`QUALIFICAÇÃO:\nUtilize perguntas como:\n${qList}`);
   } else {
-    // Fallback genérico quando não há perguntas detectadas
-    parts.push(
-      'QUALIFICAÇÃO:\n' +
+    allSections.push(
+      'QUALIFICAÇÃO:\nUtilize perguntas como:\n' +
       '- "O que te motivou a buscar isso agora?"\n' +
       '- "Qual seu principal objetivo com isso?"',
     );
   }
 
-  // Objeções
+  // ── P4: OBJEÇÕES (variável — objections + objection_responses) ───────────
   const objections = dp.objections?.filter(Boolean) ?? [];
   const responses  = dp.objection_responses?.filter(Boolean) ?? [];
   if (objections.length) {
-    const objLines = objections.slice(0, 3).map((obj, i) => {
-      const resp = responses[i] ? `: ${responses[i]}` : ': reforce o valor e traga segurança';
+    const objLines = objections.slice(0, 4).map((obj, i) => {
+      const resp = responses[i]
+        ? ` → ${responses[i]}`
+        : ' → reforce o valor e traga segurança com contexto real';
       return `- ${obj}${resp}`;
     }).join('\n');
-    parts.push(`OBJEÇÕES:\n${objLines}`);
+    allSections.push(`OBJEÇÕES:\n${objLines}`);
   } else {
-    parts.push(
+    allSections.push(
       'OBJEÇÕES:\n' +
-      '- Ao identificar dúvida ou resistência: não confronte — reforce valor e traga segurança',
+      '- Ao identificar dúvida ou resistência → reforce o valor e traga segurança com contexto real',
     );
   }
 
-  // Mídia (fixo — regras estratégicas de uso)
-  parts.push(
-    'USO DE MÍDIA:\n' +
-    '- Apresentação: início ou construção de contexto\n' +
-    '- Demonstração: quando houver interesse confirmado\n' +
-    '- Depoimentos: ao surgir dúvida ou objeção\n' +
-    '- Antes e depois: para reforçar resultado e elevar valor\n' +
-    '- Máximo 2 mídias por mensagem, sempre com contextualização',
-  );
-
-  // Fechamento — padrões da empresa + frases de convite fixas
+  // ── P5: FECHAMENTO (variável + CTAs fixos) ───────────────────────────────
   const closings = dp.closing_patterns?.filter(Boolean) ?? [];
   const closingLines = closings.length
-    ? closings.slice(0, 2).map(c => `- ${c}`).join('\n') + '\n'
+    ? closings.slice(0, 3).map(c => `- ${c}`).join('\n') + '\n'
     : '';
-  parts.push(
+  allSections.push(
     'FECHAMENTO:\n' +
     closingLines +
     '- Use convites naturais: "faz sentido pra você?", "vamos avançar nisso?"\n' +
     '- Nunca encerre sem uma próxima ação concreta e clara',
   );
 
-  // Truncar para o limite do campo (1500 chars)
-  return parts.join('\n\n').slice(0, 1500);
+  // ── P6: DÚVIDAS FREQUENTES (variável — frequent_customer_questions) ──────
+  const customerQuestions = dp.frequent_customer_questions?.filter(Boolean) ?? [];
+  if (customerQuestions.length) {
+    const cqList = customerQuestions.slice(0, 5).map(q => `- ${q}`).join('\n');
+    allSections.push(`DÚVIDAS FREQUENTES:\nEsteja preparado para responder:\n${cqList}`);
+  }
+
+  // ── P7: ELEVAÇÃO DE VALOR (fixo) ─────────────────────────────────────────
+  allSections.push(
+    'ELEVAÇÃO DE VALOR:\n' +
+    '- Não apenas informe — gere percepção de valor antes de revelar detalhes\n' +
+    '- Conecte cada produto ou serviço ao objetivo específico do cliente\n' +
+    '- Use benefícios e resultados concretos, não só características',
+  );
+
+  // ── P8: NÍVEL DE CONSCIÊNCIA (fixo) ──────────────────────────────────────
+  allSections.push(
+    'NÍVEL DE CONSCIÊNCIA:\n' +
+    '- Curioso: faça perguntas para entender contexto e elevar o interesse\n' +
+    '- Interessado: aprofunde benefícios conectados ao objetivo dele\n' +
+    '- Pronto: conduza para ação diretamente, sem mais delongas',
+  );
+
+  // ── P9: USO DE MÍDIA (fixo) ──────────────────────────────────────────────
+  allSections.push(
+    'USO DE MÍDIA:\n' +
+    '- Apresentação: início ou construção de contexto\n' +
+    '- Demonstração: ao confirmar interesse do cliente\n' +
+    '- Depoimentos: ao surgir dúvida ou objeção\n' +
+    '- Antes e depois: para reforçar resultado e elevar valor\n' +
+    '- Máx. 2 mídias por mensagem, sempre com contextualização',
+  );
+
+  // Montar saída respeitando o limite — corte limpo entre blocos (nunca no meio)
+  const result = [];
+  let used = 0;
+
+  for (const section of allSections) {
+    const sep   = result.length > 0 ? '\n\n' : '';
+    const block = sep + section;
+    if (used + block.length > MAX) break;
+    result.push(section);
+    used += block.length;
+  }
+
+  return result.join('\n\n');
 }
 
 /**
