@@ -30,6 +30,43 @@ import {
 import { ConversationImportStep } from './ConversationImportStep'
 import type { ConversationAnalysis } from '../../services/promptBuilderApi'
 
+// ── Helpers de merge do assembler ─────────────────────────────────────────────
+//
+// Após o generate.js retornar (LLM usa empresa + catálogo para identity/objective),
+// os campos comportamentais vindos do assembler de conversas (commercial_rules,
+// custom_notes) são preservados integralmente — P4-P9 com dados reais das conversas.
+// O merge só ocorre no fluxo automático (dentro de handleGenerate), nunca sobrescreve
+// edições manuais posteriores do usuário.
+
+/** Padrões de dados operacionais a remover antes de salvar campos do assembler. */
+const ASSEMBLER_STRIP_PATTERNS: RegExp[] = [
+  /\(\d{2}\)\s*\d{4,5}-?\d{4}/g,                               // telefones BR
+  /\+?\d{1,3}[\s-]?\(?\d{2,3}\)?[\s-]?\d{4,5}[\s-]?\d{4}/g,  // telefones internacionais
+  /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,        // emails
+  /https?:\/\/[^\s]+/g,                                          // URLs http/https
+  /www\.[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}[^\s]*/g,                  // URLs www
+]
+
+/** Remove dados operacionais de um campo do assembler antes do merge. */
+function sanitizeAssemblerField(value: string): string {
+  let result = value
+  for (const pattern of ASSEMBLER_STRIP_PATTERNS) {
+    result = result.replace(pattern, '')
+  }
+  return result.replace(/\s{2,}/g, ' ').trim()
+}
+
+/**
+ * Valida um campo do assembler para merge.
+ * Retorna o valor trimado ou null se inválido (tipo incorreto, vazio, fora dos limites).
+ */
+function validateAssemblerField(value: unknown, minLen: number, maxLen: number): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed.length < minLen || trimmed.length > maxLen) return null
+  return trimmed
+}
+
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -351,6 +388,25 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
       if (name && config.identity && !config.identity.toLowerCase().includes(name.toLowerCase())) {
         config.identity = `Você se chama ${name}. ${config.identity}`
       }
+
+      // Preservar campos comportamentais do assembler (P4–P9) quando a análise de
+      // conversas gerou um suggested_prompt_config válido. O LLM do generate.js é
+      // melhor para identity/objective (usa empresa + catálogo); o assembler é melhor
+      // para commercial_rules/custom_notes (usa padrões reais das conversas).
+      // Validação e sanitização leve antes do merge — evita congelamento de dados
+      // operacionais específicos que possam ter chegado via objection_responses.
+      const assemblerSpc = conversationAnalysis?.suggested_prompt_config
+      if (assemblerSpc) {
+        const cleanRules = validateAssemblerField(assemblerSpc.commercial_rules, 10, 500)
+        if (cleanRules) {
+          config.commercial_rules = sanitizeAssemblerField(cleanRules)
+        }
+        const cleanNotes = validateAssemblerField(assemblerSpc.custom_notes, 10, 1500)
+        if (cleanNotes) {
+          config.custom_notes = sanitizeAssemblerField(cleanNotes)
+        }
+      }
+
       setPromptConfig(config)
       setStep(4)
     } catch (err: unknown) {

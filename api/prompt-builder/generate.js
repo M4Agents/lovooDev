@@ -47,8 +47,17 @@ const KNOWN_OUTPUT_FIELDS = ['identity', 'objective', 'communication_style', 'co
 /** Máximo de itens do catálogo enviados ao LLM (economia de tokens). */
 const MAX_CATALOG_ITEMS = 15;
 
-/** Comprimento máximo de cada campo de userAnswers antes de truncar. */
-const MAX_ANSWER_LENGTH = 500;
+/**
+ * Comprimento máximo por campo de userAnswers — alinhado com PROMPT_CONFIG_SCHEMA.
+ * custom_notes aceita 1500 chars para preservar o output completo do assembler (P1–P9).
+ * Os outros campos seguem os limites do schema (identity e objective não são userAnswers).
+ */
+const ANSWER_MAX_BY_FIELD: Record<string, number> = {
+  objective:           300,
+  communication_style: 300,
+  commercial_rules:    500,
+  custom_notes:        1500,
+};
 
 // ── Autenticação ──────────────────────────────────────────────────────────────
 
@@ -183,7 +192,7 @@ function formatUserAnswers(answers) {
 
   const lines = fields
     .filter(f => typeof answers[f] === 'string' && answers[f].trim())
-    .map(f => `${labels[f]}: ${String(answers[f]).slice(0, MAX_ANSWER_LENGTH)}`);
+    .map(f => `${labels[f]}: ${String(answers[f]).slice(0, ANSWER_MAX_BY_FIELD[f] ?? 500)}`);
 
   return lines.length > 0 ? lines.join('\n') : 'Nenhuma resposta fornecida.';
 }
@@ -219,7 +228,7 @@ DEFINIÇÃO DOS CAMPOS:
 - objective: objetivo principal do agente em uma frase clara (obrigatório, 20–300 chars)
 - communication_style: tom e estilo de comunicação desejado (opcional, 10–300 chars)
 - commercial_rules: regras comerciais estratégicas, ex: não informar preços sem elevar valor (opcional, 10–500 chars)
-- custom_notes: comportamento estratégico e padrões de condução das conversas (opcional, 10–800 chars)
+- custom_notes: comportamento estratégico e padrões de condução das conversas (opcional, 10–1500 chars)
 
 FORMATO DE RESPOSTA (único formato aceito — sem nada antes ou depois):
 {"identity":"...","objective":"...","communication_style":"...","commercial_rules":"...","custom_notes":"..."}`;
