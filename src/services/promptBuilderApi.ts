@@ -65,6 +65,8 @@ export interface SandboxMemory {
 /** Resposta completa do sandbox real. */
 export interface SandboxRunResult {
   reply:                   string
+  /** Array de blocos para renderização progressiva (mesmo splitting do pipeline WhatsApp). */
+  reply_blocks?:           string[]
   tool_events:             SandboxToolEvent[]
   updated_sandbox_memory:  SandboxMemory | null
   rag_notice?:             string | null
@@ -199,6 +201,7 @@ export const promptBuilderApi = {
     }
     return {
       reply:                  json.reply as string,
+      reply_blocks:           Array.isArray(json.reply_blocks) ? (json.reply_blocks as string[]) : undefined,
       tool_events:            (json.tool_events as SandboxToolEvent[]) ?? [],
       updated_sandbox_memory: (json.updated_sandbox_memory as SandboxMemory | null) ?? null,
       rag_notice:             json.rag_notice ?? null,

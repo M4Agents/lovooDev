@@ -93,15 +93,30 @@ export function AgentTestSandbox({
         agent_id:        agentId,
       })
 
-      const agentMsg: DisplayMessage = {
+      // Obtém blocos do splitting (mesmo pipeline do WhatsApp real).
+      // Fallback: resposta completa como bloco único.
+      const blocks =
+        result.reply_blocks && result.reply_blocks.length > 0
+          ? result.reply_blocks
+          : [result.reply]
+
+      // Primeiro bloco — tool_events ficam associados somente ao primeiro
+      setMessages(prev => [...prev, {
         role:        'assistant',
-        content:     result.reply,
+        content:     blocks[0],
         tool_events: result.tool_events.length > 0 ? result.tool_events : undefined,
+      }])
+
+      // Blocos adicionais — renderizados progressivamente com delay curto.
+      // Loading dots continuam visíveis entre blocos (simula "digitando").
+      // Delay: min(200ms, 40ms + chars × 0.5ms) — versão reduzida do pipeline real.
+      for (let i = 1; i < blocks.length; i++) {
+        const delay = Math.min(200, 40 + blocks[i].length * 0.5)
+        await new Promise<void>(resolve => setTimeout(resolve, delay))
+        setMessages(prev => [...prev, { role: 'assistant', content: blocks[i] }])
       }
 
-      setMessages(prev => [...prev, agentMsg])
       setSandboxMemory(result.updated_sandbox_memory)
-
       if (result.rag_notice) setRagNotice(result.rag_notice)
 
     } catch (err: unknown) {

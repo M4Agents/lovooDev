@@ -39,6 +39,7 @@ import { fetchParentOpenAISettingsForSystem } from '../lib/openai/settingsDb.js'
 import { buildPromptFromConfig }              from '../lib/agents/promptTemplate.js';
 import { runAgentWithConfig }                 from '../lib/agents/runner.js';
 import { getToolsForAgent }                   from '../lib/agents/toolDefinitions.js';
+import { compose }                            from '../lib/agents/responseComposer.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -523,7 +524,20 @@ export default async function handler(req, res) {
     updatedSandboxMemory = mergeSandboxMemory(sandbox_memory ?? null, memoryPayload);
   }
 
-  // ── 9. Retornar resposta ────────────────────────────────────────────────────
+  // ── 9. Dividir resposta em blocos (mesmo pipeline do WhatsApp) ─────────────
+  //
+  // Reutiliza responseComposer.compose para replicar o comportamento real do
+  // agente no WhatsApp: até 10 blocos de ~300 chars, separados por parágrafo
+  // ou sentença. O frontend exibe cada bloco como uma bolha separada com delay.
+
+  const finalReply     = cleanResponse || runResult.result;
+  const composerResult = compose({ raw_response: finalReply });
+
+  const replyBlocks = (composerResult.success && Array.isArray(composerResult.output?.blocks))
+    ? composerResult.output.blocks.map(b => b.content).filter(Boolean)
+    : [finalReply];
+
+  // ── 10. Retornar resposta ───────────────────────────────────────────────────
 
   const toolEvents = runResult.sandbox_tool_events ?? [];
 
@@ -535,7 +549,8 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     success:                true,
-    reply:                  cleanResponse || runResult.result,
+    reply:                  finalReply,        // backward compat — string completa
+    reply_blocks:           replyBlocks,       // array de blocos para renderização progressiva
     tool_events:            toolEvents,
     updated_sandbox_memory: updatedSandboxMemory,
     rag_notice:             ragNotice,
