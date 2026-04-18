@@ -119,8 +119,9 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
 
   const isSuccess      = step === 5
   const showSupport    = step >= 3 && step <= 4
-  // Step 4 usa container mais largo para acomodar o layout 2 colunas
-  const containerWidth = step === 4
+  // Step 4 usa container mais largo para o layout 2 colunas;
+  // Step 3 com drawer aberto também expande para acomodar campos + drawer lado a lado
+  const containerWidth = step === 4 || (step === 3 && isSupportOpen)
     ? 'sm:max-w-5xl lg:max-w-6xl'
     : 'sm:max-w-3xl md:max-w-4xl'
 
