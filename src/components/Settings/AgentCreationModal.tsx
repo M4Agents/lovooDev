@@ -15,7 +15,7 @@
  *   - Step 4 (preview 2 colunas): max-w-6xl
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { HelpCircle, Sparkles, Check, X } from 'lucide-react'
 import { PromptBuilderStepper } from './PromptBuilderStepper'
@@ -51,10 +51,6 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   const [sandboxIsSaved, setSandboxIsSaved]     = useState(false)
   const [sandboxAgentId, setSandboxAgentId]     = useState<string | null>(null)
 
-  // #region agent log — debug scroll
-  const scrollRef = useRef<HTMLDivElement>(null)
-  // #endregion
-
   // Animação de entrada / saída e lock do scroll do body
   useEffect(() => {
     if (isOpen) {
@@ -76,27 +72,6 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
     if (step < 3 || step > 4) setSupport(false)
   }, [step])
 
-  // #region agent log — debug scroll
-  useEffect(() => {
-    if (!isOpen) return
-    const el = scrollRef.current
-    if (!el) return
-    const cs = window.getComputedStyle(el)
-    const parentEl = el.parentElement
-    const parentCs = parentEl ? window.getComputedStyle(parentEl) : null
-    console.log('[DBG:cf8832][post-fix] AgentCreationModal scroll container', {
-      step,
-      scrollHeight:  el.scrollHeight,
-      clientHeight:  el.clientHeight,
-      overflows:     el.scrollHeight > el.clientHeight,
-      overflowY:     cs.overflowY,
-      height:        cs.height,
-      parentOverflowY: parentCs?.overflowY ?? 'n/a',
-      parentHeight:    parentEl?.clientHeight ?? 'n/a',
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, isOpen])
-  // #endregion
 
   // Fechar com Escape (confirmação se houver progresso)
   useEffect(() => {
@@ -261,7 +236,6 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
 
           {/* Conteúdo scrollável do wizard — flex-1 min-h-0 em vez de h-full para funcionar corretamente em flex */}
           <div
-            ref={scrollRef}
             className="flex-1 min-h-0 overflow-y-auto scroll-smooth [scrollbar-width:thin] [scrollbar-color:#CBD5E1_transparent]
                           [&::-webkit-scrollbar]:w-1.5
                           [&::-webkit-scrollbar-track]:bg-transparent
