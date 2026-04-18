@@ -263,17 +263,15 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
           />
 
           {/* Drawer do Assistente de Configuração
-           *  Posicionado absolute sobre o conteúdo — NÃO empurra nem redimensiona
-           *  o wizard. O conteúdo principal mantém largura original sempre.
+           *  Renderizado APENAS quando isSupportOpen=true para garantir que
+           *  nunca aparece automaticamente — só via clique no botão Ajuda.
+           *  Animação de entrada via CSS keyframe inline.
            ── */}
-          {showSupport && (
+          {showSupport && isSupportOpen && (
             <div
-              className={`
-                absolute inset-y-0 right-0 w-full sm:w-80
-                border-l border-gray-200 shadow-xl z-10
-                transform transition-transform duration-200 ease-out
-                ${isSupportOpen ? 'translate-x-0' : 'translate-x-full'}
-              `}
+              className="absolute inset-y-0 right-0 w-full sm:w-80
+                         border-l border-gray-200 shadow-xl z-10"
+              style={{ animation: 'slideInFromRight 200ms ease-out' }}
             >
               <PromptBuilderSupportChat
                 companyId={companyId}
