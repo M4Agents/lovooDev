@@ -53,7 +53,7 @@ const MAX_CATALOG_ITEMS = 15;
  * Os outros campos seguem os limites do schema (identity e objective não são userAnswers).
  */
 // #region agent log
-fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:module-load',message:'Módulo carregado (ANSWER_MAX_BY_FIELD inicializado)',data:{},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+console.log('[DBG-cf8832][A] generate.js carregado — módulo ok');
 // #endregion
 const ANSWER_MAX_BY_FIELD = {
   objective:           300,
@@ -355,14 +355,14 @@ export default async function handler(req, res) {
   });
 
   // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:handler-start',message:'Handler executou — auth ok',data:{company_id,role:auth.role},timestamp:Date.now(),hypothesisId:'A-B-C-D'})}).catch(()=>{});
+  console.log('[DBG-cf8832][A-D] handler executou — auth ok', { company_id, role: auth.role });
   // #endregion
 
   // ── 3. Verificar OpenAI ─────────────────────────────────────────────────────
 
   const openaiSettings = await fetchParentOpenAISettingsForSystem();
   // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:openai-settings',message:'OpenAI settings carregadas',data:{enabled:openaiSettings?.enabled,model:openaiSettings?.model},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+  console.log('[DBG-cf8832][C] openai settings', { enabled: openaiSettings?.enabled, model: openaiSettings?.model });
   // #endregion
   if (!openaiSettings.enabled) {
     return res.status(503).json({ success: false, error: 'Serviço de IA não disponível.' });
@@ -384,11 +384,11 @@ export default async function handler(req, res) {
       fetchCatalogSummary(company_id),
     ]);
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:data-fetch-ok',message:'Dados buscados com sucesso',data:{has_company:Boolean(companyData),catalog_count:catalogItems.length,company_keys:companyData?Object.keys(companyData):[]},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    console.log('[DBG-cf8832][B] dados buscados', { has_company: Boolean(companyData), catalog_count: catalogItems.length, company_keys: companyData ? Object.keys(companyData) : [] });
     // #endregion
   } catch (fetchErr) {
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:data-fetch-error',message:'ERRO ao buscar dados',data:{error:fetchErr?.message},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    console.error('[DBG-cf8832][B] ERRO fetch dados', fetchErr?.message);
     // #endregion
     console.error('[PROMPT_BUILDER] Erro ao buscar dados:', fetchErr.message);
     return res.status(500).json({ success: false, error: 'Erro ao carregar dados da empresa.' });
@@ -483,11 +483,11 @@ Use exatamente este formato:
   try {
     sanitized = sanitizePromptConfig(extracted, 'save');
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:sanitize-ok',message:'sanitizePromptConfig ok',data:{fields:Object.keys(sanitized)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    console.log('[DBG-cf8832][D] sanitize ok', { fields: Object.keys(sanitized) });
     // #endregion
   } catch (blocked) {
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:sanitize-blocked',message:'BLOQUEADO por sanitizePromptConfig',data:{blocked:String(blocked)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    console.error('[DBG-cf8832][D] sanitize BLOQUEADO', String(blocked));
     // #endregion
     console.warn('[PROMPT_BUILDER] Sanitização bloqueada:', blocked);
     return res.status(422).json({
