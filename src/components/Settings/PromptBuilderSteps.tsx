@@ -455,23 +455,37 @@ export function StepPreview({
   config, setConfig,
   catalogCount, companyName, agentName,
   onBack, onSave, onTest, saving, error,
+  advancedManualActive, onActivateAdvancedManual,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
   catalogCount: number
   companyName:  string
   agentName:    string
-  onBack:       () => void
+  /** undefined quando modo avançado ativo — oculta o botão Voltar */
+  onBack?:      () => void
   onSave:       () => void
   onTest?:      () => void
   saving:       boolean
   error:        string | null
+  /** Indica que este agente está em modo de edição avançada (irreversível). */
+  advancedManualActive:     boolean
+  /** Callback para ativar o modo avançado — chamado após confirmação do usuário. */
+  onActivateAdvancedManual: () => void
 }) {
   // Preview atualiza com prioridade menor para não bloquear a edição
   const deferredConfig = useDeferredValue(config)
 
+  // Controle do dialog de confirmação para ativação do modo avançado
+  const [showAdvancedConfirm, setShowAdvancedConfirm] = useState(false)
+
   function update(field: keyof FlatPromptConfig, value: string) {
     setConfig({ ...config, [field]: value })
+  }
+
+  function handleConfirmAdvanced() {
+    setShowAdvancedConfirm(false)
+    onActivateAdvancedManual()
   }
 
   const canSave = (config.identity?.trim().length ?? 0) >= 20 && (config.objective?.trim().length ?? 0) >= 20
@@ -493,15 +507,26 @@ export function StepPreview({
         ))}
       </div>
 
-      {/* Banner de confiança */}
-      <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-        <p className="text-sm font-semibold text-green-800">
-          Seu agente já está pronto para atender seus clientes. 🎉
-        </p>
-        <p className="text-xs text-green-700 mt-0.5">
-          Você pode ajustar qualquer parte abaixo, se quiser personalizar mais.
-        </p>
-      </div>
+      {/* Banner de confiança (oculto em modo avançado) */}
+      {!advancedManualActive && (
+        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <p className="text-sm font-semibold text-green-800">
+            Seu agente já está pronto para atender seus clientes. 🎉
+          </p>
+          <p className="text-xs text-green-700 mt-0.5">
+            Você pode ajustar qualquer parte abaixo, se quiser personalizar mais.
+          </p>
+        </div>
+      )}
+
+      {/* Badge de modo avançado */}
+      {advancedManualActive && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Edição Avançada</span>
+          <span className="text-blue-300">·</span>
+          <span className="text-xs text-blue-600">Edição manual ativa — sem regeneração por IA. Os campos abaixo são a fonte de verdade do agente.</span>
+        </div>
+      )}
 
       {/* Layout 2 colunas — edição à esquerda, preview à direita
        *  min-w-0 nas colunas evita overflow horizontal no grid dentro do modal. */}
@@ -549,11 +574,52 @@ export function StepPreview({
         </div>
       )}
 
+      {/* Dialog de confirmação para ativação de modo avançado */}
+      {showAdvancedConfirm && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 space-y-2">
+          <p className="text-sm font-semibold text-amber-800">Ativar Edição Avançada?</p>
+          <p className="text-xs text-amber-700 leading-relaxed">
+            Esta ação é <strong>irreversível</strong> para este agente. O fluxo assistido por IA não ficará
+            mais disponível — todos os campos serão editados manualmente por você.
+            A injeção dinâmica de dados (empresa, catálogo, etc.) continua funcionando normalmente.
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={handleConfirmAdvanced}
+              className="px-3 py-1.5 text-xs font-semibold bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+            >
+              Confirmar — ativar edição avançada
+            </button>
+            <button
+              onClick={() => setShowAdvancedConfirm(false)}
+              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
-        <button onClick={onBack} disabled={saving}
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 disabled:opacity-40">
-          <ArrowLeft className="w-4 h-4" /> Voltar
-        </button>
+        {/* Esquerda: Voltar (oculto em modo avançado) ou ativar edição avançada */}
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button onClick={onBack} disabled={saving}
+              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 disabled:opacity-40">
+              <ArrowLeft className="w-4 h-4" /> Voltar
+            </button>
+          )}
+          {!advancedManualActive && !showAdvancedConfirm && (
+            <button
+              onClick={() => setShowAdvancedConfirm(true)}
+              disabled={saving}
+              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 disabled:opacity-40 transition-colors"
+            >
+              Ativar edição avançada
+            </button>
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           {onTest && (
             <button

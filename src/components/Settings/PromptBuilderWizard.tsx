@@ -346,6 +346,13 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     return null
   })
 
+  // Modo de edição avançada — editável manualmente sem regeneração por IA.
+  // Persiste em model_config.editing_mode = 'advanced_manual'.
+  // Irreversível por agente: uma vez ativado, nunca volta ao fluxo assistido.
+  const [advancedManualActive, setAdvancedManualActive] = useState<boolean>(
+    () => initialAgent?.model_config?.editing_mode === 'advanced_manual'
+  )
+
   // Estados globais
   const [generating, setGenerating]     = useState(false)
   const [saving, setSaving]             = useState(false)
@@ -423,6 +430,12 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     try {
       let saved: CompanyAgent
 
+      // model_config: preserva flags existentes e, se advanced, adiciona editing_mode.
+      const baseModelConfig = initialAgent?.model_config ?? {}
+      const modelConfigPayload: Record<string, unknown> = advancedManualActive
+        ? { ...baseModelConfig, editing_mode: 'advanced_manual' }
+        : baseModelConfig
+
       if (isEditMode && initialAgent?.id) {
         // Modo edição — atualiza agente existente
         const payload: UpdateCompanyAgentPayload = {
@@ -432,6 +445,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           model,
           prompt_config:  promptConfig,
           prompt_version: (initialAgent.prompt_version ?? 0) + 1,
+          model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.update(payload)
       } else {
@@ -441,6 +455,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           name:          agentName.trim(),
           model,
           prompt_config: promptConfig,
+          model_config:  Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.create(payload)
       }
@@ -452,6 +467,15 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     } finally {
       setSaving(false)
     }
+  }
+
+  /**
+   * Ativa o modo de edição avançada para este agente.
+   * Irreversível: o flag é salvo em model_config na próxima vez que handleSave rodar.
+   * O conteúdo de promptConfig NÃO é resetado — o usuário edita os campos existentes.
+   */
+  function activateAdvancedManual() {
+    setAdvancedManualActive(true)
   }
 
   /** Aceita a análise das conversas e pré-preenche os campos do wizard. */
@@ -585,11 +609,13 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           catalogCount={catalogItems.length}
           companyName={companyName}
           agentName={finalAgentName}
-          onBack={() => { setError(null); setStep(3) }}
+          onBack={advancedManualActive ? undefined : () => { setError(null); setStep(3) }}
           onSave={() => void handleSave()}
           onTest={onTest ? () => onTest(promptConfig, finalAgentName, companyName) : undefined}
           saving={saving}
           error={error}
+          advancedManualActive={advancedManualActive}
+          onActivateAdvancedManual={activateAdvancedManual}
         />
       )}
 
