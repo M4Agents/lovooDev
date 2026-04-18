@@ -631,9 +631,8 @@ async function fetchChildCompanyData(svc, companyId) {
       pais, cidade, estado, cep, logradouro, bairro, numero,
       country_code, telefone_principal,
       email_principal, site_principal, ramo_atividade,
-      ponto_referencia, horario_atendimento
+      ponto_referencia, horario_atendimento, descricao_empresa
     `)
-    // ai_profile e descricao_empresa serão adicionados após a migration correspondente
     .eq('id', companyId)
     .maybeSingle();
 

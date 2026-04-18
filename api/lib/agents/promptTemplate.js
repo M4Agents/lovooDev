@@ -300,10 +300,12 @@ export function buildPromptFromConfig(config, companyData = null) {
       companyLines.push(`Ponto de referência: ${cd.ponto_referencia}.`);
     }
 
-    // Campos opcionais remanescentes do ai_profile
+    // Descrição da empresa — coluna direta; fallback para ai_profile.descricao (legado)
     const profile = (cd.ai_profile && typeof cd.ai_profile === 'object') ? cd.ai_profile : {};
 
-    if (profile.descricao) {
+    if (cd.descricao_empresa) {
+      companyLines.push(String(cd.descricao_empresa).trim());
+    } else if (profile.descricao) {
       companyLines.push(String(profile.descricao).trim());
     }
 

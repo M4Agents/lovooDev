@@ -2730,6 +2730,7 @@ export const Settings: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     {t('company.fields.companyDescription')}
+                    <span className="ml-1 text-xs text-slate-400 font-normal">(usado pelo agente de IA)</span>
                   </label>
                   <textarea
                     value={companyData.descricao_empresa}
