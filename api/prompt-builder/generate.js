@@ -52,7 +52,10 @@ const MAX_CATALOG_ITEMS = 15;
  * custom_notes aceita 1500 chars para preservar o output completo do assembler (P1–P9).
  * Os outros campos seguem os limites do schema (identity e objective não são userAnswers).
  */
-const ANSWER_MAX_BY_FIELD: Record<string, number> = {
+// #region agent log
+fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:module-load',message:'Módulo carregado (ANSWER_MAX_BY_FIELD inicializado)',data:{},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+// #endregion
+const ANSWER_MAX_BY_FIELD = {
   objective:           300,
   communication_style: 300,
   commercial_rules:    500,
@@ -351,9 +354,16 @@ export default async function handler(req, res) {
     has_answers:  Object.keys(userAnswers).length > 0,
   });
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:handler-start',message:'Handler executou — auth ok',data:{company_id,role:auth.role},timestamp:Date.now(),hypothesisId:'A-B-C-D'})}).catch(()=>{});
+  // #endregion
+
   // ── 3. Verificar OpenAI ─────────────────────────────────────────────────────
 
   const openaiSettings = await fetchParentOpenAISettingsForSystem();
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:openai-settings',message:'OpenAI settings carregadas',data:{enabled:openaiSettings?.enabled,model:openaiSettings?.model},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   if (!openaiSettings.enabled) {
     return res.status(503).json({ success: false, error: 'Serviço de IA não disponível.' });
   }
@@ -373,7 +383,13 @@ export default async function handler(req, res) {
       fetchCompanyData(company_id),
       fetchCatalogSummary(company_id),
     ]);
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:data-fetch-ok',message:'Dados buscados com sucesso',data:{has_company:Boolean(companyData),catalog_count:catalogItems.length,company_keys:companyData?Object.keys(companyData):[]},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
   } catch (fetchErr) {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:data-fetch-error',message:'ERRO ao buscar dados',data:{error:fetchErr?.message},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     console.error('[PROMPT_BUILDER] Erro ao buscar dados:', fetchErr.message);
     return res.status(500).json({ success: false, error: 'Erro ao carregar dados da empresa.' });
   }
@@ -466,7 +482,13 @@ Use exatamente este formato:
   let sanitized;
   try {
     sanitized = sanitizePromptConfig(extracted, 'save');
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:sanitize-ok',message:'sanitizePromptConfig ok',data:{fields:Object.keys(sanitized)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
   } catch (blocked) {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cf8832'},body:JSON.stringify({sessionId:'cf8832',location:'generate.js:sanitize-blocked',message:'BLOQUEADO por sanitizePromptConfig',data:{blocked:String(blocked)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     console.warn('[PROMPT_BUILDER] Sanitização bloqueada:', blocked);
     return res.status(422).json({
       success: false,
