@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Bot, FlaskConical, Loader2, RotateCcw,
-  Save, Send, Zap, AlertCircle,
+  Save, Send, Zap, AlertCircle, Mic, Square, X,
 } from 'lucide-react'
 import {
   promptBuilderApi,
@@ -62,6 +62,15 @@ export function AgentTestSandbox({
   const [sandboxMemory, setSandboxMemory] = useState<SandboxMemory | null>(null)
   const [ragNotice, setRagNotice]         = useState<string | null>(null)
   const endRef                            = useRef<HTMLDivElement | null>(null)
+
+  // ── Gravação de áudio inline ────────────────────────────────────────────────
+  type AudioStatus = 'idle' | 'recording' | 'sending'
+  const [audioStatus, setAudioStatus]     = useState<AudioStatus>('idle')
+  const [recSeconds, setRecSeconds]       = useState(0)
+  const mediaRecorderRef  = useRef<MediaRecorder | null>(null)
+  const audioChunksRef    = useRef<Blob[]>([])
+  const audioStreamRef    = useRef<MediaStream | null>(null)
+  const recTimerRef       = useRef<number | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -139,6 +148,133 @@ export function AgentTestSandbox({
     setError(null)
     setSandboxMemory(null)
     setRagNotice(null)
+    stopAudioResources()
+    setAudioStatus('idle')
+    setRecSeconds(0)
+  }
+
+  // ── Helpers de áudio ────────────────────────────────────────────────────────
+
+  function stopAudioResources() {
+    if (recTimerRef.current) {
+      window.clearInterval(recTimerRef.current)
+      recTimerRef.current = null
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop())
+      audioStreamRef.current = null
+    }
+  }
+
+  async function startRecording() {
+    if (loading || audioStatus !== 'idle') return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current  = stream
+      audioChunksRef.current  = []
+
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+
+      recorder.ondataavailable = (e: BlobEvent) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg' })
+        const file = new File([blob], `audio-${Date.now()}.ogg`, { type: 'audio/ogg' })
+        stopAudioResources()
+        void sendAudio(file)
+      }
+
+      recorder.start()
+      setAudioStatus('recording')
+      setRecSeconds(0)
+
+      recTimerRef.current = window.setInterval(() => {
+        setRecSeconds(s => {
+          if (s >= 119) stopRecording() // limite 2 min no sandbox
+          return s + 1
+        })
+      }, 1000)
+    } catch {
+      alert('Não foi possível acessar o microfone. Verifique as permissões do navegador.')
+    }
+  }
+
+  function stopRecording() {
+    if (recTimerRef.current) {
+      window.clearInterval(recTimerRef.current)
+      recTimerRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+  }
+
+  function cancelRecording() {
+    audioChunksRef.current = [] // descarta dados para que onstop não envie
+    stopAudioResources()
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null // evita disparo do sendAudio
+      mediaRecorderRef.current.stop()
+    }
+    setAudioStatus('idle')
+    setRecSeconds(0)
+  }
+
+  async function sendAudio(file: File) {
+    setAudioStatus('sending')
+    setLoading(true)
+    setError(null)
+
+    // Histórico enviado para o backend (sem a mensagem de áudio — o backend a adiciona)
+    const apiMessages: ChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }))
+
+    // Exibe placeholder visual de áudio no chat (sem transcrição)
+    setMessages(prev => [...prev, { role: 'user', content: '🎤 Áudio' }])
+
+    try {
+      const result = await promptBuilderApi.sandboxAudioRun({
+        company_id:     companyId,
+        audio:          file,
+        messages:       apiMessages,
+        prompt_config:  promptConfig,
+        agent_name:     agentName || undefined,
+        sandbox_memory: sandboxMemory,
+        agent_id:       agentId,
+      })
+
+      const blocks =
+        result.reply_blocks && result.reply_blocks.length > 0
+          ? result.reply_blocks
+          : [result.reply]
+
+      setMessages(prev => [...prev, {
+        role:        'assistant',
+        content:     blocks[0],
+        tool_events: result.tool_events.length > 0 ? result.tool_events : undefined,
+      }])
+
+      for (let i = 1; i < blocks.length; i++) {
+        const delay = Math.min(200, 40 + blocks[i].length * 0.5)
+        await new Promise<void>(resolve => setTimeout(resolve, delay))
+        setMessages(prev => [...prev, { role: 'assistant', content: blocks[i] }])
+      }
+
+      setSandboxMemory(result.updated_sandbox_memory)
+      if (result.rag_notice) setRagNotice(result.rag_notice)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Não consegui processar o áudio. Tente novamente.')
+    } finally {
+      setLoading(false)
+      setAudioStatus('idle')
+      setRecSeconds(0)
+    }
+  }
+
+  function fmtSecs(s: number) {
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   }
 
   // Limite visual de memória: exibe até 8 turnos, mas mantém objeto completo internamente
@@ -322,27 +458,75 @@ export function AgentTestSandbox({
       </div>
 
       {/* ── Input ─────────────────────────────────────────────────────────── */}
-      <div className="border-t border-gray-200 px-4 py-3 bg-white flex gap-2 flex-shrink-0">
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          disabled={loading}
-          placeholder={`Escreva como um cliente para testar ${agentName || 'o agente'}...`}
-          className="flex-1 text-sm border border-gray-200 rounded-xl px-4 py-2.5
-                     focus:outline-none focus:ring-2 focus:ring-violet-400
-                     disabled:opacity-50 bg-gray-50 focus:bg-white transition-colors"
-          autoFocus
-        />
-        <button
-          onClick={() => void handleSend()}
-          disabled={loading || !input.trim()}
-          className="w-10 h-10 flex items-center justify-center bg-violet-600 text-white
-                     rounded-xl hover:bg-violet-700 disabled:opacity-40 transition-colors flex-shrink-0"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </button>
+      <div className="border-t border-gray-200 px-4 py-3 bg-white flex-shrink-0">
+
+        {/* Estado: gravando */}
+        {audioStatus === 'recording' && (
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+            <span className="text-sm font-medium text-gray-700 flex-1">
+              Gravando… <span className="font-mono text-red-600">{fmtSecs(recSeconds)}</span>
+            </span>
+            <button
+              onClick={cancelRecording}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-gray-300
+                         rounded-lg hover:bg-gray-50 transition-colors text-gray-600"
+            >
+              <X className="w-3.5 h-3.5" /> Cancelar
+            </button>
+            <button
+              onClick={stopRecording}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-red-600 text-white
+                         rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Square className="w-3.5 h-3.5" /> Parar
+            </button>
+          </div>
+        )}
+
+        {/* Estado: enviando / normal */}
+        {audioStatus !== 'recording' && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              disabled={loading}
+              placeholder={`Escreva como um cliente para testar ${agentName || 'o agente'}...`}
+              className="flex-1 text-sm border border-gray-200 rounded-xl px-4 py-2.5
+                         focus:outline-none focus:ring-2 focus:ring-violet-400
+                         disabled:opacity-50 bg-gray-50 focus:bg-white transition-colors"
+              autoFocus
+            />
+
+            {/* Botão microfone */}
+            <button
+              onClick={() => void startRecording()}
+              disabled={loading}
+              title="Gravar áudio"
+              className="w-10 h-10 flex items-center justify-center border border-gray-200
+                         rounded-xl hover:bg-gray-50 disabled:opacity-40 transition-colors
+                         flex-shrink-0 text-gray-500"
+            >
+              {audioStatus === 'sending'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Mic className="w-4 h-4" />}
+            </button>
+
+            {/* Botão enviar texto */}
+            <button
+              onClick={() => void handleSend()}
+              disabled={loading || !input.trim()}
+              className="w-10 h-10 flex items-center justify-center bg-violet-600 text-white
+                         rounded-xl hover:bg-violet-700 disabled:opacity-40 transition-colors flex-shrink-0"
+            >
+              {loading && audioStatus === 'idle'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

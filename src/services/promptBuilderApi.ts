@@ -209,6 +209,49 @@ export const promptBuilderApi = {
   },
 
   /**
+   * Envia áudio gravado no sandbox para transcrição e execução imediata do agente.
+   * A transcrição é interna — o agente responde diretamente sem expor o texto.
+   */
+  async sandboxAudioRun(payload: {
+    company_id:      string
+    audio:           File
+    messages:        ChatMessage[]
+    prompt_config:   FlatPromptConfig
+    agent_name?:     string
+    sandbox_memory?: SandboxMemory | null
+    agent_id?:       string | null
+  }): Promise<SandboxRunResult> {
+    const auth     = await getAuthHeader()
+    const formData = new FormData()
+
+    formData.append('company_id',     payload.company_id)
+    formData.append('audio',          payload.audio)
+    formData.append('prompt_config',  JSON.stringify(payload.prompt_config))
+    formData.append('messages',       JSON.stringify(payload.messages))
+    if (payload.agent_name)     formData.append('agent_name',     payload.agent_name)
+    if (payload.agent_id)       formData.append('agent_id',       payload.agent_id)
+    if (payload.sandbox_memory) formData.append('sandbox_memory', JSON.stringify(payload.sandbox_memory))
+
+    const res  = await fetch('/api/ai/sandbox-audio-run', {
+      method:  'POST',
+      headers: { Authorization: auth }, // sem Content-Type — FormData define o boundary
+      body:    formData,
+      signal:  AbortSignal.timeout(28_000),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.error ?? `Erro no sandbox de áudio (${res.status})`)
+    }
+    return {
+      reply:                  json.reply as string,
+      reply_blocks:           Array.isArray(json.reply_blocks) ? (json.reply_blocks as string[]) : undefined,
+      tool_events:            (json.tool_events as SandboxToolEvent[]) ?? [],
+      updated_sandbox_memory: (json.updated_sandbox_memory as SandboxMemory | null) ?? null,
+      rag_notice:             json.rag_notice ?? null,
+    }
+  },
+
+  /**
    * Envia arquivos .txt de conversas WhatsApp para análise.
    * Retorna insights estruturados para pré-preencher o Prompt Builder.
    * Nenhum arquivo é armazenado — processamento stateless.

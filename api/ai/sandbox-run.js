@@ -459,23 +459,50 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ success: false, error: auth.error });
   }
 
+  const result = await executeForSandbox({
+    company_id,
+    prompt_config,
+    agent_name,
+    sanitizedMessages,
+    safeAgentId,
+    sandbox_memory,
+  });
+  return res.status(result.status).json(result.body);
+}
+
+// ── Núcleo de execução reutilizável ───────────────────────────────────────────
+//
+// Extraído do handler principal para ser importado por sandbox-audio-run.js.
+// Pré-condição: caller já autenticado e company_id validado externamente.
+// Retorna { status: number, body: object } ao invés de chamar res.json().
+
+export async function executeForSandbox({
+  company_id,
+  prompt_config,
+  agent_name,
+  sanitizedMessages,
+  safeAgentId,
+  sandbox_memory,
+}) {
+  const lastMsg = sanitizedMessages.at(-1);
+
   // ── 3. Verificar OpenAI ─────────────────────────────────────────────────────
 
   const openaiSettings = await fetchParentOpenAISettingsForSystem();
   if (!openaiSettings.enabled) {
-    return res.status(503).json({ success: false, error: 'Serviço de IA não disponível.' });
+    return { status: 503, body: { success: false, error: 'Serviço de IA não disponível.' } };
   }
 
-  const client = getOpenAIClient();
+  const client = getOpenAIClient(); // eslint-disable-line no-unused-vars
   if (!client) {
-    return res.status(503).json({ success: false, error: 'Cliente OpenAI não configurado.' });
+    return { status: 503, body: { success: false, error: 'Cliente OpenAI não configurado.' } };
   }
 
   // ── 4. Carregar dados (read-only, service_role) ─────────────────────────────
 
   const svc = getServiceSupabase();
   if (!svc) {
-    return res.status(503).json({ success: false, error: 'Supabase service não configurado.' });
+    return { status: 503, body: { success: false, error: 'Supabase service não configurado.' } };
   }
 
   const [companyData, catalog] = await Promise.all([
@@ -483,7 +510,6 @@ export default async function handler(req, res) {
     loadCatalog(svc, company_id),
   ]);
 
-  // Carregar knowledge_base se agent_id fornecido e validado
   let agentKnowledge = null;
   if (safeAgentId) {
     agentKnowledge = await loadAgentKnowledge(svc, safeAgentId, company_id);
@@ -495,41 +521,34 @@ export default async function handler(req, res) {
     ? agent_name.replace(/<[^>]*>/g, '').trim().slice(0, MAX_AGENT_NAME_LEN)
     : '';
 
-  // Prompt base via buildPromptFromConfig (mesmo do runtime de produção)
   const builtPrompt = buildPromptFromConfig(prompt_config, companyData);
   if (!builtPrompt) {
-    return res.status(400).json({ success: false, error: 'Falha ao montar prompt do agente.' });
+    return { status: 400, body: { success: false, error: 'Falha ao montar prompt do agente.' } };
   }
 
-  // Nome do assistente: injetar no início do prompt se fornecido
   const agentPrompt = safeAgentName
     ? `Seu nome é "${safeAgentName}". Use-o ao se apresentar.\n\n${builtPrompt}`
     : builtPrompt;
 
-  // Conhecimento inline:
-  //   - Se agent_id foi fornecido e o agente salvo tem knowledge_base → usa inline
-  //   - Nunca RAG no sandbox (sem embeddings, sem match_agent_chunks)
   const knowledgeBase = agentKnowledge?.knowledge_base?.trim() || null;
   const knowledgeMode = knowledgeBase ? 'inline' : 'none';
 
-  // Tools do agente salvo (se disponível); ou conjunto padrão em modo criação
   const allowedTools = Array.isArray(agentKnowledge?.allowed_tools)
     ? agentKnowledge.allowed_tools
     : [];
 
   const syntheticAgent = {
-    id:                   safeAgentId ?? 'sandbox',
-    name:                 safeAgentName || 'Agente sandbox',
-    prompt:               agentPrompt,
-    knowledge_base:       knowledgeBase,
-    knowledge_mode:       knowledgeMode,
+    id:                    safeAgentId ?? 'sandbox',
+    name:                  safeAgentName || 'Agente sandbox',
+    prompt:                agentPrompt,
+    knowledge_base:        knowledgeBase,
+    knowledge_mode:        knowledgeMode,
     knowledge_base_config: {},
-    model:                agentKnowledge?.model ?? openaiSettings.model,
-    model_config:         agentKnowledge?.model_config ?? { temperature: 0.7, max_tokens: MAX_REPLY_TOKENS },
-    allowed_tools:        allowedTools,
+    model:                 agentKnowledge?.model ?? openaiSettings.model,
+    model_config:          agentKnowledge?.model_config ?? { temperature: 0.7, max_tokens: MAX_REPLY_TOKENS },
+    allowed_tools:         allowedTools,
   };
 
-  // Forçar max_tokens dentro do limite do sandbox (desempenho + custo)
   if (!syntheticAgent.model_config.max_tokens || syntheticAgent.model_config.max_tokens > MAX_REPLY_TOKENS) {
     syntheticAgent.model_config = { ...syntheticAgent.model_config, max_tokens: MAX_REPLY_TOKENS };
   }
@@ -545,21 +564,20 @@ export default async function handler(req, res) {
   // ── 7. Executar runner em modo sandbox ──────────────────────────────────────
 
   const runCtx = {
-    userMessage:  lastMsg.content,
-    extra_context: extraContext || undefined,
+    userMessage:           lastMsg.content,
+    extra_context:         extraContext || undefined,
     company_id,
-    channel:      'sandbox',
-    lead_id:      null,
-    conversation_id: null,
+    channel:               'sandbox',
+    lead_id:               null,
+    conversation_id:       null,
     locked_opportunity_id: null,
-    item_of_interest: null,
-    model_config: syntheticAgent.model_config,
+    item_of_interest:      null,
+    model_config:          syntheticAgent.model_config,
   };
 
-  // Timeout de segurança — garante que o handler não excede SANDBOX_TIMEOUT_MS
   let runResult;
   try {
-    const runPromise = runAgentWithConfig(syntheticAgent, 'sandbox', runCtx, { sandboxMode: true });
+    const runPromise    = runAgentWithConfig(syntheticAgent, 'sandbox', runCtx, { sandboxMode: true });
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('sandbox_timeout')), SANDBOX_TIMEOUT_MS)
     );
@@ -567,14 +585,14 @@ export default async function handler(req, res) {
   } catch (err) {
     if (err?.message === 'sandbox_timeout') {
       console.warn('[SANDBOX-RUN] Timeout de execução atingido');
-      return res.status(504).json({ success: false, error: 'Tempo limite excedido. Tente novamente.' });
+      return { status: 504, body: { success: false, error: 'Tempo limite excedido. Tente novamente.' } };
     }
     console.error('[SANDBOX-RUN] Erro no runner:', err?.message ?? err);
-    return res.status(500).json({ success: false, error: 'Erro ao executar o agente. Tente novamente.' });
+    return { status: 500, body: { success: false, error: 'Erro ao executar o agente. Tente novamente.' } };
   }
 
   if (!runResult.ok) {
-    return res.status(500).json({ success: false, error: `Agente indisponível: ${runResult.errorCode}` });
+    return { status: 500, body: { success: false, error: `Agente indisponível: ${runResult.errorCode}` } };
   }
 
   // ── 8. Extrair e mesclar memória sandbox ────────────────────────────────────
@@ -587,10 +605,6 @@ export default async function handler(req, res) {
   }
 
   // ── 9. Dividir resposta em blocos (mesmo pipeline do WhatsApp) ─────────────
-  //
-  // Reutiliza responseComposer.compose para replicar o comportamento real do
-  // agente no WhatsApp: até 10 blocos de ~300 chars, separados por parágrafo
-  // ou sentença. O frontend exibe cada bloco como uma bolha separada com delay.
 
   const finalReply     = cleanResponse || runResult.result;
   const composerResult = compose({ raw_response: finalReply });
@@ -600,26 +614,23 @@ export default async function handler(req, res) {
     : [finalReply];
 
   // ── 10. Enriquecer eventos send_media com preview de mídia real ─────────────
-  //
-  // Lookup READ-ONLY em catalog_item_media + company_media_library para obter
-  // uma URL de mídia real da empresa, filtrada por company_id e usage_role.
-  // Sem envio externo — apenas injeção de media_url/media_type nos args do evento.
-  // Cache por usage_role evita queries repetidas no mesmo turno.
 
-  const toolEvents = await enrichMediaToolEvents(svc, companyId, runResult.sandbox_tool_events ?? []);
+  const toolEvents = await enrichMediaToolEvents(svc, company_id, runResult.sandbox_tool_events ?? []);
 
-  // Indicar na UI se o agente real usa RAG mas o sandbox está com inline/none
-  const ragActive  = agentKnowledge?.knowledge_mode === 'rag' || agentKnowledge?.knowledge_mode === 'hybrid';
-  const ragNotice  = ragActive && !knowledgeBase
+  const ragActive = agentKnowledge?.knowledge_mode === 'rag' || agentKnowledge?.knowledge_mode === 'hybrid';
+  const ragNotice = ragActive && !knowledgeBase
     ? 'Conhecimento vetorial (RAG) não simulado neste ambiente.'
     : null;
 
-  return res.status(200).json({
-    success:                true,
-    reply:                  finalReply,        // backward compat — string completa
-    reply_blocks:           replyBlocks,       // array de blocos para renderização progressiva
-    tool_events:            toolEvents,
-    updated_sandbox_memory: updatedSandboxMemory,
-    rag_notice:             ragNotice,
-  });
+  return {
+    status: 200,
+    body: {
+      success:                true,
+      reply:                  finalReply,
+      reply_blocks:           replyBlocks,
+      tool_events:            toolEvents,
+      updated_sandbox_memory: updatedSandboxMemory,
+      rag_notice:             ragNotice,
+    },
+  };
 }
