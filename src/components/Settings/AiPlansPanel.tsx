@@ -89,8 +89,14 @@ interface PlanForm {
   is_active:          boolean
 }
 
-const EMPTY_PKG_FORM:  PackageForm = { name: '', credits: '', price: '', is_active: true }
-const EMPTY_PLAN_FORM: PlanForm    = { name: '', slug: '', monthly_ai_credits: '0', is_active: true }
+interface EditPlanForm {
+  name:               string
+  price:              string
+  monthly_ai_credits: string
+}
+
+const EMPTY_PKG_FORM:  PackageForm  = { name: '', credits: '', price: '', is_active: true }
+const EMPTY_PLAN_FORM: PlanForm     = { name: '', slug: '', monthly_ai_credits: '0', is_active: true }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -193,59 +199,102 @@ function GovernancePreview({ credits, price }: { credits: number; price: number 
   )
 }
 
-// ── Modal: editar cota de créditos de um plano ────────────────────────────────
+// ── Modal: editar plano (nome, valor mensal e créditos de IA) ────────────────
 
-function EditCotaModal({
+function EditPlanModal({
   plan,
+  form,
   saving,
+  error,
+  onChange,
   onSave,
   onClose,
 }: {
-  plan:    Plan
-  saving:  boolean
-  onSave:  (credits: number) => void
-  onClose: () => void
+  plan:     Plan
+  form:     EditPlanForm
+  saving:   boolean
+  error:    string | null
+  onChange: (f: Partial<EditPlanForm>) => void
+  onSave:   () => void
+  onClose:  () => void
 }) {
-  const [draft, setDraft] = useState(String(plan.monthly_ai_credits))
-  const credits = parseInt(draft, 10)
-  const isValid = !isNaN(credits) && credits >= 0
-  const conv    = isValid && credits > 0 ? estConversas(credits) : 0
+  const credits  = parseInt(form.monthly_ai_credits, 10) || 0
+  const price    = parseFloat(form.price) || 0
+  const isValid  = form.name.trim().length > 0 && !isNaN(parseFloat(form.price)) && credits >= 0
+  const showPrev = credits > 0 && price >= 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">Editar cota de IA — {plan.name}</h3>
+          <div>
+            <h3 className="font-semibold text-slate-900">Editar plano — {plan.name}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Slug: <span className="font-mono">{plan.slug}</span></p>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X size={18} />
           </button>
         </div>
+
         <div className="px-6 py-5 space-y-4">
+          {error && <ErrorBanner message={error} />}
+
+          {/* Nome */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
-            <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600">Nome do plano</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => onChange({ name: e.target.value })}
+              autoFocus
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+
+          {/* Valor mensal e créditos lado a lado */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Valor Mensal (R$)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={form.price}
+                onChange={e => onChange({ price: e.target.value })}
+                placeholder="0.00"
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Créditos IA / mês</label>
               <input
                 type="number"
                 min={0}
                 step={100}
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                autoFocus
-                className="flex-1 border border-violet-400 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 text-right tabular-nums"
+                value={form.monthly_ai_credits}
+                onChange={e => onChange({ monthly_ai_credits: e.target.value })}
+                placeholder="0"
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
-              <span className="text-xs text-slate-400 whitespace-nowrap">cr/mês</span>
+              {credits > 0 && (
+                <p className="text-xs text-violet-600 mt-0.5">
+                  ≈ {formatCredits(estConversas(credits))} conversas
+                </p>
+              )}
             </div>
-            {isValid && credits > 0 && (
-              <p className="text-xs text-violet-600 mt-0.5">
-                ≈ {formatCredits(conv)} conversas estimadas
-              </p>
-            )}
           </div>
-          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            A nova cota entrará em vigor apenas na <strong>próxima renovação</strong> das
-            empresas que utilizam este plano. O ciclo atual não é afetado.
+
+          {/* Preview de governança */}
+          {showPrev && (
+            <GovernancePreview credits={credits} price={price} />
+          )}
+
+          {/* Aviso renovação */}
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Alterações na cota de créditos entram em vigor apenas na <strong>próxima renovação</strong>. O preço e o nome têm efeito imediato.
           </p>
         </div>
+
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -255,12 +304,12 @@ function EditCotaModal({
             Cancelar
           </button>
           <button
-            onClick={() => onSave(credits)}
+            onClick={onSave}
             disabled={saving || !isValid}
             className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            Confirmar alteração
+            Salvar alterações
           </button>
         </div>
       </div>
@@ -508,9 +557,11 @@ export function AiPlansPanel() {
   const [errorPlans,   setErrorPlans]   = useState<string | null>(null)
   const [successPlans, setSuccessPlans] = useState<string | null>(null)
 
-  // Editar cota
-  const [editingCota,  setEditingCota]  = useState<Plan | null>(null)
-  const [savingCota,   setSavingCota]   = useState(false)
+  // Editar plano (nome, preço, créditos IA)
+  const [editingPlan,    setEditingPlan]    = useState<Plan | null>(null)
+  const [editPlanForm,   setEditPlanForm]   = useState<EditPlanForm>({ name: '', price: '', monthly_ai_credits: '' })
+  const [savingPlanEdit, setSavingPlanEdit] = useState(false)
+  const [errorPlanEdit,  setErrorPlanEdit]  = useState<string | null>(null)
 
   // Criar plano
   const [planModalOpen,  setPlanModalOpen]  = useState(false)
@@ -582,24 +633,43 @@ export function AiPlansPanel() {
     setTimeout(() => setSuccessPkgs(null), 4000)
   }
 
-  // ── Salvar cota do plano ─────────────────────────────────────────────────
+  // ── Salvar edição de plano (nome, preço e créditos IA) ───────────────────
 
-  async function savePlanCredits(plan: Plan, newCredits: number) {
-    setSavingCota(true)
+  async function savePlanEdit() {
+    if (!editingPlan) return
+    setSavingPlanEdit(true)
+    setErrorPlanEdit(null)
     try {
-      const { data, error } = await supabase.rpc('update_plan_ai_credits', {
-        p_plan_id: plan.id,
-        p_credits: newCredits,
+      const newName    = editPlanForm.name.trim()
+      const newPrice   = parseFloat(editPlanForm.price)
+      const newCredits = parseInt(editPlanForm.monthly_ai_credits, 10)
+
+      // Atualiza nome e preço via update_plan
+      const { data: upData, error: upError } = await supabase.rpc('update_plan', {
+        p_plan_id: editingPlan.id,
+        p_name:    newName !== editingPlan.name ? newName : undefined,
+        p_price:   !isNaN(newPrice) ? newPrice : undefined,
       })
-      if (error) throw error
-      if (!data?.ok) throw new Error(data?.error ?? 'Erro ao salvar cota')
-      setEditingCota(null)
-      showSuccessPlans(`Cota do plano "${plan.name}" atualizada. Aplicada na próxima renovação.`)
+      if (upError) throw upError
+      if (upData && !upData.ok) throw new Error(upData.error ?? 'Erro ao atualizar plano')
+
+      // Atualiza créditos de IA separadamente
+      if (!isNaN(newCredits) && newCredits !== editingPlan.monthly_ai_credits) {
+        const { data: crData, error: crError } = await supabase.rpc('update_plan_ai_credits', {
+          p_plan_id: editingPlan.id,
+          p_credits: newCredits,
+        })
+        if (crError) throw crError
+        if (crData && !crData.ok) throw new Error(crData.error ?? 'Erro ao atualizar créditos')
+      }
+
+      setEditingPlan(null)
+      showSuccessPlans(`Plano "${newName}" atualizado com sucesso.`)
       void loadPlans()
     } catch (err) {
-      setErrorPlans(err instanceof Error ? err.message : 'Erro ao salvar cota')
+      setErrorPlanEdit(err instanceof Error ? err.message : 'Erro ao salvar plano')
     } finally {
-      setSavingCota(false)
+      setSavingPlanEdit(false)
     }
   }
 
@@ -842,8 +912,16 @@ export function AiPlansPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => setEditingCota(plan)}
-                            title="Editar cota de créditos"
+                            onClick={() => {
+                              setEditingPlan(plan)
+                              setEditPlanForm({
+                                name:               plan.name,
+                                price:              String(plan.price ?? 0),
+                                monthly_ai_credits: String(plan.monthly_ai_credits),
+                              })
+                              setErrorPlanEdit(null)
+                            }}
+                            title="Editar plano"
                             className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
                           >
                             <Pencil size={14} />
@@ -1004,12 +1082,15 @@ export function AiPlansPanel() {
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
 
-      {editingCota && (
-        <EditCotaModal
-          plan={editingCota}
-          saving={savingCota}
-          onSave={credits => savePlanCredits(editingCota, credits)}
-          onClose={() => setEditingCota(null)}
+      {editingPlan && (
+        <EditPlanModal
+          plan={editingPlan}
+          form={editPlanForm}
+          saving={savingPlanEdit}
+          error={errorPlanEdit}
+          onChange={partial => setEditPlanForm(f => ({ ...f, ...partial }))}
+          onSave={savePlanEdit}
+          onClose={() => setEditingPlan(null)}
         />
       )}
 
