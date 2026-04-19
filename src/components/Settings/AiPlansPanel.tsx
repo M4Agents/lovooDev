@@ -651,7 +651,7 @@ export function AiPlansPanel() {
         p_price:   !isNaN(newPrice) ? newPrice : undefined,
       })
       if (upError) throw upError
-      if (upData && !upData.ok) throw new Error(upData.error ?? 'Erro ao atualizar plano')
+      if (upData && !upData.success) throw new Error(upData.error ?? 'Erro ao atualizar plano')
 
       // Atualiza créditos de IA separadamente
       if (!isNaN(newCredits) && newCredits !== editingPlan.monthly_ai_credits) {
