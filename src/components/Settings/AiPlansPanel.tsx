@@ -5,17 +5,12 @@
 // Integrado em: Configurações → Agentes Globais
 //
 // BLOCOS:
-//   1. Planos Mensais  — edição de cota de créditos de IA por plano
+//   1. Planos Mensais  — tabela com governança + criar + ativar/desativar + editar cota
 //   2. Pacotes Avulsos — CRUD de credit_packages
 //
-// REGRAS:
-//   - Acesso: canManageOpenAI (isSaaSAdmin)
-//   - monthly_ai_credits só afeta próxima renovação (aviso obrigatório)
-//   - valid_days NÃO é exibido (sem efeito funcional na v1)
-//
 // GOVERNANÇA INTERNA:
-//   - Campos estimated_tokens, estimated_ai_cost e estimated_profit são
-//     calculados e entregues exclusivamente pelas RPCs admin-only:
+//   - Campos estimated_tokens, estimated_ai_cost são calculados e entregues
+//     exclusivamente pelas RPCs admin-only:
 //       get_credit_packages_admin()   → pacotes + custo/tokens/lucro
 //       get_plans_governance()        → planos + custo/tokens
 //   - Empresa filha NUNCA recebe esses valores (exceção lançada no banco)
@@ -28,8 +23,6 @@ import { Sparkles, Package, Plus, Pencil, Check, X, Loader2, Power, TrendingUp }
 import { supabase } from '../../lib/supabase'
 
 // ── Constantes de governança (apenas para preview UX local no admin) ──────────
-// A fonte oficial é a RPC — estas constantes existem só para o preview
-// no modal de pacote durante a digitação, antes de salvar.
 
 const TOKENS_PER_CREDIT       = 10
 const COST_PER_1K_TOKENS_BRL  = 0.015
@@ -44,6 +37,15 @@ function govAiCost(credits: number): number {
 
 function govProfit(price: number, credits: number): number {
   return Math.round((price - govAiCost(credits)) * 100) / 100
+}
+
+// ── Estimativa de conversas (UX only — sem impacto no billing) ────────────────
+// Regra: 1 conversa ≈ 500 tokens ≈ 50 créditos (1 crédito = 10 tokens)
+
+const CREDITS_PER_CONVERSATION = 50
+
+function estConversas(credits: number): number {
+  return Math.floor(credits / CREDITS_PER_CONVERSATION)
 }
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -80,7 +82,15 @@ interface PackageForm {
   is_active: boolean
 }
 
-const EMPTY_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true }
+interface PlanForm {
+  name:               string
+  slug:               string
+  monthly_ai_credits: string
+  is_active:          boolean
+}
+
+const EMPTY_PKG_FORM:  PackageForm = { name: '', credits: '', price: '', is_active: true }
+const EMPTY_PLAN_FORM: PlanForm    = { name: '', slug: '', monthly_ai_credits: '0', is_active: true }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,14 +102,22 @@ function formatCredits(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
-// Estimativa de conversas — cálculo somente de UX, sem impacto no billing.
-// Regra: 1 conversa média ≈ 500 tokens ≈ 50 créditos (1 crédito = 10 tokens).
-// NÃO usa tokens ou custo OpenAI — apenas créditos.
+// Preço por conversa — exibição UX, sem impacto em billing
+function precoConversa(price: number, credits: number): string {
+  const conv = estConversas(credits)
+  if (conv === 0 || price === 0) return '—'
+  return formatPrice(Math.round((price / conv) * 100) / 100)
+}
 
-const CREDITS_PER_CONVERSATION = 50
-
-function estConversas(credits: number): number {
-  return Math.floor(credits / CREDITS_PER_CONVERSATION)
+// Slug a partir do nome: lowercase, sem acentos, espaços → hífen
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50)
 }
 
 // ── Subcomponentes ────────────────────────────────────────────────────────────
@@ -138,18 +156,13 @@ function SuccessBanner({ message }: { message: string }) {
 }
 
 // ── Preview de governança — somente UX local no admin ─────────────────────────
-// Exibido no modal de pacote enquanto o admin digita.
-// A fonte oficial dos valores finais é sempre a RPC no banco.
 
 function GovernancePreview({ credits, price }: { credits: number; price: number }) {
-  if (!credits || !price) return null
+  if (credits <= 0 || price < 0) return null
 
   const tokens  = govTokens(credits)
   const cost    = govAiCost(credits)
   const profit  = govProfit(price, credits)
-  const isValid = credits > 0 && price >= 0
-
-  if (!isValid) return null
 
   return (
     <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-2">
@@ -180,36 +193,54 @@ function GovernancePreview({ credits, price }: { credits: number; price: number 
   )
 }
 
-// ── Modal de confirmação (planos) ─────────────────────────────────────────────
+// ── Modal: editar cota de créditos de um plano ────────────────────────────────
 
-function ConfirmPlanModal({
-  planName,
-  newCredits,
+function EditCotaModal({
+  plan,
   saving,
-  onConfirm,
-  onCancel,
+  onSave,
+  onClose,
 }: {
-  planName:   string
-  newCredits: number
-  saving:     boolean
-  onConfirm:  () => void
-  onCancel:   () => void
+  plan:    Plan
+  saving:  boolean
+  onSave:  (credits: number) => void
+  onClose: () => void
 }) {
+  const [draft, setDraft] = useState(String(plan.monthly_ai_credits))
+  const credits = parseInt(draft, 10)
+  const isValid = !isNaN(credits) && credits >= 0
+  const conv    = isValid && credits > 0 ? estConversas(credits) : 0
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">Confirmar alteração</h3>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <h3 className="font-semibold text-slate-900">Editar cota de IA — {plan.name}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5 space-y-3">
-          <p className="text-sm text-slate-700">
-            Esta alteração atualizará a cota de créditos de IA do plano{' '}
-            <strong>{planName}</strong> para{' '}
-            <strong>{formatCredits(newCredits)} créditos/mês</strong>.
-          </p>
+        <div className="px-6 py-5 space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                step={100}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                autoFocus
+                className="flex-1 border border-violet-400 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 text-right tabular-nums"
+              />
+              <span className="text-xs text-slate-400 whitespace-nowrap">cr/mês</span>
+            </div>
+            {isValid && credits > 0 && (
+              <p className="text-xs text-violet-600 mt-0.5">
+                ≈ {formatCredits(conv)} conversas estimadas
+              </p>
+            )}
+          </div>
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             A nova cota entrará em vigor apenas na <strong>próxima renovação</strong> das
             empresas que utilizam este plano. O ciclo atual não é afetado.
@@ -217,19 +248,130 @@ function ConfirmPlanModal({
         </div>
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
           <button
-            onClick={onCancel}
+            onClick={onClose}
             disabled={saving}
             className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
-            onClick={onConfirm}
-            disabled={saving}
+            onClick={() => onSave(credits)}
+            disabled={saving || !isValid}
             className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
             Confirmar alteração
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: criar novo plano ───────────────────────────────────────────────────
+
+function PlanModal({
+  form,
+  saving,
+  error,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  form:     PlanForm
+  saving:   boolean
+  error:    string | null
+  onChange: (f: Partial<PlanForm>) => void
+  onSave:   () => void
+  onClose:  () => void
+}) {
+  const credits = parseInt(form.monthly_ai_credits, 10) || 0
+  const isValid = form.name.trim().length > 0 && form.slug.trim().length > 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-900">Novo plano de IA</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {error && <ErrorBanner message={error} />}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Nome do plano</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => {
+                const name = e.target.value
+                onChange({ name, slug: generateSlug(name) })
+              }}
+              placeholder="Ex: Business"
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Slug</label>
+            <input
+              type="text"
+              value={form.slug}
+              onChange={e => onChange({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+              placeholder="business"
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+            <p className="text-xs text-slate-400">Identificador único do plano (gerado automaticamente)</p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={form.monthly_ai_credits}
+              onChange={e => onChange({ monthly_ai_credits: e.target.value })}
+              placeholder="0"
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+            {credits > 0 && (
+              <p className="text-xs text-violet-600 mt-0.5">
+                ≈ {formatCredits(estConversas(credits))} conversas estimadas
+              </p>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={e => onChange({ is_active: e.target.checked })}
+              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span className="text-sm text-slate-700">Plano ativo</span>
+          </label>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving || !isValid}
+            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            Criar plano
           </button>
         </div>
       </div>
@@ -319,7 +461,6 @@ function PackageModal({
             </div>
           </div>
 
-          {/* Preview de governança — UX local para o admin durante digitação */}
           {showPrev && (
             <GovernancePreview credits={credits} price={price} />
           )}
@@ -360,31 +501,39 @@ function PackageModal({
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function AiPlansPanel() {
-  // ── Estado: planos ───────────────────────────────────────────────────────
-  const [plans,         setPlans]         = useState<Plan[]>([])
-  const [loadingPlans,  setLoadingPlans]  = useState(true)
-  const [errorPlans,    setErrorPlans]    = useState<string | null>(null)
-  const [successPlans,  setSuccessPlans]  = useState<string | null>(null)
 
-  const [editingPlan,   setEditingPlan]   = useState<{ id: string; draft: string } | null>(null)
-  const [confirmPlan,   setConfirmPlan]   = useState<{ plan: Plan; newCredits: number } | null>(null)
-  const [savingPlan,    setSavingPlan]    = useState(false)
+  // ── Estado: planos ───────────────────────────────────────────────────────
+  const [plans,        setPlans]        = useState<Plan[]>([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
+  const [errorPlans,   setErrorPlans]   = useState<string | null>(null)
+  const [successPlans, setSuccessPlans] = useState<string | null>(null)
+
+  // Editar cota
+  const [editingCota,  setEditingCota]  = useState<Plan | null>(null)
+  const [savingCota,   setSavingCota]   = useState(false)
+
+  // Criar plano
+  const [planModalOpen,  setPlanModalOpen]  = useState(false)
+  const [planForm,       setPlanForm]       = useState<PlanForm>(EMPTY_PLAN_FORM)
+  const [savingPlanForm, setSavingPlanForm] = useState(false)
+  const [errorPlanForm,  setErrorPlanForm]  = useState<string | null>(null)
+
+  // Toggle ativo/inativo
+  const [togglingPlan, setTogglingPlan] = useState<string | null>(null)
 
   // ── Estado: pacotes ──────────────────────────────────────────────────────
-  const [packages,       setPackages]      = useState<CreditPackage[]>([])
-  const [loadingPkgs,    setLoadingPkgs]   = useState(true)
-  const [errorPkgs,      setErrorPkgs]     = useState<string | null>(null)
-  const [successPkgs,    setSuccessPkgs]   = useState<string | null>(null)
+  const [packages,      setPackages]     = useState<CreditPackage[]>([])
+  const [loadingPkgs,   setLoadingPkgs]  = useState(true)
+  const [errorPkgs,     setErrorPkgs]    = useState<string | null>(null)
+  const [successPkgs,   setSuccessPkgs]  = useState<string | null>(null)
 
-  const [packageModal,   setPackageModal]  = useState<{ mode: 'create' | 'edit'; pkg?: CreditPackage } | null>(null)
-  const [packageForm,    setPackageForm]   = useState<PackageForm>(EMPTY_FORM)
-  const [savingPkg,      setSavingPkg]     = useState(false)
-  const [errorPkgForm,   setErrorPkgForm]  = useState<string | null>(null)
-  const [togglingPkg,    setTogglingPkg]   = useState<string | null>(null)
+  const [packageModal,  setPackageModal]  = useState<{ mode: 'create' | 'edit'; pkg?: CreditPackage } | null>(null)
+  const [packageForm,   setPackageForm]   = useState<PackageForm>(EMPTY_PKG_FORM)
+  const [savingPkg,     setSavingPkg]     = useState(false)
+  const [errorPkgForm,  setErrorPkgForm]  = useState<string | null>(null)
+  const [togglingPkg,   setTogglingPkg]   = useState<string | null>(null)
 
   // ── Carregar planos via RPC admin-only ───────────────────────────────────
-  // get_plans_governance() valida auth_user_is_platform_admin() no banco.
-  // Empresa filha que chamar recebe RAISE EXCEPTION → erro propagado aqui.
 
   const loadPlans = useCallback(async () => {
     setLoadingPlans(true)
@@ -401,9 +550,6 @@ export function AiPlansPanel() {
   }, [])
 
   // ── Carregar pacotes via RPC admin-only ──────────────────────────────────
-  // get_credit_packages_admin() valida auth_user_is_platform_admin() no banco.
-  // Retorna campos estimated_tokens, estimated_ai_cost, estimated_profit
-  // calculados no SQL — nunca via SELECT direto na tabela.
 
   const loadPackages = useCallback(async () => {
     setLoadingPkgs(true)
@@ -438,25 +584,81 @@ export function AiPlansPanel() {
 
   // ── Salvar cota do plano ─────────────────────────────────────────────────
 
-  async function savePlanCredits() {
-    if (!confirmPlan) return
-    setSavingPlan(true)
+  async function savePlanCredits(plan: Plan, newCredits: number) {
+    setSavingCota(true)
     try {
       const { data, error } = await supabase.rpc('update_plan_ai_credits', {
-        p_plan_id: confirmPlan.plan.id,
-        p_credits:  confirmPlan.newCredits,
+        p_plan_id: plan.id,
+        p_credits: newCredits,
       })
       if (error) throw error
       if (!data?.ok) throw new Error(data?.error ?? 'Erro ao salvar cota')
-      setConfirmPlan(null)
-      setEditingPlan(null)
-      showSuccessPlans(`Cota do plano "${confirmPlan.plan.name}" atualizada. Aplicada na próxima renovação.`)
+      setEditingCota(null)
+      showSuccessPlans(`Cota do plano "${plan.name}" atualizada. Aplicada na próxima renovação.`)
       void loadPlans()
     } catch (err) {
       setErrorPlans(err instanceof Error ? err.message : 'Erro ao salvar cota')
-      setConfirmPlan(null)
     } finally {
-      setSavingPlan(false)
+      setSavingCota(false)
+    }
+  }
+
+  // ── Criar novo plano ─────────────────────────────────────────────────────
+
+  async function createPlan() {
+    if (!planForm.name.trim() || !planForm.slug.trim()) return
+    setSavingPlanForm(true)
+    setErrorPlanForm(null)
+    try {
+      // Cria o plano com campos mínimos — demais campos usam defaults do banco
+      const { data, error } = await supabase.rpc('create_plan', {
+        p_name:      planForm.name.trim(),
+        p_slug:      planForm.slug.trim(),
+        p_is_active: planForm.is_active,
+      })
+      if (error) throw error
+
+      const result = data as { success: boolean; error?: string; plan_id?: string }
+      if (!result?.success) throw new Error(result?.error ?? 'Erro ao criar plano')
+
+      // Aplica a cota de créditos de IA ao plano recém-criado
+      const credits = parseInt(planForm.monthly_ai_credits, 10) || 0
+      if (credits > 0 && result.plan_id) {
+        await supabase.rpc('update_plan_ai_credits', {
+          p_plan_id: result.plan_id,
+          p_credits: credits,
+        })
+      }
+
+      setPlanModalOpen(false)
+      setPlanForm(EMPTY_PLAN_FORM)
+      showSuccessPlans(`Plano "${planForm.name}" criado com sucesso.`)
+      void loadPlans()
+    } catch (err) {
+      setErrorPlanForm(err instanceof Error ? err.message : 'Erro ao criar plano')
+    } finally {
+      setSavingPlanForm(false)
+    }
+  }
+
+  // ── Toggle ativo/inativo do plano ────────────────────────────────────────
+
+  async function togglePlan(plan: Plan) {
+    setTogglingPlan(plan.id)
+    try {
+      const { data, error } = await supabase.rpc('update_plan', {
+        p_plan_id:   plan.id,
+        p_is_active: !plan.is_active,
+      })
+      if (error) throw error
+
+      const result = data as { success: boolean; error?: string }
+      if (!result?.success) throw new Error(result?.error ?? 'Erro ao alterar status')
+      void loadPlans()
+    } catch (err) {
+      setErrorPlans(err instanceof Error ? err.message : 'Erro ao alterar status do plano')
+    } finally {
+      setTogglingPlan(null)
     }
   }
 
@@ -526,7 +728,7 @@ export function AiPlansPanel() {
     setPackageForm(
       pkg
         ? { name: pkg.name, credits: String(pkg.credits), price: String(pkg.price), is_active: pkg.is_active }
-        : EMPTY_FORM
+        : EMPTY_PKG_FORM
     )
     setPackageModal({ mode, pkg })
   }
@@ -541,6 +743,15 @@ export function AiPlansPanel() {
         <SectionHeader
           icon={<Sparkles size={16} />}
           title="Planos Mensais — Cota de IA"
+          right={
+            <button
+              onClick={() => { setErrorPlanForm(null); setPlanForm(EMPTY_PLAN_FORM); setPlanModalOpen(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
+            >
+              <Plus size={13} />
+              Novo plano
+            </button>
+          }
         />
 
         <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
@@ -554,105 +765,111 @@ export function AiPlansPanel() {
         {!loadingPlans && errorPlans && <ErrorBanner message={errorPlans} />}
 
         {loadingPlans ? (
-          <div className="divide-y divide-slate-100">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="px-5 py-4 flex items-center gap-4">
-                <div className="h-4 bg-slate-100 rounded animate-pulse w-32" />
-                <div className="h-4 bg-slate-100 rounded animate-pulse w-20 ml-auto" />
-                <div className="h-8 bg-slate-100 rounded animate-pulse w-24" />
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 9 }).map((__, j) => (
+                      <td key={j} className="px-4 py-4">
+                        <div className="h-4 bg-slate-100 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : plans.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">Nenhum plano encontrado</p>
+          <div className="px-5 py-10 text-center">
+            <Sparkles size={24} className="mx-auto mb-2 text-slate-200" />
+            <p className="text-sm text-slate-400">Nenhum plano encontrado</p>
+          </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {plans.map(plan => {
-              const isEditing = editingPlan?.id === plan.id
-
-              return (
-                <div key={plan.id} className="px-5 py-4 flex items-center gap-4 flex-wrap">
-                  {/* Nome e status */}
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-slate-800 truncate">{plan.name}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                      plan.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {plan.is_active ? 'Ativo' : 'Inativo'}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-4 py-3 text-left   text-xs font-medium text-slate-500 uppercase tracking-wide">Plano</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Créditos/mês</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Conversas (≈)</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço/conv</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Valor Mensal</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">
+                    <span className="flex items-center justify-end gap-1">
+                      <TrendingUp size={11} className="text-violet-400" />
+                      Custo (OpenAI)
                     </span>
-                  </div>
-
-                  {/* Conversas estimadas — UX pública (sem tokens/custo) */}
-                  {!isEditing && plan.monthly_ai_credits > 0 && (
-                    <span className="text-xs text-violet-600 font-medium whitespace-nowrap">
-                      ≈ {formatCredits(estConversas(plan.monthly_ai_credits))} conv/mês
-                    </span>
-                  )}
-
-                  {/* Governança inline — tokens e custo estimados */}
-                  {!isEditing && plan.estimated_tokens > 0 && (
-                    <div className="flex items-center gap-3 text-xs text-slate-400 tabular-nums">
-                      <span title="Tokens estimados por mês">
-                        ~{formatCredits(plan.estimated_tokens)} tok
-                      </span>
-                      <span title="Custo interno estimado de IA por mês" className="text-slate-400">
-                        ~{formatPrice(plan.estimated_ai_cost)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Cota atual / input de edição */}
-                  <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-                    {isEditing ? (
-                      <>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            step={100}
-                            value={editingPlan.draft}
-                            onChange={e => setEditingPlan({ id: plan.id, draft: e.target.value })}
-                            className="w-28 border border-violet-400 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 text-right tabular-nums"
-                            autoFocus
-                          />
-                          <span className="text-xs text-slate-400 whitespace-nowrap">cr/mês</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const v = parseInt(editingPlan.draft, 10)
-                            if (isNaN(v) || v < 0) return
-                            setConfirmPlan({ plan, newCredits: v })
-                          }}
-                          className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
-                        >
-                          Salvar
-                        </button>
-                        <button
-                          onClick={() => setEditingPlan(null)}
-                          className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-sm text-slate-600 tabular-nums">
-                          <strong>{formatCredits(plan.monthly_ai_credits)}</strong>
-                          <span className="text-slate-400 text-xs ml-1">cr/mês</span>
+                  </th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Lucro Estimado</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {plans.map(plan => {
+                  const lucroEst = plan.price - plan.estimated_ai_cost
+                  return (
+                    <tr key={plan.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{plan.name}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                        {formatCredits(plan.monthly_ai_credits)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-violet-600 text-xs font-medium">
+                        ~{formatCredits(estConversas(plan.monthly_ai_credits))}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-xs font-mono">
+                        {precoConversa(plan.price, plan.monthly_ai_credits)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700 text-xs font-mono">
+                        {plan.price > 0 ? formatPrice(plan.price) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs font-mono">
+                        {formatPrice(plan.estimated_ai_cost)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">
+                        <span className={lucroEst >= 0 ? 'text-green-600' : 'text-red-500'}>
+                          {plan.price > 0 ? formatPrice(lucroEst) : '—'}
                         </span>
-                        <button
-                          onClick={() => setEditingPlan({ id: plan.id, draft: String(plan.monthly_ai_credits) })}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                        >
-                          <Pencil size={12} />
-                          Editar cota
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          plan.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {plan.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setEditingCota(plan)}
+                            title="Editar cota de créditos"
+                            className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => togglePlan(plan)}
+                            disabled={togglingPlan === plan.id}
+                            title={plan.is_active ? 'Desativar plano' : 'Ativar plano'}
+                            className={`p-1.5 rounded transition-colors disabled:opacity-40 ${
+                              plan.is_active
+                                ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
+                                : 'text-slate-400 hover:text-green-600 hover:bg-green-50'
+                            }`}
+                          >
+                            {togglingPlan === plan.id
+                              ? <Loader2 size={14} className="animate-spin" />
+                              : <Power size={14} />
+                            }
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -682,7 +899,7 @@ export function AiPlansPanel() {
               <tbody className="divide-y divide-slate-100">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i}>
-                    {[1, 2, 3, 4, 5, 6, 7].map(j => (
+                    {Array.from({ length: 8 }).map((__, j) => (
                       <td key={j} className="px-4 py-4">
                         <div className="h-4 bg-slate-100 rounded animate-pulse" />
                       </td>
@@ -725,7 +942,7 @@ export function AiPlansPanel() {
                     <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                       {formatCredits(pkg.credits)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-xs font-medium">
+                    <td className="px-4 py-3 text-right tabular-nums text-violet-600 text-xs font-medium">
                       ~{formatCredits(estConversas(pkg.credits))}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">
@@ -787,13 +1004,23 @@ export function AiPlansPanel() {
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
 
-      {confirmPlan && (
-        <ConfirmPlanModal
-          planName={confirmPlan.plan.name}
-          newCredits={confirmPlan.newCredits}
-          saving={savingPlan}
-          onConfirm={savePlanCredits}
-          onCancel={() => setConfirmPlan(null)}
+      {editingCota && (
+        <EditCotaModal
+          plan={editingCota}
+          saving={savingCota}
+          onSave={credits => savePlanCredits(editingCota, credits)}
+          onClose={() => setEditingCota(null)}
+        />
+      )}
+
+      {planModalOpen && (
+        <PlanModal
+          form={planForm}
+          saving={savingPlanForm}
+          error={errorPlanForm}
+          onChange={partial => setPlanForm(f => ({ ...f, ...partial }))}
+          onSave={createPlan}
+          onClose={() => setPlanModalOpen(false)}
         />
       )}
 
