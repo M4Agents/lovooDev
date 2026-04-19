@@ -12,12 +12,39 @@
 //   - Acesso: canManageOpenAI (isSaaSAdmin)
 //   - monthly_ai_credits só afeta próxima renovação (aviso obrigatório)
 //   - valid_days NÃO é exibido (sem efeito funcional na v1)
-//   - Tokens e custo OpenAI: NUNCA exibidos
+//
+// GOVERNANÇA INTERNA:
+//   - Campos estimated_tokens, estimated_ai_cost e estimated_profit são
+//     calculados e entregues exclusivamente pelas RPCs admin-only:
+//       get_credit_packages_admin()   → pacotes + custo/tokens/lucro
+//       get_plans_governance()        → planos + custo/tokens
+//   - Empresa filha NUNCA recebe esses valores (exceção lançada no banco)
+//   - Constantes locais (TOKENS_PER_CREDIT etc.) são usadas APENAS para
+//     preview visual no modal do admin durante digitação — fonte oficial é o banco
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { Sparkles, Package, Plus, Pencil, Check, X, Loader2, Power } from 'lucide-react'
+import { Sparkles, Package, Plus, Pencil, Check, X, Loader2, Power, TrendingUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+
+// ── Constantes de governança (apenas para preview UX local no admin) ──────────
+// A fonte oficial é a RPC — estas constantes existem só para o preview
+// no modal de pacote durante a digitação, antes de salvar.
+
+const TOKENS_PER_CREDIT       = 10
+const COST_PER_1K_TOKENS_BRL  = 0.015
+
+function govTokens(credits: number): number {
+  return credits * TOKENS_PER_CREDIT
+}
+
+function govAiCost(credits: number): number {
+  return Math.round((govTokens(credits) / 1000) * COST_PER_1K_TOKENS_BRL * 100) / 100
+}
+
+function govProfit(price: number, credits: number): number {
+  return Math.round((price - govAiCost(credits)) * 100) / 100
+}
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -26,15 +53,24 @@ interface Plan {
   name:               string
   slug:               string
   is_active:          boolean
+  price:              number
   monthly_ai_credits: number
+  sort_order:         number
+  // Campos de governança — entregues pela RPC get_plans_governance()
+  estimated_tokens:   number
+  estimated_ai_cost:  number
 }
 
 interface CreditPackage {
-  id:        string
-  name:      string
-  credits:   number
-  price:     number
-  is_active: boolean
+  id:                string
+  name:              string
+  credits:           number
+  price:             number
+  is_active:         boolean
+  // Campos de governança — entregues pela RPC get_credit_packages_admin()
+  estimated_tokens:  number
+  estimated_ai_cost: number
+  estimated_profit:  number
 }
 
 interface PackageForm {
@@ -87,6 +123,49 @@ function SuccessBanner({ message }: { message: string }) {
     <div className="mx-5 my-3 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg flex items-center gap-2">
       <Check size={14} />
       {message}
+    </div>
+  )
+}
+
+// ── Preview de governança — somente UX local no admin ─────────────────────────
+// Exibido no modal de pacote enquanto o admin digita.
+// A fonte oficial dos valores finais é sempre a RPC no banco.
+
+function GovernancePreview({ credits, price }: { credits: number; price: number }) {
+  if (!credits || !price) return null
+
+  const tokens  = govTokens(credits)
+  const cost    = govAiCost(credits)
+  const profit  = govProfit(price, credits)
+  const isValid = credits > 0 && price >= 0
+
+  if (!isValid) return null
+
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-2">
+      <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+        <TrendingUp size={12} className="text-violet-500" />
+        Referência interna de governança (preview)
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <p className="text-xs text-slate-400 mb-0.5">Tokens estimados</p>
+          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatCredits(tokens)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 mb-0.5">Custo estimado</p>
+          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatPrice(cost)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 mb-0.5">Lucro estimado</p>
+          <p className={`text-sm font-semibold tabular-nums ${profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+            {formatPrice(profit)}
+          </p>
+        </div>
+      </div>
+      <p className="text-xs text-slate-400 italic">
+        Preview local — valores oficiais calculados e validados no banco
+      </p>
     </div>
   )
 }
@@ -167,7 +246,10 @@ function PackageModal({
   onSave:   () => void
   onClose:  () => void
 }) {
-  const isValid = form.name.trim() && Number(form.credits) > 0 && Number(form.price) >= 0
+  const credits  = parseInt(form.credits, 10)
+  const price    = parseFloat(form.price)
+  const isValid  = form.name.trim() && credits > 0 && !isNaN(price) && price >= 0
+  const showPrev = credits > 0 && !isNaN(price) && price >= 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -222,6 +304,11 @@ function PackageModal({
             </div>
           </div>
 
+          {/* Preview de governança — UX local para o admin durante digitação */}
+          {showPrev && (
+            <GovernancePreview credits={credits} price={price} />
+          )}
+
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -264,9 +351,7 @@ export function AiPlansPanel() {
   const [errorPlans,    setErrorPlans]    = useState<string | null>(null)
   const [successPlans,  setSuccessPlans]  = useState<string | null>(null)
 
-  // Edição inline de cota: { planId, draftValue }
   const [editingPlan,   setEditingPlan]   = useState<{ id: string; draft: string } | null>(null)
-  // Modal de confirmação antes de salvar
   const [confirmPlan,   setConfirmPlan]   = useState<{ plan: Plan; newCredits: number } | null>(null)
   const [savingPlan,    setSavingPlan]    = useState(false)
 
@@ -282,16 +367,15 @@ export function AiPlansPanel() {
   const [errorPkgForm,   setErrorPkgForm]  = useState<string | null>(null)
   const [togglingPkg,    setTogglingPkg]   = useState<string | null>(null)
 
-  // ── Carregar planos ──────────────────────────────────────────────────────
+  // ── Carregar planos via RPC admin-only ───────────────────────────────────
+  // get_plans_governance() valida auth_user_is_platform_admin() no banco.
+  // Empresa filha que chamar recebe RAISE EXCEPTION → erro propagado aqui.
 
   const loadPlans = useCallback(async () => {
     setLoadingPlans(true)
     setErrorPlans(null)
     try {
-      const { data, error } = await supabase
-        .from('plans')
-        .select('id, name, slug, is_active, monthly_ai_credits')
-        .order('sort_order', { ascending: true })
+      const { data, error } = await supabase.rpc('get_plans_governance')
       if (error) throw error
       setPlans((data ?? []) as Plan[])
     } catch (err) {
@@ -301,16 +385,16 @@ export function AiPlansPanel() {
     }
   }, [])
 
-  // ── Carregar pacotes ─────────────────────────────────────────────────────
+  // ── Carregar pacotes via RPC admin-only ──────────────────────────────────
+  // get_credit_packages_admin() valida auth_user_is_platform_admin() no banco.
+  // Retorna campos estimated_tokens, estimated_ai_cost, estimated_profit
+  // calculados no SQL — nunca via SELECT direto na tabela.
 
   const loadPackages = useCallback(async () => {
     setLoadingPkgs(true)
     setErrorPkgs(null)
     try {
-      const { data, error } = await supabase
-        .from('credit_packages')
-        .select('id, name, credits, price, is_active')
-        .order('credits', { ascending: true })
+      const { data, error } = await supabase.rpc('get_credit_packages_admin')
       if (error) throw error
       setPackages((data ?? []) as CreditPackage[])
     } catch (err) {
@@ -349,14 +433,10 @@ export function AiPlansPanel() {
       })
       if (error) throw error
       if (!data?.ok) throw new Error(data?.error ?? 'Erro ao salvar cota')
-      setPlans(prev => prev.map(p =>
-        p.id === confirmPlan.plan.id
-          ? { ...p, monthly_ai_credits: confirmPlan.newCredits }
-          : p
-      ))
       setConfirmPlan(null)
       setEditingPlan(null)
       showSuccessPlans(`Cota do plano "${confirmPlan.plan.name}" atualizada. Aplicada na próxima renovação.`)
+      void loadPlans()
     } catch (err) {
       setErrorPlans(err instanceof Error ? err.message : 'Erro ao salvar cota')
       setConfirmPlan(null)
@@ -416,9 +496,7 @@ export function AiPlansPanel() {
         .update({ is_active: !pkg.is_active })
         .eq('id', pkg.id)
       if (error) throw error
-      setPackages(prev => prev.map(p =>
-        p.id === pkg.id ? { ...p, is_active: !p.is_active } : p
-      ))
+      void loadPackages()
     } catch (err) {
       setErrorPkgs(err instanceof Error ? err.message : 'Erro ao alterar status do pacote')
     } finally {
@@ -488,6 +566,18 @@ export function AiPlansPanel() {
                       {plan.is_active ? 'Ativo' : 'Inativo'}
                     </span>
                   </div>
+
+                  {/* Governança inline — tokens e custo estimados */}
+                  {!isEditing && plan.estimated_tokens > 0 && (
+                    <div className="flex items-center gap-3 text-xs text-slate-400 tabular-nums">
+                      <span title="Tokens estimados por mês">
+                        ~{formatCredits(plan.estimated_tokens)} tok
+                      </span>
+                      <span title="Custo interno estimado de IA por mês" className="text-slate-400">
+                        ~{formatPrice(plan.estimated_ai_cost)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Cota atual / input de edição */}
                   <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -570,8 +660,8 @@ export function AiPlansPanel() {
               <tbody className="divide-y divide-slate-100">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i}>
-                    {[1, 2, 3, 4].map(j => (
-                      <td key={j} className="px-5 py-4">
+                    {[1, 2, 3, 4, 5, 6, 7].map(j => (
+                      <td key={j} className="px-4 py-4">
                         <div className="h-4 bg-slate-100 rounded animate-pulse" />
                       </td>
                     ))}
@@ -590,24 +680,43 @@ export function AiPlansPanel() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Nome</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Créditos</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Preço</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
+                  <th className="px-4 py-3 text-left   text-xs font-medium text-slate-500 uppercase tracking-wide">Pacote</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Créditos</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">
+                    <span className="flex items-center justify-end gap-1">
+                      <TrendingUp size={11} className="text-violet-400" />
+                      Tokens est.
+                    </span>
+                  </th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Custo IA</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Lucro</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {packages.map(pkg => (
                   <tr key={pkg.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-medium text-slate-800">{pkg.name}</td>
-                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                    <td className="px-4 py-3 font-medium text-slate-800">{pkg.name}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                       {formatCredits(pkg.credits)}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums text-slate-700 font-mono text-xs">
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">
+                      {formatCredits(pkg.estimated_tokens)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 font-mono text-xs">
+                      {formatPrice(pkg.estimated_ai_cost)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700 font-mono text-xs">
                       {formatPrice(pkg.price)}
                     </td>
-                    <td className="px-5 py-3 text-center">
+                    <td className="px-4 py-3 text-right tabular-nums font-mono text-xs">
+                      <span className={pkg.estimated_profit >= 0 ? 'text-green-600' : 'text-red-500'}>
+                        {formatPrice(pkg.estimated_profit)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         pkg.is_active
                           ? 'bg-green-100 text-green-700'
@@ -616,7 +725,7 @@ export function AiPlansPanel() {
                         {pkg.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => openPackageModal('edit', pkg)}
