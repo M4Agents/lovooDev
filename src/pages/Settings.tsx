@@ -16,6 +16,8 @@ import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
 import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPanel';
 import { AiGovernancePanel } from '../components/Settings/AiGovernancePanel';
+import { AiCreditsPanel } from '../components/Settings/AiCreditsPanel';
+import { AiPlansPanel } from '../components/Settings/AiPlansPanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -106,7 +108,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'consumo-ia'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1124,6 +1126,21 @@ export const Settings: React.FC = () => {
               >
                 <Bot className="w-4 h-4" />
                 Agentes
+              </button>
+            )}
+
+            {/* Aba Consumo de IA (somente empresa filha — admin+) */}
+            {canManageConversationalAgents && company?.company_type === 'client' && (
+              <button
+                onClick={() => setActiveTab('consumo-ia')}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'consumo-ia'
+                    ? 'border-violet-500 text-violet-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                Consumo de IA
               </button>
             )}
 
@@ -3627,6 +3644,8 @@ export const Settings: React.FC = () => {
       {activeTab === 'agentes' && canManageOpenAI && company?.id && (
         <div className="space-y-6">
           <LovooAgentsPanel companyId={company.id} />
+          {/* Gestão de planos de IA e pacotes avulsos — somente empresa pai */}
+          {company.company_type === 'parent' && <AiPlansPanel />}
         </div>
       )}
 
@@ -3638,6 +3657,13 @@ export const Settings: React.FC = () => {
 
           {/* 2. Configuração de canal (assignments + routing) */}
           <CompanyAgentConfigPanel companyId={company.id} />
+        </div>
+      )}
+
+      {/* Aba Consumo de IA — dashboard de créditos (somente empresa filha) */}
+      {activeTab === 'consumo-ia' && canManageConversationalAgents && company?.company_type === 'client' && company?.id && (
+        <div className="space-y-6">
+          <AiCreditsPanel companyId={company.id} />
         </div>
       )}
 

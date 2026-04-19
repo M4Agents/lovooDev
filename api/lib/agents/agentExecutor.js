@@ -58,6 +58,93 @@ const MAX_AI_NOTES_CHARS     = 200;
 /** Máximo de itens na lista compacta (sem item em foco) */
 const MAX_COMPACT_LIST_ITEMS = 15;
 
+// ── Billing de créditos de IA ─────────────────────────────────────────────────
+// Helpers isolados. Nunca bloqueiam o fluxo de execução do agente.
+// O débito é fire-and-forget — falhas são logadas e absorvidas silenciosamente.
+
+/** 1.000 tokens = 100 créditos base, ajustados por multiplicador de feature */
+const CREDIT_RATE = 100;
+
+/**
+ * Multiplicadores por feature. DO NOT CHANGE: alinhado com debit_credits_atomic.
+ * whatsapp = 1x  (canal principal)
+ * insights = 6x  (operação intensiva de processamento)
+ */
+const FEATURE_MULTIPLIERS = { whatsapp: 1, insights: 6 };
+
+/**
+ * Resolve a feature de billing a partir do canal de execução.
+ * Retorna null para canais sem billing (sandbox, test, etc.) — débito não ocorre.
+ */
+function resolveFeatureType(channel) {
+  if (channel === 'whatsapp') return 'whatsapp';
+  if (channel === 'insights')  return 'insights';
+  return null;
+}
+
+/**
+ * Calcula créditos a debitar.
+ * Fórmula: ceil((totalTokens / 1000) * CREDIT_RATE * multiplier)
+ * Retorna 0 para tokens inválidos ou feature sem multiplicador definido.
+ */
+function calculateCredits(totalTokens, featureType) {
+  if (!totalTokens || totalTokens <= 0) return 0;
+  const multiplier = FEATURE_MULTIPLIERS[featureType] ?? 0;
+  if (multiplier === 0) return 0;
+  return Math.ceil((totalTokens / 1000) * CREDIT_RATE * multiplier);
+}
+
+/**
+ * Chama debit_credits_atomic via RPC.
+ * Fire-and-forget — nunca propaga exceção para o caller.
+ *
+ * Tratamento de retorno:
+ *   ok: true             → débito registrado com sucesso
+ *   ok: true, idempotent → retry detectado — ignorar silenciosamente
+ *   ok: false            → saldo insuficiente — logar aviso
+ *   error Supabase       → falha de RPC — logar e absorver
+ */
+async function debitCredits(svc, { companyId, credits, featureType, totalTokens, model, executionLogId }) {
+  if (!svc || !companyId) return;
+  try {
+    const { data, error } = await svc.rpc('debit_credits_atomic', {
+      p_company_id:       companyId,
+      p_credits:          credits,
+      p_feature_type:     featureType,
+      p_total_tokens:     totalTokens ?? 0,
+      p_model:            model       ?? null,
+      p_execution_log_id: executionLogId ?? null,
+    });
+
+    if (error) {
+      console.error('[BILLING] Falha ao chamar debit_credits_atomic:', { company_id: companyId, error: error.message });
+      return;
+    }
+
+    if (data?.idempotent) return; // retry detectado — comportamento correto, ignorar
+
+    if (data?.ok === false) {
+      console.warn('[BILLING] Saldo de créditos insuficiente:', {
+        company_id:   companyId,
+        feature_type: featureType,
+        credits,
+        balance:      data.balance,
+      });
+      return;
+    }
+
+    console.log('[BILLING] Débito registrado:', {
+      company_id:    companyId,
+      credits,
+      feature_type:  featureType,
+      balance_after: data?.balance_after,
+    });
+  } catch (err) {
+    // Nunca deixar falha de billing quebrar o fluxo de execução
+    console.error('[BILLING] Exceção ao debitar créditos (silencioso):', err.message);
+  }
+}
+
 // ── Cliente service_role ──────────────────────────────────────────────────────
 
 function getServiceSupabase() {
@@ -1050,28 +1137,63 @@ async function writeConversationalLog(svc, { output, runResult, status, error_co
   if (!svc) return;
 
   try {
-    await svc.from('ai_agent_execution_logs').insert({
-      use_id:              USE_ID,
-      agent_id:            output.agent?.id   ?? null,
-      consumer_company_id: output.metadata?.company_id ?? null,
-      user_id:             null,                   // sem sessão de usuário humano
-      channel:             'whatsapp',
-      model:               output.agent?.model ?? null,
-      knowledge_mode:      output.agent?.knowledge_mode ?? null,
-      status,
-      is_fallback:         false,                  // sem fallback no MVP conversacional
-      duration_ms:         duration_ms ?? null,
-      input_tokens:        runResult?.input_tokens  ?? null,
-      output_tokens:       runResult?.output_tokens ?? null,
-      total_tokens:        runResult?.total_tokens  ?? null,
-      estimated_cost_usd:  runResult?.estimated_cost_usd ?? null,
-      error_code:          error_code ?? null,
-      // Campos conversacionais (migration 10 — Etapa 1):
-      conversation_id:     output.conversation?.id ?? null,
-      session_id:          output.session_id       ?? null,  // agent_conversation_sessions.id
-      assignment_id:       output.metadata?.assignment_id ?? null,
-      rule_id:             output.metadata?.rule_id ?? null,
-    });
+    // .select('id').single() captura o UUID gerado pelo banco para uso no billing.
+    // Mudança mínima em relação ao insert original — sem impacto no restante do fluxo.
+    const { data: logData, error: insertError } = await svc
+      .from('ai_agent_execution_logs')
+      .insert({
+        use_id:              USE_ID,
+        agent_id:            output.agent?.id   ?? null,
+        consumer_company_id: output.metadata?.company_id ?? null,
+        user_id:             null,                   // sem sessão de usuário humano
+        channel:             'whatsapp',
+        model:               output.agent?.model ?? null,
+        knowledge_mode:      output.agent?.knowledge_mode ?? null,
+        status,
+        is_fallback:         false,                  // sem fallback no MVP conversacional
+        duration_ms:         duration_ms ?? null,
+        input_tokens:        runResult?.input_tokens  ?? null,
+        output_tokens:       runResult?.output_tokens ?? null,
+        total_tokens:        runResult?.total_tokens  ?? null,
+        estimated_cost_usd:  runResult?.estimated_cost_usd ?? null,
+        error_code:          error_code ?? null,
+        // Campos conversacionais (migration 10 — Etapa 1):
+        conversation_id:     output.conversation?.id ?? null,
+        session_id:          output.session_id       ?? null,  // agent_conversation_sessions.id
+        assignment_id:       output.metadata?.assignment_id ?? null,
+        rule_id:             output.metadata?.rule_id ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      // Falha silenciosa — log nunca deve quebrar o executor
+      console.error('🤖 [EXEC] ⚠️  Falha ao registrar log (silencioso):', insertError.message);
+      return;
+    }
+
+    // ── Billing: debitar créditos após execução bem-sucedida ──────────────────
+    // Fire-and-forget — nunca bloqueia o retorno ao lead.
+    // Condições obrigatórias:
+    //   1. status === 'success' — erros e fallbacks não geram débito
+    //   2. logData?.id         — ID do log necessário para idempotência
+    //   3. runResult?.total_tokens > 0 — débito zero não faz sentido
+    if (status === 'success' && logData?.id && runResult?.total_tokens) {
+      const featureType = resolveFeatureType('whatsapp'); // canal fixo neste executor
+      if (featureType) {
+        const credits = calculateCredits(runResult.total_tokens, featureType);
+        if (credits > 0) {
+          void debitCredits(svc, {
+            companyId:      output.metadata?.company_id,
+            credits,
+            featureType,
+            totalTokens:    runResult.total_tokens,
+            model:          output.agent?.model ?? null,
+            executionLogId: logData.id,
+          });
+        }
+      }
+    }
   } catch (logError) {
     // Falha silenciosa — log nunca deve quebrar o executor
     console.error('🤖 [EXEC] ⚠️  Falha ao registrar log (silencioso):', logError.message);
