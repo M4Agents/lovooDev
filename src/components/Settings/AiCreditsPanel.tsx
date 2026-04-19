@@ -102,6 +102,16 @@ function formatCredits(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
+// Estimativa de conversas — cálculo somente de UX, sem impacto no billing.
+// Regra: 1 conversa média ≈ 500 tokens ≈ 50 créditos (1 crédito = 10 tokens).
+// NÃO usa tokens ou custo OpenAI — apenas créditos.
+
+const CREDITS_PER_CONVERSATION = 50
+
+function estConversas(credits: number): number {
+  return Math.floor(credits / CREDITS_PER_CONVERSATION)
+}
+
 // ── Constantes de labels ──────────────────────────────────────────────────────
 
 const TX_TYPE_LABELS: Record<string, string> = {
@@ -354,8 +364,17 @@ export function AiCreditsPanel({ companyId }: Props) {
                   {formatCredits(totalAvailable)}
                 </span>
               </div>
-              <div className="h-2" />
               <p className="text-xs text-slate-400">Plano + Extras combinados</p>
+              {totalAvailable > 0 && (
+                <div className="mt-3 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2.5 space-y-1">
+                  <p className="text-sm font-semibold text-violet-700">
+                    ≈ {formatCredits(estConversas(totalAvailable))} conversas disponíveis
+                  </p>
+                  <p className="text-xs text-violet-500 leading-snug">
+                    Estimativa baseada no uso médio. Pode variar conforme o tamanho das mensagens.
+                  </p>
+                </div>
+              )}
             </div>
 
           </div>

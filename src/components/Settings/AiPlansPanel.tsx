@@ -92,6 +92,16 @@ function formatCredits(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
+// Estimativa de conversas — cálculo somente de UX, sem impacto no billing.
+// Regra: 1 conversa média ≈ 500 tokens ≈ 50 créditos (1 crédito = 10 tokens).
+// NÃO usa tokens ou custo OpenAI — apenas créditos.
+
+const CREDITS_PER_CONVERSATION = 50
+
+function estConversas(credits: number): number {
+  return Math.floor(credits / CREDITS_PER_CONVERSATION)
+}
+
 // ── Subcomponentes ────────────────────────────────────────────────────────────
 
 function SectionHeader({ icon, title, right }: {
@@ -289,6 +299,11 @@ function PackageModal({
                 placeholder="500"
                 className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
+              {credits > 0 && (
+                <p className="text-xs text-violet-600 mt-0.5">
+                  ≈ {formatCredits(estConversas(credits))} conversas estimadas
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600">Preço (R$)</label>
@@ -567,6 +582,13 @@ export function AiPlansPanel() {
                     </span>
                   </div>
 
+                  {/* Conversas estimadas — UX pública (sem tokens/custo) */}
+                  {!isEditing && plan.monthly_ai_credits > 0 && (
+                    <span className="text-xs text-violet-600 font-medium whitespace-nowrap">
+                      ≈ {formatCredits(estConversas(plan.monthly_ai_credits))} conv/mês
+                    </span>
+                  )}
+
                   {/* Governança inline — tokens e custo estimados */}
                   {!isEditing && plan.estimated_tokens > 0 && (
                     <div className="flex items-center gap-3 text-xs text-slate-400 tabular-nums">
@@ -682,6 +704,7 @@ export function AiPlansPanel() {
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-4 py-3 text-left   text-xs font-medium text-slate-500 uppercase tracking-wide">Pacote</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Créditos</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Conversas (≈)</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">
                     <span className="flex items-center justify-end gap-1">
                       <TrendingUp size={11} className="text-violet-400" />
@@ -701,6 +724,9 @@ export function AiPlansPanel() {
                     <td className="px-4 py-3 font-medium text-slate-800">{pkg.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                       {formatCredits(pkg.credits)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-xs font-medium">
+                      ~{formatCredits(estConversas(pkg.credits))}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">
                       {formatCredits(pkg.estimated_tokens)}
