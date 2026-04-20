@@ -23,6 +23,7 @@ import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegration
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
 import { useAccessControl } from '../hooks/useAccessControl';
+import Automations from './Automations';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -109,7 +110,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'consumo-ia' | 'planos-uso'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1029,157 +1030,94 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const navItemClass = (tab: string) =>
+    `flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors duration-150 ${
+      activeTab === tab
+        ? 'bg-blue-50 text-blue-700'
+        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+    }`;
+
   return (
-    <div className="space-y-6">
-      <div>
+    <div>
+      {/* Header */}
+      <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">{t('header.title')}</h1>
         <p className="text-slate-600 mt-1">{t('header.subtitle')}</p>
-        
-        {/* Navegação Principal - ABAS SIMPLES */}
-        <div className="border-b border-gray-200 mt-8">
-          <nav className="-mb-px flex space-x-8">
-            {/* Aba Integrações */}
-            <button
-              onClick={() => setActiveTab('integracoes')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'integracoes'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <SettingsIcon className="w-4 h-4" />
-              {t('tabs.integrations')}
-            </button>
-            
-            {/* Aba Usuários */}
-            <button
-              onClick={() => setActiveTab('usuarios')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'usuarios'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              {t('tabs.users')}
-            </button>
-            
-            {/* Aba Tracking Site */}
-            <button
-              onClick={() => setActiveTab('tracking')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'tracking'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              {t('tabs.trackingSite')}
-            </button>
-            
-            {/* Aba Dados da Empresa */}
-            <button
-              onClick={() => setActiveTab('empresas')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'empresas'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Building className="w-4 h-4" />
-              {t('tabs.companyData')}
-            </button>
-            
-            {/* Aba Sistema */}
-            <button
-              onClick={() => setActiveTab('sistema')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'sistema'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <SettingsIcon className="w-4 h-4" />
-              {t('tabs.system')}
-            </button>
-
-            {/* Aba Agentes Globais (somente empresa pai - super_admin) */}
-            {canManageOpenAI && (
-              <button
-                onClick={() => setActiveTab('agentes')}
-                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  activeTab === 'agentes'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Bot className="w-4 h-4" />
-                Agentes Globais
-              </button>
-            )}
-
-            {/* Aba Agentes (configuração por empresa — admin+) */}
-            {canManageConversationalAgents && (
-              <button
-                onClick={() => setActiveTab('agentes-empresa')}
-                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  activeTab === 'agentes-empresa'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Bot className="w-4 h-4" />
-                Agentes
-              </button>
-            )}
-
-            {/* Aba Diretrizes de IA (somente empresa-pai — super_admin) */}
-            {canManageAiGovernance && (
-              <button
-                onClick={() => setActiveTab('ia-governance')}
-                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  activeTab === 'ia-governance'
-                    ? 'border-purple-500 text-purple-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Sparkles className="w-4 h-4" />
-                Diretrizes de IA
-              </button>
-            )}
-
-            {/* Aba Catálogo (produtos/serviços) */}
-            <button
-              onClick={() => setActiveTab('catalogo')}
-              className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                activeTab === 'catalogo'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              Produtos e serviços
-            </button>
-
-            {/* Aba Planos e Uso (empresa filha — todos os membros) */}
-            {company?.company_type === 'client' && (
-              <button
-                onClick={() => setActiveTab('planos-uso')}
-                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  activeTab === 'planos-uso'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <CreditCard className="w-4 h-4" />
-                Planos e Uso
-              </button>
-            )}
-          </nav>
-        </div>
       </div>
 
-      {/* Aba Integrações - NOVA ESTRUTURA */}
+      {/* Layout dois painéis: sidebar vertical + conteúdo */}
+      <div className="flex gap-6 items-start">
+
+        {/* Sidebar de navegação vertical */}
+        <nav className="w-52 shrink-0 flex flex-col gap-0.5 sticky top-4">
+          <button onClick={() => setActiveTab('integracoes')} className={navItemClass('integracoes')}>
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            {t('tabs.integrations')}
+          </button>
+
+          <button onClick={() => setActiveTab('usuarios')} className={navItemClass('usuarios')}>
+            <Users className="w-4 h-4 shrink-0" />
+            {t('tabs.users')}
+          </button>
+
+          {company?.company_type === 'client' && (
+            <button onClick={() => setActiveTab('planos-uso')} className={navItemClass('planos-uso')}>
+              <CreditCard className="w-4 h-4 shrink-0" />
+              Planos e Uso
+            </button>
+          )}
+
+          <button onClick={() => setActiveTab('automacoes')} className={navItemClass('automacoes')}>
+            <Zap className="w-4 h-4 shrink-0" />
+            Automações
+          </button>
+
+          {canManageConversationalAgents && (
+            <button onClick={() => setActiveTab('agentes-empresa')} className={navItemClass('agentes-empresa')}>
+              <Bot className="w-4 h-4 shrink-0" />
+              Agentes de IA
+            </button>
+          )}
+
+          {canManageOpenAI && (
+            <button onClick={() => setActiveTab('agentes')} className={navItemClass('agentes')}>
+              <Bot className="w-4 h-4 shrink-0" />
+              Agentes Globais
+            </button>
+          )}
+
+          {canManageAiGovernance && (
+            <button onClick={() => setActiveTab('ia-governance')} className={navItemClass('ia-governance')}>
+              <Sparkles className="w-4 h-4 shrink-0" />
+              Diretrizes de IA
+            </button>
+          )}
+
+          <button onClick={() => setActiveTab('catalogo')} className={navItemClass('catalogo')}>
+            <Package className="w-4 h-4 shrink-0" />
+            Produtos e Serviços
+          </button>
+
+          <button onClick={() => setActiveTab('sistema')} className={navItemClass('sistema')}>
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            {t('tabs.system')}
+          </button>
+
+          <button onClick={() => setActiveTab('tracking')} className={navItemClass('tracking')}>
+            <FileText className="w-4 h-4 shrink-0" />
+            {t('tabs.trackingSite')}
+          </button>
+
+          <button onClick={() => setActiveTab('empresas')} className={navItemClass('empresas')}>
+            <Building className="w-4 h-4 shrink-0" />
+            {t('tabs.companyData')}
+          </button>
+        </nav>
+
+        {/* Área de conteúdo */}
+        <div className="flex-1 min-w-0 space-y-6">
+
+          {/* Aba Integrações - NOVA ESTRUTURA */}
       {activeTab === 'integracoes' && (
         <div className="space-y-6">
           
@@ -3711,15 +3649,24 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Usuários */}
-      <UserModal
-        isOpen={showUserModal}
-        onClose={handleCloseUserModal}
-        onSave={handleSaveUser}
-        user={editingUser}
-        preSelectedProfileId={selectedTemplateId || undefined} // NOVO: Passar template pré-selecionado
-      />
+          {/* Aba Automações */}
+          {activeTab === 'automacoes' && (
+            <div className="[&>div]:min-h-0 [&>div]:bg-transparent">
+              <Automations />
+            </div>
+          )}
 
+          {/* Modal de Usuários */}
+          <UserModal
+            isOpen={showUserModal}
+            onClose={handleCloseUserModal}
+            onSave={handleSaveUser}
+            user={editingUser}
+            preSelectedProfileId={selectedTemplateId || undefined}
+          />
+
+        </div>{/* end content area */}
+      </div>{/* end flex row */}
     </div>
   );
 };

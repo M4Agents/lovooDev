@@ -21,7 +21,6 @@ import {
   FolderOpen,
   TrendingUp,
   Calendar,
-  Zap,
   BarChart2
 } from 'lucide-react';
 import { Avatar } from './Avatar';
@@ -94,7 +93,6 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
       { path: '/sales-funnel', icon: TrendingUp, label: t('navigation.salesFunnel') },
       { path: '/leads', icon: Users, label: t('navigation.leads') },
       { path: '/calendar', icon: Calendar, label: t('navigation.calendar') },
-      { path: '/automations', icon: Zap, label: t('navigation.automations') },
       ...(canAccessCompanies
         ? [{ path: '/companies', icon: Building2, label: t('navigation.companies') }]
         : []),
