@@ -114,6 +114,9 @@ export const Settings: React.FC = () => {
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
+  // Sub-abas de Planos e Uso
+  const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia'>('plano-atual');
+
   const [integracoesTab, setIntegracoesTab] = useState<
     'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai' | 'elevenlabs'
   >('whatsapp');
@@ -1127,21 +1130,6 @@ export const Settings: React.FC = () => {
               >
                 <Bot className="w-4 h-4" />
                 Agentes
-              </button>
-            )}
-
-            {/* Aba Consumo de IA (somente empresa filha — admin+) */}
-            {canManageConversationalAgents && company?.company_type === 'client' && (
-              <button
-                onClick={() => setActiveTab('consumo-ia')}
-                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
-                  activeTab === 'consumo-ia'
-                    ? 'border-violet-500 text-violet-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-                Consumo de IA
               </button>
             )}
 
@@ -3656,13 +3644,6 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Consumo de IA — dashboard de créditos (somente empresa filha) */}
-      {activeTab === 'consumo-ia' && canManageConversationalAgents && company?.company_type === 'client' && company?.id && (
-        <div className="space-y-6">
-          <AiCreditsPanel companyId={company.id} />
-        </div>
-      )}
-
       {/* Aba Diretrizes de IA — governança global (somente empresa-pai) */}
       {activeTab === 'ia-governance' && canManageAiGovernance && company?.id && (
         <div className="space-y-6">
@@ -3688,8 +3669,45 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Planos e Uso</h2>
             <p className="text-slate-500 text-sm mt-1">Acompanhe o uso do seu plano e solicite mudanças.</p>
+
+            {/* Sub-navegação — só exibe se o usuário tiver acesso ao Consumo de IA */}
+            {canManageConversationalAgents && (
+              <div className="flex gap-1 mt-5 border-b border-slate-200">
+                <button
+                  onClick={() => setPlanUsageSubTab('plano-atual')}
+                  className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
+                    planUsageSubTab === 'plano-atual'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Plano Atual
+                </button>
+                <button
+                  onClick={() => setPlanUsageSubTab('consumo-ia')}
+                  className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
+                    planUsageSubTab === 'consumo-ia'
+                      ? 'border-violet-500 text-violet-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                  Consumo de IA
+                </button>
+              </div>
+            )}
           </div>
-          <PlanUsagePanel companyId={company.id} />
+
+          {/* Painel Plano Atual */}
+          {planUsageSubTab === 'plano-atual' && (
+            <PlanUsagePanel companyId={company.id} />
+          )}
+
+          {/* Painel Consumo de IA */}
+          {planUsageSubTab === 'consumo-ia' && canManageConversationalAgents && (
+            <AiCreditsPanel companyId={company.id} />
+          )}
         </div>
       )}
 
