@@ -52,21 +52,23 @@ interface AiPlan {
 }
 
 interface CreditPackage {
-  id:                string
-  name:              string
-  credits:           number
-  price:             number
-  is_active:         boolean
-  estimated_tokens:  number
-  estimated_ai_cost: number
-  estimated_profit:  number
+  id:                    string
+  name:                  string
+  credits:               number
+  price:                 number
+  is_active:             boolean
+  is_available_for_sale: boolean
+  estimated_tokens:      number
+  estimated_ai_cost:     number
+  estimated_profit:      number
 }
 
 interface PackageForm {
-  name:      string
-  credits:   string
-  price:     string
-  is_active: boolean
+  name:                  string
+  credits:               string
+  price:                 string
+  is_active:             boolean
+  is_available_for_sale: boolean
 }
 
 interface AiPlanCreateForm {
@@ -83,7 +85,7 @@ interface AiPlanEditForm {
   internal_price:  string
 }
 
-const EMPTY_PKG_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true }
+const EMPTY_PKG_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true, is_available_for_sale: true }
 
 const EMPTY_AI_PLAN_FORM: AiPlanCreateForm = {
   name: '', slug: '', monthly_credits: '0', internal_price: '0', is_active: true,
@@ -454,13 +456,28 @@ function PackageModal({
             <GovernancePreview credits={credits} internalPrice={price} />
           )}
 
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={form.is_active}
-              onChange={e => onChange({ is_active: e.target.checked })}
-              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-            />
-            <span className="text-sm text-slate-700">Pacote ativo (visível para compra)</span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.is_active}
+                onChange={e => onChange({ is_active: e.target.checked })}
+                className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <div>
+                <span className="text-sm text-slate-700">Pacote ativo</span>
+                <p className="text-xs text-slate-400">Visível e gerenciável na governança</p>
+              </div>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.is_available_for_sale}
+                onChange={e => onChange({ is_available_for_sale: e.target.checked })}
+                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="text-sm text-slate-700">Disponível para venda</span>
+                <p className="text-xs text-slate-400">Exibido para empresas filhas em "Comprar Créditos"</p>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
@@ -643,14 +660,20 @@ export function AiPlansPanel() {
     try {
       if (packageModal?.mode === 'create') {
         const { error } = await supabase.from('credit_packages').insert({
-          name: packageForm.name.trim(), credits, price, is_active: packageForm.is_active,
+          name: packageForm.name.trim(), credits, price,
+          is_active: packageForm.is_active,
+          is_available_for_sale: packageForm.is_available_for_sale,
         })
         if (error) throw error
         showSuccessPkgs('Pacote criado com sucesso.')
       } else if (packageModal?.pkg) {
         const { error } = await supabase
           .from('credit_packages')
-          .update({ name: packageForm.name.trim(), credits, price, is_active: packageForm.is_active })
+          .update({
+            name: packageForm.name.trim(), credits, price,
+            is_active: packageForm.is_active,
+            is_available_for_sale: packageForm.is_available_for_sale,
+          })
           .eq('id', packageModal.pkg.id)
         if (error) throw error
         showSuccessPkgs('Pacote atualizado com sucesso.')
@@ -684,7 +707,13 @@ export function AiPlansPanel() {
     setErrorPkgForm(null)
     setPackageForm(
       pkg
-        ? { name: pkg.name, credits: String(pkg.credits), price: String(pkg.price), is_active: pkg.is_active }
+        ? {
+            name:                  pkg.name,
+            credits:               String(pkg.credits),
+            price:                 String(pkg.price),
+            is_active:             pkg.is_active,
+            is_available_for_sale: pkg.is_available_for_sale ?? true,
+          }
         : EMPTY_PKG_FORM
     )
     setPackageModal({ mode, pkg })

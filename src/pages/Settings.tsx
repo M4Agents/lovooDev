@@ -18,6 +18,7 @@ import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPa
 import { AiGovernancePanel } from '../components/Settings/AiGovernancePanel';
 import { AiCreditsPanel } from '../components/Settings/AiCreditsPanel';
 import { AiPlansPanel } from '../components/Settings/AiPlansPanel';
+import { CreditPackagesPanel } from '../components/Settings/CreditPackagesPanel';
 import { PlanUsagePanel } from '../components/Settings/PlanUsagePanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
@@ -119,7 +120,7 @@ export const Settings: React.FC = () => {
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
   // Sub-abas de Planos e Uso
-  const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia'>('plano-atual');
+  const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia' | 'comprar-creditos'>('plano-atual');
 
   const [integracoesTab, setIntegracoesTab] = useState<
     'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'
@@ -3599,20 +3600,20 @@ export const Settings: React.FC = () => {
             <h2 className="text-xl font-semibold text-slate-900">Planos e Uso</h2>
             <p className="text-slate-500 text-sm mt-1">Acompanhe o uso do seu plano e solicite mudanças.</p>
 
-            {/* Sub-navegação — só exibe se o usuário tiver acesso ao Consumo de IA */}
-            {canManageConversationalAgents && (
-              <div className="flex gap-1 mt-5 border-b border-slate-200">
-                <button
-                  onClick={() => setPlanUsageSubTab('plano-atual')}
-                  className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
-                    planUsageSubTab === 'plano-atual'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  Plano Atual
-                </button>
+            {/* Sub-navegação */}
+            <div className="flex gap-1 mt-5 border-b border-slate-200">
+              <button
+                onClick={() => setPlanUsageSubTab('plano-atual')}
+                className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
+                  planUsageSubTab === 'plano-atual'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                Plano Atual
+              </button>
+              {canManageConversationalAgents && (
                 <button
                   onClick={() => setPlanUsageSubTab('consumo-ia')}
                   className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
@@ -3624,8 +3625,21 @@ export const Settings: React.FC = () => {
                   <Zap className="w-4 h-4" />
                   Consumo de IA
                 </button>
-              </div>
-            )}
+              )}
+              {canManageConversationalAgents && (
+                <button
+                  onClick={() => setPlanUsageSubTab('comprar-creditos')}
+                  className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
+                    planUsageSubTab === 'comprar-creditos'
+                      ? 'border-emerald-500 text-emerald-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  Comprar Créditos
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Painel Plano Atual */}
@@ -3636,6 +3650,11 @@ export const Settings: React.FC = () => {
           {/* Painel Consumo de IA */}
           {planUsageSubTab === 'consumo-ia' && canManageConversationalAgents && (
             <AiCreditsPanel companyId={company.id} />
+          )}
+
+          {/* Painel Comprar Créditos */}
+          {planUsageSubTab === 'comprar-creditos' && canManageConversationalAgents && (
+            <CreditPackagesPanel companyId={company.id} />
           )}
         </div>
       )}
