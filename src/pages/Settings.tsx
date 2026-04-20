@@ -3599,7 +3599,7 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           <CatalogSettings
             companyId={company.id}
-            companyPlan={company.plan || 'basic'}
+            companyPlan={(company as any).plans?.name || company.plan || 'básico'}
             defaultCurrency={company.default_currency ?? 'BRL'}
             onCompanyFlagChange={() => refreshCompany?.()}
           />

@@ -161,9 +161,10 @@ export const catalogApi = {
     const d = data as Record<string, unknown> | null
     return {
       allowed: Boolean(d?.allowed),
-      plan: d?.plan as string | undefined,
-      company_enabled: d?.company_enabled as boolean | undefined,
-      plan_ok: d?.plan_ok as boolean | undefined,
+      // M5: RPC retorna plan_slug (antes: plan), plan_feature_ok (antes: plan_ok), company_override (antes: company_enabled)
+      plan: (d?.plan_slug ?? d?.plan) as string | undefined,
+      company_enabled: (d?.company_override ?? d?.company_enabled) as boolean | undefined,
+      plan_ok: (d?.plan_feature_ok ?? d?.plan_ok) as boolean | undefined,
     }
   },
 
