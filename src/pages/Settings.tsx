@@ -2773,26 +2773,6 @@ export const Settings: React.FC = () => {
                   />
                 </div>
 
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-2">{t('company.account.title')}</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium text-orange-800">{t('company.account.typeLabel')}</span>
-                      <span className="ml-2 text-orange-700">
-                        {isSaaSAdmin ? t('company.account.types.superAdmin') : t('company.account.types.childCompany')}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="font-medium text-orange-800">{t('company.account.planLabel')}</span>
-                      <span className="ml-2 text-orange-700 capitalize">
-                        {company?.plan === 'basic' ? t('company.account.plans.basic') : 
-                         company?.plan === 'pro' ? t('company.account.plans.pro') : 
-                         company?.plan === 'enterprise' ? t('company.account.plans.enterprise') : 
-                         (company?.plan || t('company.account.plans.undefined'))}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
                 <button
                   type="submit"

@@ -173,7 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (invitedCompanyId && !company) {
         const { data: invitedCompany, error: invitedError } = await supabase
           .from('companies')
-          .select('*')
+          .select('*, plans!plan_id(name, slug)')
           .eq('id', invitedCompanyId)
           .single();
 
@@ -194,7 +194,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isCurrentlyImpersonating && !forceSuper && impersonatedCompanyId) {
         const { data: impersonatedCompany, error: impError } = await supabase
           .from('companies')
-          .select('*')
+          .select('*, plans!plan_id(name, slug)')
           .eq('id', impersonatedCompanyId)
           .single();
 
@@ -220,7 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 3. Fonte única de verdade: company_users JOIN companies
       const { data: companyUserRows, error: cuError } = await supabase
         .from('company_users')
-        .select('role, companies(*)')
+        .select('role, companies(*, plans!plan_id(name, slug))')
         .eq('user_id', userId)
         .eq('is_active', true);
 
@@ -247,7 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPartnerHasNoAssignments(false);
         const { data: allCompanies, error: allError } = await supabase
           .from('companies')
-          .select('*')
+          .select('*, plans!plan_id(name, slug)')
           .order('name');
 
         if (!allError && allCompanies && allCompanies.length > 0) {
@@ -291,7 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const assignedIds = (assignedRows as { company_id: string }[]).map(r => r.company_id);
         const { data: partnerCompanies, error: partnerError } = await supabase
           .from('companies')
-          .select('*')
+          .select('*, plans!plan_id(name, slug)')
           .in('id', assignedIds)
           .order('name');
 
@@ -660,7 +660,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Fetch the company to impersonate
       const { data: targetCompany, error } = await supabase
         .from('companies')
-        .select('*')
+        .select('*, plans!plan_id(name, slug)')
         .eq('id', companyId)
         .single();
 

@@ -237,7 +237,7 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                     <div className="flex min-w-0 items-center gap-1">
                       <Crown className="w-3 h-3 shrink-0 text-yellow-400" />
                       <p className="text-xs text-yellow-400 font-medium capitalize truncate">
-                        {company?.plan || 'Free'}
+                        {(company as any)?.plans?.name ?? company?.plan ?? 'Free'}
                       </p>
                     </div>
                     <LanguageSwitcher variant="expanded" />
