@@ -12,7 +12,6 @@ import {
   Menu,
   X,
   Activity,
-  Building2,
   ChevronLeft,
   User,
   Users,
@@ -35,7 +34,7 @@ type ModernLayoutProps = {
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const { t } = useTranslation('layout');
   const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles, currentRole } = useAuth();
-  const { canAccessCompanies, canAccessPlans, isMaster } = useAccessControl();
+  const { isMaster } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -93,17 +92,11 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
       { path: '/sales-funnel', icon: TrendingUp, label: t('navigation.salesFunnel') },
       { path: '/leads', icon: Users, label: t('navigation.leads') },
       { path: '/calendar', icon: Calendar, label: t('navigation.calendar') },
-      ...(canAccessCompanies
-        ? [{ path: '/companies', icon: Building2, label: t('navigation.companies') }]
-        : []),
       { path: '/media-library', icon: FolderOpen, label: t('navigation.mediaLibrary') },
       { path: '/reports', icon: BarChart2, label: t('navigation.reports') },
-      ...(canAccessPlans
-        ? [{ path: '/plans', icon: Crown, label: t('navigation.plans') }]
-        : []),
       { path: '/settings', icon: Settings, label: t('navigation.settings') },
     ],
-    [t, canAccessCompanies, canAccessPlans]
+    [t]
   );
 
   const isActive = (path: string) => {

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard, Building2, Crown } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -24,6 +24,8 @@ import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsInt
 import { CompanyUser } from '../types/user';
 import { useAccessControl } from '../hooks/useAccessControl';
 import Automations from './Automations';
+import { Companies } from './Companies';
+import { PlansManagement } from './PlansManagement';
 
 // Ícone oficial do WhatsApp
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -39,7 +41,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,7 +113,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes' | 'gestao-empresas' | 'gestao-planos' | 'integracoes-globais'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -120,14 +122,16 @@ export const Settings: React.FC = () => {
   const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia'>('plano-atual');
 
   const [integracoesTab, setIntegracoesTab] = useState<
-    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai' | 'elevenlabs'
+    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'
   >('whatsapp');
+
+  const [globalIntegracoesTab, setGlobalIntegracoesTab] = useState<'openai' | 'elevenlabs'>('openai');
 
   // Detectar parâmetro tab na URL ou state de navegação para ativar aba correta
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     const stateTab = (location.state as any)?.activeTab as string | undefined;
-    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes'] as const;
+    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais'] as const;
     if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
       setActiveTab(stateTab as typeof validTabs[number]);
     } else if (tabParam === 'tracking') {
@@ -140,19 +144,12 @@ export const Settings: React.FC = () => {
     if (integration !== 'openai' && integration !== 'elevenlabs') return;
     if (authLoading || isLoadingCompany) return;
     if (canManageOpenAI) {
-      setActiveTab('integracoes');
-      setIntegracoesTab(integration === 'elevenlabs' ? 'elevenlabs' : 'openai');
+      setActiveTab('integracoes-globais');
+      setGlobalIntegracoesTab(integration === 'elevenlabs' ? 'elevenlabs' : 'openai');
     } else {
       navigate('/settings', { replace: true });
     }
   }, [searchParams, authLoading, isLoadingCompany, canManageOpenAI, navigate]);
-
-  useEffect(() => {
-    if (authLoading || isLoadingCompany) return;
-    if ((integracoesTab === 'openai' || integracoesTab === 'elevenlabs') && !canManageOpenAI) {
-      setIntegracoesTab('whatsapp');
-    }
-  }, [integracoesTab, canManageOpenAI, authLoading, isLoadingCompany]);
 
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
@@ -1084,20 +1081,6 @@ export const Settings: React.FC = () => {
             </button>
           )}
 
-          {canManageOpenAI && (
-            <button onClick={() => setActiveTab('agentes')} className={navItemClass('agentes')}>
-              <Bot className="w-4 h-4 shrink-0" />
-              Agentes Globais
-            </button>
-          )}
-
-          {canManageAiGovernance && (
-            <button onClick={() => setActiveTab('ia-governance')} className={navItemClass('ia-governance')}>
-              <Sparkles className="w-4 h-4 shrink-0" />
-              Diretrizes de IA
-            </button>
-          )}
-
           <button onClick={() => setActiveTab('catalogo')} className={navItemClass('catalogo')}>
             <Package className="w-4 h-4 shrink-0" />
             Produtos e Serviços
@@ -1117,6 +1100,50 @@ export const Settings: React.FC = () => {
             <Building className="w-4 h-4 shrink-0" />
             {t('tabs.companyData')}
           </button>
+
+          {/* Separador exclusivo da empresa pai */}
+          {(canAccessCompanies || canAccessPlans || canManageOpenAI || canManageAiGovernance) && (
+            <div className="mt-4 mb-1 px-3">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Governância Lovoo
+              </p>
+            </div>
+          )}
+
+          {canAccessCompanies && (
+            <button onClick={() => setActiveTab('gestao-empresas')} className={navItemClass('gestao-empresas')}>
+              <Building2 className="w-4 h-4 shrink-0" />
+              Empresas
+            </button>
+          )}
+
+          {canAccessPlans && (
+            <button onClick={() => setActiveTab('gestao-planos')} className={navItemClass('gestao-planos')}>
+              <Crown className="w-4 h-4 shrink-0" />
+              Planos
+            </button>
+          )}
+
+          {canManageOpenAI && (
+            <button onClick={() => setActiveTab('agentes')} className={navItemClass('agentes')}>
+              <Bot className="w-4 h-4 shrink-0" />
+              Agentes Globais
+            </button>
+          )}
+
+          {canManageAiGovernance && (
+            <button onClick={() => setActiveTab('ia-governance')} className={navItemClass('ia-governance')}>
+              <Sparkles className="w-4 h-4 shrink-0" />
+              Diretrizes de IA
+            </button>
+          )}
+
+          {canManageOpenAI && (
+            <button onClick={() => setActiveTab('integracoes-globais')} className={navItemClass('integracoes-globais')}>
+              <Globe className="w-4 h-4 shrink-0" />
+              Integrações Globais
+            </button>
+          )}
         </nav>
 
         {/* Área de conteúdo */}
@@ -1127,11 +1154,7 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           
           {/* Sub-navegação das Integrações Moderna - OTIMIZADA */}
-          <div
-            className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
-              canManageOpenAI ? 'lg:grid-cols-6' : 'lg:grid-cols-4'
-            }`}
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* WhatsApp Card - COMPACTO */}
             <div 
               onClick={() => setIntegracoesTab('whatsapp')}
@@ -1248,73 +1271,6 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
-            {canManageOpenAI && (
-              <div
-                onClick={() => setIntegracoesTab('openai')}
-                className="group cursor-pointer"
-              >
-                <div
-                  className={`bg-gradient-to-br from-slate-50 to-violet-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-                    integracoesTab === 'openai'
-                      ? 'border-violet-400 shadow-md scale-[1.02]'
-                      : 'border-transparent hover:border-violet-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
-                        integracoesTab === 'openai' ? 'bg-violet-600' : 'bg-violet-500'
-                      }`}
-                    >
-                      <Sparkles className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.openai')}</h3>
-                        <span className="px-2 py-0.5 bg-violet-100 text-violet-800 rounded text-xs font-medium">
-                          {t('integrations.cards.openai.badge')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">{t('integrations.cards.openai.description')}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {canManageOpenAI && (
-              <div
-                onClick={() => setIntegracoesTab('elevenlabs')}
-                className="group cursor-pointer"
-              >
-                <div
-                  className={`bg-gradient-to-br from-slate-50 to-indigo-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-                    integracoesTab === 'elevenlabs'
-                      ? 'border-indigo-400 shadow-md scale-[1.02]'
-                      : 'border-transparent hover:border-indigo-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
-                        integracoesTab === 'elevenlabs' ? 'bg-indigo-600' : 'bg-indigo-500'
-                      }`}
-                    >
-                      <Mic2 className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-base font-semibold text-slate-900">{t('integrationsNav.elevenlabs')}</h3>
-                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-medium">
-                          {t('integrations.cards.elevenlabs.badge')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">{t('integrations.cards.elevenlabs.description')}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
           
           {/* Conteúdo das Sub-abas */}
@@ -2411,10 +2367,40 @@ export const Settings: React.FC = () => {
             </div>
           )}
 
-          {integracoesTab === 'openai' && canManageOpenAI && <OpenAIIntegrationPanel />}
+        </div>
+      )}
 
-          {integracoesTab === 'elevenlabs' && canManageOpenAI && <ElevenLabsIntegrationPanel />}
+      {/* Governância Lovoo — Integrações Globais (OpenAI + ElevenLabs) */}
+      {activeTab === 'integracoes-globais' && canManageOpenAI && (
+        <div className="space-y-6">
+          {/* Sub-navegação */}
+          <div className="flex gap-2 border-b border-slate-200">
+            <button
+              onClick={() => setGlobalIntegracoesTab('openai')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 ${
+                globalIntegracoesTab === 'openai'
+                  ? 'border-violet-500 text-violet-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              {t('integrationsNav.openai')}
+            </button>
+            <button
+              onClick={() => setGlobalIntegracoesTab('elevenlabs')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 ${
+                globalIntegracoesTab === 'elevenlabs'
+                  ? 'border-indigo-500 text-indigo-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Mic2 className="w-4 h-4" />
+              {t('integrationsNav.elevenlabs')}
+            </button>
+          </div>
 
+          {globalIntegracoesTab === 'openai' && <OpenAIIntegrationPanel />}
+          {globalIntegracoesTab === 'elevenlabs' && <ElevenLabsIntegrationPanel />}
         </div>
       )}
 
@@ -3659,6 +3645,16 @@ export const Settings: React.FC = () => {
             <div className="[&>div]:min-h-0 [&>div]:bg-transparent">
               <Automations />
             </div>
+          )}
+
+          {/* Governância Lovoo — Gestão de Empresas */}
+          {activeTab === 'gestao-empresas' && canAccessCompanies && (
+            <Companies />
+          )}
+
+          {/* Governância Lovoo — Gestão de Planos */}
+          {activeTab === 'gestao-planos' && canAccessPlans && (
+            <PlansManagement />
           )}
 
           {/* Modal de Usuários */}
