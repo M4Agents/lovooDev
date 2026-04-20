@@ -95,6 +95,46 @@ async function getLeadStats(svc, companyId, maxLeads) {
   return { current, over_plan: overPlan, max: maxLeads, proximity_pct: pct, alert_level: alertLevel }
 }
 
+/**
+ * Calcula estatísticas de um recurso simples (count de tabela) para exibição no frontend.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} svc
+ * @param {string} table
+ * @param {string} companyId
+ * @param {number|null} maxAllowed - null = ilimitado
+ * @param {Object} extraFilters - filtros adicionais (ex: { is_active: true })
+ * @returns {Promise<{ current: number|null, max: number|null, pct: number|null, alert_level: string }>}
+ */
+async function getResourceStats(svc, table, companyId, maxAllowed, extraFilters = {}) {
+  let query = svc.from(table).select('*', { count: 'exact', head: true }).eq('company_id', companyId)
+
+  for (const [key, value] of Object.entries(extraFilters)) {
+    if (value === null) {
+      query = query.is(key, null)
+    } else {
+      query = query.eq(key, value)
+    }
+  }
+
+  const { count, error } = await query
+
+  if (error) {
+    console.warn(`[GET /api/plans/limits] Erro ao contar ${table}:`, error.message)
+    return { current: null, max: maxAllowed, pct: null, alert_level: 'ok' }
+  }
+
+  const current = count ?? 0
+
+  if (maxAllowed === null) {
+    return { current, max: null, pct: null, alert_level: 'unlimited' }
+  }
+
+  const pct        = maxAllowed > 0 ? Math.round((current / maxAllowed) * 100 * 10) / 10 : 100
+  const alertLevel = pct >= 100 ? 'critical' : pct >= 90 ? 'danger' : pct >= 80 ? 'warning' : 'ok'
+
+  return { current, max: maxAllowed, pct, alert_level: alertLevel }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método não permitido' })
@@ -114,10 +154,14 @@ export default async function handler(req, res) {
   // ── 2. Buscar limites do plano ────────────────────────────────────────────
 
   try {
-    const limits          = await getPlanLimits(svc, effectiveCompanyId)
-    const [leadStatsReal, storageStats] = await Promise.all([
+    const limits = await getPlanLimits(svc, effectiveCompanyId)
+
+    const [leadStatsReal, storageStats, userStats, funnelStats, autoFlowStats] = await Promise.all([
       getLeadStats(svc, effectiveCompanyId, limits.max_leads),
       getStorageStats(svc, effectiveCompanyId, limits.storage_mb),
+      getResourceStats(svc, 'company_users',   effectiveCompanyId, limits.max_users,         { is_active: true }),
+      getResourceStats(svc, 'sales_funnels',   effectiveCompanyId, limits.max_funnels,       { is_active: true }),
+      getResourceStats(svc, 'automation_flows', effectiveCompanyId, limits.max_automation_flows, { is_active: true }),
     ])
 
     // Nunca retornar campos de governança interna (internal_price está em ai_plans)
@@ -149,11 +193,14 @@ export default async function handler(req, res) {
         storage_mb:                        limits.storage_mb,
       },
       features:   limits.features,
-      // Estatísticas de leads para alertas de proximidade e modal de "leads fora do plano"
-      // alert_level: 'unlimited' | 'ok' | 'warning' (≥80%) | 'danger' (≥90%) | 'critical' (≥100% ou over_plan > 0)
+      // Estatísticas de leads (com detecção de leads fora do plano)
       lead_stats: leadStatsReal,
-      // Estatísticas de storage: used_mb, max_mb (null = ilimitado), pct (null = ilimitado)
+      // Estatísticas de storage
       storage_stats: storageStats,
+      // Estatísticas de outros recursos para a tela "Planos e Uso"
+      user_stats:      userStats,
+      funnel_stats:    funnelStats,
+      auto_flow_stats: autoFlowStats,
     })
   } catch (err) {
     console.error('[GET /api/plans/limits] Erro:', err)

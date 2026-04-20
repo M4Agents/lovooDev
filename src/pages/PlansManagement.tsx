@@ -15,9 +15,29 @@ import {
   EyeOff,
   Cpu,
   Zap,
+  Globe,
+  EyeOff as EyeOffIcon,
+  CheckCircle,
+  Clock,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
+
+interface PlanChangeRequest {
+  id: string;
+  company_id: string;
+  company_name: string;
+  from_plan_id: string | null;
+  from_plan_name: string | null;
+  to_plan_id: string;
+  to_plan_name: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+}
 
 interface Plan {
   id: string;
@@ -29,6 +49,7 @@ interface Plan {
   billing_cycle: string;
   is_active: boolean;
   is_popular: boolean;
+  is_publicly_listed: boolean;
   sort_order: number;
   // Limites CRM (NULL = ilimitado)
   max_whatsapp_instances: number | null;
@@ -71,6 +92,7 @@ interface PlanFormData {
   billing_cycle: string;
   is_active: boolean;
   is_popular: boolean;
+  is_publicly_listed: boolean;
   sort_order: number;
   // Limites CRM
   max_whatsapp_instances: string;
@@ -92,6 +114,8 @@ interface PlanFormData {
   advanced_debug_logs_enabled: boolean;
   // Plano de IA
   ai_plan_id: string;
+  // Visibilidade
+  is_publicly_listed: boolean;
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -114,6 +138,7 @@ const EMPTY_FORM: PlanFormData = {
   billing_cycle: 'monthly',
   is_active: true,
   is_popular: false,
+  is_publicly_listed: false,
   sort_order: 0,
   max_whatsapp_instances: '',
   max_leads: '',
@@ -183,6 +208,12 @@ export const PlansManagement: React.FC = () => {
   const [error, setError]       = useState<string | null>(null);
   const [formData, setFormData] = useState<PlanFormData>(EMPTY_FORM);
 
+  // Solicitações de mudança de plano
+  const [requests, setRequests]         = useState<PlanChangeRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+
   // ── Carregar dados ──────────────────────────────────────────────────────────
 
   const loadPlans = useCallback(async () => {
@@ -250,9 +281,10 @@ export const PlansManagement: React.FC = () => {
       price:         plan.price != null ? String(plan.price) : '',
       currency:      plan.currency,
       billing_cycle: plan.billing_cycle,
-      is_active:     plan.is_active,
-      is_popular:    plan.is_popular,
-      sort_order:    plan.sort_order,
+      is_active:            plan.is_active,
+      is_popular:           plan.is_popular,
+      is_publicly_listed:   plan.is_publicly_listed,
+      sort_order:           plan.sort_order,
       max_whatsapp_instances:            plan.max_whatsapp_instances != null ? String(plan.max_whatsapp_instances) : '',
       max_leads:                         plan.max_leads != null ? String(plan.max_leads) : '',
       max_users:                         plan.max_users != null ? String(plan.max_users) : '',
@@ -349,6 +381,17 @@ export const PlansManagement: React.FC = () => {
           if (linkError) throw new Error(linkError.message);
           if (!linkData?.success) throw new Error(linkData?.error || 'Erro ao vincular plano de IA');
         }
+
+        // Persistir is_publicly_listed via RPC dedicada (campo não coberto pelo update_plan genérico)
+        const publicListedChanged = !editingPlan || editingPlan.is_publicly_listed !== formData.is_publicly_listed;
+        if (publicListedChanged) {
+          const { data: plData, error: plError } = await supabase.rpc('set_plan_publicly_listed', {
+            p_plan_id:            planId,
+            p_is_publicly_listed: formData.is_publicly_listed,
+          });
+          if (plError) throw new Error(plError.message);
+          if (!plData?.success) throw new Error(plData?.error || 'Erro ao atualizar visibilidade do plano');
+        }
       }
 
       closeModal();
@@ -357,6 +400,64 @@ export const PlansManagement: React.FC = () => {
       setError(err instanceof Error ? err.message : t('errors.save'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Solicitações de mudança ──────────────────────────────────────────────────
+
+  const loadRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_plan_change_requests_admin', {
+        p_status: 'pending',
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      setRequests(data ?? []);
+    } catch {
+      // Não bloqueia a tela principal
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSaaSAdmin && showRequests) {
+      loadRequests();
+    }
+  }, [isSaaSAdmin, showRequests, loadRequests]);
+
+  const approveRequest = async (requestId: string) => {
+    setProcessingRequest(requestId);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('approve_plan_change_request', {
+        p_request_id: requestId,
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      if (!data?.success) throw new Error(data?.error || 'Erro ao aprovar');
+      await loadRequests();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao aprovar solicitação');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const rejectRequest = async (requestId: string) => {
+    const notes = window.prompt('Motivo da rejeição (opcional):');
+    if (notes === null) return; // Cancelado
+    setProcessingRequest(requestId);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('reject_plan_change_request', {
+        p_request_id: requestId,
+        p_notes:      notes || null,
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      if (!data?.success) throw new Error(data?.error || 'Erro ao rejeitar');
+      await loadRequests();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao rejeitar solicitação');
+    } finally {
+      setProcessingRequest(null);
     }
   };
 
@@ -462,10 +563,15 @@ export const PlansManagement: React.FC = () => {
               )}
 
               {/* Status */}
-              <div className="absolute top-3 right-3" title={plan.is_active ? 'Ativo' : 'Inativo'}>
+              <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                {plan.is_publicly_listed && (
+                  <span title="Disponível para venda" className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
+                    <Globe className="w-3 h-3" /> Público
+                  </span>
+                )}
                 {plan.is_active
-                  ? <Eye className="w-4 h-4 text-green-500" />
-                  : <EyeOff className="w-4 h-4 text-slate-400" />
+                  ? <Eye className="w-4 h-4 text-green-500" title="Ativo" />
+                  : <EyeOff className="w-4 h-4 text-slate-400" title="Inativo" />
                 }
               </div>
 
@@ -538,6 +644,71 @@ export const PlansManagement: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Solicitações de mudança de plano */}
+      <div className="bg-white rounded-xl border border-slate-200">
+        <button
+          onClick={() => setShowRequests(v => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors rounded-xl"
+        >
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-amber-500" />
+            <span className="font-semibold text-slate-900">Solicitações de Mudança de Plano</span>
+            {requests.length > 0 && (
+              <span className="bg-amber-100 text-amber-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                {requests.length}
+              </span>
+            )}
+          </div>
+          {showRequests ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {showRequests && (
+          <div className="border-t border-slate-200 px-6 py-4">
+            {requestsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+              </div>
+            ) : requests.length === 0 ? (
+              <p className="text-slate-500 text-sm text-center py-6">Nenhuma solicitação pendente.</p>
+            ) : (
+              <div className="space-y-3">
+                {requests.map(req => (
+                  <div key={req.id} className="flex items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{req.company_name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {req.from_plan_name ?? 'Sem plano'} → <strong>{req.to_plan_name}</strong>
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {new Date(req.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => approveRequest(req.id)}
+                        disabled={processingRequest === req.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Aprovar
+                      </button>
+                      <button
+                        onClick={() => rejectRequest(req.id)}
+                        disabled={processingRequest === req.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Rejeitar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Modal */}
       {showModal && (
@@ -724,6 +895,15 @@ export const PlansManagement: React.FC = () => {
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
                       Destacado (Popular)
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 self-end mb-1">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_publicly_listed}
+                        onChange={e => setField('is_publicly_listed', e.target.checked)}
+                        className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                      Disponível para venda (auto-serviço)
                     </label>
                   </div>
                 </section>

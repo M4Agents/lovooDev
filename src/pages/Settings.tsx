@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -18,6 +18,7 @@ import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPa
 import { AiGovernancePanel } from '../components/Settings/AiGovernancePanel';
 import { AiCreditsPanel } from '../components/Settings/AiCreditsPanel';
 import { AiPlansPanel } from '../components/Settings/AiPlansPanel';
+import { PlanUsagePanel } from '../components/Settings/PlanUsagePanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { CompanyUser } from '../types/user';
@@ -108,7 +109,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'consumo-ia'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'consumo-ia' | 'planos-uso'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -1171,6 +1172,21 @@ export const Settings: React.FC = () => {
               <Package className="w-4 h-4" />
               Produtos e serviços
             </button>
+
+            {/* Aba Planos e Uso (empresa filha — todos os membros) */}
+            {company?.company_type === 'client' && (
+              <button
+                onClick={() => setActiveTab('planos-uso')}
+                className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'planos-uso'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                Planos e Uso
+              </button>
+            )}
           </nav>
         </div>
       </div>
@@ -3663,6 +3679,17 @@ export const Settings: React.FC = () => {
             defaultCurrency={company.default_currency ?? 'BRL'}
             onCompanyFlagChange={() => refreshCompany?.()}
           />
+        </div>
+      )}
+
+      {/* Aba Planos e Uso (empresa filha) */}
+      {activeTab === 'planos-uso' && company?.company_type === 'client' && company?.id && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Planos e Uso</h2>
+            <p className="text-slate-500 text-sm mt-1">Acompanhe o uso do seu plano e solicite mudanças.</p>
+          </div>
+          <PlanUsagePanel companyId={company.id} />
         </div>
       )}
 
