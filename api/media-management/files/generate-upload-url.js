@@ -6,6 +6,11 @@
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
+import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
+
+const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co'
+const SUPABASE_SVC_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 // Configuração AWS
 const AWS_REGION = process.env.AWS_REGION || 'sa-east-1'
@@ -46,12 +51,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { company_id, filename, content_type } = req.query
+    const { company_id, filename, content_type, file_size } = req.query
 
     console.log('🔗 Gerando presigned URL para upload:', { 
       company_id, 
       filename, 
-      content_type
+      content_type,
+      file_size,
     })
 
     // Validações
@@ -60,6 +66,24 @@ export default async function handler(req, res) {
         error: 'Parâmetros obrigatórios',
         message: 'company_id, filename e content_type são necessários'
       })
+    }
+
+    // Verificar limite de storage antes de emitir a URL (primeira linha de defesa)
+    // file_size é opcional para backward compatibility; se ausente, só save-s3-metadata bloqueia
+    const fileSizeBytes = file_size ? parseInt(file_size, 10) : null
+    if (fileSizeBytes !== null && !isNaN(fileSizeBytes) && SUPABASE_SVC_KEY) {
+      try {
+        const svc = createClient(SUPABASE_URL, SUPABASE_SVC_KEY, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+        await assertStorageLimit(svc, company_id, fileSizeBytes)
+      } catch (err) {
+        if (err.isPlanError) {
+          return res.status(err.httpStatus).json(err.data)
+        }
+        // Qualquer outro erro: fail-open (não bloquear geração de URL por erro de infraestrutura)
+        console.error('[generate-upload-url] Erro ao verificar storage:', err.message)
+      }
     }
 
     // Gerar estrutura de pastas (mesma do upload atual)

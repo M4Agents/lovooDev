@@ -7,6 +7,7 @@
 
 import formidable from 'formidable'
 import { createClient } from '@supabase/supabase-js'
+import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
 
 // Usar configuração hardcoded do projeto (mesma do src/lib/supabase.ts)
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co'
@@ -59,6 +60,16 @@ export default async function handler(req, res) {
 
     // Usar service role key para bypassar RLS
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Verificar limite de storage (segunda linha de defesa para o fluxo presigned URL)
+    try {
+      await assertStorageLimit(supabase, company_id, file_size || 0)
+    } catch (err) {
+      if (err.isPlanError) {
+        return res.status(err.httpStatus).json(err.data)
+      }
+      throw err
+    }
 
     // Bloquear upload direto em pastas de sistema
     if (folder_id) {

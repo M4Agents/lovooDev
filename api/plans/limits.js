@@ -24,6 +24,34 @@ import { resolveCreditsContext } from '../lib/credits/authContext.js'
 import { getPlanLimits }         from '../lib/plans/limitChecker.js'
 
 /**
+ * Calcula estatísticas de storage para exibição no frontend.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} svc
+ * @param {string} companyId
+ * @param {number|null} maxMb - null = ilimitado
+ * @returns {Promise<{ used_mb: number|null, max_mb: number|null, pct: number|null }>}
+ */
+async function getStorageStats(svc, companyId, maxMb) {
+  const { data, error } = await svc.rpc('get_company_storage_used_mb', {
+    p_company_id: companyId,
+  })
+
+  if (error) {
+    console.warn('[GET /api/plans/limits] Erro ao calcular storage:', error.message)
+    return { used_mb: null, max_mb: maxMb, pct: null }
+  }
+
+  const usedMb = Math.round((parseFloat(data) || 0) * 100) / 100
+
+  if (maxMb === null) {
+    return { used_mb: usedMb, max_mb: null, pct: null }
+  }
+
+  const pct = maxMb > 0 ? Math.round((usedMb / maxMb) * 100 * 10) / 10 : 100
+  return { used_mb: usedMb, max_mb: maxMb, pct }
+}
+
+/**
  * Calcula estatísticas de leads para alertas de proximidade de plano.
  *
  * @param {import('@supabase/supabase-js').SupabaseClient} svc
@@ -86,8 +114,11 @@ export default async function handler(req, res) {
   // ── 2. Buscar limites do plano ────────────────────────────────────────────
 
   try {
-    const limits        = await getPlanLimits(svc, effectiveCompanyId)
-    const leadStatsReal = await getLeadStats(svc, effectiveCompanyId, limits.max_leads)
+    const limits          = await getPlanLimits(svc, effectiveCompanyId)
+    const [leadStatsReal, storageStats] = await Promise.all([
+      getLeadStats(svc, effectiveCompanyId, limits.max_leads),
+      getStorageStats(svc, effectiveCompanyId, limits.storage_mb),
+    ])
 
     // Nunca retornar campos de governança interna (internal_price está em ai_plans)
     // A resposta é segura para exibição ao frontend da empresa filha.
@@ -121,6 +152,8 @@ export default async function handler(req, res) {
       // Estatísticas de leads para alertas de proximidade e modal de "leads fora do plano"
       // alert_level: 'unlimited' | 'ok' | 'warning' (≥80%) | 'danger' (≥90%) | 'critical' (≥100% ou over_plan > 0)
       lead_stats: leadStatsReal,
+      // Estatísticas de storage: used_mb, max_mb (null = ilimitado), pct (null = ilimitado)
+      storage_stats: storageStats,
     })
   } catch (err) {
     console.error('[GET /api/plans/limits] Erro:', err)

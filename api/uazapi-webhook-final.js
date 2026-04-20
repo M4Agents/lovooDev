@@ -649,6 +649,26 @@ async function processMessage(payload) {
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;
 
+    // Contabilizar tamanho de mídia inbound para cálculo de storage da empresa.
+    // Fire-and-forget: NUNCA bloqueia, NUNCA lança exceção, NUNCA impacta performance.
+    // media_file_size é usado pelo get_company_storage_used_mb para calcular uso de storage.
+    if (savedMessageId && isMediaMessage) {
+      const rawFileLength = message.content?.fileLength ?? message.content?.fileLenght ?? null
+      const mediaFileSizeBytes = rawFileLength ? parseInt(rawFileLength, 10) : NaN
+      if (!isNaN(mediaFileSizeBytes) && mediaFileSizeBytes > 0) {
+        supabase
+          .from('chat_messages')
+          .update({ media_file_size: mediaFileSizeBytes })
+          .eq('id', savedMessageId)
+          .then(({ error: updateErr }) => {
+            if (updateErr) {
+              console.warn('[WEBHOOK] Falha ao registrar media_file_size (non-fatal):', updateErr.message)
+            }
+          })
+          .catch(() => {}) // erros silenciados — contabilização é best-effort
+      }
+    }
+
     // =====================================================
     // IMPORTANTE: Memória conversacional NÃO pode ser escrita por webhooks.
     // Apenas o agentExecutor (via LLM) pode atualizar chat_conversations.memory.

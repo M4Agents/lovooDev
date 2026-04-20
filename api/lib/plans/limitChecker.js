@@ -267,6 +267,62 @@ export async function assertPlanFeature(svc, companyId, featureKey) {
   assertFeatureFromLoaded(limits, featureKey)
 }
 
+// =============================================================================
+// STORAGE — assertStorageLimit
+// =============================================================================
+
+/**
+ * Verifica se um novo upload vai ultrapassar o limite de storage do plano.
+ * Hard block para uploads deliberados (biblioteca, presigned URL, etc.).
+ *
+ * Comportamento:
+ *   - plans.storage_mb = NULL → ilimitado, sem verificação
+ *   - Erro na query de storage → fail-CLOSED: lança PlanEnforcementError('plan_validation_failed')
+ *   - total_after > storage_mb → lança PlanEnforcementError('plan_storage_limit_exceeded')
+ *
+ * Cálculo de storage via RPC get_company_storage_used_mb:
+ *   lead_media_unified + company_media_library + chat_messages.media_file_size
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} svc - client com service_role
+ * @param {string} companyId    - UUID da empresa
+ * @param {number} fileSizeBytes - tamanho do arquivo em BYTES
+ * @throws {PlanEnforcementError} se o upload ultrapassar o limite
+ */
+export async function assertStorageLimit(svc, companyId, fileSizeBytes) {
+  const limits = await getPlanLimits(svc, companyId)
+  const maxMb  = limits.storage_mb ?? null
+
+  // NULL = ilimitado — sai imediatamente sem consultar banco
+  if (maxMb === null) return
+
+  const { data, error } = await svc.rpc('get_company_storage_used_mb', {
+    p_company_id: companyId,
+  })
+
+  if (error) {
+    // Fail-closed: falha na validação de storage BLOQUEIA o upload deliberado.
+    // Permitir um upload sem confirmar o limite viola a garantia do plano.
+    // O usuário pode tentar novamente; instabilidade pontual não abre bypass.
+    console.error('[assertStorageLimit] Erro ao calcular storage usado — bloqueando upload:', error.message)
+    throw new PlanEnforcementError({
+      error:   'plan_validation_failed',
+      message: 'Não foi possível validar o armazenamento do seu plano. Tente novamente em instantes.',
+    })
+  }
+
+  const usedMb     = parseFloat(data) || 0
+  const incomingMb = fileSizeBytes / 1048576
+
+  if (usedMb + incomingMb > maxMb) {
+    throw new PlanEnforcementError({
+      error:           'plan_storage_limit_exceeded',
+      max_allowed_mb:  maxMb,
+      current_used_mb: Math.round(usedMb * 100) / 100,
+      incoming_mb:     Math.round(incomingMb * 100) / 100,
+    })
+  }
+}
+
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
 function buildEmptyLimits() {

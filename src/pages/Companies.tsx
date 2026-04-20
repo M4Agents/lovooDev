@@ -162,8 +162,11 @@ export const Companies: React.FC = () => {
     }
   };
 
-  const planLabel = (plan: string) => {
-    switch (plan) {
+  const planLabel = (comp: Company & { plans?: { name: string; slug: string } | null }) => {
+    // Prioridade: nome real do plano via plan_id (join com plans)
+    if ((comp as any).plans?.name) return (comp as any).plans.name;
+    // Fallback: mapeamento do campo legado
+    switch (comp.plan) {
       case 'basic':
         return t('planLabels.basic');
       case 'pro':
@@ -171,7 +174,7 @@ export const Companies: React.FC = () => {
       case 'enterprise':
         return t('planLabels.enterprise');
       default:
-        return plan;
+        return comp.plan ?? '—';
     }
   };
 
@@ -228,7 +231,7 @@ export const Companies: React.FC = () => {
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Users className="w-4 h-4" />
-                <span>{t('card.plan', { plan: planLabel(comp.plan) })}</span>
+                <span>{t('card.plan', { plan: planLabel(comp as any) })}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <TrendingUp className="w-4 h-4" />

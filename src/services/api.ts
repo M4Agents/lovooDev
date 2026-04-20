@@ -342,7 +342,7 @@ export const api = {
     // Para super admin ver TODAS as empresas (pai + filhas)
     const { data, error } = await supabase
       .from('companies')
-      .select('*')
+      .select('*, plans!plan_id(name, slug)')
       .order('company_type', { ascending: true })
       .order('name', { ascending: true });
 

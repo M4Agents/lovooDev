@@ -7,6 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import formidable from 'formidable'
 import fs from 'fs'
+import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE
@@ -313,6 +314,20 @@ export default async function handler(req, res) {
       } catch (error) {
         console.log('⚠️ Erro ao buscar pasta, usando pasta raiz:', error.message)
       }
+    }
+
+    // Calcular tamanho total dos arquivos recebidos antes de iniciar uploads
+    const allFiles = Object.values(files).flat()
+    const totalSizeBytes = allFiles.reduce((sum, f) => sum + (f.size || 0), 0)
+
+    // Verificar limite de storage antes de qualquer upload
+    try {
+      await assertStorageLimit(supabase, companyId, totalSizeBytes)
+    } catch (err) {
+      if (err.isPlanError) {
+        return res.status(err.httpStatus).json(err.data)
+      }
+      throw err
     }
 
     const uploadResults = []

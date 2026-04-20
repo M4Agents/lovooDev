@@ -7,6 +7,7 @@
 // Data: 2026-02-24 08:57
 
 import { createClient } from '@supabase/supabase-js'
+import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
 
 export default async function handler(req, res) {
   // CORS headers
@@ -78,6 +79,16 @@ export default async function handler(req, res) {
         persistSession: false
       }
     })
+
+    // Verificar limite de storage antes de registrar o arquivo
+    try {
+      await assertStorageLimit(supabase, company_id, file_size || 0)
+    } catch (err) {
+      if (err.isPlanError) {
+        return res.status(err.httpStatus).json(err.data)
+      }
+      throw err
+    }
 
     // Inserir metadados no banco
     console.log('💾 Inserindo metadados no banco...')

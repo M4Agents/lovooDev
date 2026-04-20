@@ -8,6 +8,7 @@ import formidable from 'formidable'
 import { uploadToTemporal } from '../../../services/aws/s3Storage.js'
 import { createClient } from '@supabase/supabase-js'
 import AWS from 'aws-sdk'
+import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE
@@ -151,7 +152,17 @@ export default async function handler(req, res) {
 
     // Pegar primeiro arquivo
     const file = Array.isArray(files[fileKeys[0]]) ? files[fileKeys[0]][0] : files[fileKeys[0]]
-    
+
+    // Verificar limite de storage antes do upload
+    try {
+      await assertStorageLimit(supabase, companyId, file.size || 0)
+    } catch (err) {
+      if (err.isPlanError) {
+        return res.status(err.httpStatus).json(err.data)
+      }
+      throw err
+    }
+
     // Upload para estrutura temporal
     let uploadResult = await uploadToTemporal(file, companyId)
     

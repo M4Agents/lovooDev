@@ -193,6 +193,8 @@ async function processMessage(payload) {
 
     // 🎬 PROCESSAMENTO DE MÍDIA ANTES DO RPC - CORREÇÃO CRÍTICA
     let finalMediaUrl = null;
+    // Tamanho da mídia em bytes — populado durante o processamento S3 ou via payload
+    let detectedMediaFileSizeBytes = null;
     
     if (isMediaMessage) {
       console.error('🎥 PROCESSAMENTO DE MÍDIA INICIADO:', { rawMessageType, rawType, rawMediaType });
@@ -224,6 +226,7 @@ async function processMessage(payload) {
                 const mediaResponse = await fetch(uazapiData.fileURL);
                 if (mediaResponse.ok) {
                   const mediaBuffer = Buffer.from(await mediaResponse.arrayBuffer());
+                  detectedMediaFileSizeBytes = mediaBuffer.length;
                   console.error('📦 AWS S3: Mídia baixada, tamanho:', mediaBuffer.length, 'bytes');
                   
                   // Detectar formato e gerar nome do arquivo
@@ -377,6 +380,27 @@ async function processMessage(payload) {
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;
     const isNewContact = webhookResult?.lead_created || false;
+
+    // Contabilizar tamanho de mídia inbound para cálculo de storage da empresa.
+    // Fire-and-forget: NUNCA bloqueia, NUNCA lança exceção, NUNCA impacta performance.
+    // Prioridade: tamanho real do buffer S3 > fileLength do payload UAZAPI.
+    if (savedMessageId && isMediaMessage) {
+      const fileSizeBytes = detectedMediaFileSizeBytes
+        ?? (message.content?.fileLength ? parseInt(message.content.fileLength, 10) : null)
+        ?? (message.content?.fileLenght ? parseInt(message.content.fileLenght, 10) : null) // typo UAZAPI
+      if (fileSizeBytes && !isNaN(fileSizeBytes) && fileSizeBytes > 0) {
+        supabase
+          .from('chat_messages')
+          .update({ media_file_size: fileSizeBytes })
+          .eq('id', savedMessageId)
+          .then(({ error: updateErr }) => {
+            if (updateErr) {
+              console.warn('[WEBHOOK] Falha ao registrar media_file_size (non-fatal):', updateErr.message)
+            }
+          })
+          .catch(() => {}) // erros silenciados — contabilização é best-effort
+      }
+    }
 
     // =====================================================
     // SINCRONIZAÇÃO DE FOTO VIA imagePreview DO PAYLOAD
