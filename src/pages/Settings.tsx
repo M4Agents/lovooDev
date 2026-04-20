@@ -42,7 +42,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -3626,7 +3626,7 @@ export const Settings: React.FC = () => {
                   Consumo de IA
                 </button>
               )}
-              {canManageConversationalAgents && (
+              {canPurchaseAiCredits && (
                 <button
                   onClick={() => setPlanUsageSubTab('comprar-creditos')}
                   className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
@@ -3653,7 +3653,7 @@ export const Settings: React.FC = () => {
           )}
 
           {/* Painel Comprar Créditos */}
-          {planUsageSubTab === 'comprar-creditos' && canManageConversationalAgents && (
+          {planUsageSubTab === 'comprar-creditos' && canPurchaseAiCredits && (
             <CreditPackagesPanel companyId={company.id} />
           )}
         </div>

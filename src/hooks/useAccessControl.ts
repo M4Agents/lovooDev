@@ -76,6 +76,18 @@ export function useAccessControl() {
     currentRole === 'super_admin' ||
     isImpersonating
 
+  // ── Compra de créditos de IA ───────────────────────────────
+  // Funcionalidade financeira/comercial: somente admin e acima podem
+  // autorizar a compra de pacotes de créditos adicionais.
+  // Mesma hierarquia de canManageConversationalAgents por design, mas
+  // com semântica explícita de billing — NÃO usar canManageConversationalAgents
+  // para proteger features financeiras.
+  const canPurchaseAiCredits =
+    currentRole === 'admin' ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin' ||
+    isImpersonating
+
   // ── Governança global de IA ────────────────────────────────
   // Restrito à empresa-pai + super_admin.
   // Permite criar e editar as diretrizes globais aplicadas a TODOS os agentes.
@@ -127,6 +139,9 @@ export function useAccessControl() {
 
     // Agentes conversacionais por empresa
     canManageConversationalAgents,
+
+    // Compra de créditos de IA (billing/comercial)
+    canPurchaseAiCredits,
 
     // Governança global de IA
     canManageAiGovernance,

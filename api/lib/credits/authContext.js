@@ -39,7 +39,7 @@ export function getServiceSupabase() {
  * @param {import('http').IncomingMessage} req
  * @param {string | null} queryCompanyId - company_id da query string (pode ser null)
  * @returns {Promise<{ ok: false, status: number, error: string } |
- *                   { ok: true, svc: any, effectiveCompanyId: string, isParentUser: boolean }>}
+ *                   { ok: true, svc: any, effectiveCompanyId: string, isParentUser: boolean, userId: string }>}
  */
 export async function resolveCreditsContext(req, queryCompanyId) {
   // ── 1. Validar Bearer token ──────────────────────────────────────────────
@@ -107,5 +107,5 @@ export async function resolveCreditsContext(req, queryCompanyId) {
     effectiveCompanyId = clientMembership.company_id
   }
 
-  return { ok: true, svc, effectiveCompanyId, isParentUser }
+  return { ok: true, svc, effectiveCompanyId, isParentUser, userId: user.id }
 }

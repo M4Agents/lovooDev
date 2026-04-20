@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     return res.status(ctx.status).json({ ok: false, error: ctx.error })
   }
 
-  const { svc, effectiveCompanyId } = ctx
+  const { svc, effectiveCompanyId, userId } = ctx
 
   // ── Validar package_id no banco ───────────────────────────────────────────
   // Lê credits e price para snapshot — nunca confia em valores do frontend
@@ -104,17 +104,8 @@ export default async function handler(req, res) {
     })
   }
 
-  // ── Obter requested_by (user_id do JWT) ───────────────────────────────────
-  const authHeader = req.headers.authorization ?? ''
-  const token      = authHeader.slice(7)
-  const { data: { user } } = await svc.auth.getUser(token)
-  const requestedBy = user?.id
-
-  if (!requestedBy) {
-    return res.status(401).json({ ok: false, error: 'Usuário não identificado' })
-  }
-
   // ── Criar order com snapshots ─────────────────────────────────────────────
+  // userId já validado e disponível via resolveCreditsContext (sem chamada extra)
   const { data: order, error: insertError } = await svc
     .from('credit_orders')
     .insert({
@@ -123,7 +114,7 @@ export default async function handler(req, res) {
       credits_snapshot: pkg.credits,
       price_snapshot:   pkg.price,
       status:           'pending_payment',
-      requested_by:     requestedBy,
+      requested_by:     userId,
       metadata:         {},
     })
     .select('id, status')
