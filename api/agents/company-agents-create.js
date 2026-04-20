@@ -33,6 +33,10 @@ import {
   detectOperationalContent,
   OPERATIONAL_SCORE_THRESHOLD,
 } from '../lib/agents/kbContentValidator.js';
+import {
+  getPlanLimits,
+  checkFeature,
+} from '../lib/plans/limitChecker.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -154,6 +158,41 @@ export default async function handler(req, res) {
     return res.status(403).json({
       success: false,
       error:   'Permissão insuficiente. Requer role admin, system_admin ou super_admin.'
+    });
+  }
+
+  // ── Enforcement de plano: multiple_agents_enabled ─────────────────────────
+  //
+  // Regra: se o plano não tem multiple_agents_enabled = true, a empresa
+  // só pode ter 1 agente ativo. Bloquear criação de um segundo agente.
+
+  try {
+    const limits = await getPlanLimits(supabaseAdmin, auth.callerCompanyId);
+
+    if (!checkFeature(limits.features, 'multiple_agents_enabled')) {
+      const { count, error: countErr } = await supabaseAdmin
+        .from('lovoo_agents')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', auth.callerCompanyId)
+        .eq('is_active', true);
+
+      if (!countErr && count >= 1) {
+        return res.status(403).json({
+          success:     false,
+          error:       'plan_feature_disabled',
+          feature_key: 'multiple_agents_enabled',
+          message:     'Seu plano permite apenas 1 agente. Faça upgrade para criar múltiplos agentes.',
+        });
+      }
+    }
+  } catch (planErr) {
+    // Falha ao validar plano → BLOQUEAR criação (fail-closed).
+    // Nunca permitir criação de agente sem confirmar os limites do plano.
+    console.error('[company-agents/create] Falha ao validar plano — bloqueando criação:', planErr?.message);
+    return res.status(503).json({
+      success: false,
+      error:   'plan_validation_failed',
+      message: 'Não foi possível validar os limites do seu plano. Tente novamente.',
     });
   }
 

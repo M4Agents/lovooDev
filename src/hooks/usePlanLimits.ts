@@ -17,11 +17,11 @@ import {
 // =====================================================
 export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
   const [planLimits, setPlanLimits] = useState<PlanLimits>({
-    canAdd: false,
+    canAdd:       false,
     currentCount: 0,
-    maxAllowed: 1,
-    planType: 'basic',
-    remaining: 0,
+    maxAllowed:   null,
+    planType:     'unknown',
+    remaining:    null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,12 +54,27 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
       }
 
       if (data) {
+        // RPC retorna planSlug (campo novo). planType não existe no response.
+        const planSlug: string | null = data.planSlug ?? null;
+
+        if (!planSlug) {
+          // Expose inconsistency: company sem plan_id vinculado ou plano inativo.
+          // Não mascarar com 'starter' — logar para facilitar diagnóstico.
+          console.warn(
+            '[usePlanLimits] planSlug ausente na resposta da RPC.',
+            'Company pode estar sem plan_id vinculado ou com plano inativo.',
+            { companyId, rpcResponse: data }
+          );
+        }
+
+        // maxAllowed e remaining: null = ilimitado (Elite/custom).
+        // NÃO coagir null para 1 — preservar semântica de ilimitado.
         setPlanLimits({
-          canAdd: data.canAdd || false,
-          currentCount: data.currentCount || 0,
-          maxAllowed: data.maxAllowed || 1,
-          planType: data.planType || 'basic',
-          remaining: data.remaining || 0,
+          canAdd:       data.canAdd       ?? false,
+          currentCount: data.currentCount ?? 0,
+          maxAllowed:   data.maxAllowed   ?? null,
+          planType:     planSlug ?? 'unknown',
+          remaining:    data.remaining    ?? null,
         });
       } else {
         throw new Error('Dados inválidos recebidos');
@@ -68,13 +83,14 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
       console.error('[usePlanLimits] Erro ao buscar limites:', err);
       setError(err instanceof Error ? err.message : 'Erro ao verificar limites');
       
-      // Definir valores padrão em caso de erro
+      // Estado conservador em erro: bloqueia adição, não mascara como 'starter'.
+      // Verificar this.error === null no consumidor para distinguir de estado normal.
       setPlanLimits({
-        canAdd: false,
+        canAdd:       false,
         currentCount: 0,
-        maxAllowed: 1,
-        planType: 'basic',
-        remaining: 0,
+        maxAllowed:   1,   // conservador: bloqueia adição em caso de erro
+        planType:     'unknown',
+        remaining:    0,
       });
     } finally {
       setLoading(false);
@@ -96,7 +112,7 @@ export const usePlanLimits = (companyId?: string): UsePlanLimitsReturn => {
   // =====================================================
   // COMPUTED: CONFIGURAÇÃO DO PLANO
   // =====================================================
-  const planConfig: PlanConfig = PLAN_CONFIGS[planLimits.planType] || PLAN_CONFIGS.basic;
+  const planConfig: PlanConfig = PLAN_CONFIGS[planLimits.planType] || PLAN_CONFIGS.starter;
 
   // =====================================================
   // EFFECT: CARREGAR LIMITES

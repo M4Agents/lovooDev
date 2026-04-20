@@ -1,10 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
+import { getPlanLimits, checkLimit } from '../lib/plans/limitChecker.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+// Service role separado exclusivamente para leitura de limites de plano.
+// ANON_KEY não tem visibilidade garantida sobre plans (RLS restritiva).
+function getServiceClient() {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+}
 
 export default async function handler(req, res) {
   // Permitir apenas métodos POST
@@ -64,7 +75,41 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    // Criar lead
+    // ── VERIFICAÇÃO DE LIMITE: max_leads (sem bloqueio) ───────────────────────
+    // Lead SEMPRE é criado. Se a empresa estiver acima do limite, o lead
+    // é marcado com is_over_plan = true para controle de visibilidade.
+    // NULL em max_leads = ilimitado → is_over_plan nunca é true.
+    let isOverPlan = false
+    try {
+      const svc    = getServiceClient()
+      const limits = await getPlanLimits(svc, company.id)
+
+      if (limits.max_leads !== null) {
+        const { count: leadsCount, error: countErr } = await svc
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', company.id)
+          .is('deleted_at', null)
+
+        if (countErr) {
+          console.warn('[leads/create] falha ao contar leads para check de limite:', countErr.message)
+        } else {
+          const check = checkLimit(limits.max_leads, leadsCount ?? 0)
+          isOverPlan = !check.allowed
+          if (isOverPlan) {
+            console.info(
+              `[leads/create] empresa ${company.id} acima do limite de leads ` +
+              `(${check.current}/${check.limit}) — lead será criado com is_over_plan=true`
+            )
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[leads/create] erro no check de limite max_leads:', err?.message)
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Criar lead (sempre — is_over_plan marca visibilidade restrita se acima do plano)
     const leadData = {
       company_id: company.id,
       name,
@@ -74,6 +119,7 @@ export default async function handler(req, res) {
       status,
       interest: interest || null,
       visitor_id: visitor_id || null,
+      is_over_plan: isOverPlan,
       // Campos da empresa
       company_name: company_name || null,
       company_cnpj: company_cnpj || null,
@@ -140,15 +186,19 @@ export default async function handler(req, res) {
     res.status(201).json({
       success: true,
       lead: {
-        id: lead.id,
-        name: lead.name,
-        email: lead.email,
-        phone: lead.phone,
-        origin: lead.origin,
-        status: lead.status,
-        created_at: lead.created_at
+        id:           lead.id,
+        name:         lead.name,
+        email:        lead.email,
+        phone:        lead.phone,
+        origin:       lead.origin,
+        status:       lead.status,
+        is_over_plan: lead.is_over_plan,
+        created_at:   lead.created_at
       },
-      message: 'Lead created successfully'
+      is_over_plan: lead.is_over_plan,
+      message: lead.is_over_plan
+        ? 'Lead created (plan limit reached — lead marked as restricted)'
+        : 'Lead created successfully'
     });
 
   } catch (error) {

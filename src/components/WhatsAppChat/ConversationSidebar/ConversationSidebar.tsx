@@ -80,10 +80,11 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     if (!searchTerm) return true
     
     const searchLower = searchTerm.toLowerCase()
+    const isRestricted = conversation.is_lead_over_plan === true
     return (
       conversation.contact_name?.toLowerCase().includes(searchLower) ||
-      conversation.contact_phone.includes(searchTerm) ||
-      conversation.last_message_content?.toLowerCase().includes(searchLower)
+      (!isRestricted && conversation.contact_phone.includes(searchTerm)) ||
+      (!isRestricted && conversation.last_message_content?.toLowerCase().includes(searchLower))
     )
   })
 
@@ -379,7 +380,10 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
               <p className={`text-xs truncate mt-0.5 ${
                 isSelected ? 'text-slate-500' : 'text-slate-400'
               }`}>
-                {formatPhone(conversation.contact_phone)}
+                {conversation.is_lead_over_plan
+                  ? <span className="italic text-amber-500">Número restrito</span>
+                  : formatPhone(conversation.contact_phone)
+                }
               </p>
             </div>
             <div className="flex items-center space-x-2 ml-3">
@@ -402,11 +406,17 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             <p className={`text-sm truncate ${
               isSelected ? 'text-slate-600' : 'text-slate-500'
             }`}>
-              {conversation.last_message_direction === 'outbound' && (
-                <span className="text-[#00a884] mr-1 font-medium">→</span>
-              )}
-              {conversation.last_message_content || (
-                <span className="italic">{t('conversationItem.noMessages')}</span>
+                {conversation.is_lead_over_plan ? (
+                <span className="italic text-amber-500">Conteúdo restrito</span>
+              ) : (
+                <>
+                  {conversation.last_message_direction === 'outbound' && (
+                    <span className="text-[#00a884] mr-1 font-medium">→</span>
+                  )}
+                  {conversation.last_message_content || (
+                    <span className="italic">{t('conversationItem.noMessages')}</span>
+                  )}
+                </>
               )}
             </p>
             

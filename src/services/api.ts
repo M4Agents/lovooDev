@@ -982,8 +982,20 @@ export const api = {
 
       if (error) throw error;
 
-      console.log('API: Leads retrieved successfully:', data?.length || 0);
-      return data || [];
+      const leads = (data || []).map((lead: any) => {
+        if (!lead.is_over_plan) return lead;
+        return {
+          ...lead,
+          phone: null,
+          email: null,
+          company_cnpj: null,
+          company_phone: null,
+          company_email: null,
+        };
+      });
+
+      console.log('API: Leads retrieved successfully:', leads.length);
+      return leads;
     } catch (error) {
       console.error('Error in getLeads:', error);
       throw error;

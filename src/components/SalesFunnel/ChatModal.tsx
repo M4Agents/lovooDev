@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, MessageSquarePlus, WifiOff } from 'lucide-react'
 import { ChatLayout } from '../WhatsAppChat/ChatLayout'
+import { LockedChatPanel } from '../WhatsAppChat/LockedChatPanel'
 import { chatApi } from '../../services/chat/chatApi'
 import { supabase } from '../../lib/supabase'
 import { api } from '../../services/api'
@@ -36,6 +37,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [leadPhone, setLeadPhone] = useState<string>('')
   const [leadName, setLeadName] = useState<string>('')
   const [startingConversation, setStartingConversation] = useState(false)
+  const [isLeadOverPlan, setIsLeadOverPlan] = useState(false)
 
   useEffect(() => {
     if (isOpen && leadId) {
@@ -53,11 +55,32 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     setLeadPhone('')
     setLeadName('')
     setStartingConversation(false)
+    setIsLeadOverPlan(false)
   }
 
   const fetchConversationId = async () => {
     try {
       setLoading(true)
+
+      // Verificar is_over_plan antes de qualquer outra operação
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('name, phone, is_over_plan')
+        .eq('id', leadId)
+        .eq('company_id', companyId)
+        .single()
+
+      if (leadData?.is_over_plan) {
+        setIsLeadOverPlan(true)
+        setLeadName(leadData.name || '')
+        return
+      }
+
+      if (leadData) {
+        setLeadName(leadData.name || '')
+        setLeadPhone(leadData.phone?.replace(/\D/g, '') || '')
+      }
+
       const convId = await chatApi.getConversationByLeadId(leadId, companyId)
 
       if (convId) {
@@ -293,6 +316,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                 <p className="text-gray-600">Carregando conversa...</p>
               </div>
+            </div>
+          ) : isLeadOverPlan ? (
+            <div className="flex-1 flex flex-col">
+              <LockedChatPanel contactName={leadName || undefined} />
             </div>
           ) : error ? (
             <div className="flex-1 flex items-center justify-center">

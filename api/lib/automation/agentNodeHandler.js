@@ -20,6 +20,16 @@
 
 'use strict'
 
+// Importação lazy para evitar ciclo de dependências no motor de automação
+let _getPlanLimits = null
+async function getPlanLimitsLazy() {
+  if (!_getPlanLimits) {
+    const mod = await import('../plans/limitChecker.js')
+    _getPlanLimits = mod.getPlanLimits
+  }
+  return _getPlanLimits
+}
+
 // ---------------------------------------------------------------------------
 // Constantes
 // ---------------------------------------------------------------------------
@@ -120,6 +130,27 @@ export async function executeAgentNode(node, context, supabase) {
 
   if (!context?.executionId) {
     return { skipped: true, reason: 'context.executionId ausente — execute_agent não pode ser executado' }
+  }
+
+  // ----------------------------------------------------------------
+  // C2. Verificar se a empresa possui plano de IA configurado
+  //     Sem ai_plan_id, a empresa não deveria executar agentes de IA.
+  //     Retorno: skipped (gracioso — não quebra a automação).
+  // ----------------------------------------------------------------
+  try {
+    const getPlanLimits = await getPlanLimitsLazy()
+    const limits = await getPlanLimits(supabase, context.companyId)
+    if (!limits.ai_plan_id) {
+      console.warn('[agentNodeHandler] Empresa sem plano de IA configurado — nó execute_agent ignorado.', {
+        company_id: context.companyId,
+        agent_id:   config.agentId,
+      })
+      return { skipped: true, reason: 'no_ai_plan_configured — empresa sem plano de IA' }
+    }
+  } catch (planCheckErr) {
+    // Falha ao checar plano: log e continua (não queremos silenciar automações
+    // por falha de infraestrutura de billing).
+    console.warn('[agentNodeHandler] Falha ao verificar plano de IA:', planCheckErr?.message)
   }
 
   // ----------------------------------------------------------------

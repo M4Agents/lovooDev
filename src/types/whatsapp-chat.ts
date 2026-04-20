@@ -17,6 +17,7 @@ export interface ChatConversation {
   profile_picture_url?: string
   company_name?: string  // NOVO: nome da empresa do lead
   lead_id?: number
+  is_lead_over_plan?: boolean
   assigned_to?: {
     id: string
     email: string

@@ -319,6 +319,8 @@ export interface LeadCardData {
   chat_conversations?: Array<{
     id: string
   }>
+  /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
+  is_over_plan?: boolean
 }
 
 // =====================================================

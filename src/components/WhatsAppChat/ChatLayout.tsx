@@ -4,13 +4,14 @@
 // Layout principal do chat com 3 colunas
 // NÃO MODIFICA componentes existentes
 
-import React from 'react'
+import React, { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
-import type { ChatLayoutProps } from '../../types/whatsapp-chat'
+import { LockedChatPanel } from './LockedChatPanel'
+import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -24,6 +25,21 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 }) => {
   const { t } = useTranslation('chat')
   const chatData = useChatData(companyId, userId, initialConversationId)
+
+  // Conversa clicada que está bloqueada (lead is_over_plan = true)
+  const [lockedConversation, setLockedConversation] = useState<ChatConversation | null>(null)
+
+  // Intercepta o clique na conversa: bloqueia se lead restrito
+  const handleSelectConversation = useCallback((conversationId: string) => {
+    const conversation = chatData.conversations.find(c => c.id === conversationId)
+    if (conversation?.is_lead_over_plan) {
+      setLockedConversation(conversation)
+      // Não seta selectedConversation → ChatArea não é montada
+      return
+    }
+    setLockedConversation(null)
+    chatData.setSelectedConversation(conversationId)
+  }, [chatData])
 
   // =====================================================
   // LOADING STATE
@@ -96,7 +112,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             filter={chatData.filter}
             loading={chatData.conversationsLoading}
             onSelectInstance={chatData.setSelectedInstance}
-            onSelectConversation={chatData.setSelectedConversation}
+            onSelectConversation={handleSelectConversation}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
           />
@@ -105,7 +121,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
       {/* Área Chat - 50% ou 60% se sidebar oculta */}
       <div className={`${hideConversationSidebar ? 'flex-[3]' : 'flex-1'} flex flex-col bg-white/60 backdrop-blur-sm`}>
-        {chatData.selectedConversation ? (
+        {lockedConversation ? (
+          <LockedChatPanel contactName={lockedConversation.contact_name} />
+        ) : chatData.selectedConversation ? (
           <ChatArea
             conversationId={chatData.selectedConversation}
             companyId={companyId}
@@ -134,7 +152,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
       {/* Painel Lead - 25% ou 40% se sidebar oculta */}
       <div className={`${hideConversationSidebar ? 'flex-[2] h-full' : 'w-1/4 min-w-[320px]'} bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
-        {chatData.selectedConversation ? (
+        {!lockedConversation && chatData.selectedConversation ? (
           <LeadPanel
             conversationId={chatData.selectedConversation}
             companyId={companyId}
@@ -175,6 +193,19 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
   const { t } = useTranslation('chat')
   const chatData = useChatData(companyId, userId)
   const [activeView, setActiveView] = React.useState<'conversations' | 'chat' | 'lead'>('conversations')
+  const [lockedConversation, setLockedConversation] = React.useState<ChatConversation | null>(null)
+
+  const handleSelectConversationMobile = useCallback((conversationId: string) => {
+    const conversation = chatData.conversations.find(c => c.id === conversationId)
+    if (conversation?.is_lead_over_plan) {
+      setLockedConversation(conversation)
+      setActiveView('chat')
+      return
+    }
+    setLockedConversation(null)
+    chatData.setSelectedConversation(conversationId)
+    setActiveView('chat')
+  }, [chatData])
 
   if (chatData.instancesLoading) {
     return (
@@ -238,21 +269,22 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
             filter={chatData.filter}
             loading={chatData.conversationsLoading}
             onSelectInstance={chatData.setSelectedInstance}
-            onSelectConversation={(id) => {
-              chatData.setSelectedConversation(id)
-              setActiveView('chat')
-            }}
+            onSelectConversation={handleSelectConversationMobile}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
           />
         )}
 
-        {activeView === 'chat' && chatData.selectedConversation && (
-          <ChatArea
-            conversationId={chatData.selectedConversation}
-            companyId={companyId}
-            userId={userId}
-          />
+        {activeView === 'chat' && (
+          lockedConversation
+            ? <LockedChatPanel contactName={lockedConversation.contact_name} />
+            : chatData.selectedConversation
+              ? <ChatArea
+                  conversationId={chatData.selectedConversation}
+                  companyId={companyId}
+                  userId={userId}
+                />
+              : null
         )}
 
         {activeView === 'lead' && chatData.selectedConversation && (

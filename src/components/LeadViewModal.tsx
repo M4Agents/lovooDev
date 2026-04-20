@@ -18,6 +18,7 @@ interface Lead {
   name: string;
   email?: string;
   phone?: string;
+  is_over_plan?: boolean;
   origin: string;
   status: string;
   interest?: string;
@@ -55,7 +56,7 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   useEffect(() => {
     const loadPhoto = async () => {
       try {
-        if (!company?.id || !lead?.phone) {
+        if (!company?.id || !lead?.phone || lead?.is_over_plan) {
           setPhotoUrl(null);
           return;
         }
@@ -170,6 +171,20 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
         </div>
 
         <div className="p-6 space-y-6">
+          {/* Banner de lead restrito */}
+          {lead.is_over_plan && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <span className="text-amber-500 text-lg leading-none">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Lead fora do plano</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Este lead foi criado acima do limite contratado. Dados de contato estão ocultos.
+                  Faça upgrade do plano ou exclua leads antigos para liberá-lo.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Informações Principais */}
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
@@ -195,38 +210,58 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
                 </div>
               </div>
 
-              {lead.email && (
-                <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium text-gray-900">
-                      <a 
-                        href={`mailto:${lead.email}`}
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                      >
-                        {lead.email}
-                      </a>
-                    </p>
+              {lead.is_over_plan ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-5 h-5 text-gray-300" />
+                    <div>
+                      <p className="text-sm text-gray-500">Email</p>
+                      <p className="text-sm italic text-gray-400">Dado restrito</p>
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {lead.phone && (
-                <div className="flex items-center gap-3">
-                  <Phone className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Telefone</p>
-                    <p className="font-medium text-gray-900">
-                      <a 
-                        href={`tel:${lead.phone}`}
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                      >
-                        {lead.phone}
-                      </a>
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-gray-300" />
+                    <div>
+                      <p className="text-sm text-gray-500">Telefone</p>
+                      <p className="text-sm italic text-gray-400">Dado restrito</p>
+                    </div>
                   </div>
-                </div>
+                </>
+              ) : (
+                <>
+                  {lead.email && (
+                    <div className="flex items-center gap-3">
+                      <Mail className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="font-medium text-gray-900">
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            {lead.email}
+                          </a>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {lead.phone && (
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-500">Telefone</p>
+                        <p className="font-medium text-gray-900">
+                          <a
+                            href={`tel:${lead.phone}`}
+                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            {lead.phone}
+                          </a>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {lead.interest && (

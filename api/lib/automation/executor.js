@@ -10,6 +10,7 @@
 // =====================================================
 
 import { acquireLock, releaseLock } from './executionLock.js'
+import { getPlanLimits, checkLimit }  from '../plans/limitChecker.js'
 
 // ---------------------------------------------------------------------------
 // Resolução de instanceId — fonte única para processFlowAsync e resumeFromNode
@@ -127,6 +128,49 @@ async function completeExecution(executionId, status, errorMessage, supabase) {
 // ---------------------------------------------------------------------------
 
 export async function createExecution(flow, triggerData, companyId, supabase) {
+  // ── ENFORCEMENT: max_automation_executions_monthly ──────────────────────────
+  // Verifica o limite mensal de execuções ANTES de criar a execution.
+  //
+  // JANELA: mês calendário corrente (date_trunc baseado em UTC).
+  // Decisão: mês calendário é simples, auditável e independente de billing_cycle_anchor.
+  // TODO futuro: migrar para billing_cycle_anchor quando o módulo de billing estiver maduro.
+  //
+  // SOFT BLOCK: retorna null (mesmo comportamento de erro de INSERT).
+  // O caller (dispatchLeadCreatedTrigger, trigger-event.ts) interpreta null como falha
+  // e loga o evento sem crashar o flow nem perder a mensagem.
+  try {
+    const limits     = await getPlanLimits(supabase, companyId)
+    const maxMonthly = limits.max_automation_executions_monthly ?? null
+
+    if (maxMonthly !== null) {
+      const now        = new Date()
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+
+      const { count: monthlyCount, error: countErr } = await supabase
+        .from('automation_executions')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .gte('started_at', monthStart)
+
+      if (countErr) {
+        console.warn('[executor][plan_limit] falha ao contar execuções mensais:', countErr?.message)
+      } else {
+        const check = checkLimit(maxMonthly, monthlyCount ?? 0)
+        if (!check.allowed) {
+          console.warn(
+            '[executor][plan_limit] max_automation_executions_monthly atingido — execução bloqueada.',
+            `company=${companyId} flow=${flow.id} current=${check.current} max=${check.limit}`
+          )
+          return null
+        }
+      }
+    }
+  } catch (limitErr) {
+    // Não crashar a automação por falha no check de limite
+    console.error('[executor] erro ao verificar limite max_automation_executions_monthly:', limitErr?.message)
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const { data, error } = await supabase
       .from('automation_executions')

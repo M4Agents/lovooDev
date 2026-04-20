@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { useLeadPermissions } from '../hooks/useLeadPermissions';
+import { usePlanLeadStats } from '../hooks/usePlanLeadStats';
+import { PlanLeadLimitBanner } from '../components/PlanLeadLimitBanner';
 import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
@@ -45,9 +47,11 @@ interface Lead {
   interest?: string;
   responsible_user_id?: string;
   visitor_id?: string;
-  record_type?: string;  // NOVO: Tipo de registro
+  record_type?: string;
   created_at: string;
   updated_at: string;
+  /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
+  is_over_plan?: boolean;
   lead_custom_values?: Array<{
     field_id: string;
     value: string;
@@ -68,6 +72,7 @@ interface LeadStats {
 export const Leads: React.FC = () => {
   const { company } = useAuth();
   const { canViewLead, canEditLead, canDeleteLead } = useLeadPermissions();
+  const { leadStats } = usePlanLeadStats(company?.id);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -496,6 +501,9 @@ export const Leads: React.FC = () => {
         </div>
       </div>
 
+      {/* Alerta de limite de leads do plano */}
+      <PlanLeadLimitBanner leadStats={leadStats} />
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Card: Total de Leads */}
@@ -709,20 +717,29 @@ export const Leads: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="space-y-1">
-                      {lead.email && (
-                        <div className="flex items-center text-sm text-gray-900">
-                          <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                          {lead.email}
-                        </div>
-                      )}
-                      {lead.phone && (
-                        <div className="flex items-center text-sm text-gray-900">
-                          <Phone className="w-4 h-4 mr-2 text-gray-400" />
-                          {lead.phone}
-                        </div>
-                      )}
-                    </div>
+                    {lead.is_over_plan ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
+                          Restrito
+                        </span>
+                        <span className="text-xs text-gray-400 italic">Dados ocultos</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {lead.email && (
+                          <div className="flex items-center text-sm text-gray-900">
+                            <Mail className="w-4 h-4 mr-2 text-gray-400" />
+                            {lead.email}
+                          </div>
+                        )}
+                        {lead.phone && (
+                          <div className="flex items-center text-sm text-gray-900">
+                            <Phone className="w-4 h-4 mr-2 text-gray-400" />
+                            {lead.phone}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>

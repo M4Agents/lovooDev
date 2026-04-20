@@ -6,6 +6,7 @@
 // Admin recebe o link para compartilhar manualmente (WhatsApp, etc.)
 
 import { createClient } from '@supabase/supabase-js';
+import { getPlanLimits, assertLimitFromLoaded, PlanEnforcementError } from '../lib/plans/limitChecker.js';
 
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
 
@@ -51,11 +52,39 @@ export default async function handler(req: any, res: any) {
   // ─────────────────────────────────────────────────────────
 
   try {
-    const { email, redirectTo, data } = req.body;
+    const { email, redirectTo, data, company_id } = req.body;
 
     if (!email) {
       return res.status(400).json({ error: 'Email é obrigatório' });
     }
+
+    // ── ENFORCEMENT: max_users ────────────────────────────────────────────────
+    // Verifica o limite de usuários ANTES de criar o auth user.
+    // company_id é opcional para compatibilidade retroativa — se não fornecido,
+    // o check é delegado ao RPC create_company_user_safe (gate definitivo no DB).
+    if (company_id) {
+      try {
+        const limits = await getPlanLimits(supabaseAdmin, company_id)
+        const { count: activeUsers, error: countErr } = await supabaseAdmin
+          .from('company_users')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', company_id)
+          .eq('is_active', true)
+
+        if (!countErr) {
+          assertLimitFromLoaded(limits, 'max_users', activeUsers ?? 0)
+        } else {
+          console.warn('invite-user: falha ao contar usuários para check de limite:', countErr.message)
+        }
+      } catch (err: any) {
+        if (err instanceof PlanEnforcementError) {
+          return res.status(err.httpStatus).json(err.data)
+        }
+        // Erro inesperado no check de limite não deve bloquear o fluxo inteiro
+        console.error('invite-user: erro inesperado no check de limite max_users:', err?.message)
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (!serviceRoleKey) {
       return res.status(500).json({

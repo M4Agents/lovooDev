@@ -48,49 +48,45 @@ export type WhatsAppInstanceStatus =
 export interface PlanLimits {
   canAdd: boolean;
   currentCount: number;
-  maxAllowed: number;
+  maxAllowed: number | null;  // null = ilimitado (Elite/custom)
   planType: string;
-  remaining: number;
+  remaining: number | null;   // null = ilimitado (Elite/custom)
 }
 
 export interface PlanConfig {
-  planType: 'basic' | 'start' | 'professional' | 'pro' | 'enterprise';
-  maxInstances: number;
+  planType: 'starter' | 'growth' | 'pro' | 'elite';
+  maxInstances: number | null;  // null = ilimitado
   price: string;
   features: string[];
 }
 
+// Slugs oficiais: starter, growth, pro, elite
+// maxInstances NULL = ilimitado (Elite/custom)
 export const PLAN_CONFIGS: Record<string, PlanConfig> = {
-  basic: {
-    planType: 'basic',
-    maxInstances: 1,
-    price: 'Gratuito',
-    features: ['1 número WhatsApp', 'Suporte básico']
-  },
-  start: {
-    planType: 'start',
+  starter: {
+    planType: 'starter',
     maxInstances: 3,
-    price: 'R$ 97/mês',
-    features: ['3 números WhatsApp', 'Chat básico', 'Suporte email']
+    price: 'R$ 347/mês',
+    features: ['3 canais WhatsApp', '2 usuários', '5.000 leads'],
   },
-  professional: {
-    planType: 'professional',
-    maxInstances: 10,
-    price: 'R$ 297/mês',
-    features: ['10 números WhatsApp', 'Chat avançado', 'Automações', 'Suporte prioritário']
+  growth: {
+    planType: 'growth',
+    maxInstances: 5,
+    price: 'R$ 697/mês',
+    features: ['5 canais WhatsApp', '5 usuários', '15.000 leads'],
   },
   pro: {
     planType: 'pro',
     maxInstances: 10,
-    price: 'R$ 297/mês',
-    features: ['10 números WhatsApp', 'Chat avançado', 'Automações', 'Suporte prioritário']
+    price: 'R$ 1.097/mês',
+    features: ['10 canais WhatsApp', '15 usuários', '30.000 leads'],
   },
-  enterprise: {
-    planType: 'enterprise',
-    maxInstances: 50,
-    price: 'R$ 897/mês',
-    features: ['50 números WhatsApp', 'Recursos completos', 'API personalizada', 'Suporte 24/7']
-  }
+  elite: {
+    planType: 'elite',
+    maxInstances: null,
+    price: 'Sob consulta',
+    features: ['Ilimitado', 'Suporte dedicado', 'SLA personalizado'],
+  },
 };
 
 // =====================================================
@@ -355,7 +351,7 @@ export const isValidInstanceStatus = (status: string): status is WhatsAppInstanc
 };
 
 export const isValidPlanType = (plan: string): plan is keyof typeof PLAN_CONFIGS => {
-  return plan in PLAN_CONFIGS;
+  return ['starter', 'growth', 'pro', 'elite'].includes(plan);
 };
 
 export const getStatusColor = (status: WhatsAppInstanceStatus): string => {

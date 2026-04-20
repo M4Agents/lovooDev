@@ -1,47 +1,36 @@
 // =============================================================================
 // src/components/Settings/AiPlansPanel.tsx
 //
-// Painel de gestão de IA para empresa pai (company_type === 'parent').
-// Integrado em: Configurações → Agentes Globais
+// Painel de gestão de IA para empresa pai (platform admin).
 //
 // BLOCOS:
-//   1. Planos Mensais  — tabela com governança + criar + ativar/desativar + editar cota
-//   2. Pacotes Avulsos — CRUD de credit_packages
+//   1. Planos de IA       — CRUD de ai_plans (tabela própria, separada de plans)
+//   2. Pacotes Avulsos    — CRUD de credit_packages
+//
+// SEPARAÇÃO DE DOMÍNIO:
+//   - "Planos de IA" → tabela ai_plans → vinculados a plans via plans.ai_plan_id (1:1)
+//   - "Pacotes Avulsos" → tabela credit_packages → créditos pontuais, sem vínculo com planos
 //
 // GOVERNANÇA INTERNA:
-//   - Campos estimated_tokens, estimated_ai_cost são calculados e entregues
-//     exclusivamente pelas RPCs admin-only:
-//       get_credit_packages_admin()   → pacotes + custo/tokens/lucro
-//       get_plans_governance()        → planos + custo/tokens
-//   - Empresa filha NUNCA recebe esses valores (exceção lançada no banco)
-//   - Constantes locais (TOKENS_PER_CREDIT etc.) são usadas APENAS para
-//     preview visual no modal do admin durante digitação — fonte oficial é o banco
+//   - ai_plans.internal_price: custo interno de referência (NOT NULL, NOT venda)
+//   - Campos estimados (tokens, custo IA) calculados localmente apenas para preview UX
+//   - Fonte oficial: banco via get_ai_plans_admin() e get_credit_packages_admin()
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, Package, Plus, Pencil, Check, X, Loader2, Power, TrendingUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-// ── Constantes de governança (apenas para preview UX local no admin) ──────────
+// ── Constantes de governança (preview UX local no admin apenas) ───────────────
 
-const TOKENS_PER_CREDIT       = 10
-const COST_PER_1K_TOKENS_BRL  = 0.015
-
-function govTokens(credits: number): number {
-  return credits * TOKENS_PER_CREDIT
-}
+const TOKENS_PER_CREDIT      = 10
+const COST_PER_1K_TOKENS_BRL = 0.015
 
 function govAiCost(credits: number): number {
-  return Math.round((govTokens(credits) / 1000) * COST_PER_1K_TOKENS_BRL * 100) / 100
+  return Math.round((credits * TOKENS_PER_CREDIT / 1000) * COST_PER_1K_TOKENS_BRL * 100) / 100
 }
 
-function govProfit(price: number, credits: number): number {
-  return Math.round((price - govAiCost(credits)) * 100) / 100
-}
-
-// ── Estimativa de conversas (UX only — sem impacto no billing) ────────────────
-// Regra: 1 conversa ≈ 500 tokens ≈ 50 créditos (1 crédito = 10 tokens)
-
+// Estimativa de conversas: 1 conversa ≈ 500 tokens ≈ 50 créditos
 const CREDITS_PER_CONVERSATION = 50
 
 function estConversas(credits: number): number {
@@ -50,17 +39,16 @@ function estConversas(credits: number): number {
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-interface Plan {
-  id:                 string
-  name:               string
-  slug:               string
-  is_active:          boolean
-  price:              number
-  monthly_ai_credits: number
-  sort_order:         number
-  // Campos de governança — entregues pela RPC get_plans_governance()
-  estimated_tokens:   number
-  estimated_ai_cost:  number
+interface AiPlan {
+  id:                      string
+  name:                    string
+  slug:                    string
+  monthly_credits:         number
+  internal_price:          number
+  is_active:               boolean
+  sort_order:              number
+  estimated_conversations: number   // calculado pela RPC (monthly_credits / 50)
+  plans_count:             number   // quantos plans CRM referenciam este ai_plan
 }
 
 interface CreditPackage {
@@ -69,7 +57,6 @@ interface CreditPackage {
   credits:           number
   price:             number
   is_active:         boolean
-  // Campos de governança — entregues pela RPC get_credit_packages_admin()
   estimated_tokens:  number
   estimated_ai_cost: number
   estimated_profit:  number
@@ -82,21 +69,25 @@ interface PackageForm {
   is_active: boolean
 }
 
-interface PlanForm {
-  name:               string
-  slug:               string
-  monthly_ai_credits: string
-  is_active:          boolean
+interface AiPlanCreateForm {
+  name:            string
+  slug:            string
+  monthly_credits: string
+  internal_price:  string
+  is_active:       boolean
 }
 
-interface EditPlanForm {
-  name:               string
-  price:              string
-  monthly_ai_credits: string
+interface AiPlanEditForm {
+  name:            string
+  monthly_credits: string
+  internal_price:  string
 }
 
-const EMPTY_PKG_FORM:  PackageForm  = { name: '', credits: '', price: '', is_active: true }
-const EMPTY_PLAN_FORM: PlanForm     = { name: '', slug: '', monthly_ai_credits: '0', is_active: true }
+const EMPTY_PKG_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true }
+
+const EMPTY_AI_PLAN_FORM: AiPlanCreateForm = {
+  name: '', slug: '', monthly_credits: '0', internal_price: '0', is_active: true,
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,29 +99,22 @@ function formatCredits(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
-// Preço por conversa — exibição UX, sem impacto em billing
-function precoConversa(price: number, credits: number): string {
-  const conv = estConversas(credits)
-  if (conv === 0 || price === 0) return '—'
-  return formatPrice(Math.round((price / conv) * 100) / 100)
-}
-
-// Slug a partir do nome: lowercase, sem acentos, espaços → hífen
 function generateSlug(name: string): string {
-  return name
+  return `ai-${name
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-    .slice(0, 50)
+    .slice(0, 40)
+  }`
 }
 
 // ── Subcomponentes ────────────────────────────────────────────────────────────
 
 function SectionHeader({ icon, title, right }: {
-  icon: React.ReactNode
-  title: string
+  icon:   React.ReactNode
+  title:  string
   right?: React.ReactNode
 }) {
   return (
@@ -161,181 +145,54 @@ function SuccessBanner({ message }: { message: string }) {
   )
 }
 
-// ── Preview de governança — somente UX local no admin ─────────────────────────
-
-function GovernancePreview({ credits, price }: { credits: number; price: number }) {
-  if (credits <= 0 || price < 0) return null
-
-  const tokens  = govTokens(credits)
-  const cost    = govAiCost(credits)
-  const profit  = govProfit(price, credits)
-
+function GovernancePreview({ credits, internalPrice }: { credits: number; internalPrice: number }) {
+  if (credits <= 0) return null
+  const cost = govAiCost(credits)
   return (
     <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-2">
       <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
         <TrendingUp size={12} className="text-violet-500" />
-        Referência interna de governança (preview)
+        Referência interna (preview)
       </p>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <p className="text-xs text-slate-400 mb-0.5">Tokens estimados</p>
-          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatCredits(tokens)}</p>
+          <p className="text-xs text-slate-400 mb-0.5">Tokens est.</p>
+          <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatCredits(credits * TOKENS_PER_CREDIT)}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400 mb-0.5">Custo estimado</p>
+          <p className="text-xs text-slate-400 mb-0.5">Custo IA est.</p>
           <p className="text-sm font-semibold text-slate-700 tabular-nums">{formatPrice(cost)}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400 mb-0.5">Lucro estimado</p>
-          <p className={`text-sm font-semibold tabular-nums ${profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-            {formatPrice(profit)}
+          <p className="text-xs text-slate-400 mb-0.5">Preço interno ref.</p>
+          <p className={`text-sm font-semibold tabular-nums ${internalPrice >= cost ? 'text-green-600' : 'text-amber-500'}`}>
+            {formatPrice(internalPrice)}
           </p>
         </div>
       </div>
       <p className="text-xs text-slate-400 italic">
-        Preview local — valores oficiais calculados e validados no banco
+        Preview local — valores oficiais calculados no banco
       </p>
     </div>
   )
 }
 
-// ── Modal: editar plano (nome, valor mensal e créditos de IA) ────────────────
+// ── Modal: criar plano de IA ──────────────────────────────────────────────────
 
-function EditPlanModal({
-  plan,
-  form,
-  saving,
-  error,
-  onChange,
-  onSave,
-  onClose,
+function AiPlanCreateModal({
+  form, saving, error,
+  onChange, onSave, onClose,
 }: {
-  plan:     Plan
-  form:     EditPlanForm
+  form:     AiPlanCreateForm
   saving:   boolean
   error:    string | null
-  onChange: (f: Partial<EditPlanForm>) => void
+  onChange: (f: Partial<AiPlanCreateForm>) => void
   onSave:   () => void
   onClose:  () => void
 }) {
-  const credits  = parseInt(form.monthly_ai_credits, 10) || 0
-  const price    = parseFloat(form.price) || 0
-  const isValid  = form.name.trim().length > 0 && !isNaN(parseFloat(form.price)) && credits >= 0
-  const showPrev = credits > 0 && price >= 0
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-slate-900">Editar plano — {plan.name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Slug: <span className="font-mono">{plan.slug}</span></p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          {error && <ErrorBanner message={error} />}
-
-          {/* Nome */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Nome do plano</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={e => onChange({ name: e.target.value })}
-              autoFocus
-              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-          </div>
-
-          {/* Valor mensal e créditos lado a lado */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Valor Mensal (R$)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={form.price}
-                onChange={e => onChange({ price: e.target.value })}
-                placeholder="0.00"
-                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Créditos IA / mês</label>
-              <input
-                type="number"
-                min={0}
-                step={100}
-                value={form.monthly_ai_credits}
-                onChange={e => onChange({ monthly_ai_credits: e.target.value })}
-                placeholder="0"
-                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              {credits > 0 && (
-                <p className="text-xs text-violet-600 mt-0.5">
-                  ≈ {formatCredits(estConversas(credits))} conversas
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Preview de governança */}
-          {showPrev && (
-            <GovernancePreview credits={credits} price={price} />
-          )}
-
-          {/* Aviso renovação */}
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Alterações na cota de créditos entram em vigor apenas na <strong>próxima renovação</strong>. O preço e o nome têm efeito imediato.
-          </p>
-        </div>
-
-        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onSave}
-            disabled={saving || !isValid}
-            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            Salvar alterações
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Modal: criar novo plano ───────────────────────────────────────────────────
-
-function PlanModal({
-  form,
-  saving,
-  error,
-  onChange,
-  onSave,
-  onClose,
-}: {
-  form:     PlanForm
-  saving:   boolean
-  error:    string | null
-  onChange: (f: Partial<PlanForm>) => void
-  onSave:   () => void
-  onClose:  () => void
-}) {
-  const credits = parseInt(form.monthly_ai_credits, 10) || 0
-  const isValid = form.name.trim().length > 0 && form.slug.trim().length > 0
+  const credits       = parseInt(form.monthly_credits, 10) || 0
+  const internalPrice = parseFloat(form.internal_price) || 0
+  const isValid       = form.name.trim().length > 0 && form.slug.trim().length > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -359,9 +216,9 @@ function PlanModal({
                 const name = e.target.value
                 onChange({ name, slug: generateSlug(name) })
               }}
-              placeholder="Ex: Business"
-              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="Ex: AI Business"
               autoFocus
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
           </div>
 
@@ -371,29 +228,42 @@ function PlanModal({
               type="text"
               value={form.slug}
               onChange={e => onChange({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-              placeholder="business"
+              placeholder="ai-business"
               className="border border-slate-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
-            <p className="text-xs text-slate-400">Identificador único do plano (gerado automaticamente)</p>
+            <p className="text-xs text-slate-400">Identificador único (gerado automaticamente)</p>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
-            <input
-              type="number"
-              min={0}
-              step={100}
-              value={form.monthly_ai_credits}
-              onChange={e => onChange({ monthly_ai_credits: e.target.value })}
-              placeholder="0"
-              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-            {credits > 0 && (
-              <p className="text-xs text-violet-600 mt-0.5">
-                ≈ {formatCredits(estConversas(credits))} conversas estimadas
-              </p>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
+              <input
+                type="number" min={0} step={100}
+                value={form.monthly_credits}
+                onChange={e => onChange({ monthly_credits: e.target.value })}
+                placeholder="0"
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              {credits > 0 && (
+                <p className="text-xs text-violet-600 mt-0.5">≈ {formatCredits(estConversas(credits))} conversas</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Preço interno ref. (R$)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={form.internal_price}
+                onChange={e => onChange({ internal_price: e.target.value })}
+                placeholder="0.00"
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <p className="text-xs text-slate-400">Governança interna — não é preço de venda</p>
+            </div>
           </div>
+
+          {credits > 0 && (
+            <GovernancePreview credits={credits} internalPrice={internalPrice} />
+          )}
 
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
@@ -407,20 +277,108 @@ function PlanModal({
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
-          >
+          <button onClick={onClose} disabled={saving}
+            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
             Cancelar
           </button>
-          <button
-            onClick={onSave}
-            disabled={saving || !isValid}
-            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
+          <button onClick={onSave} disabled={saving || !isValid}
+            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 size={14} className="animate-spin" />}
             Criar plano
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: editar plano de IA ─────────────────────────────────────────────────
+
+function AiPlanEditModal({
+  plan, form, saving, error,
+  onChange, onSave, onClose,
+}: {
+  plan:     AiPlan
+  form:     AiPlanEditForm
+  saving:   boolean
+  error:    string | null
+  onChange: (f: Partial<AiPlanEditForm>) => void
+  onSave:   () => void
+  onClose:  () => void
+}) {
+  const credits       = parseInt(form.monthly_credits, 10) || 0
+  const internalPrice = parseFloat(form.internal_price) || 0
+  const isValid       = form.name.trim().length > 0 && credits >= 0 && internalPrice >= 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-900">Editar — {plan.name}</h3>
+            <p className="text-xs text-slate-400 mt-0.5 font-mono">{plan.slug}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {error && <ErrorBanner message={error} />}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Nome do plano</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => onChange({ name: e.target.value })}
+              autoFocus
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Créditos de IA / mês</label>
+              <input
+                type="number" min={0} step={100}
+                value={form.monthly_credits}
+                onChange={e => onChange({ monthly_credits: e.target.value })}
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              {credits > 0 && (
+                <p className="text-xs text-violet-600 mt-0.5">≈ {formatCredits(estConversas(credits))} conversas</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">Preço interno ref. (R$)</label>
+              <input
+                type="number" min={0} step={0.01}
+                value={form.internal_price}
+                onChange={e => onChange({ internal_price: e.target.value })}
+                className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+          </div>
+
+          {credits > 0 && (
+            <GovernancePreview credits={credits} internalPrice={internalPrice} />
+          )}
+
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Alterações na cota de créditos entram em vigor apenas na <strong>próxima renovação</strong>. O nome tem efeito imediato.
+          </p>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} disabled={saving}
+            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
+            Cancelar
+          </button>
+          <button onClick={onSave} disabled={saving || !isValid}
+            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            Salvar alterações
           </button>
         </div>
       </div>
@@ -431,13 +389,8 @@ function PlanModal({
 // ── Modal de pacote ───────────────────────────────────────────────────────────
 
 function PackageModal({
-  mode,
-  form,
-  saving,
-  error,
-  onChange,
-  onSave,
-  onClose,
+  mode, form, saving, error,
+  onChange, onSave, onClose,
 }: {
   mode:     'create' | 'edit'
   form:     PackageForm
@@ -447,10 +400,9 @@ function PackageModal({
   onSave:   () => void
   onClose:  () => void
 }) {
-  const credits  = parseInt(form.credits, 10)
-  const price    = parseFloat(form.price)
-  const isValid  = form.name.trim() && credits > 0 && !isNaN(price) && price >= 0
-  const showPrev = credits > 0 && !isNaN(price) && price >= 0
+  const credits = parseInt(form.credits, 10)
+  const price   = parseFloat(form.price)
+  const isValid = form.name.trim() && credits > 0 && !isNaN(price) && price >= 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -469,11 +421,9 @@ function PackageModal({
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-600">Nome do pacote</label>
-            <input
-              type="text"
-              value={form.name}
+            <input type="text" value={form.name}
               onChange={e => onChange({ name: e.target.value })}
-              placeholder="Ex: Pacote 500 créditos"
+              placeholder="Ex: Boost IA"
               className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
           </div>
@@ -481,28 +431,18 @@ function PackageModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600">Créditos</label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={form.credits}
+              <input type="number" min={1} step={1} value={form.credits}
                 onChange={e => onChange({ credits: e.target.value })}
-                placeholder="500"
+                placeholder="5000"
                 className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
               {credits > 0 && (
-                <p className="text-xs text-violet-600 mt-0.5">
-                  ≈ {formatCredits(estConversas(credits))} conversas estimadas
-                </p>
+                <p className="text-xs text-violet-600 mt-0.5">≈ {formatCredits(estConversas(credits))} conversas</p>
               )}
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Preço (R$)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={form.price}
+              <label className="text-xs font-medium text-slate-600">Preço de venda (R$)</label>
+              <input type="number" min={0} step={0.01} value={form.price}
                 onChange={e => onChange({ price: e.target.value })}
                 placeholder="49.90"
                 className="border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
@@ -510,14 +450,12 @@ function PackageModal({
             </div>
           </div>
 
-          {showPrev && (
-            <GovernancePreview credits={credits} price={price} />
+          {credits > 0 && !isNaN(price) && price >= 0 && (
+            <GovernancePreview credits={credits} internalPrice={price} />
           )}
 
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.is_active}
+            <input type="checkbox" checked={form.is_active}
               onChange={e => onChange({ is_active: e.target.checked })}
               className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
             />
@@ -526,18 +464,12 @@ function PackageModal({
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
-          >
+          <button onClick={onClose} disabled={saving}
+            className="px-4 py-2 text-sm text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
             Cancelar
           </button>
-          <button
-            onClick={onSave}
-            disabled={saving || !isValid}
-            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
+          <button onClick={onSave} disabled={saving || !isValid}
+            className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 size={14} className="animate-spin" />}
             {mode === 'create' ? 'Criar pacote' : 'Salvar alterações'}
           </button>
@@ -551,56 +483,53 @@ function PackageModal({
 
 export function AiPlansPanel() {
 
-  // ── Estado: planos ───────────────────────────────────────────────────────
-  const [plans,        setPlans]        = useState<Plan[]>([])
+  // ── Estado: ai_plans ─────────────────────────────────────────────────────
+  const [aiPlans,      setAiPlans]      = useState<AiPlan[]>([])
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [errorPlans,   setErrorPlans]   = useState<string | null>(null)
   const [successPlans, setSuccessPlans] = useState<string | null>(null)
 
-  // Editar plano (nome, preço, créditos IA)
-  const [editingPlan,    setEditingPlan]    = useState<Plan | null>(null)
-  const [editPlanForm,   setEditPlanForm]   = useState<EditPlanForm>({ name: '', price: '', monthly_ai_credits: '' })
-  const [savingPlanEdit, setSavingPlanEdit] = useState(false)
-  const [errorPlanEdit,  setErrorPlanEdit]  = useState<string | null>(null)
+  const [editingAiPlan,    setEditingAiPlan]    = useState<AiPlan | null>(null)
+  const [editAiPlanForm,   setEditAiPlanForm]   = useState<AiPlanEditForm>({ name: '', monthly_credits: '', internal_price: '' })
+  const [savingPlanEdit,   setSavingPlanEdit]   = useState(false)
+  const [errorPlanEdit,    setErrorPlanEdit]    = useState<string | null>(null)
 
-  // Criar plano
-  const [planModalOpen,  setPlanModalOpen]  = useState(false)
-  const [planForm,       setPlanForm]       = useState<PlanForm>(EMPTY_PLAN_FORM)
-  const [savingPlanForm, setSavingPlanForm] = useState(false)
-  const [errorPlanForm,  setErrorPlanForm]  = useState<string | null>(null)
+  const [aiPlanModalOpen,  setAiPlanModalOpen]  = useState(false)
+  const [aiPlanCreateForm, setAiPlanCreateForm] = useState<AiPlanCreateForm>(EMPTY_AI_PLAN_FORM)
+  const [savingPlanCreate, setSavingPlanCreate] = useState(false)
+  const [errorPlanCreate,  setErrorPlanCreate]  = useState<string | null>(null)
 
-  // Toggle ativo/inativo
   const [togglingPlan, setTogglingPlan] = useState<string | null>(null)
 
   // ── Estado: pacotes ──────────────────────────────────────────────────────
-  const [packages,      setPackages]     = useState<CreditPackage[]>([])
-  const [loadingPkgs,   setLoadingPkgs]  = useState(true)
-  const [errorPkgs,     setErrorPkgs]    = useState<string | null>(null)
-  const [successPkgs,   setSuccessPkgs]  = useState<string | null>(null)
+  const [packages,     setPackages]     = useState<CreditPackage[]>([])
+  const [loadingPkgs,  setLoadingPkgs]  = useState(true)
+  const [errorPkgs,    setErrorPkgs]    = useState<string | null>(null)
+  const [successPkgs,  setSuccessPkgs]  = useState<string | null>(null)
 
-  const [packageModal,  setPackageModal]  = useState<{ mode: 'create' | 'edit'; pkg?: CreditPackage } | null>(null)
-  const [packageForm,   setPackageForm]   = useState<PackageForm>(EMPTY_PKG_FORM)
-  const [savingPkg,     setSavingPkg]     = useState(false)
-  const [errorPkgForm,  setErrorPkgForm]  = useState<string | null>(null)
-  const [togglingPkg,   setTogglingPkg]   = useState<string | null>(null)
+  const [packageModal, setPackageModal] = useState<{ mode: 'create' | 'edit'; pkg?: CreditPackage } | null>(null)
+  const [packageForm,  setPackageForm]  = useState<PackageForm>(EMPTY_PKG_FORM)
+  const [savingPkg,    setSavingPkg]    = useState(false)
+  const [errorPkgForm, setErrorPkgForm] = useState<string | null>(null)
+  const [togglingPkg,  setTogglingPkg]  = useState<string | null>(null)
 
-  // ── Carregar planos via RPC admin-only ───────────────────────────────────
+  // ── Load: ai_plans via get_ai_plans_admin() ──────────────────────────────
 
-  const loadPlans = useCallback(async () => {
+  const loadAiPlans = useCallback(async () => {
     setLoadingPlans(true)
     setErrorPlans(null)
     try {
-      const { data, error } = await supabase.rpc('get_plans_governance')
+      const { data, error } = await supabase.rpc('get_ai_plans_admin')
       if (error) throw error
-      setPlans((data ?? []) as Plan[])
+      setAiPlans((data ?? []) as AiPlan[])
     } catch (err) {
-      setErrorPlans(err instanceof Error ? err.message : 'Erro ao carregar planos')
+      setErrorPlans(err instanceof Error ? err.message : 'Erro ao carregar planos de IA')
     } finally {
       setLoadingPlans(false)
     }
   }, [])
 
-  // ── Carregar pacotes via RPC admin-only ──────────────────────────────────
+  // ── Load: pacotes via get_credit_packages_admin() ────────────────────────
 
   const loadPackages = useCallback(async () => {
     setLoadingPkgs(true)
@@ -617,11 +546,9 @@ export function AiPlansPanel() {
   }, [])
 
   useEffect(() => {
-    void loadPlans()
+    void loadAiPlans()
     void loadPackages()
-  }, [loadPlans, loadPackages])
-
-  // ── Feedback com auto-dismiss ────────────────────────────────────────────
+  }, [loadAiPlans, loadPackages])
 
   function showSuccessPlans(msg: string) {
     setSuccessPlans(msg)
@@ -633,39 +560,52 @@ export function AiPlansPanel() {
     setTimeout(() => setSuccessPkgs(null), 4000)
   }
 
-  // ── Salvar edição de plano (nome, preço e créditos IA) ───────────────────
+  // ── Criar plano de IA via create_ai_plan() ───────────────────────────────
 
-  async function savePlanEdit() {
-    if (!editingPlan) return
+  async function createAiPlan() {
+    const { name, slug, monthly_credits, internal_price, is_active } = aiPlanCreateForm
+    if (!name.trim() || !slug.trim()) return
+    setSavingPlanCreate(true)
+    setErrorPlanCreate(null)
+    try {
+      const { data, error } = await supabase.rpc('create_ai_plan', {
+        p_name:            name.trim(),
+        p_slug:            slug.trim(),
+        p_monthly_credits: parseInt(monthly_credits, 10) || 0,
+        p_internal_price:  parseFloat(internal_price) || 0,
+        p_is_active:       is_active,
+      })
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error ?? 'Erro ao criar plano de IA')
+      setAiPlanModalOpen(false)
+      setAiPlanCreateForm(EMPTY_AI_PLAN_FORM)
+      showSuccessPlans(`Plano "${name}" criado com sucesso.`)
+      void loadAiPlans()
+    } catch (err) {
+      setErrorPlanCreate(err instanceof Error ? err.message : 'Erro ao criar plano')
+    } finally {
+      setSavingPlanCreate(false)
+    }
+  }
+
+  // ── Salvar edição via update_ai_plan() ───────────────────────────────────
+
+  async function saveAiPlanEdit() {
+    if (!editingAiPlan) return
     setSavingPlanEdit(true)
     setErrorPlanEdit(null)
     try {
-      const newName    = editPlanForm.name.trim()
-      const newPrice   = parseFloat(editPlanForm.price)
-      const newCredits = parseInt(editPlanForm.monthly_ai_credits, 10)
-
-      // Atualiza nome e preço via update_plan
-      const { data: upData, error: upError } = await supabase.rpc('update_plan', {
-        p_plan_id: editingPlan.id,
-        p_name:    newName !== editingPlan.name ? newName : undefined,
-        p_price:   !isNaN(newPrice) ? newPrice : undefined,
+      const { data, error } = await supabase.rpc('update_ai_plan', {
+        p_ai_plan_id:      editingAiPlan.id,
+        p_name:            editAiPlanForm.name.trim() || undefined,
+        p_monthly_credits: parseInt(editAiPlanForm.monthly_credits, 10) ?? undefined,
+        p_internal_price:  parseFloat(editAiPlanForm.internal_price) ?? undefined,
       })
-      if (upError) throw upError
-      if (upData && !upData.success) throw new Error(upData.error ?? 'Erro ao atualizar plano')
-
-      // Atualiza créditos de IA separadamente
-      if (!isNaN(newCredits) && newCredits !== editingPlan.monthly_ai_credits) {
-        const { data: crData, error: crError } = await supabase.rpc('update_plan_ai_credits', {
-          p_plan_id: editingPlan.id,
-          p_credits: newCredits,
-        })
-        if (crError) throw crError
-        if (crData && !crData.ok) throw new Error(crData.error ?? 'Erro ao atualizar créditos')
-      }
-
-      setEditingPlan(null)
-      showSuccessPlans(`Plano "${newName}" atualizado com sucesso.`)
-      void loadPlans()
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error ?? 'Erro ao atualizar plano')
+      setEditingAiPlan(null)
+      showSuccessPlans(`Plano "${editAiPlanForm.name}" atualizado com sucesso.`)
+      void loadAiPlans()
     } catch (err) {
       setErrorPlanEdit(err instanceof Error ? err.message : 'Erro ao salvar plano')
     } finally {
@@ -673,93 +613,44 @@ export function AiPlansPanel() {
     }
   }
 
-  // ── Criar novo plano ─────────────────────────────────────────────────────
+  // ── Toggle ativo/inativo via update_ai_plan() ────────────────────────────
 
-  async function createPlan() {
-    if (!planForm.name.trim() || !planForm.slug.trim()) return
-    setSavingPlanForm(true)
-    setErrorPlanForm(null)
-    try {
-      // Cria o plano com campos mínimos — demais campos usam defaults do banco
-      const { data, error } = await supabase.rpc('create_plan', {
-        p_name:      planForm.name.trim(),
-        p_slug:      planForm.slug.trim(),
-        p_is_active: planForm.is_active,
-      })
-      if (error) throw error
-
-      const result = data as { success: boolean; error?: string; plan_id?: string }
-      if (!result?.success) throw new Error(result?.error ?? 'Erro ao criar plano')
-
-      // Aplica a cota de créditos de IA ao plano recém-criado
-      const credits = parseInt(planForm.monthly_ai_credits, 10) || 0
-      if (credits > 0 && result.plan_id) {
-        await supabase.rpc('update_plan_ai_credits', {
-          p_plan_id: result.plan_id,
-          p_credits: credits,
-        })
-      }
-
-      setPlanModalOpen(false)
-      setPlanForm(EMPTY_PLAN_FORM)
-      showSuccessPlans(`Plano "${planForm.name}" criado com sucesso.`)
-      void loadPlans()
-    } catch (err) {
-      setErrorPlanForm(err instanceof Error ? err.message : 'Erro ao criar plano')
-    } finally {
-      setSavingPlanForm(false)
-    }
-  }
-
-  // ── Toggle ativo/inativo do plano ────────────────────────────────────────
-
-  async function togglePlan(plan: Plan) {
+  async function toggleAiPlan(plan: AiPlan) {
     setTogglingPlan(plan.id)
     try {
-      const { data, error } = await supabase.rpc('update_plan', {
-        p_plan_id:   plan.id,
-        p_is_active: !plan.is_active,
+      const { data, error } = await supabase.rpc('update_ai_plan', {
+        p_ai_plan_id: plan.id,
+        p_is_active:  !plan.is_active,
       })
       if (error) throw error
-
-      const result = data as { success: boolean; error?: string }
-      if (!result?.success) throw new Error(result?.error ?? 'Erro ao alterar status')
-      void loadPlans()
+      if (!data?.success) throw new Error(data?.error ?? 'Erro ao alterar status')
+      void loadAiPlans()
     } catch (err) {
-      setErrorPlans(err instanceof Error ? err.message : 'Erro ao alterar status do plano')
+      setErrorPlans(err instanceof Error ? err.message : 'Erro ao alterar status')
     } finally {
       setTogglingPlan(null)
     }
   }
 
-  // ── Salvar pacote (create/edit) ──────────────────────────────────────────
+  // ── Pacotes: salvar ──────────────────────────────────────────────────────
 
   async function savePackage() {
     const credits = parseInt(packageForm.credits, 10)
     const price   = parseFloat(packageForm.price)
     if (!packageForm.name.trim() || credits <= 0 || isNaN(price) || price < 0) return
-
     setSavingPkg(true)
     setErrorPkgForm(null)
     try {
       if (packageModal?.mode === 'create') {
         const { error } = await supabase.from('credit_packages').insert({
-          name:      packageForm.name.trim(),
-          credits,
-          price,
-          is_active: packageForm.is_active,
+          name: packageForm.name.trim(), credits, price, is_active: packageForm.is_active,
         })
         if (error) throw error
         showSuccessPkgs('Pacote criado com sucesso.')
       } else if (packageModal?.pkg) {
         const { error } = await supabase
           .from('credit_packages')
-          .update({
-            name:      packageForm.name.trim(),
-            credits,
-            price,
-            is_active: packageForm.is_active,
-          })
+          .update({ name: packageForm.name.trim(), credits, price, is_active: packageForm.is_active })
           .eq('id', packageModal.pkg.id)
         if (error) throw error
         showSuccessPkgs('Pacote atualizado com sucesso.')
@@ -772,8 +663,6 @@ export function AiPlansPanel() {
       setSavingPkg(false)
     }
   }
-
-  // ── Toggle ativo/inativo do pacote ───────────────────────────────────────
 
   async function togglePackage(pkg: CreditPackage) {
     setTogglingPkg(pkg.id)
@@ -791,8 +680,6 @@ export function AiPlansPanel() {
     }
   }
 
-  // ── Abrir modal de pacote ────────────────────────────────────────────────
-
   function openPackageModal(mode: 'create' | 'edit', pkg?: CreditPackage) {
     setErrorPkgForm(null)
     setPackageForm(
@@ -803,31 +690,31 @@ export function AiPlansPanel() {
     setPackageModal({ mode, pkg })
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
 
-      {/* ── 1. Planos Mensais ──────────────────────────────────────────────── */}
+      {/* ── 1. Planos de IA (ai_plans) ──────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <SectionHeader
           icon={<Sparkles size={16} />}
-          title="Planos Mensais — Cota de IA"
+          title="Planos de IA — Cota Mensal"
           right={
             <button
-              onClick={() => { setErrorPlanForm(null); setPlanForm(EMPTY_PLAN_FORM); setPlanModalOpen(true) }}
+              onClick={() => { setErrorPlanCreate(null); setAiPlanCreateForm(EMPTY_AI_PLAN_FORM); setAiPlanModalOpen(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
             >
               <Plus size={13} />
-              Novo plano
+              Novo plano de IA
             </button>
           }
         />
 
         <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
           <p className="text-xs text-amber-700">
-            Alterações na cota de créditos entram em vigor apenas na <strong>próxima renovação</strong> das
-            empresas que utilizam cada plano. O ciclo em andamento não é afetado.
+            Planos de IA são entidades próprias vinculadas a Planos CRM (1:1).
+            Alterações na cota de créditos entram em vigor apenas na <strong>próxima renovação</strong>.
           </p>
         </div>
 
@@ -840,7 +727,7 @@ export function AiPlansPanel() {
               <tbody className="divide-y divide-slate-100">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 9 }).map((__, j) => (
+                    {Array.from({ length: 7 }).map((__, j) => (
                       <td key={j} className="px-4 py-4">
                         <div className="h-4 bg-slate-100 rounded animate-pulse" />
                       </td>
@@ -850,56 +737,57 @@ export function AiPlansPanel() {
               </tbody>
             </table>
           </div>
-        ) : plans.length === 0 ? (
+        ) : aiPlans.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <Sparkles size={24} className="mx-auto mb-2 text-slate-200" />
-            <p className="text-sm text-slate-400">Nenhum plano encontrado</p>
+            <p className="text-sm text-slate-400">Nenhum plano de IA encontrado</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-4 py-3 text-left   text-xs font-medium text-slate-500 uppercase tracking-wide">Plano</th>
+                  <th className="px-4 py-3 text-left   text-xs font-medium text-slate-500 uppercase tracking-wide">Plano de IA</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Créditos/mês</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Conversas (≈)</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço/conv</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Valor Mensal</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">
                     <span className="flex items-center justify-end gap-1">
                       <TrendingUp size={11} className="text-violet-400" />
-                      Custo (OpenAI)
+                      Custo IA est.
                     </span>
                   </th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Lucro Estimado</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço interno ref.</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Planos CRM</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {plans.map(plan => {
-                  const lucroEst = plan.price - plan.estimated_ai_cost
+                {aiPlans.map(plan => {
+                  const custo = govAiCost(plan.monthly_credits)
                   return (
                     <tr key={plan.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{plan.name}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-800">{plan.name}</div>
+                        <div className="text-xs text-slate-400 font-mono">{plan.slug}</div>
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                        {formatCredits(plan.monthly_ai_credits)}
+                        {formatCredits(plan.monthly_credits)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-violet-600 text-xs font-medium">
-                        ~{formatCredits(estConversas(plan.monthly_ai_credits))}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-xs font-mono">
-                        {precoConversa(plan.price, plan.monthly_ai_credits)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700 text-xs font-mono">
-                        {plan.price > 0 ? formatPrice(plan.price) : '—'}
+                        ~{formatCredits(plan.estimated_conversations ?? estConversas(plan.monthly_credits))}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs font-mono">
-                        {formatPrice(plan.estimated_ai_cost)}
+                        {formatPrice(custo)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">
-                        <span className={lucroEst >= 0 ? 'text-green-600' : 'text-red-500'}>
-                          {plan.price > 0 ? formatPrice(lucroEst) : '—'}
+                        <span className={plan.internal_price >= custo ? 'text-green-600' : 'text-amber-500'}>
+                          {plan.internal_price > 0 ? formatPrice(plan.internal_price) : '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700">
+                          {plan.plans_count ?? 0}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -913,23 +801,23 @@ export function AiPlansPanel() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => {
-                              setEditingPlan(plan)
-                              setEditPlanForm({
-                                name:               plan.name,
-                                price:              String(plan.price ?? 0),
-                                monthly_ai_credits: String(plan.monthly_ai_credits),
+                              setEditingAiPlan(plan)
+                              setEditAiPlanForm({
+                                name:            plan.name,
+                                monthly_credits: String(plan.monthly_credits),
+                                internal_price:  String(plan.internal_price ?? 0),
                               })
                               setErrorPlanEdit(null)
                             }}
-                            title="Editar plano"
+                            title="Editar"
                             className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
                           >
                             <Pencil size={14} />
                           </button>
                           <button
-                            onClick={() => togglePlan(plan)}
+                            onClick={() => toggleAiPlan(plan)}
                             disabled={togglingPlan === plan.id}
-                            title={plan.is_active ? 'Desativar plano' : 'Ativar plano'}
+                            title={plan.is_active ? 'Desativar' : 'Ativar'}
                             className={`p-1.5 rounded transition-colors disabled:opacity-40 ${
                               plan.is_active
                                 ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
@@ -952,7 +840,7 @@ export function AiPlansPanel() {
         )}
       </div>
 
-      {/* ── 2. Pacotes de Créditos Avulsos ─────────────────────────────────── */}
+      {/* ── 2. Pacotes de Créditos Avulsos ──────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <SectionHeader
           icon={<Package size={16} />}
@@ -1007,7 +895,7 @@ export function AiPlansPanel() {
                     </span>
                   </th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Custo IA</th>
-                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço</th>
+                  <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço venda</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Lucro</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
@@ -1017,21 +905,13 @@ export function AiPlansPanel() {
                 {packages.map(pkg => (
                   <tr key={pkg.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-slate-800">{pkg.name}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                      {formatCredits(pkg.credits)}
-                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCredits(pkg.credits)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-violet-600 text-xs font-medium">
                       ~{formatCredits(estConversas(pkg.credits))}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">
-                      {formatCredits(pkg.estimated_tokens)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 font-mono text-xs">
-                      {formatPrice(pkg.estimated_ai_cost)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700 font-mono text-xs">
-                      {formatPrice(pkg.price)}
-                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">{formatCredits(pkg.estimated_tokens)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 font-mono text-xs">{formatPrice(pkg.estimated_ai_cost)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700 font-mono text-xs">{formatPrice(pkg.price)}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-mono text-xs">
                       <span className={pkg.estimated_profit >= 0 ? 'text-green-600' : 'text-red-500'}>
                         {formatPrice(pkg.estimated_profit)}
@@ -1039,36 +919,25 @@ export function AiPlansPanel() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        pkg.is_active
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-slate-100 text-slate-500'
+                        pkg.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
                       }`}>
                         {pkg.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openPackageModal('edit', pkg)}
-                          title="Editar"
-                          className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
-                        >
+                        <button onClick={() => openPackageModal('edit', pkg)} title="Editar"
+                          className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors">
                           <Pencil size={14} />
                         </button>
-                        <button
-                          onClick={() => togglePackage(pkg)}
-                          disabled={togglingPkg === pkg.id}
+                        <button onClick={() => togglePackage(pkg)} disabled={togglingPkg === pkg.id}
                           title={pkg.is_active ? 'Desativar' : 'Ativar'}
                           className={`p-1.5 rounded transition-colors disabled:opacity-40 ${
                             pkg.is_active
                               ? 'text-slate-400 hover:text-red-500 hover:bg-red-50'
                               : 'text-slate-400 hover:text-green-600 hover:bg-green-50'
-                          }`}
-                        >
-                          {togglingPkg === pkg.id
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : <Power size={14} />
-                          }
+                          }`}>
+                          {togglingPkg === pkg.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
                         </button>
                       </div>
                     </td>
@@ -1080,28 +949,28 @@ export function AiPlansPanel() {
         )}
       </div>
 
-      {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      {/* ── Modais ─────────────────────────────────────────────────────────────── */}
 
-      {editingPlan && (
-        <EditPlanModal
-          plan={editingPlan}
-          form={editPlanForm}
-          saving={savingPlanEdit}
-          error={errorPlanEdit}
-          onChange={partial => setEditPlanForm(f => ({ ...f, ...partial }))}
-          onSave={savePlanEdit}
-          onClose={() => setEditingPlan(null)}
+      {aiPlanModalOpen && (
+        <AiPlanCreateModal
+          form={aiPlanCreateForm}
+          saving={savingPlanCreate}
+          error={errorPlanCreate}
+          onChange={partial => setAiPlanCreateForm(f => ({ ...f, ...partial }))}
+          onSave={createAiPlan}
+          onClose={() => setAiPlanModalOpen(false)}
         />
       )}
 
-      {planModalOpen && (
-        <PlanModal
-          form={planForm}
-          saving={savingPlanForm}
-          error={errorPlanForm}
-          onChange={partial => setPlanForm(f => ({ ...f, ...partial }))}
-          onSave={createPlan}
-          onClose={() => setPlanModalOpen(false)}
+      {editingAiPlan && (
+        <AiPlanEditModal
+          plan={editingAiPlan}
+          form={editAiPlanForm}
+          saving={savingPlanEdit}
+          error={errorPlanEdit}
+          onChange={partial => setEditAiPlanForm(f => ({ ...f, ...partial }))}
+          onSave={saveAiPlanEdit}
+          onClose={() => setEditingAiPlan(null)}
         />
       )}
 
@@ -1116,7 +985,6 @@ export function AiPlansPanel() {
           onClose={() => setPackageModal(null)}
         />
       )}
-
     </div>
   )
 }

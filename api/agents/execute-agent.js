@@ -48,11 +48,20 @@
 //   }
 // =====================================================
 
+import { createClient }          from '@supabase/supabase-js';
 import { orchestrateExecution } from '../lib/agents/conversationOrchestrator.js';
 import { buildContext }          from '../lib/agents/contextBuilder.js';
 import { executeAgent }          from '../lib/agents/agentExecutor.js';
 import { compose }               from '../lib/agents/responseComposer.js';
 import { sendBlocks }            from '../lib/agents/whatsappGateway.js';
+import { getPlanLimits }         from '../lib/plans/limitChecker.js';
+
+const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false }
+});
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -94,6 +103,54 @@ export default async function handler(req, res) {
   }
 
   const conversationId = decision.event?.conversation_id;
+  const companyId      = decision.event?.company_id;
+
+  // ── 1b. Validação de plano de IA (fail-closed) ────────────────────────────
+  //
+  // Verifica se a empresa possui plano de IA configurado (ai_plan_id) antes de
+  // iniciar qualquer etapa do pipeline. Falha → bloqueia. Nunca fail-open.
+
+  if (!companyId) {
+    console.error('🤖 [EXECUTE] ❌ company_id ausente no evento — não é possível validar plano');
+    return res.status(200).json({
+      success: false,
+      status:  'plan_validation_failed',
+      error:   'company_id ausente — não foi possível validar o plano de IA',
+      meta:    { conversation_id: conversationId }
+    });
+  }
+
+  if (!SERVICE_ROLE_KEY) {
+    console.error('🤖 [EXECUTE] ❌ SERVICE_ROLE_KEY ausente — não é possível validar plano');
+    return res.status(200).json({
+      success: false,
+      status:  'plan_validation_failed',
+      error:   'Configuração interna inválida — não foi possível validar o plano de IA',
+      meta:    { conversation_id: conversationId }
+    });
+  }
+
+  try {
+    const limits = await getPlanLimits(supabaseAdmin, companyId);
+    if (!limits.ai_plan_id) {
+      console.warn('🤖 [EXECUTE] ⛔ Empresa sem plano de IA configurado — execução bloqueada:', { company_id: companyId });
+      return res.status(200).json({
+        success: false,
+        status:  'no_ai_plan_configured',
+        error:   'Empresa sem plano de IA configurado',
+        meta:    { conversation_id: conversationId, company_id: companyId }
+      });
+    }
+  } catch (planErr) {
+    // Falha ao buscar plano → BLOQUEAR (fail-closed).
+    console.error('🤖 [EXECUTE] ❌ Falha ao validar plano de IA — bloqueando execução:', planErr?.message);
+    return res.status(200).json({
+      success: false,
+      status:  'plan_validation_failed',
+      error:   'Não foi possível validar o plano de IA',
+      meta:    { conversation_id: conversationId, company_id: companyId }
+    });
+  }
 
   // ── 2. Orchestrator ───────────────────────────────────────────────────────
 

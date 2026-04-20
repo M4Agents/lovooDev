@@ -125,12 +125,17 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 
               {/* Nome do Lead */}
               {isFieldVisible('name') && (
-                <p className="text-xs text-gray-600 truncate">
+                <p className="text-xs text-gray-600 truncate flex items-center gap-1.5">
                   👤 {lead.name}
+                  {lead.is_over_plan && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600 flex-shrink-0">
+                      Restrito
+                    </span>
+                  )}
                 </p>
               )}
 
-              {isFieldVisible('email') && lead.email && (
+              {isFieldVisible('email') && lead.email && !lead.is_over_plan && (
                 <p className="text-xs text-gray-500 truncate">
                   {lead.email}
                 </p>
@@ -171,11 +176,18 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 
           {/* Informações do lead */}
           <div className="space-y-2">
-            {isFieldVisible('phone') && lead.phone && (
-              <div className="flex items-center gap-2 text-xs text-gray-600">
-                <Phone className="w-3.5 h-3.5 text-gray-400" />
-                <span className="truncate">{lead.phone}</span>
-              </div>
+            {isFieldVisible('phone') && (
+              lead.is_over_plan ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 italic">
+                  <Phone className="w-3.5 h-3.5 text-gray-300" />
+                  <span>Número restrito</span>
+                </div>
+              ) : lead.phone ? (
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <Phone className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="truncate">{lead.phone}</span>
+                </div>
+              ) : null
             )}
 
             {isFieldVisible('company') && lead.company_name && (

@@ -569,12 +569,16 @@ export const WhatsAppLifeModule: React.FC = () => {
           </div>
           
           <div className="bg-green-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-600">{planLimits.remaining}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {planLimits.remaining === null ? '∞' : planLimits.remaining}
+            </div>
             <div className="text-sm text-green-700">Disponíveis</div>
           </div>
           
           <div className="bg-purple-50 rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-600">{planLimits.maxAllowed}</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {planLimits.maxAllowed === null ? '∞' : planLimits.maxAllowed}
+            </div>
             <div className="text-sm text-purple-700">Limite do Plano</div>
           </div>
         </div>
@@ -703,7 +707,9 @@ export const WhatsAppLifeModule: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-lg font-semibold text-purple-900">Plano {planConfig.planType}</div>
-              <div className="text-sm text-purple-700">Até {planLimits.maxAllowed} números WhatsApp</div>
+              <div className="text-sm text-purple-700">
+                {planLimits.maxAllowed === null ? 'Ilimitado' : `Até ${planLimits.maxAllowed}`} números WhatsApp
+              </div>
             </div>
             <div className="text-right">
               <div className="text-lg font-semibold text-purple-900">{planConfig.price}</div>

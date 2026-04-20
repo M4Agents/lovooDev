@@ -13,8 +13,8 @@ interface AddInstanceModalProps {
   loading?: boolean;
   planLimits: {
     canAdd: boolean;
-    remaining: number;
-    maxAllowed: number;
+    remaining: number | null;   // null = ilimitado (Elite/custom)
+    maxAllowed: number | null;  // null = ilimitado (Elite/custom)
     currentCount: number;
   };
 }
@@ -100,7 +100,10 @@ export const AddInstanceModal: React.FC<AddInstanceModalProps> = ({
             <div className="flex items-center gap-2 text-sm text-blue-700">
               <Smartphone className="h-4 w-4" />
               <span>
-                {planLimits.remaining} de {planLimits.maxAllowed} instâncias disponíveis
+                {planLimits.maxAllowed === null
+                  ? `${planLimits.remaining ?? planLimits.currentCount} instâncias (ilimitado)`
+                  : `${planLimits.remaining} de ${planLimits.maxAllowed} instâncias disponíveis`
+                }
               </span>
             </div>
           </div>

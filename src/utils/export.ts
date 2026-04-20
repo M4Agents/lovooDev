@@ -55,10 +55,11 @@ export const prepareAnalyticsForExport = (conversions: any[]) => {
 // NOVAS FUNÇÕES PARA EXPORTAÇÃO DE LEADS
 export const prepareLeadsForExport = (leads: any[]) => {
   return leads.map(lead => {
+    const isRestricted = lead.is_over_plan === true
     const processedLead: any = {
       'Nome': lead.name || '',
-      'Email': lead.email || '',
-      'Telefone': lead.phone || '',
+      'Email': isRestricted ? '' : (lead.email || ''),
+      'Telefone': isRestricted ? '' : (lead.phone || ''),
       'Origem': (() => {
         switch (lead.origin) {
           case 'webhook_ultra_simples': return 'Webhook';
@@ -76,10 +77,10 @@ export const prepareLeadsForExport = (leads: any[]) => {
       
       // Campos da empresa
       'Empresa': lead.company_name || '',
-      'CNPJ': lead.company_cnpj || '',
+      'CNPJ': isRestricted ? '' : (lead.company_cnpj || ''),
       'Razão Social': lead.company_legal_name || '',
-      'Telefone Empresa': lead.company_phone || '',
-      'Email Empresa': lead.company_email || '',
+      'Telefone Empresa': isRestricted ? '' : (lead.company_phone || ''),
+      'Email Empresa': isRestricted ? '' : (lead.company_email || ''),
       'Website': lead.company_website || '',
       'CEP': lead.company_cep || '',
       'Endereço': lead.company_address || '',

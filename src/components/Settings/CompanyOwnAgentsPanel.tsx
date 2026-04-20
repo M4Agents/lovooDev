@@ -26,6 +26,7 @@ import {
   type UpdateCompanyAgentPayload
 } from '../../services/companyOwnAgentsApi'
 import { api } from '../../services/api'
+import { supabase } from '../../lib/supabase'
 import { PromptEditor } from '../ui/PromptEditor'
 import { AgentPromptBuilder, assemblePreview, createEmptyPromptConfig } from '../ui/AgentPromptBuilder'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
@@ -645,6 +646,8 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
   // Agente sendo editado no wizard (formato flat). null = nenhum agente em edição via wizard
   const [editingAgentInWizard, setEditingAgentInWizard] = useState<CompanyAgent | null>(null)
   const [customFieldVariables, setCustomFieldVars] = useState<PromptVariable[]>([])
+  // Controle de feature: true = pode criar múltiplos agentes, null = carregando
+  const [multipleAgentsEnabled, setMultipleAgentsEnabled] = useState<boolean | null>(null)
 
   useEffect(() => {
     api.getCustomFields(companyId)
@@ -656,7 +659,25 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const data = await companyOwnAgentsApi.list(companyId)
+      const [data] = await Promise.all([
+        companyOwnAgentsApi.list(companyId),
+        // Busca features do plano em paralelo; falha silenciosa (não bloqueia carregamento)
+        (async () => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session?.access_token) return
+            const resp = await fetch(`/api/plans/limits?company_id=${encodeURIComponent(companyId)}`, {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            })
+            if (resp.ok) {
+              const json = await resp.json()
+              setMultipleAgentsEnabled(json.features?.multiple_agents_enabled === true)
+            }
+          } catch {
+            // Não bloquear UI em caso de falha ao buscar features
+          }
+        })()
+      ])
       setAgents(data)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar agentes.')
@@ -699,17 +720,44 @@ export function CompanyOwnAgentsPanel({ companyId }: Props) {
           </div>
         </div>
 
-        {!createMode && (
-          <button
-            onClick={() => setCreateMode('wizard')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600
-                       text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Novo agente
-          </button>
-        )}
+        {!createMode && (() => {
+          const atLimit = agents.length >= 1 && multipleAgentsEnabled === false
+          return (
+            <div className="relative group">
+              <button
+                onClick={() => { if (!atLimit) setCreateMode('wizard') }}
+                disabled={atLimit}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors
+                  ${atLimit
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+              >
+                <Plus className="w-4 h-4" />
+                Novo agente
+              </button>
+              {atLimit && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 z-10 hidden group-hover:block shadow-lg">
+                  Seu plano permite apenas 1 agente. Faça upgrade para criar múltiplos agentes.
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
+
+      {/* Banner: multiple_agents_enabled desabilitado e já tem agentes */}
+      {agents.length >= 1 && multipleAgentsEnabled === false && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm">
+          <span className="text-amber-500 mt-0.5">⚠️</span>
+          <div>
+            <p className="font-medium text-amber-800">Limite de agentes atingido</p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              Seu plano atual permite apenas 1 agente de IA. Faça upgrade do plano para criar agentes adicionais.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Modal premium de criação de agente (modo guiado) */}
       <AgentCreationModal
