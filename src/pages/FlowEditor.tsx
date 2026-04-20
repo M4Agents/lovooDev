@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Node, Edge } from 'reactflow'
 import { ArrowLeft, Loader, Undo, Redo, Copy, Clipboard, FileText, Download, Upload, Edit2 } from 'lucide-react'
 import FlowCanvas from '../components/Automation/FlowCanvas'
@@ -20,6 +20,9 @@ import { validateFlow, formatValidationMessages, type ValidationResult } from '.
 export default function FlowEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnTo: string = (location.state as any)?.returnTo || '/automations'
+  const returnActiveTab: string | undefined = (location.state as any)?.activeTab
   const [flow, setFlow] = useState<AutomationFlow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -250,7 +253,7 @@ export default function FlowEditor() {
     if (!id) return
 
     await automationApi.deleteFlow(id)
-    navigate('/automations')
+    navigate(returnTo, returnActiveTab ? { state: { activeTab: returnActiveTab } } : undefined)
   }
 
   const handleNodeConfigSave = async (nodeId: string, config: any) => {
@@ -346,7 +349,7 @@ export default function FlowEditor() {
         <div className="text-center">
           <p className="text-red-600 mb-4">{error || 'Fluxo não encontrado'}</p>
           <button
-            onClick={() => navigate('/automations')}
+            onClick={() => navigate(returnTo, returnActiveTab ? { state: { activeTab: returnActiveTab } } : undefined)}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -364,7 +367,7 @@ export default function FlowEditor() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/automations')}
+              onClick={() => navigate(returnTo, returnActiveTab ? { state: { activeTab: returnActiveTab } } : undefined)}
               className="text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-6 h-6" />

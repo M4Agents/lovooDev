@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard } from 'lucide-react';
@@ -42,6 +42,7 @@ export const Settings: React.FC = () => {
   const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   
@@ -122,13 +123,17 @@ export const Settings: React.FC = () => {
     'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'openai' | 'elevenlabs'
   >('whatsapp');
 
-  // Detectar parâmetro tab na URL para ativar aba correta
+  // Detectar parâmetro tab na URL ou state de navegação para ativar aba correta
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'tracking') {
+    const stateTab = (location.state as any)?.activeTab as string | undefined;
+    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes'] as const;
+    if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
+      setActiveTab(stateTab as typeof validTabs[number]);
+    } else if (tabParam === 'tracking') {
       setActiveTab('tracking');
     }
-  }, [searchParams]);
+  }, [searchParams, location.state]);
 
   useEffect(() => {
     const integration = searchParams.get('integration');
