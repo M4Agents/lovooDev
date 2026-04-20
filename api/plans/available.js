@@ -11,20 +11,9 @@
 //   200 {
 //     ok: true,
 //     current_plan_id: string | null,
+//     usage: UsageSnapshot,
 //     plans: PlanCard[],
-//     pending_request: PlanChangeRequest | null
-//   }
-//
-//   PlanCard {
-//     id, name, slug, sort_order, is_popular,
-//     max_leads, max_users, max_funnels, max_funnel_stages,
-//     max_automation_flows, max_automation_executions_monthly,
-//     max_products, max_whatsapp_instances, storage_mb,
-//     features,
-//     is_current:    boolean,
-//     direction:     'current' | 'upgrade' | 'downgrade' | 'same',
-//     is_accessible: boolean,     -- false se uso atual excede os limites deste plano
-//     blocked_by:    string[],    -- limites que impedem a mudança (ex: ['max_leads', 'storage_mb'])
+//     pending_request: PendingRequest | null
 //   }
 //
 // SEGURANÇA:
@@ -82,9 +71,9 @@ export default async function handler(req, res) {
     ])
 
     const usage = {
-      leads:      leadsRes.count    ?? 0,
-      users:      usersRes.count    ?? 0,
-      funnels:    funnelsRes.count  ?? 0,
+      leads:      leadsRes.count     ?? 0,
+      users:      usersRes.count     ?? 0,
+      funnels:    funnelsRes.count   ?? 0,
       auto_flows: autoFlowsRes.count ?? 0,
       storage_mb: Math.ceil(parseFloat(storageRes.data) || 0),
     }
@@ -119,7 +108,6 @@ export default async function handler(req, res) {
     const enrichedPlans = (plans ?? []).map(plan => {
       const isCurrent = plan.id === currentPlanId
 
-      // Direção em relação ao plano atual (baseada em sort_order da query)
       let direction = 'same'
       if (!isCurrent && currentPlanId) {
         const currentPlan = plans.find(p => p.id === currentPlanId)
@@ -131,21 +119,16 @@ export default async function handler(req, res) {
       }
       if (isCurrent) direction = 'current'
 
-      // Limites que o uso atual excede neste plano (bloqueia downgrade)
       const blockedBy = []
-
       const checks = [
-        { key: 'max_leads',          current: usage.leads,      limit: plan.max_leads },
-        { key: 'max_users',          current: usage.users,      limit: plan.max_users },
-        { key: 'max_funnels',        current: usage.funnels,    limit: plan.max_funnels },
+        { key: 'max_leads',            current: usage.leads,      limit: plan.max_leads },
+        { key: 'max_users',            current: usage.users,      limit: plan.max_users },
+        { key: 'max_funnels',          current: usage.funnels,    limit: plan.max_funnels },
         { key: 'max_automation_flows', current: usage.auto_flows, limit: plan.max_automation_flows },
-        { key: 'storage_mb',         current: usage.storage_mb, limit: plan.storage_mb },
+        { key: 'storage_mb',           current: usage.storage_mb, limit: plan.storage_mb },
       ]
-
       for (const { key, current, limit } of checks) {
-        if (limit !== null && current > limit) {
-          blockedBy.push(key)
-        }
+        if (limit !== null && current > limit) blockedBy.push(key)
       }
 
       return {
@@ -157,6 +140,16 @@ export default async function handler(req, res) {
       }
     })
 
+    // Supabase retorna o join como objeto ou array dependendo da relação.
+    // Normalmente para FK singular retorna objeto, mas tratamos ambos por segurança.
+    const pendingPlanData = pendingReq?.plans
+    const pendingPlanName = Array.isArray(pendingPlanData)
+      ? (pendingPlanData[0]?.name ?? null)
+      : (pendingPlanData?.name ?? null)
+    const pendingPlanSlug = Array.isArray(pendingPlanData)
+      ? (pendingPlanData[0]?.slug ?? null)
+      : (pendingPlanData?.slug ?? null)
+
     return res.status(200).json({
       ok:              true,
       current_plan_id: currentPlanId,
@@ -164,12 +157,12 @@ export default async function handler(req, res) {
       plans:           enrichedPlans,
       pending_request: pendingReq
         ? {
-            id:         pendingReq.id,
-            to_plan_id: pendingReq.to_plan_id,
-            to_plan_name: (pendingReq.plans as any)?.name ?? null,
-            to_plan_slug: (pendingReq.plans as any)?.slug ?? null,
-            status:     pendingReq.status,
-            created_at: pendingReq.created_at,
+            id:           pendingReq.id,
+            to_plan_id:   pendingReq.to_plan_id,
+            to_plan_name: pendingPlanName,
+            to_plan_slug: pendingPlanSlug,
+            status:       pendingReq.status,
+            created_at:   pendingReq.created_at,
           }
         : null,
     })
