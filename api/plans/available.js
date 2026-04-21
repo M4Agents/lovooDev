@@ -85,7 +85,8 @@ export default async function handler(req, res) {
         'id, name, slug, sort_order, is_popular,' +
         'max_leads, max_users, max_funnels, max_funnel_stages,' +
         'max_automation_flows, max_automation_executions_monthly,' +
-        'max_products, max_whatsapp_instances, storage_mb, features'
+        'max_products, max_whatsapp_instances, storage_mb, features,' +
+        'stripe_price_id_monthly'
       )
       .eq('is_active', true)
       .eq('is_publicly_listed', true)
@@ -133,10 +134,11 @@ export default async function handler(req, res) {
 
       return {
         ...plan,
-        is_current:    isCurrent,
+        is_current:           isCurrent,
         direction,
-        is_accessible: blockedBy.length === 0,
-        blocked_by:    blockedBy,
+        is_accessible:        blockedBy.length === 0,
+        blocked_by:           blockedBy,
+        is_stripe_purchasable: !!plan.stripe_price_id_monthly,
       }
     })
 

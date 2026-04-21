@@ -2,17 +2,19 @@ import React, { useState } from 'react'
 import {
   Crown, TrendingUp, Users, GitBranch, Zap, HardDrive, CheckCircle,
   ArrowUpCircle, ArrowDownCircle, Clock, AlertTriangle, Info, ChevronDown,
-  ChevronUp, Loader2, X,
+  ChevronUp, Loader2, X, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { usePlanAvailable, PlanCard } from '../../hooks/usePlanAvailable'
-import { usePlanLeadStats } from '../../hooks/usePlanLeadStats'
+import { usePlanLeadStats }           from '../../hooks/usePlanLeadStats'
+import { usePlanSubscription }        from '../../hooks/usePlanSubscription'
+import { SubscriptionStatusBanner }   from './SubscriptionStatusBanner'
 
 interface Props {
   companyId: string
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(value: number | null): string {
   if (value === null) return '∞'
@@ -48,7 +50,23 @@ function blockedLabel(key: string): string {
   return map[key] ?? key
 }
 
-// ── Barra de uso ─────────────────────────────────────────────────────────────
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+// ── Erros de ação Stripe (mensagens amigáveis) ────────────────────────────────
+
+const STRIPE_ERROR_MSGS: Record<string, string> = {
+  no_active_subscription:      'Você não possui assinatura ativa. Use o checkout para contratar.',
+  plan_not_available:          'Este plano não está disponível.',
+  plan_not_stripe_purchasable: 'Este plano requer contato com nossa equipe.',
+  already_on_this_plan:        'Você já está neste plano.',
+  active_subscription_exists:  'Use a opção de alterar plano, não o checkout.',
+  downgrade_blocked:           'Reduza seu uso antes de fazer downgrade.',
+}
+
+// ── Barra de uso ──────────────────────────────────────────────────────────────
 
 interface UsageBarProps {
   icon: React.ReactNode
@@ -56,7 +74,6 @@ interface UsageBarProps {
   current: number | null
   max: number | null
   pct: number | null
-  unit?: string
 }
 
 function UsageBar({ icon, label, current, max, pct }: UsageBarProps) {
@@ -93,13 +110,14 @@ function UsageBar({ icon, label, current, max, pct }: UsageBarProps) {
 
 // ── Card de plano ─────────────────────────────────────────────────────────────
 
-interface PlanCardProps {
+interface PlanCardItemProps {
   plan: PlanCard
-  onRequest: (plan: PlanCard) => void
+  hasSubscription: boolean
+  onSelect: (plan: PlanCard) => void
   requesting: boolean
 }
 
-function PlanCardItem({ plan, onRequest, requesting }: PlanCardProps) {
+function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardItemProps) {
   const [expanded, setExpanded] = useState(false)
 
   const directionIcon = plan.direction === 'upgrade'
@@ -110,11 +128,32 @@ function PlanCardItem({ plan, onRequest, requesting }: PlanCardProps) {
     ? <CheckCircle className="w-4 h-4 text-blue-500" />
     : null
 
-  const ctaLabel = plan.direction === 'upgrade'
-    ? 'Solicitar upgrade'
-    : plan.direction === 'downgrade'
-    ? 'Solicitar downgrade'
+  // CTA logic:
+  // - Plano atual → sem botão
+  // - Sem stripe_price_id → "Fale com a equipe"
+  // - Com stripe: upgrade/downgrade → botão de ação
+  const isContactPlan = !plan.is_stripe_purchasable && !plan.is_current
+
+  const ctaLabel = plan.is_current ? null
+    : isContactPlan ? 'Fale com a equipe'
+    : plan.direction === 'upgrade' ? 'Fazer upgrade'
+    : plan.direction === 'downgrade' ? 'Fazer downgrade'
     : null
+
+  const ctaStyle = plan.is_current ? ''
+    : isContactPlan
+      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+      : plan.direction === 'upgrade'
+      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+      : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+
+  const handleCtaClick = () => {
+    if (isContactPlan) {
+      window.open('mailto:comercial@lovoocrm.com?subject=Interesse em plano personalizado', '_blank')
+      return
+    }
+    if (plan.is_accessible) onSelect(plan)
+  }
 
   return (
     <div className={`relative rounded-xl border-2 p-5 transition-all ${
@@ -135,27 +174,25 @@ function PlanCardItem({ plan, onRequest, requesting }: PlanCardProps) {
 
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${slugColor(plan.slug)}`}>
-              {plan.name}
-            </span>
-            {directionIcon}
-            {plan.is_current && (
-              <span className="text-xs text-blue-600 font-medium">Plano atual</span>
-            )}
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${slugColor(plan.slug)}`}>
+            {plan.name}
+          </span>
+          {directionIcon}
+          {plan.is_current && (
+            <span className="text-xs text-blue-600 font-medium">Plano atual</span>
+          )}
         </div>
         <button
           onClick={() => setExpanded(v => !v)}
-          className="text-slate-400 hover:text-slate-600 transition-colors"
+          className="text-slate-400 hover:text-slate-600 transition-colors ml-2"
           aria-label={expanded ? 'Ocultar detalhes' : 'Ver detalhes'}
         >
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
       </div>
 
-      {/* Limites principais sempre visíveis */}
+      {/* Limites principais */}
       <div className="grid grid-cols-2 gap-1.5 text-xs text-slate-600 mb-4">
         <div className="flex items-center gap-1">
           <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
@@ -171,64 +208,61 @@ function PlanCardItem({ plan, onRequest, requesting }: PlanCardProps) {
         </div>
         <div className="flex items-center gap-1">
           <HardDrive className="w-3.5 h-3.5 text-slate-400" />
-          <span>{plan.storage_mb === null ? '∞' : `${plan.storage_mb / 1024 >= 1 ? `${plan.storage_mb / 1024}GB` : `${plan.storage_mb}MB`}`} armazenamento</span>
+          <span>
+            {plan.storage_mb === null
+              ? '∞'
+              : plan.storage_mb >= 1024
+              ? `${plan.storage_mb / 1024}GB`
+              : `${plan.storage_mb}MB`
+            } armazenamento
+          </span>
         </div>
       </div>
 
       {/* Detalhes expandidos */}
       {expanded && (
         <div className="border-t border-slate-200 pt-3 mb-4 space-y-1 text-xs text-slate-500">
-          <div className="flex justify-between">
-            <span>Funis</span>
-            <span className="font-medium">{fmt(plan.max_funnels)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Etapas por funil</span>
-            <span className="font-medium">{fmt(plan.max_funnel_stages)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Execuções/mês</span>
-            <span className="font-medium">{fmt(plan.max_automation_executions_monthly)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Produtos</span>
-            <span className="font-medium">{fmt(plan.max_products)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Instâncias WhatsApp</span>
-            <span className="font-medium">{fmt(plan.max_whatsapp_instances)}</span>
-          </div>
+          <div className="flex justify-between"><span>Funis</span><span className="font-medium">{fmt(plan.max_funnels)}</span></div>
+          <div className="flex justify-between"><span>Etapas por funil</span><span className="font-medium">{fmt(plan.max_funnel_stages)}</span></div>
+          <div className="flex justify-between"><span>Execuções/mês</span><span className="font-medium">{fmt(plan.max_automation_executions_monthly)}</span></div>
+          <div className="flex justify-between"><span>Produtos</span><span className="font-medium">{fmt(plan.max_products)}</span></div>
+          <div className="flex justify-between"><span>Instâncias WhatsApp</span><span className="font-medium">{fmt(plan.max_whatsapp_instances)}</span></div>
         </div>
       )}
 
-      {/* Aviso de bloqueio */}
-      {!plan.is_current && !plan.is_accessible && (
+      {/* Aviso de bloqueio (downgrade) */}
+      {!plan.is_current && !plan.is_accessible && !isContactPlan && (
         <div className="mb-3 flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 rounded-lg px-3 py-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-          <span>
-            Reduza seu uso antes: {plan.blocked_by.map(blockedLabel).join(', ')}.
-          </span>
+          <span>Reduza seu uso antes: {plan.blocked_by.map(blockedLabel).join(', ')}.</span>
+        </div>
+      )}
+
+      {/* Aviso downgrade Stripe */}
+      {!plan.is_current && plan.direction === 'downgrade' && plan.is_stripe_purchasable && plan.is_accessible && hasSubscription && (
+        <div className="mb-3 flex items-start gap-1.5 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
+          <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>Será aplicado no próximo ciclo de cobrança.</span>
         </div>
       )}
 
       {/* CTA */}
       {!plan.is_current && ctaLabel && (
         <button
-          onClick={() => plan.is_accessible && onRequest(plan)}
-          disabled={!plan.is_accessible || requesting}
-          className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-            plan.is_accessible && !requesting
-              ? plan.direction === 'upgrade'
-                ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+          onClick={handleCtaClick}
+          disabled={(plan.is_stripe_purchasable && (!plan.is_accessible || requesting))}
+          className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+            isContactPlan
+              ? ctaStyle
+              : plan.is_accessible && !requesting
+              ? ctaStyle
               : 'bg-slate-100 text-slate-400 cursor-not-allowed'
           }`}
         >
           {requesting ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Aguarde…
-            </span>
+            <><Loader2 className="w-4 h-4 animate-spin" />Aguarde…</>
+          ) : isContactPlan ? (
+            <><MessageCircle className="w-4 h-4" />{ctaLabel}</>
           ) : ctaLabel}
         </button>
       )}
@@ -240,34 +274,50 @@ function PlanCardItem({ plan, onRequest, requesting }: PlanCardProps) {
 
 interface ConfirmModalProps {
   plan: PlanCard
+  hasSubscription: boolean
   onConfirm: () => void
   onCancel: () => void
   loading: boolean
 }
 
-function ConfirmModal({ plan, onConfirm, onCancel, loading }: ConfirmModalProps) {
+function ConfirmModal({ plan, hasSubscription, onConfirm, onCancel, loading }: ConfirmModalProps) {
+  const isDowngrade = plan.direction === 'downgrade'
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-900">Confirmar solicitação</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Confirmar {isDowngrade ? 'downgrade' : 'upgrade'}
+          </h2>
           <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
           </button>
         </div>
+
         <div className="p-6 space-y-4">
           <p className="text-slate-600 text-sm">
-            Você está solicitando a mudança para o plano{' '}
+            Você está alterando para o plano{' '}
             <strong className="text-slate-900">{plan.name}</strong>.
           </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
-            <Info className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Sua solicitação será analisada e você será notificado quando o plano for atualizado.
-              Não há cobrança automática neste momento.
-            </span>
-          </div>
+
+          {hasSubscription ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                {isDowngrade
+                  ? 'O downgrade será aplicado no início do próximo ciclo de cobrança. Sem reembolso proporcional.'
+                  : 'O upgrade será aplicado imediatamente. O valor proporcional será cobrado na próxima fatura.'}
+              </span>
+            </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Você será redirecionado para o checkout seguro do Stripe para concluir a contratação.</span>
+            </div>
+          )}
         </div>
+
         <div className="flex gap-3 p-6 border-t border-slate-200">
           <button
             onClick={onCancel}
@@ -283,9 +333,9 @@ function ConfirmModal({ plan, onConfirm, onCancel, loading }: ConfirmModalProps)
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Enviando…
+                {hasSubscription ? 'Alterando…' : 'Redirecionando…'}
               </span>
-            ) : 'Confirmar solicitação'}
+            ) : hasSubscription ? 'Confirmar alteração' : 'Ir para checkout'}
           </button>
         </div>
       </div>
@@ -296,74 +346,79 @@ function ConfirmModal({ plan, onConfirm, onCancel, loading }: ConfirmModalProps)
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
-  const { data, loading, error, refetch } = usePlanAvailable(companyId)
-  const { leadStats } = usePlanLeadStats(companyId)
+  const { data, loading, error, refetch }        = usePlanAvailable(companyId)
+  const { data: subscription, refetch: refetchSub } = usePlanSubscription(companyId)
+  const { leadStats }                            = usePlanLeadStats(companyId)
 
-  const [selectedPlan, setSelectedPlan]   = useState<PlanCard | null>(null)
-  const [requesting, setRequesting]       = useState(false)
-  const [requestError, setRequestError]   = useState<string | null>(null)
-  const [requestSuccess, setRequestSuccess] = useState(false)
-  const [cancelling, setCancelling]       = useState(false)
+  const [selectedPlan, setSelectedPlan]     = useState<PlanCard | null>(null)
+  const [requesting, setRequesting]         = useState(false)
+  const [actionError, setActionError]       = useState<string | null>(null)
+  const [actionSuccess, setActionSuccess]   = useState<string | null>(null)
 
-  const handleRequest = async () => {
+  const refetchAll = () => { refetch(); refetchSub() }
+
+  const handleConfirm = async () => {
     if (!selectedPlan) return
     setRequesting(true)
-    setRequestError(null)
+    setActionError(null)
+    setActionSuccess(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
+      const token = await getAuthToken()
+      if (!token) { setActionError('Sessão inválida'); setSelectedPlan(null); return }
 
-      const resp = await fetch('/api/plans/change-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ to_plan_id: selectedPlan.id }),
-      })
+      const hasSubscription = subscription?.has_subscription ?? false
 
-      const json = await resp.json()
+      if (hasSubscription) {
+        // ── Alterar plano existente via Stripe ─────────────────────────────
+        const resp = await fetch('/api/stripe/plans/change', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ to_plan_id: selectedPlan.id }),
+        })
 
-      if (!resp.ok) {
-        const msgs: Record<string, string> = {
-          plan_not_available:        'Este plano não está disponível.',
-          already_has_pending_request: 'Você já tem uma solicitação pendente.',
-          already_on_this_plan:      'Você já está neste plano.',
-          downgrade_blocked:         'Reduza seu uso antes de solicitar este plano.',
+        const json = await resp.json()
+
+        if (!resp.ok) {
+          setActionError(STRIPE_ERROR_MSGS[json.error] ?? 'Erro ao alterar plano. Tente novamente.')
+          setSelectedPlan(null)
+          return
         }
-        setRequestError(msgs[json.error] ?? 'Erro ao enviar solicitação. Tente novamente.')
+
+        const msg = json.type === 'upgrade'
+          ? 'Upgrade aplicado! Seu plano será ativado em instantes.'
+          : 'Downgrade agendado para o próximo ciclo de cobrança.'
+
         setSelectedPlan(null)
-        return
+        setActionSuccess(msg)
+        refetchAll()
+
+      } else {
+        // ── Nova assinatura via Stripe Checkout ────────────────────────────
+        const resp = await fetch('/api/stripe/plans/checkout', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body:    JSON.stringify({ to_plan_id: selectedPlan.id }),
+        })
+
+        const json = await resp.json()
+
+        if (!resp.ok) {
+          setActionError(STRIPE_ERROR_MSGS[json.error] ?? 'Erro ao iniciar checkout. Tente novamente.')
+          setSelectedPlan(null)
+          return
+        }
+
+        if (json.checkout_url) {
+          window.location.href = json.checkout_url
+        }
       }
 
-      setSelectedPlan(null)
-      setRequestSuccess(true)
-      refetch()
     } catch {
-      setRequestError('Erro de conexão. Tente novamente.')
+      setActionError('Erro de conexão. Tente novamente.')
       setSelectedPlan(null)
     } finally {
       setRequesting(false)
-    }
-  }
-
-  const handleCancel = async () => {
-    setCancelling(true)
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-
-      await fetch('/api/plans/change-request', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      setRequestSuccess(false)
-      refetch()
-    } finally {
-      setCancelling(false)
     }
   }
 
@@ -386,63 +441,53 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
   if (!data) return null
 
-  const currentPlan = data.plans.find(p => p.is_current)
-  const usage = data.usage
+  const currentPlan    = data.plans.find(p => p.is_current)
+  const usage          = data.usage
+  const hasSubscription = subscription?.has_subscription ?? false
 
   return (
-    <div className="space-y-8">
-      {/* ── Banner de pedido pendente ── */}
-      {data.pending_request && (
-        <div className="flex items-start justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <div className="flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800">
-              <p className="font-medium">Solicitação em análise</p>
-              <p className="mt-0.5">
-                Você solicitou a mudança para o plano <strong>{data.pending_request.to_plan_name}</strong>.
-                Nossa equipe irá processar em breve.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="shrink-0 text-xs text-amber-700 underline hover:text-amber-900 disabled:opacity-50"
-          >
-            {cancelling ? 'Cancelando…' : 'Cancelar pedido'}
-          </button>
-        </div>
+    <div className="space-y-6">
+      {/* ── Banner de estado da assinatura Stripe ── */}
+      {subscription && (
+        <SubscriptionStatusBanner
+          subscription={subscription}
+          companyId={companyId}
+          onCancelled={refetchAll}
+        />
       )}
 
       {/* ── Banner de sucesso ── */}
-      {requestSuccess && !data.pending_request && (
-        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-          <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-          <p className="text-sm text-green-800">
-            Solicitação enviada com sucesso! Nossa equipe irá analisá-la em breve.
-          </p>
-        </div>
-      )}
-
-      {/* ── Banner de erro ── */}
-      {requestError && (
-        <div className="flex items-center justify-between gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+      {actionSuccess && (
+        <div className="flex items-center justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-            <p className="text-sm text-red-700">{requestError}</p>
+            <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+            <p className="text-sm text-green-800">{actionSuccess}</p>
           </div>
-          <button onClick={() => setRequestError(null)} className="text-red-400 hover:text-red-600">
+          <button onClick={() => setActionSuccess(null)} className="text-green-400 hover:text-green-600">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* ── Seção 1: Plano atual ── */}
+      {/* ── Banner de erro ── */}
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+            <p className="text-sm text-red-700">{actionError}</p>
+          </div>
+          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Seção 1: Uso atual ── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <Crown className="w-5 h-5 text-amber-500" />
-            <h2 className="text-base font-semibold text-slate-900">Plano atual</h2>
+            <h2 className="text-base font-semibold text-slate-900">Uso atual</h2>
           </div>
           {currentPlan && (
             <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${slugColor(currentPlan.slug)}`}>
@@ -452,7 +497,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Leads */}
           <UsageBar
             icon={<TrendingUp className="w-4 h-4" />}
             label="Leads"
@@ -460,8 +504,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             max={leadStats?.max ?? null}
             pct={leadStats?.proximity_pct ?? null}
           />
-
-          {/* Usuários */}
           <UsageBar
             icon={<Users className="w-4 h-4" />}
             label="Usuários ativos"
@@ -469,12 +511,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             max={currentPlan?.max_users ?? null}
             pct={
               currentPlan?.max_users
-                ? Math.round((usage.users / currentPlan.max_users) * 100 * 10) / 10
+                ? Math.round((usage.users / currentPlan.max_users) * 1000) / 10
                 : null
             }
           />
-
-          {/* Funis */}
           <UsageBar
             icon={<GitBranch className="w-4 h-4" />}
             label="Funis ativos"
@@ -482,12 +522,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             max={currentPlan?.max_funnels ?? null}
             pct={
               currentPlan?.max_funnels
-                ? Math.round((usage.funnels / currentPlan.max_funnels) * 100 * 10) / 10
+                ? Math.round((usage.funnels / currentPlan.max_funnels) * 1000) / 10
                 : null
             }
           />
-
-          {/* Automações */}
           <UsageBar
             icon={<Zap className="w-4 h-4" />}
             label="Automações ativas"
@@ -495,12 +533,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             max={currentPlan?.max_automation_flows ?? null}
             pct={
               currentPlan?.max_automation_flows
-                ? Math.round((usage.auto_flows / currentPlan.max_automation_flows) * 100 * 10) / 10
+                ? Math.round((usage.auto_flows / currentPlan.max_automation_flows) * 1000) / 10
                 : null
             }
           />
-
-          {/* Storage */}
           <UsageBar
             icon={<HardDrive className="w-4 h-4" />}
             label="Armazenamento"
@@ -508,10 +544,9 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             max={currentPlan?.storage_mb ?? null}
             pct={
               currentPlan?.storage_mb
-                ? Math.round((usage.storage_mb / currentPlan.storage_mb) * 100 * 10) / 10
+                ? Math.round((usage.storage_mb / currentPlan.storage_mb) * 1000) / 10
                 : null
             }
-            unit="MB"
           />
         </div>
       </div>
@@ -524,7 +559,8 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
             <PlanCardItem
               key={plan.id}
               plan={plan}
-              onRequest={setSelectedPlan}
+              hasSubscription={hasSubscription}
+              onSelect={setSelectedPlan}
               requesting={requesting && selectedPlan?.id === plan.id}
             />
           ))}
@@ -535,8 +571,9 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       {selectedPlan && (
         <ConfirmModal
           plan={selectedPlan}
-          onConfirm={handleRequest}
-          onCancel={() => setSelectedPlan(null)}
+          hasSubscription={hasSubscription}
+          onConfirm={handleConfirm}
+          onCancel={() => { setSelectedPlan(null); setActionError(null) }}
           loading={requesting}
         />
       )}
