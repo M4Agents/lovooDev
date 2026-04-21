@@ -121,7 +121,7 @@ export default async function handler(req: any, res: any): Promise<void> {
   // ── 2. Auth ───────────────────────────────────────────────────────────────
 
   const auth = await assertCompanyMember(req, companyId)
-  if (!auth.ok) return jsonError(res, auth.status, auth.message)
+  if (auth.ok === false) return jsonError(res, auth.status, auth.message)
 
   // ── 3. Montar contexto e executar agente ──────────────────────────────────
 

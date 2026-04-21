@@ -73,7 +73,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const auth = await assertCanManageOpenAIIntegration(req)
-  if (!auth.ok) {
+  if (auth.ok === false) {
     res.status(auth.status).json({ ok: false, error: auth.message })
     return
   }
@@ -91,7 +91,7 @@ export default async function handler(req: any, res: any) {
 
   if (req.method === 'PATCH') {
     const parsed = validatePatchBody(req.body)
-    if (!parsed.ok) {
+    if (parsed.ok === false) {
       res.status(400).json({ ok: false, error: parsed.error })
       return
     }

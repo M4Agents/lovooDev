@@ -68,7 +68,7 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: listError.message });
     }
 
-    const user = users.users.find(u => u.email === email);
+    const user = users.users.find((u: { email?: string | null; id: string }) => u.email === email);
 
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });

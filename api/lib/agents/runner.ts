@@ -269,7 +269,7 @@ export async function runAgent(
   // 4. Resolve agente
   const resolved = await resolveAgent(useId)
 
-  if (!resolved.found) {
+  if (resolved.found === false) {
     if (resolved.reason === 'no_binding' || resolved.reason === 'agent_inactive') {
       const isFallback = meta.fallback_mode === 'static'
       return logAndReturn(
@@ -604,7 +604,7 @@ export async function runAgentWithConfig(
         // Guard duplo: sandbox_mode bloqueia todos os efeitos reais
         const sandboxResult = await executeToolCallsSandbox(toolCalls as any, toolContext)
         toolResults        = sandboxResult.toolResults as ToolCallResult[]
-        sandboxToolEvents  = sandboxResult.events
+        sandboxToolEvents  = sandboxResult.events as SandboxToolEvent[]
       } else {
         toolResults = (await executeToolCalls(toolCalls as any, toolContext)) as ToolCallResult[]
       }
