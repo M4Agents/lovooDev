@@ -64,6 +64,8 @@ interface Plan {
   storage_mb: number | null;
   // Features JSONB (chaves com sufixo _enabled)
   features: Record<string, boolean>;
+  // Stripe (somente admin — nunca exposto para empresas finais)
+  stripe_price_id_monthly: string | null;
   // Plano de IA vinculado (via JOIN em get_plans_full)
   ai_plan_id: string | null;
   ai_plan_name: string | null;
@@ -114,6 +116,8 @@ interface PlanFormData {
   advanced_debug_logs_enabled: boolean;
   // Plano de IA
   ai_plan_id: string;
+  // Stripe (somente admin)
+  stripe_price_id_monthly: string;
   // Visibilidade
   is_publicly_listed: boolean;
 }
@@ -157,6 +161,7 @@ const EMPTY_FORM: PlanFormData = {
   cycle_report_enabled: false,
   advanced_debug_logs_enabled: false,
   ai_plan_id: '',
+  stripe_price_id_monthly: '',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -295,7 +300,8 @@ export const PlansManagement: React.FC = () => {
       max_automation_executions_monthly: plan.max_automation_executions_monthly != null ? String(plan.max_automation_executions_monthly) : '',
       max_products:                      plan.max_products != null ? String(plan.max_products) : '',
       storage_mb:                        plan.storage_mb != null ? String(plan.storage_mb) : '',
-      ai_plan_id:    plan.ai_plan_id ?? '',
+      ai_plan_id:                plan.ai_plan_id ?? '',
+      stripe_price_id_monthly:   plan.stripe_price_id_monthly ?? '',
       ...featuresFromPlan(plan),
     });
     setShowModal(true);
@@ -316,6 +322,13 @@ export const PlansManagement: React.FC = () => {
     try {
       setSaving(true);
       setError(null);
+
+      const stripeId = formData.stripe_price_id_monthly.trim();
+      if (stripeId && !stripeId.startsWith('price_')) {
+        setError('O Stripe Price ID deve começar com "price_" (ex: price_1Abc...)');
+        setSaving(false);
+        return;
+      }
 
       const featuresJsonb = {
         opportunity_items_enabled:   formData.opportunity_items_enabled,
@@ -345,6 +358,7 @@ export const PlansManagement: React.FC = () => {
           p_is_active:                       formData.is_active,
           p_is_popular:                      formData.is_popular,
           p_sort_order:                      formData.sort_order,
+          p_stripe_price_id_monthly:         stripeId || null,
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.error || t('errors.save'));
@@ -364,6 +378,7 @@ export const PlansManagement: React.FC = () => {
           p_is_active:              formData.is_active,
           p_is_popular:             formData.is_popular,
           p_sort_order:             formData.sort_order,
+          p_stripe_price_id_monthly: stripeId || null,
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.error || t('errors.save'));
@@ -564,6 +579,11 @@ export const PlansManagement: React.FC = () => {
 
               {/* Status */}
               <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                {plan.stripe_price_id_monthly && (
+                  <span title={`Stripe: ${plan.stripe_price_id_monthly}`} className="text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-medium">
+                    Stripe ✓
+                  </span>
+                )}
                 {plan.is_publicly_listed && (
                   <span title="Disponível para venda" className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
                     <Globe className="w-3 h-3" /> Público
@@ -826,6 +846,35 @@ export const PlansManagement: React.FC = () => {
                     <LimitInput label="Produtos" fieldKey="max_products" />
                     <LimitInput label="Storage (MB)" fieldKey="storage_mb" />
                     <LimitInput label="Landing Pages" fieldKey="max_landing_pages" />
+                  </div>
+                </section>
+
+                {/* Integração Stripe */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Integração Stripe</h3>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      Stripe Price ID (mensal)
+                      <span className="ml-1 text-slate-400 font-normal normal-case">— opcional, somente admin</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.stripe_price_id_monthly}
+                      onChange={e => setField('stripe_price_id_monthly', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="price_XXXXXXXXXXXXXXXXXXXXXXXX"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    {formData.stripe_price_id_monthly && !formData.stripe_price_id_monthly.startsWith('price_') && (
+                      <p className="mt-1 text-xs text-amber-600">
+                        O ID deve começar com "price_"
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-400">
+                      Encontre este valor no Stripe Dashboard → Produtos → selecione o produto → copie o Price ID.
+                      Deixe vazio para planos personalizados (contato comercial).
+                    </p>
                   </div>
                 </section>
 

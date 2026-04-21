@@ -21,6 +21,7 @@ export interface PlanCard {
   direction: 'current' | 'upgrade' | 'downgrade' | 'same'
   is_accessible: boolean
   blocked_by: string[]
+  is_stripe_purchasable: boolean
 }
 
 export interface UsageSnapshot {
