@@ -143,7 +143,7 @@ export default async function handler(
       req as Parameters<typeof assertCanManageAgentDocuments>[0],
       agentId.trim()
     )
-    if (!companyAgentAuth.ok) {
+    if (companyAgentAuth.ok === false) {
       return jsonError(res, companyAgentAuth.status, companyAgentAuth.message)
     }
     effectiveClient = companyAgentAuth.svcSupabase
@@ -216,7 +216,7 @@ export default async function handler(
   const finalName = docName?.trim() || originalName
 
   const storageResult = await uploadDocumentFile(storagePath, fileBuffer, mimeType)
-  if (!storageResult.ok) {
+  if (storageResult.ok === false) {
     return jsonError(res, 500, `Falha no storage: ${storageResult.error}`)
   }
 

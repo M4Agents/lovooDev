@@ -113,7 +113,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     const companyAgentAuth = await assertCanManageAgentDocuments(req, docForAuth.agent_id)
-    if (!companyAgentAuth.ok) {
+    if (companyAgentAuth.ok === false) {
       return jsonError(res, companyAgentAuth.status, companyAgentAuth.message)
     }
 
@@ -177,7 +177,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ── 6a. Download do arquivo ───────────────────────────────────────────
 
     const download = await downloadDocumentFile(storagePath)
-    if (!download.ok) {
+    if (download.ok === false) {
       throw new Error(`Falha ao baixar arquivo: ${download.error}`)
     }
 

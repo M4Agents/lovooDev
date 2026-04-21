@@ -251,7 +251,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 5. Buscar logs de todas as execuções em uma única query
-    const executionIds = executions.map((e: RawExecution) => e.id)
+    const executionIds = (executions as unknown as RawExecution[]).map(e => e.id)
 
     const { data: allLogs, error: logsErr } = await supabase
       .from('automation_logs')
@@ -280,7 +280,7 @@ export default async function handler(req: any, res: any) {
     // 7. Montar resposta enriquecida
     const now = new Date()
 
-    const enrichedExecutions = (executions as RawExecution[]).map(exec => {
+    const enrichedExecutions = (executions as unknown as RawExecution[]).map(exec => {
       const derived = deriveState(exec, now)
       const logs = logsByExecution[exec.id] || []
       const lastLog = logs[0] ?? null

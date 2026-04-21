@@ -228,7 +228,7 @@ export default async function handler(
   const auth = await assertCanManageOpenAIIntegration(
     req as Parameters<typeof assertCanManageOpenAIIntegration>[0]
   )
-  if (!auth.ok) {
+  if (auth.ok === false) {
     return jsonResponse(res, auth.status, { ok: false, error: auth.message })
   }
 

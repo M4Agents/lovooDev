@@ -114,7 +114,7 @@ function validatePatchBody(body: unknown): { ok: true; value: PatchFields } | { 
   }
   if ('provider_config' in o) {
     const v = validateElevenLabsProviderConfigInput(o.provider_config)
-    if (!v.ok) {
+    if (v.ok === false) {
       return { ok: false, error: v.error }
     }
     out.provider_config = v.value
@@ -134,7 +134,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const auth = await assertCanManageOpenAIIntegration(req)
-  if (!auth.ok) {
+  if (auth.ok === false) {
     res.status(auth.status).json({ ok: false, error: auth.message })
     return
   }
@@ -153,7 +153,7 @@ export default async function handler(req: any, res: any) {
 
   if (req.method === 'PATCH') {
     const parsed = validatePatchBody(req.body)
-    if (!parsed.ok) {
+    if (parsed.ok === false) {
       res.status(400).json({ ok: false, error: parsed.error })
       return
     }

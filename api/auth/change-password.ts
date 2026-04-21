@@ -97,7 +97,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const auth = await assertCompanyAdmin(req, companyId, targetUserId);
-    if (!auth.ok) {
+    if (auth.ok === false) {
       return res.status(auth.status).json({ error: auth.message });
     }
 
