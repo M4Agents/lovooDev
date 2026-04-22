@@ -44,6 +44,23 @@ function extractBillingCycle(sub) {
 }
 
 /**
+ * Extrai current_period_start e current_period_end de uma subscription Stripe.
+ *
+ * Na API version >= 2026-03-25.dahlia esses campos foram movidos do nível raiz
+ * para items.data[0]. Este helper lida com ambas as versões usando fallback.
+ *
+ * @returns {{ start: string|null, end: string|null }}
+ */
+function extractPeriod(sub) {
+  const rawStart = sub?.current_period_start ?? sub?.items?.data?.[0]?.current_period_start
+  const rawEnd   = sub?.current_period_end   ?? sub?.items?.data?.[0]?.current_period_end
+  return {
+    start: rawStart ? new Date(rawStart * 1000).toISOString() : null,
+    end:   rawEnd   ? new Date(rawEnd   * 1000).toISOString() : null,
+  }
+}
+
+/**
  * Extrai company_id de um evento Stripe.
  * Tenta: metadata → client_reference_id → lookup por customer_id no banco.
  */
@@ -208,14 +225,15 @@ async function handleCheckoutSessionCompleted(stripe, svc, event) {
 
   const sub      = await stripe.subscriptions.retrieve(subscriptionId)
   const priceId  = sub.items?.data?.[0]?.price?.id ?? null
+  const period   = extractPeriod(sub)
 
   const alreadyApplied = await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: subscriptionId,
     p_stripe_price_id:        priceId,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
@@ -240,14 +258,15 @@ async function handleSubscriptionCreated(stripe, svc, event) {
 
   const priceId   = sub.items?.data?.[0]?.price?.id ?? null
   const plan      = await resolvePlanByPriceId(svc, priceId)
+  const period    = extractPeriod(sub)
 
   const alreadyApplied = await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        priceId,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
@@ -283,6 +302,7 @@ async function handleSubscriptionUpdated(stripe, svc, event) {
 
   const newPriceId = sub.items?.data?.[0]?.price?.id ?? null
   const plan       = await resolvePlanByPriceId(svc, newPriceId)
+  const period     = extractPeriod(sub)
 
   // Detecta se o price_id mudou comparando com o que está armazenado
   const { data: stored } = await svc
@@ -298,8 +318,8 @@ async function handleSubscriptionUpdated(stripe, svc, event) {
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        newPriceId,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
@@ -333,14 +353,15 @@ async function handleSubscriptionDeleted(stripe, svc, event) {
   }
 
   const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : new Date().toISOString()
+  const period     = extractPeriod(sub)
 
   await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        sub.items?.data?.[0]?.price?.id ?? null,
     p_status:                 'canceled',
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   false,
     p_billing_cycle:          null,
     p_trial_start:            null,
@@ -381,14 +402,15 @@ async function handleInvoicePaid(stripe, svc, event) {
 
   const priceId     = sub.items?.data?.[0]?.price?.id ?? null
   const plan        = await resolvePlanByPriceId(svc, priceId)
+  const period      = extractPeriod(sub)
 
   const alreadyApplied = await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        priceId,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
@@ -429,14 +451,16 @@ async function handleInvoicePaymentFailed(stripe, svc, event) {
     return
   }
 
+  const period = extractPeriod(sub)
+
   // Apenas sync — plano não é alterado em caso de falha de pagamento
   await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        sub.items?.data?.[0]?.price?.id ?? null,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            null,
@@ -463,14 +487,16 @@ async function handleInvoicePaymentActionRequired(stripe, svc, event) {
     return
   }
 
+  const period = extractPeriod(sub)
+
   // Apenas sync — plano não é alterado; apenas status contratual é atualizado
   await syncContractual(svc, {
     p_company_id:             companyId,
     p_stripe_subscription_id: sub.id,
     p_stripe_price_id:        sub.items?.data?.[0]?.price?.id ?? null,
     p_status:                 sub.status,
-    p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
-    p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
+    p_current_period_start:   period.start,
+    p_current_period_end:     period.end,
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
     p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            null,
