@@ -33,6 +33,17 @@ const VALID_OPERATIONAL_STATUSES = ['active', 'trialing']
 // ── Helpers de resolução ──────────────────────────────────────────────────────
 
 /**
+ * Extrai o ciclo de cobrança ('monthly' | 'yearly' | null) a partir de um
+ * objeto Subscription do Stripe. Baseia-se no recurring.interval do primeiro item.
+ */
+function extractBillingCycle(sub) {
+  const interval = sub?.items?.data?.[0]?.price?.recurring?.interval
+  if (interval === 'month') return 'monthly'
+  if (interval === 'year')  return 'yearly'
+  return null
+}
+
+/**
  * Extrai company_id de um evento Stripe.
  * Tenta: metadata → client_reference_id → lookup por customer_id no banco.
  */
@@ -206,6 +217,7 @@ async function handleCheckoutSessionCompleted(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
     p_trial_end:              sub.trial_end   ? new Date(sub.trial_end   * 1000).toISOString() : null,
     p_canceled_at:            null,
@@ -237,6 +249,7 @@ async function handleSubscriptionCreated(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
     p_trial_end:              sub.trial_end   ? new Date(sub.trial_end   * 1000).toISOString() : null,
     p_canceled_at:            null,
@@ -288,6 +301,7 @@ async function handleSubscriptionUpdated(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
     p_trial_end:              sub.trial_end   ? new Date(sub.trial_end   * 1000).toISOString() : null,
     p_canceled_at:            null,
@@ -328,6 +342,7 @@ async function handleSubscriptionDeleted(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   false,
+    p_billing_cycle:          null,
     p_trial_start:            null,
     p_trial_end:              null,
     p_canceled_at:            canceledAt,
@@ -375,6 +390,7 @@ async function handleInvoicePaid(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            sub.trial_start ? new Date(sub.trial_start * 1000).toISOString() : null,
     p_trial_end:              sub.trial_end   ? new Date(sub.trial_end   * 1000).toISOString() : null,
     p_canceled_at:            null,
@@ -422,6 +438,7 @@ async function handleInvoicePaymentFailed(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            null,
     p_trial_end:              null,
     p_canceled_at:            null,
@@ -455,6 +472,7 @@ async function handleInvoicePaymentActionRequired(stripe, svc, event) {
     p_current_period_start:   new Date(sub.current_period_start * 1000).toISOString(),
     p_current_period_end:     new Date(sub.current_period_end   * 1000).toISOString(),
     p_cancel_at_period_end:   sub.cancel_at_period_end ?? false,
+    p_billing_cycle:          extractBillingCycle(sub),
     p_trial_start:            null,
     p_trial_end:              null,
     p_canceled_at:            null,
