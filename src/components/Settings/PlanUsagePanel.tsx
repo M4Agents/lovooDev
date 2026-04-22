@@ -58,12 +58,13 @@ async function getAuthToken(): Promise<string | null> {
 // ── Erros de ação Stripe (mensagens amigáveis) ────────────────────────────────
 
 const STRIPE_ERROR_MSGS: Record<string, string> = {
-  no_active_subscription:      'Você não possui assinatura ativa. Use o checkout para contratar.',
-  plan_not_available:          'Este plano não está disponível.',
-  plan_not_stripe_purchasable: 'Este plano requer contato com nossa equipe.',
-  already_on_this_plan:        'Você já está neste plano.',
-  active_subscription_exists:  'Use a opção de alterar plano, não o checkout.',
-  downgrade_blocked:           'Reduza seu uso antes de fazer downgrade.',
+  no_active_subscription:       'Você não possui assinatura ativa. Use o checkout para contratar.',
+  plan_not_available:           'Este plano não está disponível.',
+  plan_not_stripe_purchasable:  'Este plano requer contato com nossa equipe.',
+  already_on_this_plan:         'Você já está neste plano.',
+  active_subscription_exists:   'Use a opção de alterar plano, não o checkout.',
+  downgrade_blocked:            'Reduza seu uso antes de fazer downgrade.',
+  already_has_pending_request:  'Há uma solicitação de plano em andamento. Aguarde alguns instantes e tente novamente.',
 }
 
 // ── Barra de uso ──────────────────────────────────────────────────────────────

@@ -87,6 +87,10 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Instância Stripe inicializada cedo para uso tanto na validação de PCR stale
+    // quanto na criação da Checkout Session (passos 8 e 9).
+    const stripe = getStripe()
+
     // ── 4. Validar plano destino ───────────────────────────────────────────────
     // Lê stripe_price_id_monthly do banco — nunca do frontend
     const { data: targetPlan, error: planError } = await svc
@@ -117,16 +121,46 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'already_on_this_plan' })
     }
 
-    // PCR pendente para QUALQUER plano bloqueia nova solicitação
+    // PCR pendente: verificar se a sessão Stripe associada ainda está aberta.
+    // Se a sessão expirou ou foi cancelada, o PCR é stale e deve ser auto-cancelado
+    // para permitir nova tentativa sem intervenção manual.
     const { data: existingPcr } = await svc
       .from('plan_change_requests')
-      .select('id')
+      .select('id, stripe_checkout_session_id')
       .eq('company_id', effectiveCompanyId)
       .eq('status', 'pending')
       .maybeSingle()
 
     if (existingPcr) {
-      return res.status(400).json({ error: 'already_has_pending_request' })
+      let sessionStillOpen = false
+
+      if (existingPcr.stripe_checkout_session_id) {
+        try {
+          const existingSession = await stripe.checkout.sessions.retrieve(
+            existingPcr.stripe_checkout_session_id
+          )
+          sessionStillOpen = existingSession.status === 'open'
+        } catch {
+          // Não conseguiu verificar (ex: sessão deletada no Stripe) — assume não aberta
+          sessionStillOpen = false
+        }
+      }
+
+      if (sessionStillOpen) {
+        // Checkout em andamento — não criar duplicata
+        return res.status(400).json({ error: 'already_has_pending_request' })
+      }
+
+      // Sessão expirada/cancelada — auto-cancelar PCR stale e prosseguir
+      await svc
+        .from('plan_change_requests')
+        .update({ status: 'cancelled' })
+        .eq('id', existingPcr.id)
+
+      console.log(
+        '[POST /api/stripe/plans/checkout] PCR stale auto-cancelado:',
+        existingPcr.id, '| session:', existingPcr.stripe_checkout_session_id
+      )
     }
 
     // ── 6. Verificar assinatura Stripe ativa (este endpoint = apenas nova contratação)
@@ -194,7 +228,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Erro ao carregar dados da empresa' })
     }
 
-    const stripe      = getStripe()
     let stripeCustomerId = company.stripe_customer_id
 
     if (!stripeCustomerId) {
@@ -253,8 +286,8 @@ export default async function handler(req, res) {
           },
         },
 
-        success_url: `${appBaseUrl}/settings?tab=planos-e-uso&checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url:  `${appBaseUrl}/settings?tab=planos-e-uso&checkout=cancelled`,
+        success_url: `${appBaseUrl}/settings?tab=planos-uso&checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url:  `${appBaseUrl}/settings?tab=planos-uso&checkout=cancelled`,
 
         // Expiração padrão da Stripe: 24h (não alteramos)
       },

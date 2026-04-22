@@ -162,6 +162,29 @@ async function applyOperational(svc, companyId, planId, pcrId, eventId) {
 
 // ── Handlers por evento ───────────────────────────────────────────────────────
 
+async function handleCheckoutSessionExpired(stripe, svc, event) {
+  const session   = event.data.object
+  const companyId = session.client_reference_id ?? session.metadata?.company_id
+
+  if (!companyId) {
+    console.warn('[planWebhook] checkout.session.expired sem company_id', event.id)
+    return
+  }
+
+  // Cancelar o PCR pendente vinculado a esta sessão expirada
+  const { data: pcr } = await svc
+    .from('plan_change_requests')
+    .update({ status: 'cancelled' })
+    .eq('company_id', companyId)
+    .eq('status', 'pending')
+    .eq('stripe_checkout_session_id', session.id)
+    .select('id')
+    .maybeSingle()
+
+  console.log('[planWebhook] checkout.session.expired | company:', companyId,
+    '| session:', session.id, '| pcr_cancelado:', pcr?.id ?? 'nenhum')
+}
+
 async function handleCheckoutSessionCompleted(stripe, svc, event) {
   const session      = event.data.object
   const companyId    = session.client_reference_id ?? session.metadata?.company_id
@@ -464,6 +487,9 @@ export async function handlePlanEvent(event) {
   const svc    = getServiceSupabase()
 
   switch (event.type) {
+    case 'checkout.session.expired':
+      return handleCheckoutSessionExpired(stripe, svc, event)
+
     case 'checkout.session.completed':
       return handleCheckoutSessionCompleted(stripe, svc, event)
 
