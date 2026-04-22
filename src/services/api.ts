@@ -358,23 +358,39 @@ export const api = {
     adminPassword: string;
     sendInviteEmail?: boolean;
   }) {
-    // Criação atômica via RPC: cria company + company_users (super_admin) +
-    // auto-assignment em partner_company_assignments se caller for partner.
-    const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('create_client_company_safe', {
-        p_parent_company_id: parentCompanyId,
-        p_name: data.name,
-        p_domain: data.domain ?? null,
-        p_plan: data.plan,
-      });
+    // Criação atômica via backend (POST /api/companies/create):
+    //   - valida permissões (super_admin/system_admin/partner)
+    //   - chama create_client_company_safe (empresa + company_users + trial)
+    //   - trial de 14 dias criado automaticamente
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
 
-    if (rpcError || !rpcResult?.success) {
+    const createRes = await fetch('/api/companies/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name:            data.name,
+        domain:          data.domain ?? null,
+        parentCompanyId,
+      }),
+    });
+
+    const createJson = await createRes.json();
+
+    if (!createRes.ok) {
       throw new Error(
-        'Erro ao criar empresa: ' + (rpcError?.message ?? rpcResult?.error ?? 'unknown error')
+        'Erro ao criar empresa: ' + (createJson?.error ?? 'unknown error')
       );
     }
 
-    const companyId: string = rpcResult.company_id;
+    const companyId: string     = createJson.company_id;
+    const rpcResult: Record<string, unknown> = {
+      auto_assigned: createJson.auto_assigned ?? false,
+    };
 
     // Buscar empresa criada para compor o retorno
     const { data: company, error: fetchError } = await supabase

@@ -12,6 +12,10 @@ export type SubscriptionStatus =
 export interface PlanSubscription {
   has_subscription:     boolean
   status:               SubscriptionStatus
+  // true quando status='trialing' e stripe_subscription_id IS NULL (trial interno, não Stripe)
+  is_internal_trial:    boolean
+  // calculado no backend: dias até current_period_end (ceil, mín 0); null se não for trial interno
+  days_remaining:       number | null
   plan_name:            string | null
   billing_cycle:        'monthly' | 'yearly' | null
   current_period_end:   string | null
@@ -23,6 +27,8 @@ export interface PlanSubscription {
 const DEFAULT_EMPTY: PlanSubscription = {
   has_subscription:     false,
   status:               null,
+  is_internal_trial:    false,
+  days_remaining:       null,
   plan_name:            null,
   billing_cycle:        null,
   current_period_end:   null,

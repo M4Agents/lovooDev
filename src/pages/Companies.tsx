@@ -3,10 +3,29 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
-import { Company } from '../lib/supabase';
-import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Link } from 'lucide-react';
+import { Company, supabase } from '../lib/supabase';
+import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Link, Clock, CalendarClock } from 'lucide-react';
 import { openDirectEditCompanyModal } from './companies/openDirectEditCompanyModal';
 import { PartnerAssignmentModal } from '../components/PartnerAssignmentModal';
+
+interface TrialInfo {
+  company_id:        string;
+  is_internal_trial: boolean;
+  trial_start:       string | null;
+  trial_end:         string | null;
+  trial_extended:    boolean;
+  can_extend:        boolean;
+  days_remaining:    number | null;
+}
+
+const EXTEND_ERROR_MSGS: Record<string, string> = {
+  trial_already_extended: 'Este trial já foi estendido. Apenas 1 extensão por empresa.',
+  not_internal_trial:     'Esta empresa já possui uma assinatura Stripe ativa.',
+  trial_not_started:      'Esta empresa não possui trial iniciado.',
+  trial_not_eligible:     'Esta empresa não está em estado elegível para extensão.',
+  forbidden:              'Você não tem permissão para estender este trial.',
+  company_not_found:      'Empresa não encontrada.',
+};
 
 export const Companies: React.FC = () => {
   const { t } = useTranslation('companies');
@@ -21,6 +40,14 @@ export const Companies: React.FC = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [managingCompany, setManagingCompany] = useState<Company | null>(null);
   const [partnerModalCompany, setPartnerModalCompany] = useState<Company | null>(null);
+
+  // ── Trial state ──────────────────────────────────────────────────────────
+  const [trialInfoMap, setTrialInfoMap] = useState<Record<string, TrialInfo | null>>({});
+  const [trialLoadingIds, setTrialLoadingIds] = useState<string[]>([]);
+  const [extendModalCompany, setExtendModalCompany] = useState<Company | null>(null);
+  const [extending, setExtending] = useState(false);
+  const [extendError, setExtendError] = useState<string | null>(null);
+  const [extendSuccess, setExtendSuccess] = useState(false);
   const [userFormData, setUserFormData] = useState({
     email: '',
     newPassword: ''
@@ -35,23 +62,87 @@ export const Companies: React.FC = () => {
   });
 
   useEffect(() => {
-    if (isSaaSAdmin) {
+    if (isSaaSAdmin || isSystemAdmin) {
       loadCompanies();
     }
-  }, [isSaaSAdmin]);
+  }, [isSaaSAdmin, isSystemAdmin]);
 
   const loadCompanies = async () => {
-    if (!isSaaSAdmin) {
+    if (!isSaaSAdmin && !isSystemAdmin) {
       return;
     }
 
     try {
       const data = await api.getAllCompanies();
       setCompanies(data);
+      // Buscar trial info para empresas cliente (não bloqueia o render)
+      const clients = (data as any[]).filter(c => c.company_type === 'client');
+      clients.forEach(c => fetchTrialInfo(c.id));
     } catch (error) {
       console.error('Error loading companies:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Trial: buscar info por empresa cliente ───────────────────────────────
+  const fetchTrialInfo = async (companyId: string) => {
+    setTrialLoadingIds(prev => [...prev, companyId]);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+
+      const res = await fetch(`/api/admin/trials/info?company_id=${companyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data: TrialInfo = await res.json();
+      setTrialInfoMap(prev => ({ ...prev, [companyId]: data }));
+    } catch {
+      // Silencioso — não bloqueia a UI
+    } finally {
+      setTrialLoadingIds(prev => prev.filter(id => id !== companyId));
+    }
+  };
+
+  // ── Trial: executar extensão via modal de confirmação ────────────────────
+  const handleExtendTrial = async () => {
+    if (!extendModalCompany) return;
+    setExtending(true);
+    setExtendError(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Sessão inválida');
+
+      const res = await fetch('/api/admin/trials/extend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ company_id: extendModalCompany.id }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const msg = EXTEND_ERROR_MSGS[json?.error] ?? 'Erro ao estender trial. Tente novamente.';
+        setExtendError(msg);
+        return;
+      }
+
+      setExtendSuccess(true);
+      // Refetch para manter badge consistente com o banco
+      await fetchTrialInfo(extendModalCompany.id);
+      setTimeout(() => {
+        setExtendModalCompany(null);
+        setExtendSuccess(false);
+        setExtendError(null);
+      }, 2200);
+    } catch {
+      setExtendError('Erro interno ao processar extensão.');
+    } finally {
+      setExtending(false);
     }
   };
 
@@ -243,6 +334,64 @@ export const Companies: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* ── Badge de trial ──────────────────────────────────────── */}
+            {(comp as any).company_type === 'client' && (() => {
+              const info = trialInfoMap[comp.id];
+              const isLoading = trialLoadingIds.includes(comp.id);
+
+              if (isLoading) {
+                return <div className="h-5 w-36 mb-3 bg-slate-100 animate-pulse rounded-full" />;
+              }
+              if (!info) return null;
+
+              const isActiveTrial  = info.is_internal_trial;
+              const isExpiredTrial = !isActiveTrial && !!info.trial_end && info.can_extend;
+              const wasExtended    = !isActiveTrial && info.trial_extended && !!info.trial_end;
+
+              if (!isActiveTrial && !isExpiredTrial && !wasExtended) return null;
+
+              return (
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  {isActiveTrial ? (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      (info.days_remaining ?? 99) <= 3
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      <Clock className="w-3 h-3" />
+                      {info.days_remaining === 0
+                        ? 'Trial expira hoje'
+                        : `Trial — ${info.days_remaining} dia(s)`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                      <Clock className="w-3 h-3" />
+                      Trial expirado
+                    </span>
+                  )}
+                  {info.trial_extended && (
+                    <span className="text-xs text-slate-400">Já estendido</span>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Botão Estender Trial ────────────────────────────────── */}
+            {(comp as any).company_type === 'client' && trialInfoMap[comp.id]?.can_extend && (
+              <button
+                type="button"
+                onClick={() => {
+                  setExtendModalCompany(comp);
+                  setExtendError(null);
+                  setExtendSuccess(false);
+                }}
+                className="w-full mb-3 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <CalendarClock className="w-4 h-4" />
+                Estender Trial (+14 dias)
+              </button>
+            )}
 
             <div className="flex gap-2">
               <button
@@ -519,6 +668,76 @@ export const Companies: React.FC = () => {
           parentCompanyId={currentCompany.id}
           onClose={() => setPartnerModalCompany(null)}
         />
+      )}
+
+      {/* ── Modal de extensão de trial ──────────────────────────────────── */}
+      {extendModalCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200 flex items-center gap-3">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <CalendarClock className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Estender Trial</h2>
+                <p className="text-sm text-slate-500">{extendModalCompany.name}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {extendSuccess ? (
+                <div className="flex flex-col items-center gap-3 py-4 text-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <CalendarClock className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="font-medium text-green-800">Trial estendido com sucesso!</p>
+                  <p className="text-sm text-slate-500">O período de teste foi renovado por mais 14 dias.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm text-amber-800">
+                      Deseja estender o período de trial de{' '}
+                      <strong>{extendModalCompany.name}</strong> por mais{' '}
+                      <strong>14 dias</strong>?
+                    </p>
+                    <p className="text-xs text-amber-600 mt-2">
+                      Esta ação é permitida apenas 1 vez por empresa e não pode ser desfeita.
+                    </p>
+                  </div>
+
+                  {extendError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-700">{extendError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExtendModalCompany(null);
+                        setExtendError(null);
+                      }}
+                      disabled={extending}
+                      className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExtendTrial}
+                      disabled={extending}
+                      className="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+                    >
+                      {extending ? 'Processando...' : 'Confirmar Extensão'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {createdCompany && (

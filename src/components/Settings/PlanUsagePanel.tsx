@@ -114,11 +114,12 @@ function UsageBar({ icon, label, current, max, pct }: UsageBarProps) {
 interface PlanCardItemProps {
   plan: PlanCard
   hasSubscription: boolean
+  isInternalTrial: boolean
   onSelect: (plan: PlanCard) => void
   requesting: boolean
 }
 
-function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardItemProps) {
+function PlanCardItem({ plan, hasSubscription, isInternalTrial, onSelect, requesting }: PlanCardItemProps) {
   const [expanded, setExpanded] = useState(false)
 
   const directionIcon = plan.direction === 'upgrade'
@@ -132,11 +133,13 @@ function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardI
   // CTA logic:
   // - Plano atual → sem botão
   // - Sem stripe_price_id → "Fale com a equipe"
+  // - Trial interno + stripe comprável → "Contratar plano"
   // - Com stripe: upgrade/downgrade → botão de ação
   const isContactPlan = !plan.is_stripe_purchasable && !plan.is_current
 
   const ctaLabel = plan.is_current ? null
     : isContactPlan ? 'Fale com a equipe'
+    : isInternalTrial && plan.is_stripe_purchasable ? 'Contratar plano'
     : plan.direction === 'upgrade' ? 'Fazer upgrade'
     : plan.direction === 'downgrade' ? 'Fazer downgrade'
     : null
@@ -144,6 +147,8 @@ function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardI
   const ctaStyle = plan.is_current ? ''
     : isContactPlan
       ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+      : isInternalTrial && plan.is_stripe_purchasable
+      ? 'bg-blue-600 hover:bg-blue-700 text-white'
       : plan.direction === 'upgrade'
       ? 'bg-blue-600 hover:bg-blue-700 text-white'
       : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
@@ -239,8 +244,8 @@ function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardI
         </div>
       )}
 
-      {/* Aviso downgrade Stripe */}
-      {!plan.is_current && plan.direction === 'downgrade' && plan.is_stripe_purchasable && plan.is_accessible && hasSubscription && (
+      {/* Aviso downgrade Stripe (apenas para assinaturas ativas, não trial interno) */}
+      {!plan.is_current && plan.direction === 'downgrade' && plan.is_stripe_purchasable && plan.is_accessible && hasSubscription && !isInternalTrial && (
         <div className="mb-3 flex items-start gap-1.5 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
           <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span>Será aplicado no próximo ciclo de cobrança.</span>
@@ -276,20 +281,24 @@ function PlanCardItem({ plan, hasSubscription, onSelect, requesting }: PlanCardI
 interface ConfirmModalProps {
   plan: PlanCard
   hasSubscription: boolean
+  isInternalTrial: boolean
   onConfirm: () => void
   onCancel: () => void
   loading: boolean
 }
 
-function ConfirmModal({ plan, hasSubscription, onConfirm, onCancel, loading }: ConfirmModalProps) {
+function ConfirmModal({ plan, hasSubscription, isInternalTrial, onConfirm, onCancel, loading }: ConfirmModalProps) {
   const isDowngrade = plan.direction === 'downgrade'
+  const goesToCheckout = !hasSubscription || isInternalTrial
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900">
-            Confirmar {isDowngrade ? 'downgrade' : 'upgrade'}
+            {goesToCheckout
+              ? 'Contratar plano'
+              : `Confirmar ${isDowngrade ? 'downgrade' : 'upgrade'}`}
           </h2>
           <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
@@ -298,11 +307,18 @@ function ConfirmModal({ plan, hasSubscription, onConfirm, onCancel, loading }: C
 
         <div className="p-6 space-y-4">
           <p className="text-slate-600 text-sm">
-            Você está alterando para o plano{' '}
+            {goesToCheckout
+              ? <>Você será redirecionado para o checkout seguro do Stripe para contratar o plano{' '}</>
+              : <>Você está alterando para o plano{' '}</>}
             <strong className="text-slate-900">{plan.name}</strong>.
           </p>
 
-          {hasSubscription ? (
+          {goesToCheckout ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Após a confirmação do pagamento, sua conta será ativada automaticamente.</span>
+            </div>
+          ) : (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
@@ -310,11 +326,6 @@ function ConfirmModal({ plan, hasSubscription, onConfirm, onCancel, loading }: C
                   ? 'O downgrade será aplicado no início do próximo ciclo de cobrança. Sem reembolso proporcional.'
                   : 'O upgrade será aplicado imediatamente. O valor proporcional será cobrado na próxima fatura.'}
               </span>
-            </div>
-          ) : (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
-              <Info className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Você será redirecionado para o checkout seguro do Stripe para concluir a contratação.</span>
             </div>
           )}
         </div>
@@ -334,9 +345,9 @@ function ConfirmModal({ plan, hasSubscription, onConfirm, onCancel, loading }: C
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                {hasSubscription ? 'Alterando…' : 'Redirecionando…'}
+                {goesToCheckout ? 'Redirecionando…' : 'Alterando…'}
               </span>
-            ) : hasSubscription ? 'Confirmar alteração' : 'Ir para checkout'}
+            ) : goesToCheckout ? 'Ir para checkout' : 'Confirmar alteração'}
           </button>
         </div>
       </div>
@@ -368,9 +379,13 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       const token = await getAuthToken()
       if (!token) { setActionError('Sessão inválida'); setSelectedPlan(null); return }
 
-      const hasSubscription = subscription?.has_subscription ?? false
+      const hasSubscription  = subscription?.has_subscription ?? false
+      const isInternalTrial  = subscription?.is_internal_trial ?? false
 
-      if (hasSubscription) {
+      // Trial interno ou sem assinatura → checkout; assinatura Stripe ativa → change
+      const useCheckout = !hasSubscription || isInternalTrial
+
+      if (!useCheckout) {
         // ── Alterar plano existente via Stripe ─────────────────────────────
         const resp = await fetch('/api/stripe/plans/change', {
           method:  'POST',
@@ -395,7 +410,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         refetchAll()
 
       } else {
-        // ── Nova assinatura via Stripe Checkout ────────────────────────────
+        // ── Nova assinatura via Stripe Checkout (sem assinatura ou trial interno) ──
         const resp = await fetch('/api/stripe/plans/checkout', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -442,9 +457,14 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
   if (!data) return null
 
-  const currentPlan    = data.plans.find(p => p.is_current)
-  const usage          = data.usage
+  const currentPlan     = data.plans.find(p => p.is_current)
+  const usage           = data.usage
   const hasSubscription = subscription?.has_subscription ?? false
+  const isInternalTrial = subscription?.is_internal_trial ?? false
+
+  const handleHirePlan = () => {
+    document.getElementById('planos-disponiveis')?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   return (
     <div className="space-y-6">
@@ -454,6 +474,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
           subscription={subscription}
           companyId={companyId}
           onCancelled={refetchAll}
+          onHirePlan={handleHirePlan}
         />
       )}
 
@@ -553,7 +574,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       </div>
 
       {/* ── Seção 2: Planos disponíveis ── */}
-      <div>
+      <div id="planos-disponiveis">
         <h2 className="text-base font-semibold text-slate-900 mb-4">Planos disponíveis</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {data.plans.map(plan => (
@@ -561,6 +582,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
               key={plan.id}
               plan={plan}
               hasSubscription={hasSubscription}
+              isInternalTrial={isInternalTrial}
               onSelect={setSelectedPlan}
               requesting={requesting && selectedPlan?.id === plan.id}
             />
@@ -573,6 +595,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         <ConfirmModal
           plan={selectedPlan}
           hasSubscription={hasSubscription}
+          isInternalTrial={isInternalTrial}
           onConfirm={handleConfirm}
           onCancel={() => { setSelectedPlan(null); setActionError(null) }}
           loading={requesting}

@@ -68,6 +68,12 @@ export default async function handler(req, res) {
       .eq('company_id', effectiveCompanyId)
       .maybeSingle()
 
+    // Trial interno: tem registro mas sem stripe_subscription_id.
+    // Não há assinatura Stripe para cancelar — trial expira automaticamente via cron.
+    if (existingSub?.status === 'trialing' && !existingSub?.stripe_subscription_id) {
+      return res.status(400).json({ error: 'trial_has_no_subscription' })
+    }
+
     if (!existingSub?.stripe_subscription_id || !ACTIVE_SUB_STATUS.has(existingSub.status)) {
       return res.status(400).json({ error: 'no_active_subscription' })
     }

@@ -10,6 +10,7 @@ interface Props {
   subscription: PlanSubscription
   companyId: string
   onCancelled: () => void
+  onHirePlan?: () => void
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
   subscription,
   companyId,
   onCancelled,
+  onHirePlan,
 }) => {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling]           = useState(false)
@@ -123,10 +125,16 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
   if (!subscription.has_subscription) return null
 
   const { status, plan_name, current_period_end, cancel_at_period_end,
-          scheduled_plan_name, last_invoice_url, billing_cycle } = subscription
+          scheduled_plan_name, last_invoice_url, billing_cycle,
+          is_internal_trial, days_remaining } = subscription
 
-  const canCancel     = (status === 'active' || status === 'trialing') && !cancel_at_period_end
-  const canOpenPortal = !!status && PORTAL_STATUSES.has(status)
+  // days_remaining é calculado no backend (evita drift de fuso no cliente)
+  const trialDaysRemaining = days_remaining
+  const isTrialUrgent      = trialDaysRemaining !== null && trialDaysRemaining <= 3
+
+  // Trial interno oculta portal e cancelamento (não há assinatura Stripe para gerir)
+  const canCancel     = !is_internal_trial && (status === 'active' || status === 'trialing') && !cancel_at_period_end
+  const canOpenPortal = !is_internal_trial && !!status && PORTAL_STATUSES.has(status)
 
   const handleOpenPortal = async () => {
     setOpeningPortal(true)
@@ -204,6 +212,17 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
 
           {/* Ações de billing */}
           <div className="flex items-center gap-3">
+            {/* Trial interno: único CTA disponível é contratar um plano */}
+            {is_internal_trial && onHirePlan && (
+              <button
+                onClick={onHirePlan}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Contratar plano
+              </button>
+            )}
+
+            {/* Assinatura Stripe ativa: portal e cancelamento */}
             {canOpenPortal && (
               <button
                 onClick={handleOpenPortal}
@@ -219,7 +238,6 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
               </button>
             )}
 
-            {/* Cancelar assinatura */}
             {canCancel && (
               <button
                 onClick={() => setShowCancelModal(true)}
@@ -240,8 +258,45 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Período de teste */}
-          {status === 'trialing' && current_period_end && (
+          {/* Trial interno: banner com urgência e CTA secundário */}
+          {is_internal_trial && current_period_end && (
+            <div className={`flex items-start gap-3 text-sm rounded-lg px-3 py-3 border ${
+              isTrialUrgent
+                ? 'text-red-800 bg-red-50 border-red-200'
+                : 'text-amber-800 bg-amber-50 border-amber-200'
+            }`}>
+              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isTrialUrgent ? 'text-red-500' : 'text-amber-500'}`} />
+              <div className="flex-1">
+                <p className="font-medium">Você está em período de teste</p>
+                <p className="mt-0.5">
+                  {trialDaysRemaining === 0
+                    ? 'Seu período de teste encerra hoje.'
+                    : trialDaysRemaining === 1
+                    ? 'Falta 1 dia para o encerramento do período de teste.'
+                    : `Faltam ${trialDaysRemaining} dias — encerra em `}
+                  {trialDaysRemaining !== null && trialDaysRemaining > 1 && (
+                    <strong>{fmtDate(current_period_end)}</strong>
+                  )}
+                  {trialDaysRemaining === 0 || trialDaysRemaining === 1 ? (
+                    <> Encerra em <strong>{fmtDate(current_period_end)}</strong>.</>
+                  ) : '.'}
+                </p>
+              </div>
+              {onHirePlan && (
+                <button
+                  onClick={onHirePlan}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-white ${
+                    isTrialUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  Contratar plano
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Trial Stripe convencional (não internal trial) */}
+          {status === 'trialing' && !is_internal_trial && current_period_end && (
             <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
               <Clock className="w-4 h-4 shrink-0" />
               <span>Período de teste até <strong>{fmtDate(current_period_end)}</strong>.</span>

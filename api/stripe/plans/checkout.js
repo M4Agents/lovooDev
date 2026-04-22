@@ -164,6 +164,10 @@ export default async function handler(req, res) {
     }
 
     // ── 6. Verificar assinatura Stripe ativa (este endpoint = apenas nova contratação)
+    //
+    // Empresas em trial interno (status='trialing', stripe_subscription_id IS NULL)
+    // são PERMITIDAS aqui — esta é a rota correta de conversão do trial para plano pago.
+    // A guarda usa stripe_subscription_id como critério, não o status isolado.
     const { data: existingSub } = await svc
       .from('company_subscriptions')
       .select('id, status, stripe_subscription_id')

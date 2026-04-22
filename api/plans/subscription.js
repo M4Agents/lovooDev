@@ -11,6 +11,7 @@
 //   {
 //     has_subscription:     boolean,
 //     status:               "active" | "trialing" | "past_due" | "incomplete" | "canceled" | null,
+//     is_internal_trial:    boolean,         // true quando status=trialing E stripe_subscription_id IS NULL
 //     plan_name:            string | null,
 //     billing_cycle:        "monthly" | "yearly" | null,
 //     current_period_end:   string | null,   // ISO 8601
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
       .from('company_subscriptions')
       .select(
         'status, billing_cycle, current_period_end, cancel_at_period_end,' +
-        'last_invoice_url, scheduled_plan_id,' +
+        'last_invoice_url, scheduled_plan_id, stripe_subscription_id,' +
         'plans!company_subscriptions_plan_id_fkey(name)'
       )
       .eq('company_id', effectiveCompanyId)
@@ -58,14 +59,16 @@ export default async function handler(req, res) {
     // ── 3. Sem assinatura — resposta padrão ───────────────────────────────
     if (!sub) {
       return res.status(200).json({
-        has_subscription:    false,
-        status:              null,
-        plan_name:           null,
-        billing_cycle:       null,
-        current_period_end:  null,
+        has_subscription:     false,
+        status:               null,
+        is_internal_trial:    false,
+        days_remaining:       null,
+        plan_name:            null,
+        billing_cycle:        null,
+        current_period_end:   null,
         cancel_at_period_end: false,
-        scheduled_plan_name: null,
-        last_invoice_url:    null,
+        scheduled_plan_name:  null,
+        last_invoice_url:     null,
       })
     }
 
@@ -87,10 +90,24 @@ export default async function handler(req, res) {
       ? (planData[0]?.name ?? null)
       : (planData?.name ?? null)
 
+    // Trial interno: empresa em período de teste sem assinatura Stripe vinculada.
+    // Ações como change, cancel e customer-portal são bloqueadas no backend.
+    const isInternalTrial = sub.status === 'trialing' && !sub.stripe_subscription_id
+
+    // Dias restantes do trial interno — calculado no backend para evitar drift de fuso.
+    // Arredondamento para cima (ceil): trial que termina hoje à noite ainda conta como 1 dia.
+    let daysRemaining = null
+    if (isInternalTrial && sub.current_period_end) {
+      const diffMs = new Date(sub.current_period_end).getTime() - Date.now()
+      daysRemaining = Math.max(0, Math.ceil(diffMs / 86_400_000))
+    }
+
     // ── 5. Resposta — stripe_subscription_id NUNCA exposto ao frontend ────
     return res.status(200).json({
       has_subscription:     true,
       status:               sub.status,
+      is_internal_trial:    isInternalTrial,
+      days_remaining:       daysRemaining,
       plan_name:            planName,
       billing_cycle:        sub.billing_cycle,
       current_period_end:   sub.current_period_end,

@@ -64,7 +64,31 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ── 3. Buscar stripe_customer_id da empresa ────────────────────────────
+    // ── 3. Verificar assinatura — detectar trial interno antes de qualquer consulta Stripe
+    //
+    // Empresas em trial interno (status='trialing', stripe_subscription_id IS NULL)
+    // não têm assinatura Stripe para gerenciar no portal e frequentemente também não
+    // têm stripe_customer_id. Retornar erro específico antes de atingir essa checagem.
+    const { data: sub, error: subError } = await svc
+      .from('company_subscriptions')
+      .select('status, stripe_subscription_id')
+      .eq('company_id', effectiveCompanyId)
+      .maybeSingle()
+
+    if (subError) {
+      console.error('[POST /api/stripe/customer-portal] Erro ao buscar assinatura:', subError.message)
+      return res.status(500).json({ error: 'Erro interno ao buscar assinatura' })
+    }
+
+    if (sub?.status === 'trialing' && !sub?.stripe_subscription_id) {
+      return res.status(400).json({ error: 'trial_has_no_subscription' })
+    }
+
+    if (!sub || !MANAGEABLE_SUB_STATUS.has(sub.status)) {
+      return res.status(400).json({ error: 'no_active_subscription' })
+    }
+
+    // ── 4. Buscar stripe_customer_id da empresa ────────────────────────────
     const { data: company, error: companyError } = await svc
       .from('companies')
       .select('stripe_customer_id')
@@ -78,22 +102,6 @@ export default async function handler(req, res) {
 
     if (!company?.stripe_customer_id) {
       return res.status(400).json({ error: 'no_stripe_customer' })
-    }
-
-    // ── 4. Validar assinatura gerenciável ─────────────────────────────────
-    const { data: sub, error: subError } = await svc
-      .from('company_subscriptions')
-      .select('status')
-      .eq('company_id', effectiveCompanyId)
-      .maybeSingle()
-
-    if (subError) {
-      console.error('[POST /api/stripe/customer-portal] Erro ao buscar assinatura:', subError.message)
-      return res.status(500).json({ error: 'Erro interno ao buscar assinatura' })
-    }
-
-    if (!sub || !MANAGEABLE_SUB_STATUS.has(sub.status)) {
-      return res.status(400).json({ error: 'no_active_subscription' })
     }
 
     // ── 5. Criar sessão no Stripe Customer Portal ─────────────────────────

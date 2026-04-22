@@ -92,7 +92,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function AppRoutes() {
-  const { isSaaSAdmin } = useAccessControl();
+  const { isSaaSAdmin, isSystemAdmin } = useAccessControl();
 
   return (
     <Routes>
@@ -168,7 +168,7 @@ function AppRoutes() {
         path="/companies"
         element={
           <ProtectedRoute>
-            <RoleProtectedRoute guard={isSaaSAdmin}>
+            <RoleProtectedRoute guard={isSaaSAdmin || isSystemAdmin}>
               <Companies />
             </RoleProtectedRoute>
           </ProtectedRoute>
