@@ -69,11 +69,17 @@ export default async function handler(req, res) {
     const stripe = getStripe()
     event = stripe.webhooks.constructEvent(rawBody, sig, secret)
   } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',location:'api/stripe/webhook.js:71',message:'constructEvent falhou',data:{errMsg:err.message,errType:err.type,sigPresent:!!sig,sigPrefix:sig?.slice(0,20),secretConfigured:!!secret,secretPrefix:secret?.slice(0,8),rawBodyLen:rawBody?.length,hypothesisId:'H-A'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     console.warn('[webhook] Assinatura inválida:', err.message)
     return res.status(400).json({ error: `Webhook signature invalid: ${err.message}` })
   }
 
   // 3. Log de recebimento
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',location:'api/stripe/webhook.js:78',message:'evento recebido com sucesso',data:{type:event.type,id:event.id,apiVersion:event.api_version,hypothesisId:'H-B'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   console.log('[webhook] Evento recebido | type:', event.type, '| id:', event.id)
 
   // 4. Processar evento
