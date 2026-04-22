@@ -36,11 +36,10 @@ import { getStripe }             from '../../lib/stripe/client.js'
 // Roles com permissão para iniciar checkout de plano
 const ALLOWED_ROLES = new Set(['admin', 'super_admin', 'system_admin'])
 
-// Janela de dias para reutilizar idempotency key (1 dia UTC)
-const idempotencyKeyFor = (companyId, planId) => {
-  const day = new Date().toISOString().slice(0, 10) // YYYY-MM-DD UTC
-  return `checkout-plan-${companyId}-${planId}-${day}`
-}
+// Idempotency key única por tentativa de checkout
+// Usa crypto.randomUUID para garantir nova sessão a cada tentativa.
+// Duplicidade real é prevenida pela verificação de PCR pendente (passo 5).
+const idempotencyKeyFor = () => crypto.randomUUID()
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -225,8 +224,9 @@ export default async function handler(req, res) {
 
     const session = await stripe.checkout.sessions.create(
       {
-        mode:     'subscription',
-        customer: stripeCustomerId,
+        mode:                  'subscription',
+        customer:              stripeCustomerId,
+        allow_promotion_codes: true,
 
         line_items: [
           {
@@ -258,8 +258,7 @@ export default async function handler(req, res) {
 
         // Expiração padrão da Stripe: 24h (não alteramos)
       },
-      // Idempotency key: previne duplicar checkout para o mesmo par empresa+plano no mesmo dia
-      { idempotencyKey: idempotencyKeyFor(effectiveCompanyId, to_plan_id) }
+      { idempotencyKey: idempotencyKeyFor() }
     )
 
     // ── 10. Inserir plan_change_request para auditoria ─────────────────────────
