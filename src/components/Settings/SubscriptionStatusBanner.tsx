@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import {
   CheckCircle, Clock, AlertTriangle, XCircle, ExternalLink,
-  Loader2, X, AlertCircle,
+  Loader2, X, AlertCircle, Settings,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { PlanSubscription } from '../../hooks/usePlanSubscription'
@@ -106,6 +106,8 @@ function StatusBadge({ status }: StatusBadgeProps) {
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
+const PORTAL_STATUSES = new Set(['active', 'trialing', 'past_due'])
+
 export const SubscriptionStatusBanner: React.FC<Props> = ({
   subscription,
   companyId,
@@ -115,12 +117,43 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
   const [cancelling, setCancelling]           = useState(false)
   const [cancelError, setCancelError]         = useState<string | null>(null)
 
+  const [openingPortal, setOpeningPortal] = useState(false)
+  const [portalError, setPortalError]     = useState<string | null>(null)
+
   if (!subscription.has_subscription) return null
 
   const { status, plan_name, current_period_end, cancel_at_period_end,
           scheduled_plan_name, last_invoice_url, billing_cycle } = subscription
 
-  const canCancel = (status === 'active' || status === 'trialing') && !cancel_at_period_end
+  const canCancel     = (status === 'active' || status === 'trialing') && !cancel_at_period_end
+  const canOpenPortal = !!status && PORTAL_STATUSES.has(status)
+
+  const handleOpenPortal = async () => {
+    setOpeningPortal(true)
+    setPortalError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      const resp = await fetch('/api/stripe/customer-portal', {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const json = await resp.json()
+
+      if (!resp.ok) {
+        setPortalError(json.error ?? 'Erro ao abrir portal de cobrança')
+        return
+      }
+
+      window.open(json.portal_url, '_blank', 'noopener,noreferrer')
+    } catch {
+      setPortalError('Erro de conexão. Tente novamente.')
+    } finally {
+      setOpeningPortal(false)
+    }
+  }
 
   const handleCancel = async () => {
     setCancelling(true)
@@ -169,15 +202,33 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Cancelar assinatura */}
-          {canCancel && (
-            <button
-              onClick={() => setShowCancelModal(true)}
-              className="text-xs text-slate-400 hover:text-red-600 transition-colors underline"
-            >
-              Cancelar assinatura
-            </button>
-          )}
+          {/* Ações de billing */}
+          <div className="flex items-center gap-3">
+            {canOpenPortal && (
+              <button
+                onClick={handleOpenPortal}
+                disabled={openingPortal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {openingPortal ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Settings className="w-3.5 h-3.5" />
+                )}
+                Gerenciar assinatura
+              </button>
+            )}
+
+            {/* Cancelar assinatura */}
+            {canCancel && (
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="text-xs text-slate-400 hover:text-red-600 transition-colors underline"
+              >
+                Cancelar assinatura
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="px-6 py-4 space-y-3">
@@ -259,6 +310,14 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
             <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{cancelError}</span>
+            </div>
+          )}
+
+          {/* Erro ao abrir portal */}
+          {portalError && (
+            <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{portalError}</span>
             </div>
           )}
         </div>
