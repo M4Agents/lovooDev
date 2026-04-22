@@ -135,10 +135,33 @@ export const Settings: React.FC = () => {
     const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais'] as const;
     if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
       setActiveTab(stateTab as typeof validTabs[number]);
-    } else if (tabParam === 'tracking') {
-      setActiveTab('tracking');
+    } else if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
+      setActiveTab(tabParam as typeof validTabs[number]);
     }
   }, [searchParams, location.state]);
+
+  // Detectar retorno do Stripe Checkout (success ou cancelled)
+  useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    if (!checkout || authLoading || isLoadingCompany) return;
+
+    setActiveTab('planos-uso');
+
+    if (checkout === 'cancelled') {
+      // Cancelar PCR pendente deixado pela sessão abandonada
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        const token = session?.access_token;
+        if (!token) return;
+        fetch('/api/plans/change-request', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      });
+    }
+
+    // Limpar os parâmetros de checkout da URL sem adicionar ao histórico
+    navigate('/settings?tab=planos-uso', { replace: true });
+  }, [searchParams, authLoading, isLoadingCompany, navigate]);
 
   useEffect(() => {
     const integration = searchParams.get('integration');
