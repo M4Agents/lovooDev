@@ -88,7 +88,13 @@ export default async function handler(req, res) {
   } catch (err) {
     // Erro no processamento: retornar 500 para Stripe fazer retry
     console.error('[webhook] Erro ao processar evento:', event.type, event.id, err)
-    return res.status(500).json({ error: 'Internal error processing event' })
+    // #region agent log - debug temporário (remover após diagnóstico)
+    return res.status(500).json({
+      error: 'Internal error processing event',
+      debug: err?.message ?? String(err),
+      stack: err?.stack?.split('\n').slice(0, 3).join(' | '),
+    })
+    // #endregion
   }
 
   // 5. Confirmar recebimento (sempre 200 após processamento bem-sucedido)
