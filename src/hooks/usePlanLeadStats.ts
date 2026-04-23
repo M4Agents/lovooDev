@@ -47,7 +47,7 @@ export function usePlanLeadStats(companyId: string | null | undefined) {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token || cancelled) return
 
-        const res = await fetch('/api/plans/limits', {
+        const res = await fetch(`/api/plans/limits?company_id=${encodeURIComponent(companyId)}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
 
