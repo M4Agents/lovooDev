@@ -34,7 +34,8 @@ export default async function handler(req, res) {
   }
 
   // ── 1. Auth + contexto multi-tenant ───────────────────────────────────────
-  const ctx = await resolveCreditsContext(req, null)
+  const queryCompanyId = req.query?.company_id ?? null
+  const ctx = await resolveCreditsContext(req, queryCompanyId)
   if (!ctx.ok) return res.status(ctx.status).json({ error: ctx.error })
 
   const { svc, effectiveCompanyId } = ctx

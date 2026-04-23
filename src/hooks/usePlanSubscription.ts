@@ -56,7 +56,8 @@ export function usePlanSubscription(companyId: string | null | undefined) {
         return
       }
 
-      const resp = await fetch('/api/plans/subscription', {
+      const url = `/api/plans/subscription?company_id=${encodeURIComponent(companyId)}`
+      const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
