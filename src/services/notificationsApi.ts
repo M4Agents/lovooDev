@@ -62,7 +62,7 @@ export async function fetchNotificationsSettings(): Promise<NotificationsSetting
   const data = await res.json().catch(() => ({})) as Record<string, unknown>
 
   // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',location:'notificationsApi.ts:fetchNotificationsSettings',message:'Full API response with backend _debug',data:{httpStatus:res.status,ok:res.ok,available_instances_count:Array.isArray(data?.available_instances)?(data.available_instances as unknown[]).length:null,backend_debug:(data as Record<string,unknown>)?._debug},timestamp:Date.now(),hypothesisId:'H-A H-B H-C H-D H-E'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',runId:'post-fix',location:'notificationsApi.ts:fetchNotificationsSettings',message:'Full API response with backend _debug',data:{httpStatus:res.status,ok:res.ok,available_instances_count:Array.isArray(data?.available_instances)?(data.available_instances as unknown[]).length:null,backend_debug:(data as Record<string,unknown>)?._debug},timestamp:Date.now(),hypothesisId:'H-A H-B H-C H-D H-E'})}).catch(()=>{});
   // #endregion
 
   if (!res.ok) throw new Error((data?.error as string) || 'Erro ao carregar configurações de notificações')

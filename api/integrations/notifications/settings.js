@@ -76,35 +76,25 @@ async function readCurrentSettings(supabase) {
 async function readAvailableInstances(supabase) {
   const { data, error } = await supabase
     .from('whatsapp_life_instances')
-    .select('id, name, status')
+    .select('id, instance_name, status')
     .eq('company_id', PARENT_COMPANY_ID)
     .eq('status', 'connected')
-    .is('deleted_at', null)
-    .order('name', { ascending: true })
+    .order('instance_name', { ascending: true })
 
   if (error || !data) return []
-  return data.map(inst => ({ id: inst.id, name: inst.name, status: inst.status }))
+  return data.map(inst => ({ id: inst.id, name: inst.instance_name, status: inst.status }))
 }
 
-// #region agent log — debug temporário
+// #region agent log — debug temporário (verificação pós-fix)
 async function debugReadInstances(supabase) {
-  // Query 1: sem nenhum filtro (só company_id)
   const { data: raw, error: rawErr } = await supabase
     .from('whatsapp_life_instances')
-    .select('id, name, status, deleted_at, company_id')
+    .select('id, instance_name, status, company_id')
     .eq('company_id', PARENT_COMPANY_ID)
-
-  // Query 2: sem filtro deleted_at (só status=connected)
-  const { data: noDeleted, error: noDeletedErr } = await supabase
-    .from('whatsapp_life_instances')
-    .select('id, name, status')
-    .eq('company_id', PARENT_COMPANY_ID)
-    .eq('status', 'connected')
 
   return {
     parent_company_id_used: PARENT_COMPANY_ID,
     raw_query: { data: raw, error: rawErr?.message, count: raw?.length ?? 0 },
-    no_deleted_at_filter:   { data: noDeleted, error: noDeletedErr?.message, count: noDeleted?.length ?? 0 },
   }
 }
 // #endregion
