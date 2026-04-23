@@ -60,6 +60,11 @@ export async function fetchNotificationsSettings(): Promise<NotificationsSetting
   const headers = await getAuthHeaders()
   const res  = await fetch('/api/integrations/notifications/settings', { headers })
   const data = await res.json().catch(() => ({})) as Record<string, unknown>
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',location:'notificationsApi.ts:fetchNotificationsSettings',message:'Raw API response',data:{httpStatus:res.status,ok:res.ok,rawData:data,available_instances_raw:data?.available_instances,available_instances_count:Array.isArray(data?.available_instances)?(data.available_instances as unknown[]).length:null},timestamp:Date.now(),hypothesisId:'H-A H-B H-C H-D H-E'})}).catch(()=>{});
+  // #endregion
+
   if (!res.ok) throw new Error((data?.error as string) || 'Erro ao carregar configurações de notificações')
   return {
     enabled:              Boolean(data.enabled),
