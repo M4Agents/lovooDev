@@ -20,6 +20,9 @@ import { AiCreditsPanel } from '../components/Settings/AiCreditsPanel';
 import { AiPlansPanel } from '../components/Settings/AiPlansPanel';
 import { CreditPackagesPanel } from '../components/Settings/CreditPackagesPanel';
 import { PlanUsagePanel } from '../components/Settings/PlanUsagePanel';
+import { ConsultingPackagesPanel } from '../components/Settings/ConsultingPackagesPanel';
+import { ConsultingTimeEntriesPanel } from '../components/Settings/ConsultingTimeEntriesPanel';
+import { AdminConsultingPackagesEditor } from '../components/Settings/AdminConsultingPackagesEditor';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
@@ -43,7 +46,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -121,7 +124,7 @@ export const Settings: React.FC = () => {
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
 
   // Sub-abas de Planos e Uso
-  const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia' | 'comprar-creditos'>('plano-atual');
+  const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia' | 'comprar-creditos' | 'consultoria'>('plano-atual');
 
   const [integracoesTab, setIntegracoesTab] = useState<
     'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'
@@ -3675,6 +3678,19 @@ export const Settings: React.FC = () => {
                   Comprar Créditos
                 </button>
               )}
+              {(canPurchaseConsulting || canLogConsultingHours || canManageConsultingCatalog) && (
+                <button
+                  onClick={() => setPlanUsageSubTab('consultoria')}
+                  className={`flex items-center gap-2 py-2 px-3 border-b-2 font-medium text-sm transition-colors duration-200 -mb-px ${
+                    planUsageSubTab === 'consultoria'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Crown className="w-4 h-4" />
+                  Consultoria
+                </button>
+              )}
             </div>
           </div>
 
@@ -3691,6 +3707,27 @@ export const Settings: React.FC = () => {
           {/* Painel Comprar Créditos */}
           {planUsageSubTab === 'comprar-creditos' && canPurchaseAiCredits && (
             <CreditPackagesPanel companyId={company.id} />
+          )}
+
+          {/* Painel Consultoria */}
+          {planUsageSubTab === 'consultoria' && (
+            <div className="space-y-10">
+              {/* Catálogo admin (platform admin) */}
+              {canManageConsultingCatalog && (
+                <AdminConsultingPackagesEditor />
+              )}
+              {/* Compra de pacotes (admin da empresa filha) */}
+              {canPurchaseConsulting && (
+                <ConsultingPackagesPanel companyId={company.id} />
+              )}
+              {/* Lançamentos de horas */}
+              {(canPurchaseConsulting || canLogConsultingHours) && (
+                <ConsultingTimeEntriesPanel
+                  companyId={company.id}
+                  canLogHours={canLogConsultingHours}
+                />
+              )}
+            </div>
           )}
         </div>
       )}

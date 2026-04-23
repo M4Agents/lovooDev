@@ -99,6 +99,20 @@ export function useAccessControl() {
   // system_admin tem acesso aqui diferente de canManageAiGovernance (só isSaaSAdmin).
   const canManageNotifications = isSaaSAdmin || isSystemAdmin
 
+  // ── Consultoria ────────────────────────────────────────────
+  // Compra de pacotes consultivos: mesma hierarquia de canPurchaseAiCredits
+  const canPurchaseConsulting =
+    currentRole === 'admin' ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin' ||
+    isImpersonating
+
+  // Catálogo de consultoria: apenas platform admin (empresa pai)
+  const canManageConsultingCatalog = isSaaSAdmin || isSystemAdmin
+
+  // Lançamento de horas: apenas platform admin (equipe interna)
+  const canLogConsultingHours = isSaaSAdmin || isSystemAdmin
+
   // ── Impersonação ───────────────────────────────────────────
   // super_admin e system_admin podem impersonar empresas para suporte
   const canImpersonate = isSaaSAdmin || isSystemAdmin
@@ -154,6 +168,11 @@ export function useAccessControl() {
 
     // Notificações automáticas
     canManageNotifications,
+
+    // Pacotes de consultoria
+    canPurchaseConsulting,
+    canManageConsultingCatalog,
+    canLogConsultingHours,
 
     // Impersonação
     canImpersonate,

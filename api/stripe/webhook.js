@@ -26,17 +26,21 @@
 //   STRIPE_WEBHOOK_SECRET   — segredo de assinatura do webhook (whsec_...)
 // =============================================================================
 
-import { getStripe }          from '../lib/stripe/client.js'
-import { handlePlanEvent }    from '../lib/stripe/planWebhookHandler.js'
-import { handleCreditEvent }  from '../lib/stripe/creditWebhookHandler.js'
+import { getStripe }               from '../lib/stripe/client.js'
+import { handlePlanEvent }         from '../lib/stripe/planWebhookHandler.js'
+import { handleCreditEvent }       from '../lib/stripe/creditWebhookHandler.js'
+import { handleConsultingEvent }   from '../lib/stripe/consultingWebhookHandler.js'
 
-// Eventos de checkout que podem ser de créditos avulsos
-const CREDIT_ROUTABLE_EVENTS = new Set([
+// Eventos de checkout que podem ser de créditos avulsos ou consultoria
+const CHECKOUT_ROUTABLE_EVENTS = new Set([
   'checkout.session.completed',
   'checkout.session.async_payment_succeeded',
   'checkout.session.async_payment_failed',
   'checkout.session.expired',
 ])
+
+// Mantido por compatibilidade — aponta para o mesmo Set
+const CREDIT_ROUTABLE_EVENTS = CHECKOUT_ROUTABLE_EVENTS
 
 // Necessário para receber o rawBody e validar a assinatura Stripe
 export const config = { api: { bodyParser: false } }
@@ -89,23 +93,32 @@ export default async function handler(req, res) {
   console.log('[webhook] Evento recebido | type:', event.type, '| id:', event.id)
 
   // 4. Rotear e processar evento
-  // Créditos avulsos identificados por metadata.type === 'credit_purchase'
-  // Planos: todos os demais eventos (inclusive checkout.session.completed de planos)
-  const meta = event.data?.object?.metadata ?? {}
-  const isCreditEvent = CREDIT_ROUTABLE_EVENTS.has(event.type) && meta.type === 'credit_purchase'
+  // Roteamento por metadata.type:
+  //   'consulting_purchase' → consultingWebhookHandler
+  //   'credit_purchase'     → creditWebhookHandler
+  //   demais                → planWebhookHandler (assinaturas recorrentes)
+  const meta             = event.data?.object?.metadata ?? {}
+  const isCheckoutEvent  = CHECKOUT_ROUTABLE_EVENTS.has(event.type)
+  const isConsulting     = isCheckoutEvent && meta.type === 'consulting_purchase'
+  const isCredit         = isCheckoutEvent && meta.type === 'credit_purchase'
 
+  let handlerName = 'plan'
   try {
-    if (isCreditEvent) {
+    if (isConsulting) {
+      handlerName = 'consulting'
+      await handleConsultingEvent(event)
+    } else if (isCredit) {
+      handlerName = 'credit'
       await handleCreditEvent(event)
     } else {
       await handlePlanEvent(event)
     }
   } catch (err) {
     console.error('[webhook] Erro ao processar evento:', {
-      type:     event.type,
-      id:       event.id,
-      handler:  isCreditEvent ? 'credit' : 'plan',
-      error:    err.message,
+      type:    event.type,
+      id:      event.id,
+      handler: handlerName,
+      error:   err.message,
     })
     return res.status(500).json({ error: 'Internal error processing event', debug: err.message })
   }
