@@ -222,7 +222,7 @@ interface Props {
   companyId: string
 }
 
-export function CreditPackagesPanel({ companyId: _companyId }: Props) {
+export function CreditPackagesPanel({ companyId }: Props) {
   // ── Estado: pacotes ───────────────────────────────────────────────────────
   const [packages,     setPackages]     = useState<CreditPackage[]>([])
   const [loadingPkgs,  setLoadingPkgs]  = useState(true)
@@ -247,7 +247,7 @@ export function CreditPackagesPanel({ companyId: _companyId }: Props) {
     setErrorPkgs(null)
     try {
       const headers = await getAuthHeaders()
-      const res     = await fetch('/api/credit-orders/packages', { headers })
+      const res     = await fetch(`/api/credit-orders/packages?company_id=${encodeURIComponent(companyId)}`, { headers })
       const json    = await res.json().catch(() => ({})) as Record<string, unknown>
 
       if (!res.ok || !json.ok) {
@@ -260,7 +260,7 @@ export function CreditPackagesPanel({ companyId: _companyId }: Props) {
     } finally {
       setLoadingPkgs(false)
     }
-  }, [])
+  }, [companyId])
 
   // ── Carregar histórico de pedidos ─────────────────────────────────────────
 
@@ -269,7 +269,7 @@ export function CreditPackagesPanel({ companyId: _companyId }: Props) {
     setErrorOrders(null)
     try {
       const headers = await getAuthHeaders()
-      const res     = await fetch('/api/credit-orders?limit=10&offset=0', { headers })
+      const res     = await fetch(`/api/credit-orders?company_id=${encodeURIComponent(companyId)}&limit=10&offset=0`, { headers })
       const json    = await res.json().catch(() => ({})) as Record<string, unknown>
 
       if (!res.ok || !json.ok) {
@@ -283,7 +283,7 @@ export function CreditPackagesPanel({ companyId: _companyId }: Props) {
     } finally {
       setLoadingOrders(false)
     }
-  }, [])
+  }, [companyId])
 
   useEffect(() => {
     void loadPackages()
@@ -298,7 +298,7 @@ export function CreditPackagesPanel({ companyId: _companyId }: Props) {
     setErrorBuy(null)
     try {
       const headers = await getAuthHeaders()
-      const res = await fetch('/api/credit-orders/create', {
+      const res = await fetch(`/api/credit-orders/create?company_id=${encodeURIComponent(companyId)}`, {
         method:  'POST',
         headers,
         body:    JSON.stringify({ package_id: selectedPkg.id }),
