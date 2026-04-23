@@ -93,6 +93,12 @@ export function useAccessControl() {
   // Permite criar e editar as diretrizes globais aplicadas a TODOS os agentes.
   const canManageAiGovernance = isSaaSAdmin
 
+  // ── Notificações automáticas ───────────────────────────────
+  // super_admin e system_admin da empresa pai podem configurar canais
+  // e editar templates de notificações automáticas (ex: trial alerts).
+  // system_admin tem acesso aqui diferente de canManageAiGovernance (só isSaaSAdmin).
+  const canManageNotifications = isSaaSAdmin || isSystemAdmin
+
   // ── Impersonação ───────────────────────────────────────────
   // super_admin e system_admin podem impersonar empresas para suporte
   const canImpersonate = isSaaSAdmin || isSystemAdmin
@@ -145,6 +151,9 @@ export function useAccessControl() {
 
     // Governança global de IA
     canManageAiGovernance,
+
+    // Notificações automáticas
+    canManageNotifications,
 
     // Impersonação
     canImpersonate,

@@ -37,6 +37,10 @@
     {
       "path": "/api/cron/expire-trials",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/alert-trials",
+      "schedule": "0 6 * * *"
     }
   ],
   "rewrites": [

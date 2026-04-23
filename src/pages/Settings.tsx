@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard, Building2, Crown } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard, Building2, Crown, Bell } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -22,6 +22,7 @@ import { CreditPackagesPanel } from '../components/Settings/CreditPackagesPanel'
 import { PlanUsagePanel } from '../components/Settings/PlanUsagePanel';
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
+import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
 import { CompanyUser } from '../types/user';
 import { useAccessControl } from '../hooks/useAccessControl';
 import Automations from './Automations';
@@ -42,7 +43,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -114,7 +115,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes' | 'gestao-empresas' | 'gestao-planos' | 'integracoes-globais'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes' | 'gestao-empresas' | 'gestao-planos' | 'integracoes-globais' | 'notificacoes'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -132,7 +133,7 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     const stateTab = (location.state as any)?.activeTab as string | undefined;
-    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais'] as const;
+    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais', 'notificacoes'] as const;
     if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
       setActiveTab(stateTab as typeof validTabs[number]);
     } else if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
@@ -1166,6 +1167,13 @@ export const Settings: React.FC = () => {
             <button onClick={() => setActiveTab('integracoes-globais')} className={navItemClass('integracoes-globais')}>
               <Globe className="w-4 h-4 shrink-0" />
               Integrações Globais
+            </button>
+          )}
+
+          {canManageNotifications && (
+            <button onClick={() => setActiveTab('notificacoes')} className={navItemClass('notificacoes')}>
+              <Bell className="w-4 h-4 shrink-0" />
+              Notificações
             </button>
           )}
         </nav>
@@ -2392,6 +2400,11 @@ export const Settings: React.FC = () => {
           )}
 
         </div>
+      )}
+
+      {/* Governância Lovoo — Notificações Automáticas */}
+      {activeTab === 'notificacoes' && canManageNotifications && (
+        <NotificationsPanel />
       )}
 
       {/* Governância Lovoo — Integrações Globais (OpenAI + ElevenLabs) */}
