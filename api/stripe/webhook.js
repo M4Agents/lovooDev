@@ -1,7 +1,11 @@
 // =============================================================================
 // POST /api/stripe/webhook
 //
-// Endpoint de recebimento de eventos Stripe (billing de planos).
+// Endpoint de recebimento de eventos Stripe (billing de planos e créditos avulsos).
+//
+// ROTEAMENTO:
+//   - metadata.type === 'credit_purchase' → creditWebhookHandler
+//   - demais eventos → planWebhookHandler (billing de assinaturas)
 //
 // SEGURANÇA:
 //   - bodyParser DESATIVADO: rawBody obrigatório para validar assinatura HMAC
@@ -10,9 +14,8 @@
 //   - Nenhuma confiança em dados de frontend — tudo vem do payload Stripe
 //
 // IDEMPOTÊNCIA:
-//   - Cada evento possui um ID único (event.id)
-//   - O handler verifica via sync_subscription_billing_state se o evento
-//     já foi processado antes de executar qualquer ação
+//   - Planos: via sync_subscription_billing_state (event.id)
+//   - Créditos: via RPC confirm_credit_order_payment (FOR UPDATE + status check)
 //
 // RETORNO:
 //   - Sempre 200 após processamento bem-sucedido
@@ -23,8 +26,17 @@
 //   STRIPE_WEBHOOK_SECRET   — segredo de assinatura do webhook (whsec_...)
 // =============================================================================
 
-import { getStripe }        from '../lib/stripe/client.js'
-import { handlePlanEvent }  from '../lib/stripe/planWebhookHandler.js'
+import { getStripe }          from '../lib/stripe/client.js'
+import { handlePlanEvent }    from '../lib/stripe/planWebhookHandler.js'
+import { handleCreditEvent }  from '../lib/stripe/creditWebhookHandler.js'
+
+// Eventos de checkout que podem ser de créditos avulsos
+const CREDIT_ROUTABLE_EVENTS = new Set([
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed',
+  'checkout.session.expired',
+])
 
 // Necessário para receber o rawBody e validar a assinatura Stripe
 export const config = { api: { bodyParser: false } }
@@ -76,12 +88,26 @@ export default async function handler(req, res) {
   // 3. Log de recebimento
   console.log('[webhook] Evento recebido | type:', event.type, '| id:', event.id)
 
-  // 4. Processar evento
+  // 4. Rotear e processar evento
+  // Créditos avulsos identificados por metadata.type === 'credit_purchase'
+  // Planos: todos os demais eventos (inclusive checkout.session.completed de planos)
+  const meta = event.data?.object?.metadata ?? {}
+  const isCreditEvent = CREDIT_ROUTABLE_EVENTS.has(event.type) && meta.type === 'credit_purchase'
+
   try {
-    await handlePlanEvent(event)
+    if (isCreditEvent) {
+      await handleCreditEvent(event)
+    } else {
+      await handlePlanEvent(event)
+    }
   } catch (err) {
-    console.error('[webhook] Erro ao processar evento:', event.type, event.id, err)
-    return res.status(500).json({ error: 'Internal error processing event' })
+    console.error('[webhook] Erro ao processar evento:', {
+      type:     event.type,
+      id:       event.id,
+      handler:  isCreditEvent ? 'credit' : 'plan',
+      error:    err.message,
+    })
+    return res.status(500).json({ error: 'Internal error processing event', debug: err.message })
   }
 
   // 5. Confirmar recebimento (sempre 200 após processamento bem-sucedido)

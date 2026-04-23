@@ -5,17 +5,16 @@
 // Acessível em: Configurações → Planos e Uso → Comprar Créditos
 //
 // BLOCOS:
-//   1. Cards de pacotes disponíveis (is_active + is_available_for_sale)
-//   2. Modal de confirmação de compra
-//   3. Histórico de pedidos da empresa
-//
-// FASE 1: checkout_url é null — exibe instrução de pagamento offline
-// FASE 2: checkout_url preenchido → window.location.href = checkout_url (Stripe)
+//   1. Banner de sucesso pós-checkout Stripe (?credits=success — visual apenas)
+//   2. Cards de pacotes disponíveis (is_active + is_available_for_sale)
+//   3. Modal de confirmação → redireciona ao Stripe Checkout
+//   4. Histórico de pedidos da empresa
 //
 // SEGURANÇA:
-//   - company_id NUNCA enviado pelo frontend — resolvido via JWT no backend
-//   - package_id validado no backend antes de qualquer INSERT
+//   - company_id NUNCA enviado no body — resolvido via JWT no backend
+//   - package_id validado no backend antes de qualquer operação
 //   - Valores financeiros nunca vêm do frontend
+//   - ?credits=success é APENAS feedback visual — créditos são liberados pelo webhook
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react'
@@ -102,7 +101,7 @@ function StatusIcon({ status }: { status: CreditOrder['status'] }) {
   }
 }
 
-// ── Modal de confirmação ──────────────────────────────────────────────────────
+// ── Modal de confirmação → Stripe ─────────────────────────────────────────────
 
 function ConfirmModal({
   pkg,
@@ -121,7 +120,7 @@ function ConfirmModal({
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-slate-900">Confirmar compra</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Revise os detalhes antes de confirmar</p>
+            <p className="text-xs text-slate-400 mt-0.5">Você será redirecionado ao Stripe para pagamento</p>
           </div>
           <button onClick={onClose} disabled={loading}
             className="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50">
@@ -151,13 +150,10 @@ function ConfirmModal({
             </div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-            <p className="text-xs text-amber-700 font-medium mb-1">Instrução de pagamento (Fase 1)</p>
-            <p className="text-xs text-amber-600">
-              Após confirmar, entre em contato com o suporte para processar o pagamento.
-              Os créditos serão liberados após a confirmação.
-            </p>
-          </div>
+          <p className="text-xs text-slate-500">
+            Os créditos serão creditados automaticamente após a confirmação do pagamento pelo Stripe.
+            Créditos extras acumulam entre meses e não expiram.
+          </p>
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
@@ -168,7 +164,7 @@ function ConfirmModal({
           <button onClick={onConfirm} disabled={loading}
             className="px-4 py-2 text-sm text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
             {loading && <Loader2 size={14} className="animate-spin" />}
-            Confirmar pedido
+            {loading ? 'Aguarde...' : 'Ir para pagamento'}
           </button>
         </div>
       </div>
@@ -240,6 +236,24 @@ export function CreditPackagesPanel({ companyId }: Props) {
   const [successMsg,   setSuccessMsg]   = useState<string | null>(null)
   const [errorBuy,     setErrorBuy]     = useState<string | null>(null)
 
+  // ── Detectar retorno do Stripe (?credits=success) ─────────────────────────
+  // Apenas feedback visual — créditos são liberados pelo webhook, não por este param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('credits') === 'success') {
+      setSuccessMsg('Pagamento recebido! Seus créditos serão liberados em instantes pelo sistema.')
+      // Limpar o param da URL sem recarregar a página
+      params.delete('credits')
+      params.delete('session_id')
+      const newSearch = params.toString()
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '')
+      window.history.replaceState({}, '', newUrl)
+      // Atualizar histórico de pedidos após retorno
+      void loadOrders()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Carregar pacotes ──────────────────────────────────────────────────────
 
   const loadPackages = useCallback(async () => {
@@ -290,7 +304,7 @@ export function CreditPackagesPanel({ companyId }: Props) {
     void loadOrders()
   }, [loadPackages, loadOrders])
 
-  // ── Confirmar compra ──────────────────────────────────────────────────────
+  // ── Iniciar checkout Stripe ───────────────────────────────────────────────
 
   async function handleConfirmBuy() {
     if (!selectedPkg) return
@@ -298,32 +312,30 @@ export function CreditPackagesPanel({ companyId }: Props) {
     setErrorBuy(null)
     try {
       const headers = await getAuthHeaders()
-      const res = await fetch(`/api/credit-orders/create?company_id=${encodeURIComponent(companyId)}`, {
+      const res = await fetch(`/api/credit-orders/checkout?company_id=${encodeURIComponent(companyId)}`, {
         method:  'POST',
         headers,
         body:    JSON.stringify({ package_id: selectedPkg.id }),
       })
       const json = await res.json().catch(() => ({})) as Record<string, unknown>
 
-      if (res.status === 409) {
-        setErrorBuy('Já existe um pedido ativo para este pacote. Aguarde a confirmação ou contate o suporte.')
-        setSelectedPkg(null)
-        return
-      }
-
       if (!res.ok || !json.ok) {
         throw new Error((json.error as string) || `Erro ${res.status}`)
       }
 
-      setSelectedPkg(null)
-      setSuccessMsg(`Pedido criado com sucesso! Entre em contato com o suporte para finalizar o pagamento do pacote "${selectedPkg.name}".`)
-      setTimeout(() => setSuccessMsg(null), 8000)
-      void loadOrders()
+      const checkoutUrl = json.checkout_url as string | undefined
+      if (!checkoutUrl) {
+        throw new Error('URL de checkout não recebida. Tente novamente.')
+      }
+
+      // Redirecionar ao Stripe — página sairá, selectedPkg não precisa ser limpo
+      window.location.href = checkoutUrl
+
     } catch (err) {
-      setErrorBuy(err instanceof Error ? err.message : 'Erro ao criar pedido')
-    } finally {
+      setErrorBuy(err instanceof Error ? err.message : 'Erro ao iniciar checkout')
       setBuying(false)
     }
+    // Nota: setBuying(false) não é chamado no sucesso pois a página redireciona
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
