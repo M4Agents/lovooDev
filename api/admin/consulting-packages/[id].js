@@ -56,11 +56,24 @@ export default async function handler(req, res) {
   const allowedFields = [
     'name', 'description', 'package_type', 'hours', 'price',
     'is_active', 'is_available_for_sale', 'bonus_credit_package_id',
+    'headline', 'subheadline', 'features', 'cta_text', 'badge_text',
+    'is_highlighted', 'display_order',
   ]
 
   const updates = {}
   for (const field of allowedFields) {
     if (field in body) updates[field] = body[field]
+  }
+
+  // Coerce types para campos novos
+  if ('features' in updates) {
+    updates.features = Array.isArray(updates.features) ? updates.features : null
+  }
+  if ('is_highlighted' in updates) {
+    updates.is_highlighted = Boolean(updates.is_highlighted)
+  }
+  if ('display_order' in updates) {
+    updates.display_order = Number(updates.display_order) || 0
   }
 
   if (Object.keys(updates).length === 0) {

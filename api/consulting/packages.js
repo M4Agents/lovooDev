@@ -42,6 +42,13 @@ export default async function handler(req, res) {
       package_type,
       hours,
       price,
+      headline,
+      subheadline,
+      features,
+      cta_text,
+      badge_text,
+      is_highlighted,
+      display_order,
       bonus_credit_package_id,
       bonus_credit:bonus_credit_package_id (
         id, name, credits
@@ -49,7 +56,7 @@ export default async function handler(req, res) {
     `)
     .eq('is_active', true)
     .eq('is_available_for_sale', true)
-    .order('package_type', { ascending: true })
+    .order('display_order', { ascending: true })
     .order('price', { ascending: true })
 
   if (error) {

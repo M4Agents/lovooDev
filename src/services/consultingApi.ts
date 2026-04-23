@@ -26,6 +26,14 @@ export interface ConsultingPackage {
   package_type:           'implementation' | 'training' | 'consulting'
   hours:                  number
   price:                  number
+  // Campos comerciais (opcionais — fallbacks no frontend quando null)
+  headline:               string | null
+  subheadline:            string | null
+  features:               string[] | null
+  cta_text:               string | null
+  badge_text:             string | null
+  is_highlighted:         boolean
+  display_order:          number
   is_active:              boolean
   is_available_for_sale:  boolean
   bonus_credit_package_id: string | null
@@ -85,14 +93,22 @@ export interface NewTimeEntryPayload {
 }
 
 export interface ConsultingPackagePayload {
-  name:                   string
-  description?:           string | null
-  package_type:           'implementation' | 'training' | 'consulting'
-  hours:                  number
-  price:                  number
-  is_active?:             boolean
-  is_available_for_sale?: boolean
+  name:                    string
+  description?:            string | null
+  package_type:            'implementation' | 'training' | 'consulting'
+  hours:                   number
+  price:                   number
+  is_active?:              boolean
+  is_available_for_sale?:  boolean
   bonus_credit_package_id?: string | null
+  // Campos comerciais (todos opcionais)
+  headline?:               string | null
+  subheadline?:            string | null
+  features?:               string[] | null
+  cta_text?:               string | null
+  badge_text?:             string | null
+  is_highlighted?:         boolean
+  display_order?:          number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

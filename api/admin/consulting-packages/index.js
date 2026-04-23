@@ -43,11 +43,13 @@ export default async function handler(req, res) {
       .select(`
         id, name, description, package_type, hours, price,
         is_active, is_available_for_sale,
+        headline, subheadline, features, cta_text, badge_text,
+        is_highlighted, display_order,
         bonus_credit_package_id,
         bonus_credit:bonus_credit_package_id (id, name, credits),
         created_at, updated_at
       `)
-      .order('package_type', { ascending: true })
+      .order('display_order', { ascending: true })
       .order('price', { ascending: true })
 
     if (error) {
@@ -73,9 +75,16 @@ export default async function handler(req, res) {
       package_type,
       hours,
       price,
-      is_active            = true,
-      is_available_for_sale = true,
+      is_active               = true,
+      is_available_for_sale   = true,
       bonus_credit_package_id = null,
+      headline                = null,
+      subheadline             = null,
+      features                = null,
+      cta_text                = null,
+      badge_text              = null,
+      is_highlighted          = false,
+      display_order           = 0,
     } = body
 
     if (!name || !package_type || hours == null || price == null) {
@@ -122,6 +131,13 @@ export default async function handler(req, res) {
         is_active,
         is_available_for_sale,
         bonus_credit_package_id:  bonus_credit_package_id ?? null,
+        headline:                 headline    ?? null,
+        subheadline:              subheadline ?? null,
+        features:                 Array.isArray(features) ? features : null,
+        cta_text:                 cta_text    ?? null,
+        badge_text:               badge_text  ?? null,
+        is_highlighted:           Boolean(is_highlighted),
+        display_order:            Number(display_order) || 0,
       })
       .select()
       .single()
