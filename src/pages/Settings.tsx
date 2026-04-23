@@ -46,7 +46,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, isSystemAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1090,7 +1090,7 @@ export const Settings: React.FC = () => {
             {t('tabs.users')}
           </button>
 
-          {company?.company_type === 'client' && (
+          {(company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && (
             <button onClick={() => setActiveTab('planos-uso')} className={navItemClass('planos-uso')}>
               <CreditCard className="w-4 h-4 shrink-0" />
               Planos e Uso
@@ -3632,8 +3632,8 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Aba Planos e Uso (empresa filha) */}
-      {activeTab === 'planos-uso' && company?.company_type === 'client' && company?.id && (
+      {/* Aba Planos e Uso (empresa filha e empresa pai para platform admins) */}
+      {activeTab === 'planos-uso' && (company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && company?.id && (
         <div className="space-y-6">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Planos e Uso</h2>
