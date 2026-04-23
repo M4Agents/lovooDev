@@ -86,6 +86,29 @@ async function readAvailableInstances(supabase) {
   return data.map(inst => ({ id: inst.id, name: inst.name, status: inst.status }))
 }
 
+// #region agent log — debug temporário
+async function debugReadInstances(supabase) {
+  // Query 1: sem nenhum filtro (só company_id)
+  const { data: raw, error: rawErr } = await supabase
+    .from('whatsapp_life_instances')
+    .select('id, name, status, deleted_at, company_id')
+    .eq('company_id', PARENT_COMPANY_ID)
+
+  // Query 2: sem filtro deleted_at (só status=connected)
+  const { data: noDeleted, error: noDeletedErr } = await supabase
+    .from('whatsapp_life_instances')
+    .select('id, name, status')
+    .eq('company_id', PARENT_COMPANY_ID)
+    .eq('status', 'connected')
+
+  return {
+    parent_company_id_used: PARENT_COMPANY_ID,
+    raw_query: { data: raw, error: rawErr?.message, count: raw?.length ?? 0 },
+    no_deleted_at_filter:   { data: noDeleted, error: noDeletedErr?.message, count: noDeleted?.length ?? 0 },
+  }
+}
+// #endregion
+
 /**
  * Valida o body recebido no PUT.
  * Retorna { ok: true, value } ou { ok: false, error }.
@@ -145,10 +168,13 @@ export default async function handler(req, res) {
   // ── GET — retornar config + instâncias disponíveis ─────────────────────────
   if (req.method === 'GET') {
     try {
-      const [current, instances] = await Promise.all([
+      // #region agent log
+      const [current, instances, _dbg] = await Promise.all([
         readCurrentSettings(supabase),
         readAvailableInstances(supabase),
+        debugReadInstances(supabase),
       ])
+      // #endregion
 
       return res.status(200).json({
         ok:                   true,
@@ -156,6 +182,7 @@ export default async function handler(req, res) {
         enabled_channels:     current.enabled_channels,
         whatsapp_instance_id: current.whatsapp_instance_id,
         available_instances:  instances,
+        _debug:               _dbg,
       })
     } catch (err) {
       console.error('[notifications/settings GET] Erro interno:', err?.message)
