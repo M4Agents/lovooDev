@@ -6,17 +6,17 @@
 // BLOCOS (em ordem):
 //   1. Banner de sucesso pós-checkout (?consulting=success — visual apenas)
 //   2. Hero comercial com promessa e subtítulo
-//   3. Seção "Como funciona" — 4 passos pós-compra
-//   4. Cards de oferta — com campos comerciais e fallbacks
+//   3. Seção "Como funciona" — 4 passos
+//   4. Cards de oferta com copy completa e fallbacks padrão
 //   5. Saldo consultivo atual (horas disponíveis)
-//   6. Histórico de pedidos
+//   6. Histórico de pedidos (colapsável)
 //
-// FALLBACKS OBRIGATÓRIOS:
-//   - sem headline    → usa name
-//   - sem subheadline → usa description
-//   - sem features    → usa description como parágrafo
-//   - sem cta_text    → "Comprar pacote"
-//   - sem badge_text  → sem badge
+// FALLBACKS (quando campo não preenchido no banco):
+//   - sem headline    → DEFAULT_HEADLINE
+//   - sem subheadline → DEFAULT_SUBHEADLINE
+//   - sem features    → DEFAULT_FEATURES
+//   - sem cta_text    → DEFAULT_CTA
+//   - sem badge_text  → DEFAULT_BADGE
 //
 // SEGURANÇA:
 //   - company_id NUNCA enviado no body — resolvido via JWT no backend
@@ -27,7 +27,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Clock, CheckCircle2, XCircle, AlertCircle, Loader2,
   RefreshCw, Star, Rocket, ShieldCheck, CalendarCheck,
-  Zap, ChevronDown, ChevronUp,
+  Zap, ChevronDown, ChevronUp, Settings2,
 } from 'lucide-react'
 import {
   fetchConsultingPackages,
@@ -38,6 +38,28 @@ import {
   type ConsultingOrder,
   type ConsultingBalance,
 } from '../../services/consultingApi'
+
+// ── Copy padrão (fallbacks quando banco não tem conteúdo preenchido) ──────────
+
+const DEFAULT_HEADLINE =
+  'Estruture seu CRM e comece a vender com automação desde o primeiro dia'
+
+const DEFAULT_SUBHEADLINE =
+  'Configuramos seu processo comercial, automações e atendimento com IA para você sair do zero com tudo funcionando.'
+
+const DEFAULT_FEATURES: string[] = [
+  'Criação de 2 funis de vendas estruturados',
+  'Configuração de automações do CRM',
+  'Agente de IA para atendimento no WhatsApp',
+  'Integração com Google Calendar',
+  'Treinamento da equipe',
+  'Acompanhamento e ajustes iniciais',
+]
+
+const DEFAULT_CTA    = 'Começar implantação'
+const DEFAULT_BADGE  = 'Ideal para começar'
+
+const MAX_FEATURES_SHOWN = 5
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -80,8 +102,6 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; cls: 
   expired:          { label: 'Expirado',     icon: <XCircle size={14} />,      cls: 'text-slate-500 bg-slate-50 border-slate-200' },
 }
 
-const MAX_FEATURES_SHOWN = 5
-
 // ── Badge de status ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
@@ -94,6 +114,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── Card de oferta ────────────────────────────────────────────────────────────
+//
+// Ordem visual obrigatória:
+//   badge → tipo → nome → headline → subheadline → benefícios → bônus IA → preço → CTA
 
 interface OfferCardProps {
   pkg:      ConsultingPackage
@@ -103,16 +126,16 @@ interface OfferCardProps {
 function OfferCard({ pkg, onSelect }: OfferCardProps) {
   const [expanded, setExpanded] = useState(false)
 
-  const headline   = pkg.headline   || pkg.name
-  const subtitle   = pkg.subheadline || pkg.description
-  const ctaText    = pkg.cta_text   || 'Comprar pacote'
-  const features   = pkg.features
+  // Resolve campos com fallbacks
+  const badge      = pkg.badge_text  || DEFAULT_BADGE
+  const headline   = pkg.headline    || DEFAULT_HEADLINE
+  const subtitle   = pkg.subheadline || DEFAULT_SUBHEADLINE
+  const features   = pkg.features && pkg.features.length > 0 ? pkg.features : DEFAULT_FEATURES
+  const ctaText    = pkg.cta_text    || DEFAULT_CTA
   const bonusCredits = pkg.bonus_credit?.credits
 
-  const visibleFeatures = features
-    ? (expanded ? features : features.slice(0, MAX_FEATURES_SHOWN))
-    : null
-  const hiddenCount = features ? Math.max(0, features.length - MAX_FEATURES_SHOWN) : 0
+  const visibleFeatures = expanded ? features : features.slice(0, MAX_FEATURES_SHOWN)
+  const hiddenCount     = Math.max(0, features.length - MAX_FEATURES_SHOWN)
 
   const typeColor = packageTypeColor[pkg.package_type] ?? 'text-slate-600 bg-slate-50 border-slate-200'
 
@@ -126,18 +149,22 @@ function OfferCard({ pkg, onSelect }: OfferCardProps) {
         }
       `}
     >
-      {/* Badge de recomendação */}
-      {pkg.badge_text && (
-        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-          <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md whitespace-nowrap">
-            {pkg.badge_text}
-          </span>
-        </div>
-      )}
+      {/* 1. Badge de recomendação */}
+      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+        <span className={`
+          text-xs font-semibold px-3 py-1 rounded-full shadow-sm whitespace-nowrap
+          ${pkg.is_highlighted
+            ? 'bg-blue-600 text-white shadow-md'
+            : 'bg-slate-700 text-white'
+          }
+        `}>
+          {badge}
+        </span>
+      </div>
 
-      <div className="p-6 flex flex-col flex-1 gap-4">
+      <div className="p-6 pt-7 flex flex-col flex-1 gap-4">
 
-        {/* Tipo + horas */}
+        {/* 2. Tipo + horas */}
         <div className="flex items-center justify-between">
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${typeColor}`}>
             {packageTypeLabel[pkg.package_type] ?? pkg.package_type}
@@ -148,34 +175,32 @@ function OfferCard({ pkg, onSelect }: OfferCardProps) {
           </span>
         </div>
 
-        {/* Headline */}
+        {/* 3. Nome do pacote */}
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider -mb-2">
+          {pkg.name}
+        </p>
+
+        {/* 4. Headline + 5. Subheadline */}
         <div>
           <h3 className="text-lg font-bold text-slate-900 leading-snug">{headline}</h3>
-          {subtitle && (
-            <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{subtitle}</p>
-          )}
+          <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{subtitle}</p>
         </div>
 
-        {/* Lista de benefícios */}
-        {visibleFeatures && visibleFeatures.length > 0 ? (
-          <ul className="space-y-2">
-            {visibleFeatures.map((feat, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                <CheckCircle2 size={15} className="text-emerald-500 mt-0.5 shrink-0" />
-                <span>{feat}</span>
-              </li>
-            ))}
-          </ul>
-        ) : subtitle && !features ? (
-          // Sem features e sem subheadline — description já exibido acima
-          null
-        ) : null}
+        {/* 6. Lista de benefícios */}
+        <ul className="space-y-2">
+          {visibleFeatures.map((feat, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+              <CheckCircle2 size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+              <span>{feat}</span>
+            </li>
+          ))}
+        </ul>
 
         {/* Mostrar mais/menos benefícios */}
         {hiddenCount > 0 && (
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
-            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition self-start"
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition self-start -mt-1"
           >
             {expanded
               ? <><ChevronUp size={13} />Mostrar menos</>
@@ -184,7 +209,7 @@ function OfferCard({ pkg, onSelect }: OfferCardProps) {
           </button>
         )}
 
-        {/* Bônus IA */}
+        {/* 7. Bônus IA */}
         {bonusCredits && (
           <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2.5">
             <Star size={15} className="text-violet-500 shrink-0" />
@@ -199,7 +224,7 @@ function OfferCard({ pkg, onSelect }: OfferCardProps) {
           </div>
         )}
 
-        {/* Preço + CTA */}
+        {/* 8. Preço + 9. CTA */}
         <div className="mt-auto pt-4 border-t border-slate-100">
           <p className="text-2xl font-extrabold text-slate-900 mb-3">{formatPrice(pkg.price)}</p>
           <button
@@ -233,7 +258,7 @@ interface ConfirmModalProps {
 
 function ConfirmModal({ pkg, loading, error, onConfirm, onCancel }: ConfirmModalProps) {
   const bonusCredits = pkg.bonus_credit?.credits
-  const ctaText      = pkg.cta_text || 'Comprar pacote'
+  const ctaText      = pkg.cta_text || DEFAULT_CTA
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -302,24 +327,24 @@ function ConfirmModal({ pkg, loading, error, onConfirm, onCancel }: ConfirmModal
 
 const HOW_IT_WORKS = [
   {
-    icon: <Rocket size={20} className="text-blue-600" />,
-    title: 'Escolha o pacote',
-    desc:  'Selecione o pacote ideal para sua etapa: implantação, treinamento ou consultoria.',
+    icon:  <Rocket size={20} className="text-blue-600" />,
+    title: 'Escolha o pacote ideal para sua empresa',
+    desc:  'Selecione o pacote adequado para sua etapa: implantação, treinamento ou consultoria.',
   },
   {
-    icon: <ShieldCheck size={20} className="text-emerald-600" />,
-    title: 'Pagamento seguro',
-    desc:  'Realize o pagamento com segurança pelo Stripe. Cartão ou Pix aceitos.',
+    icon:  <ShieldCheck size={20} className="text-emerald-600" />,
+    title: 'Realize o pagamento com segurança',
+    desc:  'Pague com cartão ou Pix via Stripe — ambiente 100% seguro e certificado.',
   },
   {
-    icon: <CalendarCheck size={20} className="text-violet-600" />,
-    title: 'Agendamos a sessão',
-    desc:  'Nossa equipe entra em contato para agendar a primeira sessão.',
+    icon:  <CalendarCheck size={20} className="text-violet-600" />,
+    title: 'Nossa equipe agenda a implantação',
+    desc:  'Entramos em contato para agendar as sessões conforme a sua disponibilidade.',
   },
   {
-    icon: <Zap size={20} className="text-amber-500" />,
-    title: 'Horas no seu saldo',
-    desc:  'As horas ficam disponíveis imediatamente após a confirmação do pagamento.',
+    icon:  <Zap size={20} className="text-amber-500" />,
+    title: 'Comece a usar o CRM com tudo configurado',
+    desc:  'Suas horas ficam disponíveis no saldo e a implantação começa imediatamente.',
   },
 ]
 
@@ -330,16 +355,16 @@ interface Props {
 }
 
 export function ConsultingPackagesPanel({ companyId }: Props) {
-  const [packages, setPackages]         = useState<ConsultingPackage[]>([])
-  const [orders, setOrders]             = useState<ConsultingOrder[]>([])
-  const [balance, setBalance]           = useState<ConsultingBalance | null>(null)
-  const [loading, setLoading]           = useState(true)
-  const [error, setError]               = useState<string | null>(null)
-  const [selectedPkg, setSelectedPkg]   = useState<ConsultingPackage | null>(null)
-  const [buying, setBuying]             = useState(false)
-  const [buyError, setBuyError]         = useState<string | null>(null)
-  const [showSuccess, setShowSuccess]   = useState(false)
-  const [showOrders, setShowOrders]     = useState(false)
+  const [packages, setPackages]       = useState<ConsultingPackage[]>([])
+  const [orders, setOrders]           = useState<ConsultingOrder[]>([])
+  const [balance, setBalance]         = useState<ConsultingBalance | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+  const [selectedPkg, setSelectedPkg] = useState<ConsultingPackage | null>(null)
+  const [buying, setBuying]           = useState(false)
+  const [buyError, setBuyError]       = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [showOrders, setShowOrders]   = useState(false)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -408,27 +433,34 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
           <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-emerald-800">Pagamento processado com sucesso!</p>
-            <p className="text-xs text-emerald-600 mt-0.5">As horas serão creditadas após a confirmação pelo Stripe. Isso costuma levar alguns instantes.</p>
+            <p className="text-xs text-emerald-600 mt-0.5">
+              As horas serão creditadas após a confirmação pelo Stripe. Isso costuma levar alguns instantes.
+            </p>
           </div>
-          <button onClick={() => setShowSuccess(false)} className="ml-auto text-emerald-400 hover:text-emerald-600 text-lg leading-none">×</button>
+          <button
+            onClick={() => setShowSuccess(false)}
+            className="ml-auto text-emerald-400 hover:text-emerald-600 text-lg leading-none"
+          >
+            ×
+          </button>
         </div>
       )}
 
       {/* 2. Hero comercial */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-8 text-white">
-        {/* Decorativo */}
         <div className="absolute -right-12 -top-12 w-48 h-48 bg-white/5 rounded-full" />
         <div className="absolute -right-4 -bottom-8 w-32 h-32 bg-white/5 rounded-full" />
 
         <div className="relative">
           <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/90 text-xs font-medium px-3 py-1 rounded-full mb-4">
-            <Rocket size={12} />Implementação & Consultoria
+            <Settings2 size={12} />Implementação & Consultoria
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight mb-3">
             Implantamos o CRM para você —<br className="hidden sm:block" /> sem complicação
           </h2>
           <p className="text-blue-100 text-sm sm:text-base max-w-xl leading-relaxed">
-            Escolha o pacote ideal para configurar, treinar sua equipe e acelerar seus resultados com o Lovoo CRM. Nossa equipe especializada cuida de tudo.
+            Escolha o pacote ideal para estruturar seu processo comercial, automatizar atendimentos
+            e começar a vender com mais organização.
           </p>
         </div>
       </div>
@@ -445,7 +477,7 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
                   {step.icon}
                 </div>
               </div>
-              <p className="text-sm font-semibold text-slate-800 mb-1">{step.title}</p>
+              <p className="text-sm font-semibold text-slate-800 mb-1 leading-snug">{step.title}</p>
               <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
             </div>
           ))}
@@ -454,9 +486,13 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
 
       {/* 4. Cards de oferta */}
       <div>
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-8">
           <h3 className="text-base font-semibold text-slate-800">Escolha seu pacote</h3>
-          <button onClick={loadAll} className="text-slate-400 hover:text-slate-600 transition" title="Atualizar">
+          <button
+            onClick={loadAll}
+            className="text-slate-400 hover:text-slate-600 transition"
+            title="Atualizar lista"
+          >
             <RefreshCw size={15} />
           </button>
         </div>
@@ -474,7 +510,7 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
             <p className="text-xs mt-1">Entre em contato com o suporte para mais informações.</p>
           </div>
         ) : (
-          <div className={`grid gap-6 ${
+          <div className={`grid gap-8 pt-4 ${
             packages.length === 1
               ? 'grid-cols-1 max-w-sm'
               : packages.length === 2
@@ -524,7 +560,9 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
           >
             {showOrders ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             Histórico de pedidos
-            <span className="text-xs font-normal text-slate-400 ml-1">({orders.length} pedido{orders.length > 1 ? 's' : ''})</span>
+            <span className="text-xs font-normal text-slate-400 ml-1">
+              ({orders.length} pedido{orders.length > 1 ? 's' : ''})
+            </span>
           </button>
 
           {showOrders && (
@@ -560,9 +598,10 @@ export function ConsultingPackagesPanel({ companyId }: Props) {
             </div>
           )}
 
-          {/* Atalho para expandir histórico se o cliente tiver pedidos pagos mas histórico fechado */}
           {!showOrders && hasPaidOrders && (
-            <p className="text-xs text-slate-400">Clique para ver seus {orders.length} pedido{orders.length > 1 ? 's' : ''}.</p>
+            <p className="text-xs text-slate-400">
+              Clique para ver seus {orders.length} pedido{orders.length > 1 ? 's' : ''}.
+            </p>
           )}
         </div>
       )}
