@@ -8,37 +8,20 @@
 //   - Validação de bonus_credit_package_id (is_available_for_bonus)
 // =============================================================================
 
-import { resolveCreditsContext } from '../../lib/credits/authContext.js'
-
-async function isPlatformAdmin(svc, userId) {
-  const { data } = await svc
-    .from('company_users')
-    .select('role')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .in('role', ['super_admin', 'system_admin'])
-    .limit(1)
-    .maybeSingle()
-
-  return !!data
-}
+import { resolvePlatformAdminContext } from '../../lib/credits/authContext.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'PUT') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }
 
-  const ctx = await resolveCreditsContext(req, null)
+  // Catálogo global — apenas super_admin/system_admin da empresa pai, sem company_id
+  const ctx = await resolvePlatformAdminContext(req)
   if (!ctx.ok) {
     return res.status(ctx.status).json({ ok: false, error: ctx.error })
   }
 
-  const { svc, userId } = ctx
-
-  const isAdmin = await isPlatformAdmin(svc, userId)
-  if (!isAdmin) {
-    return res.status(403).json({ ok: false, error: 'Apenas administradores da plataforma podem editar o catálogo consultivo' })
-  }
+  const { svc } = ctx
 
   const packageId = req.query?.id ?? req.url?.split('/').filter(Boolean).pop()?.split('?')[0]
 

@@ -82,9 +82,19 @@ export async function resolveCreditsContext(req, queryCompanyId) {
       return { ok: false, status: 400, error: 'company_id obrigatório para empresa pai' }
     }
 
-    // Impede cross-tenant: valida que queryCompanyId é filha direta desta pai.
-    const parentCompanyId = memberships.find(m => m.companies?.company_type === 'parent')?.company_id ?? ''
+    const parentMembership = memberships.find(m => m.companies?.company_type === 'parent')
+    const parentCompanyId  = parentMembership?.company_id ?? ''
+    const requesterRole    = parentMembership?.role
 
+    // Auto-acesso: super_admin e system_admin podem ver dados da própria empresa pai
+    if (queryCompanyId === parentCompanyId) {
+      if (requesterRole === 'super_admin' || requesterRole === 'system_admin') {
+        return { ok: true, svc, effectiveCompanyId: parentCompanyId, isParentUser, userId: user.id }
+      }
+      return { ok: false, status: 403, error: 'Sem permissão para acessar dados da empresa pai' }
+    }
+
+    // Impede cross-tenant: valida que queryCompanyId é filha direta desta pai.
     const { data: childCheck, error: childCheckError } = await svc
       .from('companies')
       .select('id')
@@ -108,4 +118,49 @@ export async function resolveCreditsContext(req, queryCompanyId) {
   }
 
   return { ok: true, svc, effectiveCompanyId, isParentUser, userId: user.id }
+}
+
+/**
+ * Contexto simplificado para endpoints administrativos globais (sem company_id).
+ *
+ * Valida JWT e garante que o requester é super_admin ou system_admin
+ * em uma empresa pai. Não exige nem valida company_id.
+ *
+ * Usado por: /api/admin/consulting-packages (catálogo global)
+ *
+ * @param {import('http').IncomingMessage} req
+ * @returns {Promise<{ ok: false, status: number, error: string } |
+ *                   { ok: true, svc: any, userId: string }>}
+ */
+export async function resolvePlatformAdminContext(req) {
+  const authHeader = req.headers.authorization ?? ''
+  if (!authHeader.startsWith('Bearer ')) {
+    return { ok: false, status: 401, error: 'Token não fornecido' }
+  }
+  const token = authHeader.slice(7)
+
+  const svc = getServiceSupabase()
+  if (!svc) {
+    return { ok: false, status: 500, error: 'Configuração de servidor incompleta' }
+  }
+
+  const { data: { user }, error: authError } = await svc.auth.getUser(token)
+  if (authError || !user) {
+    return { ok: false, status: 401, error: 'Token inválido ou expirado' }
+  }
+
+  // Verifica membership ativa como super_admin ou system_admin em empresa pai
+  const { data: adminMembership } = await svc
+    .from('company_users')
+    .select('role, companies!inner(company_type)')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .in('role', ['super_admin', 'system_admin'])
+    .maybeSingle()
+
+  if (!adminMembership || adminMembership.companies?.company_type !== 'parent') {
+    return { ok: false, status: 403, error: 'Acesso restrito a administradores da plataforma' }
+  }
+
+  return { ok: true, svc, userId: user.id }
 }
