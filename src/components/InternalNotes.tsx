@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import { Loader2, StickyNote, Pencil, Trash2, Check, X, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { notesApi, type InternalNote } from '../services/notesApi'
+import { RichTextNoteEditor } from './RichTextNoteEditor'
 
 // =====================================================
 // TIPOS
@@ -13,6 +15,21 @@ type InternalNotesProps =
   | { companyId: string; opportunityId: string; leadId?: never }
 
 // =====================================================
+// CONFIGURAÇÃO DE SANITIZAÇÃO
+// Tags e atributos permitidos — somente formatação de texto
+// Aplicada antes de salvar e antes de renderizar
+// =====================================================
+
+const SANITIZE_CONFIG: DOMPurify.Config = {
+  ALLOWED_TAGS: ['p', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'br'],
+  ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+}
+
+function sanitize(html: string): string {
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG)
+}
+
+// =====================================================
 // HELPERS
 // =====================================================
 
@@ -21,6 +38,37 @@ const formatDateTime = (iso: string): string =>
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   }).format(new Date(iso))
+
+/**
+ * Detecta se o conteúdo é HTML ou texto puro.
+ * Regex exige tag completa (abertura ou fechamento com nome de tag válido)
+ * para evitar falso positivo com strings como "preço < 100".
+ */
+function isHtmlContent(str: string): boolean {
+  return /<\/?[a-z][^>]*>/i.test(str)
+}
+
+// =====================================================
+// SUB-COMPONENTE: renderização de conteúdo do card
+// =====================================================
+
+function NoteContent({ content }: { content: string }) {
+  if (isHtmlContent(content)) {
+    return (
+      <div
+        className="text-sm text-gray-800 prose prose-sm max-w-none
+          prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0
+          prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline"
+        dangerouslySetInnerHTML={{ __html: sanitize(content) }}
+      />
+    )
+  }
+  return (
+    <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+      {content}
+    </p>
+  )
+}
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -49,8 +97,6 @@ export function InternalNotes(props: InternalNotesProps) {
   // Estados de exclusão com confirmação inline
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Obter usuário atual uma única vez
   useEffect(() => {
@@ -84,9 +130,19 @@ export function InternalNotes(props: InternalNotesProps) {
     setCreating(true)
     setCreateError(undefined)
     try {
+      // Sanitização no frontend antes de persistir — única barreira nesta fase
+      const safeContent = isHtmlContent(newContent)
+        ? sanitize(newContent)
+        : newContent.trim()
+
+      if (!safeContent.trim()) {
+        setCreateError('Conteúdo inválido após sanitização')
+        return
+      }
+
       const note = await notesApi.createNote({
         companyId,
-        content: newContent,
+        content: safeContent,
         ...(leadId !== undefined ? { leadId } : { opportunityId }),
       })
       setNotes(prev => [note, ...prev])
@@ -115,9 +171,16 @@ export function InternalNotes(props: InternalNotesProps) {
     if (!editContent.trim()) return
     setSaving(true)
     try {
-      await notesApi.updateContent(noteId, editContent)
+      // Sanitização no frontend antes de persistir — única barreira nesta fase
+      const safeContent = isHtmlContent(editContent)
+        ? sanitize(editContent)
+        : editContent.trim()
+
+      if (!safeContent.trim()) return
+
+      await notesApi.updateContent(noteId, safeContent)
       setNotes(prev =>
-        prev.map(n => n.id === noteId ? { ...n, content: editContent.trim() } : n)
+        prev.map(n => n.id === noteId ? { ...n, content: safeContent } : n)
       )
       setEditingId(null)
     } catch (err) {
@@ -156,16 +219,11 @@ export function InternalNotes(props: InternalNotesProps) {
 
       {/* Formulário de criação */}
       <div className="flex flex-col gap-2">
-        <textarea
-          ref={textareaRef}
+        <RichTextNoteEditor
           value={newContent}
-          onChange={e => setNewContent(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCreate()
-          }}
-          rows={3}
+          onChange={setNewContent}
+          onSubmit={handleCreate}
           placeholder="Adicionar nota interna... (Ctrl+Enter para salvar)"
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-gray-400"
           disabled={creating}
         />
         {createError && (
@@ -247,15 +305,14 @@ export function InternalNotes(props: InternalNotesProps) {
                   )}
                 </div>
 
-                {/* Conteúdo ou textarea de edição */}
+                {/* Conteúdo ou editor de edição */}
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
-                    <textarea
+                    <RichTextNoteEditor
                       value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      autoFocus
+                      onChange={setEditContent}
+                      onSubmit={() => handleSaveEdit(note.id)}
+                      disabled={saving}
                     />
                     <div className="flex items-center gap-2 self-end">
                       <button
@@ -303,9 +360,7 @@ export function InternalNotes(props: InternalNotesProps) {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
-                    {note.content}
-                  </p>
+                  <NoteContent content={note.content} />
                 )}
               </div>
             )
