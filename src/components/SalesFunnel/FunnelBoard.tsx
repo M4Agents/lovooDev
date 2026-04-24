@@ -143,7 +143,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
 
   const [isDragging, setIsDragging]                 = useState(false)
-  const boardScrollRef = useRef<HTMLDivElement>(null)
+  const [visualDragOverStageId, setVisualDragOverStageId] = useState<string | null>(null)
+  const boardScrollRef    = useRef<HTMLDivElement>(null)
+  const lastMouseXRef     = useRef<number>(0)
+  const visualDragOverRef = useRef<string | null>(null)
   useBoardAutoScroll(boardScrollRef, isDragging)
   const [showEditStageModal, setShowEditStageModal]  = useState(false)
   const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
@@ -369,23 +372,81 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   const handleDragStart = () => {
     setIsDragging(true)
+    const trackMouse = (e: PointerEvent | MouseEvent) => {
+      lastMouseXRef.current = e.clientX
+      // Calcula qual coluna está sob o cursor usando posições reais do DOM.
+      // O cache interno do @hello-pangea/dnd não é atualizado durante scroll horizontal,
+      // por isso usamos getBoundingClientRect() a cada frame de movimento.
+      const mx = e.clientX
+      let bestId: string | null = null
+      let bestDist = Infinity
+      document.querySelectorAll('[data-rfd-droppable-id]').forEach(el => {
+        const id = el.getAttribute('data-rfd-droppable-id')
+        if (!id) return
+        const r = el.getBoundingClientRect()
+        const inBounds = mx >= r.left && mx <= r.right
+        const dist = inBounds
+          ? Math.abs(mx - (r.left + r.right) / 2) - 100_000
+          : Math.abs(mx - (r.left + r.right) / 2)
+        if (dist < bestDist) { bestDist = dist; bestId = id }
+      })
+      if (bestId !== visualDragOverRef.current) {
+        visualDragOverRef.current = bestId
+        setVisualDragOverStageId(bestId)
+      }
+    }
+    document.addEventListener('pointermove', trackMouse as EventListener)
+    document.addEventListener('mouseup', () => document.removeEventListener('pointermove', trackMouse as EventListener), { once: true })
   }
 
   const handleDragEnd = async (result: DropResult) => {
     setIsDragging(false)
+    setVisualDragOverStageId(null)
+    visualDragOverRef.current = null
 
     const { source, destination, draggableId } = result
 
     if (!destination) return
+
+    // @hello-pangea/dnd não atualiza o cache de posições dos Droppables quando o
+    // container horizontal (overflow-x-auto) é rolado durante o drag. Para corrigir,
+    // usamos getBoundingClientRect() no momento do drop (sempre correto) combinado
+    // com a posição real do mouse (rastreada em lastMouseXRef) para determinar a
+    // coluna de destino real, sobrescrevendo o destination.droppableId da biblioteca.
+    let resolvedDroppableId = destination.droppableId
+    let resolvedIndex       = destination.index
+    const mouseX = lastMouseXRef.current
+    if (mouseX > 0) {
+      const dropEls = document.querySelectorAll('[data-rfd-droppable-id]')
+      let bestId: string | null = null
+      let bestDist = Infinity
+      dropEls.forEach(el => {
+        const id = el.getAttribute('data-rfd-droppable-id')
+        if (!id) return
+        const rect = el.getBoundingClientRect()
+        const center = (rect.left + rect.right) / 2
+        const inBounds = mouseX >= rect.left && mouseX <= rect.right
+        // Prioriza Droppables que contêm o cursor; desempata pelo mais próximo ao centro
+        const dist = inBounds
+          ? Math.abs(mouseX - center) - 100_000
+          : Math.abs(mouseX - center)
+        if (dist < bestDist) { bestDist = dist; bestId = id }
+      })
+      if (bestId && bestId !== destination.droppableId) {
+        resolvedDroppableId = bestId
+        resolvedIndex       = stageMap.get(bestId)?.positions.length ?? 0
+      }
+    }
+
     if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
+      source.droppableId === resolvedDroppableId &&
+      source.index === resolvedIndex
     ) return
 
     const opportunityId = draggableId.replace('opportunity-', '')
     const fromStageId   = source.droppableId
-    const toStageId     = destination.droppableId
-    const newPosition   = destination.index
+    const toStageId     = resolvedDroppableId
+    const newPosition   = resolvedIndex
 
     const fromStage = stages.find(s => s.id === fromStageId)
     const toStage   = stages.find(s => s.id === toStageId)
@@ -679,6 +740,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 companyId={companyId}
                 onDetailClick={handleDetailClick}
                 companyUsers={companyUsers}
+                isDraggedOver={isDragging ? visualDragOverStageId === stage.id : undefined}
               />
             </div>
           ))}
