@@ -226,7 +226,8 @@ function OfferCard({ pkg, onSelect }: OfferCardProps) {
 
         {/* 8. Preço + 9. CTA */}
         <div className="mt-auto pt-4 border-t border-slate-100">
-          <p className="text-2xl font-extrabold text-slate-900 mb-3">{formatPrice(pkg.price)}</p>
+          <p className="text-2xl font-extrabold text-slate-900">{formatPrice(pkg.price)}</p>
+          <p className="text-xs text-slate-400 mt-0.5 mb-3">Parcele no cartão, quando disponível</p>
           <button
             onClick={() => onSelect(pkg)}
             className={`

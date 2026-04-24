@@ -262,6 +262,18 @@ export default async function handler(req, res) {
         },
       ],
 
+      // Parcelamento no cartão — habilitado quando disponível para o cartão/bandeira.
+      // O Stripe exibe as opções de parcelas automaticamente na página de checkout.
+      // Pix e outros métodos não são afetados por esta configuração.
+      // Se o cartão não suportar parcelamento, o checkout continua normalmente.
+      payment_method_options: {
+        card: {
+          installments: {
+            enabled: true,
+          },
+        },
+      },
+
       metadata: {
         type:                 'consulting_purchase',
         company_id:           effectiveCompanyId,
