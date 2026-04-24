@@ -62,7 +62,7 @@ export default async function handler(req, res) {
 
     const { data, error, count } = await svc
       .from('consulting_time_entries')
-      .select('*, created_by_user:created_by(id, email)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('company_id', effectiveCompanyId)
       .is('deleted_at', null)
       .order('entry_date', { ascending: false })
