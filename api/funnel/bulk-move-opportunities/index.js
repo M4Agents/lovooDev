@@ -237,10 +237,6 @@ export default async function handler(req, res) {
     p_period_days: period_days ?? null,
   })
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf3f9d'},body:JSON.stringify({sessionId:'bf3f9d',location:'index.js:rpc-result',message:'get_stage_opportunity_ids_filtered result',data:{idsErr: idsErr ? {message: idsErr.message, code: idsErr.code, details: idsErr.details, hint: idsErr.hint} : null, idsCount: ids?.length ?? null, has_filters: hasFilters, from_funnel_id, from_stage_id, company_id, search: search ?? null, origin: origin ?? null, period_days: period_days ?? null},timestamp:Date.now(),hypothesisId:'H-A,H-B,H-C,H-D,H-E'})}).catch(()=>{});
-  // #endregion
-
   if (idsErr) {
     return res.status(500).json({ error: 'Erro ao resolver oportunidades elegíveis', detail: idsErr.message })
   }
