@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
+import { BulkMoveOpportunitiesModal } from './BulkMoveOpportunitiesModal'
 import { EditStageModal } from './EditStageModal'
 import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
 import { CloseOpportunityModal } from './CloseOpportunityModal'
@@ -37,6 +38,7 @@ import type {
   ReopenOpportunityParams,
   Opportunity
 } from '../../types/sales-funnel'
+import type { BulkMoveRequest } from './FunnelColumn'
 import type { CompanyUser } from '../../types/user'
 
 // =====================================================
@@ -48,6 +50,8 @@ const FUNNEL_REALTIME_ENABLED = true
 
 interface FunnelBoardProps {
   funnelId: string
+  /** Nome do funil — exibido no modal de bulk move. */
+  funnelName?: string
   visibleFields?: string[]
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
@@ -57,6 +61,7 @@ interface FunnelBoardProps {
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelId,
+  funnelName = '',
   visibleFields,
   onLeadClick,
   searchTerm = '',
@@ -141,6 +146,22 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
   // ESTADO DOS MODAIS
   // =====================================================
+
+  // Bulk move
+  const [bulkMoveRequest, setBulkMoveRequest] = useState<BulkMoveRequest | null>(null)
+
+  const hasActiveFilters = !!(searchTerm || selectedOrigin || selectedPeriod)
+
+  const handleBulkMoveRequest = useCallback((request: BulkMoveRequest) => {
+    setBulkMoveRequest(request)
+  }, [])
+
+  const handleBulkMoveSuccess = useCallback((movedCount: number) => {
+    setBulkMoveRequest(null)
+    // Refresh visual: recarregar contagens e cards das colunas afetadas
+    refreshCounts().catch(err => console.error('[FunnelBoard] bulk move — erro ao atualizar contadores:', err))
+    stages.forEach(s => boardRefresh(s.id))
+  }, [refreshCounts, boardRefresh, stages])
 
   const [isDragging, setIsDragging]                 = useState(false)
   const [visualDragOverStageId, setVisualDragOverStageId] = useState<string | null>(null)
@@ -732,6 +753,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onLeadClick={onLeadClick}
                 onAddLead={handleAddLead}
                 onEditStage={handleEditStage}
+                onBulkMoveRequest={handleBulkMoveRequest}
+                funnelName={funnelName}
                 count={counts[stage.id]?.count}
                 totalValue={counts[stage.id]?.total_value}
                 hasMore={stageMap.get(stage.id)?.hasMore}
@@ -825,6 +848,23 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           companyId={companyId ?? ''}
           initialTab="journey"
           onUpdate={handleOpportunityUpdate}
+        />
+      )}
+
+      {/* Modal de movimentação em massa */}
+      {bulkMoveRequest && companyId && (
+        <BulkMoveOpportunitiesModal
+          isOpen={true}
+          onClose={() => setBulkMoveRequest(null)}
+          onSuccess={handleBulkMoveSuccess}
+          companyId={companyId}
+          fromFunnelId={bulkMoveRequest.fromFunnelId}
+          fromFunnelName={bulkMoveRequest.fromFunnelName}
+          fromStageId={bulkMoveRequest.fromStageId}
+          fromStageName={bulkMoveRequest.fromStageName}
+          fromStageType={bulkMoveRequest.fromStageType}
+          opportunityIds={bulkMoveRequest.opportunityIds}
+          hasActiveFilters={hasActiveFilters}
         />
       )}
     </div>

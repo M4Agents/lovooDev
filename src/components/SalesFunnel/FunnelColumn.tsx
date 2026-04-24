@@ -4,9 +4,10 @@
 // Objetivo: Coluna do Kanban com drag & drop
 // =====================================================
 
+import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users } from 'lucide-react'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
@@ -26,6 +27,15 @@ function formatColumnTotals(leads: LeadFunnelPosition[]): string | null {
   return parts.join(' · ')
 }
 
+export interface BulkMoveRequest {
+  fromFunnelId:   string
+  fromFunnelName: string
+  fromStageId:    string
+  fromStageName:  string
+  fromStageType:  'active' | 'won' | 'lost'
+  opportunityIds: string[]
+}
+
 interface FunnelColumnProps {
   stage: FunnelStage
   leads: LeadFunnelPosition[]
@@ -33,6 +43,10 @@ interface FunnelColumnProps {
   onLeadClick?: (leadId: number) => void
   onAddLead?: (stageId: string) => void
   onEditStage?: (stageId: string) => void
+  /** Callback para iniciar o bulk move a partir desta coluna. */
+  onBulkMoveRequest?: (request: BulkMoveRequest) => void
+  /** Nome do funil ao qual esta coluna pertence (para o modal de bulk move). */
+  funnelName?: string
   /** Fase 3: total real vindo do servidor (get_funnel_stage_counts). */
   count?: number
   /** Fase 3: soma de valores vinda do servidor. */
@@ -62,6 +76,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onLeadClick,
   onAddLead,
   onEditStage,
+  onBulkMoveRequest,
+  funnelName = '',
   count,
   totalValue,
   hasMore,
@@ -74,6 +90,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   isDraggedOver
 }) => {
   const { t } = useTranslation('funnel')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
   }, 0)
@@ -146,14 +164,59 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </button>
           )}
           
-          {onEditStage && !stage.is_system_stage && (
-            <button
-              onClick={() => onEditStage(stage.id)}
-              className="p-1.5 hover:bg-white rounded-md transition-colors"
-              title={t('board.column.editStageTitle')}
-            >
-              <MoreVertical className="w-4 h-4 text-gray-600" />
-            </button>
+          {(onEditStage || onBulkMoveRequest) && !stage.is_system_stage && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(prev => !prev)}
+                onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                className="p-1.5 hover:bg-white rounded-md transition-colors"
+                title="Opções da etapa"
+              >
+                <MoreVertical className="w-4 h-4 text-gray-600" />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-8 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                  {onEditStage && (
+                    <button
+                      onClick={() => { setMenuOpen(false); onEditStage(stage.id) }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4 text-gray-400" />
+                      {t('board.column.editStageTitle')}
+                    </button>
+                  )}
+
+                  {onBulkMoveRequest && (
+                    <>
+                      {onEditStage && <div className="border-t border-gray-100 my-1" />}
+                      <button
+                        disabled={leads.length === 0}
+                        onClick={() => {
+                          if (leads.length === 0) return
+                          setMenuOpen(false)
+                          onBulkMoveRequest({
+                            fromFunnelId:   stage.funnel_id,
+                            fromFunnelName: funnelName,
+                            fromStageId:    stage.id,
+                            fromStageName:  stage.name,
+                            fromStageType:  stage.stage_type,
+                            opportunityIds: leads
+                              .map(p => p.opportunity_id)
+                              .filter(Boolean) as string[],
+                          })
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={leads.length === 0 ? 'Nenhuma oportunidade visível nesta etapa' : undefined}
+                      >
+                        <ArrowRightLeft className="w-4 h-4 text-gray-400" />
+                        Mover oportunidades visíveis
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
