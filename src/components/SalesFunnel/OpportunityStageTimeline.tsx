@@ -405,12 +405,19 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
 
   const summary = computeSummary(history, currentEnteredAt)
 
-  // Eventos exibidos (com ou sem colapso)
+  // Cópia invertida apenas para exibição — não muta o array original.
+  // history[] permanece inalterado para todos os cálculos (lastEntry,
+  // computeSummary, reentryIds, isCurrent).
+  const displayHistory = [...history].reverse()
+
+  // Colapso: exibe os 5 eventos mais recentes (topo de displayHistory)
+  // + o mais antigo (base), com separador entre eles.
+  // hiddenCount mantém a mesma fórmula pois exibimos 5 + 1 = 6 itens.
   const shouldCollapse = history.length > COLLAPSE_THRESHOLD && !expanded
   const visibleHistory = shouldCollapse
-    ? [...history.slice(0, 5), history[history.length - 1]]
-    : history
-  const hiddenCount = history.length - 6  // 5 do topo + 1 do fim
+    ? [...displayHistory.slice(0, 5), displayHistory[displayHistory.length - 1]]
+    : displayHistory
+  const hiddenCount = history.length - 6  // 5 do topo + 1 da base
 
   const lastEntry          = history[history.length - 1]
   const currentStage       = lastEntry?.to_stage?.name ?? '—'
@@ -578,7 +585,7 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
                   </div>
                 )}
 
-                <div ref={isLast ? lastEventRef : undefined}>
+                <div ref={idx === 0 ? lastEventRef : undefined}>
                   <TimelineItem
                     entry={entry}
                     isLast={isLast}
