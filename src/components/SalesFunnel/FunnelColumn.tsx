@@ -33,7 +33,8 @@ export interface BulkMoveRequest {
   fromStageId:    string
   fromStageName:  string
   fromStageType:  'active' | 'won' | 'lost'
-  opportunityIds: string[]
+  /** Snapshot dos filtros ativos no momento do clique (injetado pelo FunnelBoard). */
+  filters?: { search?: string; origin?: string; period_days?: number }
 }
 
 interface FunnelColumnProps {
@@ -191,26 +192,23 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                     <>
                       {onEditStage && <div className="border-t border-gray-100 my-1" />}
                       <button
-                        disabled={leads.length === 0}
+                        disabled={!count || count === 0}
                         onClick={() => {
-                          if (leads.length === 0) return
+                          if (!count || count === 0) return
                           setMenuOpen(false)
                           onBulkMoveRequest({
-                            fromFunnelId:   stage.funnel_id,
+                            fromFunnelId:  stage.funnel_id,
                             fromFunnelName: funnelName,
-                            fromStageId:    stage.id,
-                            fromStageName:  stage.name,
-                            fromStageType:  stage.stage_type,
-                            opportunityIds: leads
-                              .map(p => p.opportunity_id)
-                              .filter(Boolean) as string[],
+                            fromStageId:   stage.id,
+                            fromStageName: stage.name,
+                            fromStageType: stage.stage_type,
                           })
                         }}
                         className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={leads.length === 0 ? 'Nenhuma oportunidade visível nesta etapa' : undefined}
+                        title={!count || count === 0 ? 'Nenhuma oportunidade nesta etapa' : undefined}
                       >
                         <ArrowRightLeft className="w-4 h-4 text-gray-400" />
-                        Mover oportunidades visíveis
+                        Mover oportunidades desta etapa
                       </button>
                     </>
                   )}

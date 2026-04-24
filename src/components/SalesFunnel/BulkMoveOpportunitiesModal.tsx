@@ -1,17 +1,20 @@
 // =====================================================
 // COMPONENTE: BulkMoveOpportunitiesModal
-// Permite mover oportunidades visíveis de uma etapa
-// para outra etapa (mesmo funil ou funil diferente).
+// Permite mover oportunidades de uma etapa para outra
+// (mesmo funil ou funil diferente).
 //
 // Fluxo:
 //   1. Usuário seleciona funil destino
 //   2. Usuário seleciona etapa destino
 //   3. Modal consulta /api/funnel/bulk-move-opportunities/count
-//   4. Usuário confirma → dispara /api/funnel/bulk-move-opportunities
+//      com os filtros ativos (snapshot do momento do clique)
+//   4. Backend calcula elegíveis — NÃO depende de IDs do frontend
+//   5. Se eligible_count > 200, bloqueia com mensagem
+//   6. Usuário confirma → dispara /api/funnel/bulk-move-opportunities
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, AlertTriangle, ArrowRight, Loader2, Filter, CheckCircle2 } from 'lucide-react'
+import { X, AlertTriangle, ArrowRight, Loader2, Filter, CheckCircle2, Ban } from 'lucide-react'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
 import type { SalesFunnel, FunnelStage } from '../../types/sales-funnel'
@@ -29,11 +32,11 @@ interface BulkMoveOpportunitiesModalProps {
   fromStageName: string
   fromStageType: 'active' | 'won' | 'lost'
 
-  /** IDs visíveis no board (já filtrados pelo usuário) */
-  opportunityIds: string[]
-
-  /** Indica se há filtros ativos no board */
-  hasActiveFilters: boolean
+  /**
+   * Snapshot dos filtros ativos no momento em que o usuário abriu o modal.
+   * undefined = sem filtros (move todas as oportunidades da etapa).
+   */
+  filters?: { search?: string; origin?: string; period_days?: number }
 }
 
 const STAGE_TYPE_LABEL: Record<string, string> = {
@@ -41,6 +44,8 @@ const STAGE_TYPE_LABEL: Record<string, string> = {
   won:    'Ganho',
   lost:   'Perdido',
 }
+
+const MAX_OPPORTUNITIES = 200
 
 export function BulkMoveOpportunitiesModal({
   isOpen,
@@ -52,8 +57,7 @@ export function BulkMoveOpportunitiesModal({
   fromStageId,
   fromStageName,
   fromStageType,
-  opportunityIds,
-  hasActiveFilters,
+  filters,
 }: BulkMoveOpportunitiesModalProps) {
   const [funnels, setFunnels]               = useState<SalesFunnel[]>([])
   const [stages, setStages]                 = useState<FunnelStage[]>([])
@@ -65,10 +69,13 @@ export function BulkMoveOpportunitiesModal({
   const [loadingCount, setLoadingCount]     = useState(false)
   const [submitting, setSubmitting]         = useState(false)
 
-  const [validCount, setValidCount]         = useState<number | null>(null)
-  const [invalidCount, setInvalidCount]     = useState<number | null>(null)
+  const [eligibleCount, setEligibleCount]   = useState<number | null>(null)
+  const [exceedsLimit, setExceedsLimit]     = useState(false)
   const [countError, setCountError]         = useState<string | null>(null)
   const [submitError, setSubmitError]       = useState<string | null>(null)
+
+  // Derivado do snapshot de filtros — não do estado global atual
+  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_days)
 
   // ── Carregar funis da empresa ──────────────────────────────────────────
   useEffect(() => {
@@ -85,8 +92,8 @@ export function BulkMoveOpportunitiesModal({
     if (!selectedFunnelId) return
     setStages([])
     setSelectedStageId('')
-    setValidCount(null)
-    setInvalidCount(null)
+    setEligibleCount(null)
+    setExceedsLimit(false)
     setLoadingStages(true)
     funnelApi.getStages(selectedFunnelId)
       .then(data => setStages(data.filter(s => !s.is_hidden)))
@@ -95,11 +102,12 @@ export function BulkMoveOpportunitiesModal({
   }, [selectedFunnelId])
 
   // ── Consultar contagem real ao selecionar destino ──────────────────────
-  const fetchCount = useCallback(async (toFunnelId: string, toStageId: string) => {
-    if (!toStageId || opportunityIds.length === 0) return
+  const fetchCount = useCallback(async (toStageId: string) => {
+    if (!toStageId) return
     setLoadingCount(true)
     setCountError(null)
-    setValidCount(null)
+    setEligibleCount(null)
+    setExceedsLimit(false)
     try {
       const { data: session } = await supabase.auth.getSession()
       const token = session.session?.access_token
@@ -109,38 +117,41 @@ export function BulkMoveOpportunitiesModal({
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          company_id:       companyId,
-          from_funnel_id:   fromFunnelId,
-          from_stage_id:    fromStageId,
-          opportunity_ids:  opportunityIds,
+          company_id:    companyId,
+          from_funnel_id: fromFunnelId,
+          from_stage_id:  fromStageId,
+          search:        filters?.search      ?? null,
+          origin:        filters?.origin      ?? null,
+          period_days:   filters?.period_days ?? null,
         }),
       })
       const json = await resp.json()
-      if (!resp.ok) throw new Error(json.error ?? 'Erro ao contar oportunidades')
-      setValidCount(json.valid_count ?? 0)
-      setInvalidCount(json.invalid_count ?? 0)
+      if (!resp.ok) throw new Error(json.error ?? 'Erro ao calcular oportunidades elegíveis')
+      setEligibleCount(json.eligible_count ?? 0)
+      setExceedsLimit(json.exceeds_limit ?? false)
     } catch (err) {
       setCountError(err instanceof Error ? err.message : 'Erro ao buscar contagem')
     } finally {
       setLoadingCount(false)
     }
-  }, [companyId, fromFunnelId, fromStageId, opportunityIds])
+  }, [companyId, fromFunnelId, fromStageId, filters])
 
   useEffect(() => {
     if (selectedStageId) {
-      fetchCount(selectedFunnelId, selectedStageId)
+      fetchCount(selectedStageId)
     } else {
-      setValidCount(null)
+      setEligibleCount(null)
+      setExceedsLimit(false)
     }
-  }, [selectedStageId, selectedFunnelId, fetchCount])
+  }, [selectedStageId, fetchCount])
 
   // ── Reset ao fechar ────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       setSelectedFunnelId(fromFunnelId)
       setSelectedStageId('')
-      setValidCount(null)
-      setInvalidCount(null)
+      setEligibleCount(null)
+      setExceedsLimit(false)
       setCountError(null)
       setSubmitError(null)
     }
@@ -148,7 +159,7 @@ export function BulkMoveOpportunitiesModal({
 
   // ── Executar bulk move ─────────────────────────────────────────────────
   const handleConfirm = async () => {
-    if (!selectedStageId || validCount === null || validCount === 0 || submitting) return
+    if (!selectedStageId || eligibleCount === null || eligibleCount === 0 || exceedsLimit || submitting) return
 
     setSubmitting(true)
     setSubmitError(null)
@@ -161,12 +172,14 @@ export function BulkMoveOpportunitiesModal({
         method:  'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          company_id:       companyId,
-          from_funnel_id:   fromFunnelId,
-          from_stage_id:    fromStageId,
-          to_funnel_id:     selectedFunnelId,
-          to_stage_id:      selectedStageId,
-          opportunity_ids:  opportunityIds,
+          company_id:    companyId,
+          from_funnel_id: fromFunnelId,
+          from_stage_id:  fromStageId,
+          to_funnel_id:   selectedFunnelId,
+          to_stage_id:    selectedStageId,
+          search:        filters?.search      ?? null,
+          origin:        filters?.origin      ?? null,
+          period_days:   filters?.period_days ?? null,
         }),
       })
       const json = await resp.json()
@@ -181,10 +194,9 @@ export function BulkMoveOpportunitiesModal({
 
   if (!isOpen) return null
 
-  const selectedStage   = stages.find(s => s.id === selectedStageId)
-  const selectedFunnel  = funnels.find(f => f.id === selectedFunnelId)
-  const isSameStage     = selectedStageId === fromStageId && selectedFunnelId === fromFunnelId
-  const canConfirm      = !!selectedStageId && !isSameStage && !loadingCount && validCount !== null && validCount > 0 && !submitting
+  const selectedStage    = stages.find(s => s.id === selectedStageId)
+  const isSameStage      = selectedStageId === fromStageId && selectedFunnelId === fromFunnelId
+  const canConfirm       = !!selectedStageId && !isSameStage && !loadingCount && eligibleCount !== null && eligibleCount > 0 && !exceedsLimit && !submitting
   const statusWillChange = selectedStage && selectedStage.stage_type !== fromStageType
 
   return (
@@ -208,16 +220,15 @@ export function BulkMoveOpportunitiesModal({
             )}
           </div>
 
-          {/* Aviso de filtros ativos */}
-          {hasActiveFilters && (
-            <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-3">
-              <Filter className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800">
-                <span className="font-semibold">Filtros ativos:</span> apenas as oportunidades visíveis
-                no momento serão movidas, não todas as da etapa.
-              </p>
-            </div>
-          )}
+          {/* Aviso contextual (filtros ativos ou não) */}
+          <div className="flex items-start gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
+            <Filter className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-800">
+              {hasActiveFilters
+                ? 'Todas as oportunidades que correspondem aos filtros atuais serão consideradas, independentemente da paginação.'
+                : 'Todas as oportunidades desta etapa serão consideradas, mesmo que nem todas estejam carregadas na tela.'}
+            </p>
+          </div>
 
           {/* Seleção de funil destino */}
           <div>
@@ -273,34 +284,36 @@ export function BulkMoveOpportunitiesModal({
             {loadingCount ? (
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Validando oportunidades...</span>
+                <span>Calculando oportunidades elegíveis...</span>
               </div>
-            ) : validCount !== null ? (
-              <div className="space-y-2">
-                {validCount > 0 ? (
+            ) : exceedsLimit ? (
+              <div className="flex items-start gap-2">
+                <Ban className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 font-medium">
+                  {`Esta ação possui limite de ${MAX_OPPORTUNITIES} oportunidades por vez. Aplique filtros para reduzir o volume.`}
+                  {eligibleCount !== null && (
+                    <span className="block text-xs text-red-500 mt-1 font-normal">
+                      {eligibleCount} oportunidades elegíveis encontradas.
+                    </span>
+                  )}
+                </p>
+              </div>
+            ) : eligibleCount !== null ? (
+              <div className="space-y-1">
+                {eligibleCount > 0 ? (
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
                     <p className="text-sm text-gray-800">
-                      <span className="font-semibold text-blue-700">{validCount}</span>
-                      {' / '}
-                      <span className="font-semibold">{opportunityIds.length}</span>
+                      <span className="font-semibold text-blue-700">{eligibleCount}</span>
                       {' '}
-                      {opportunityIds.length === 1 ? 'oportunidade' : 'oportunidades'} serão movidas
+                      {hasActiveFilters ? 'oportunidades filtradas' : 'oportunidades desta etapa'} serão movidas
                     </p>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <p className="text-sm text-red-600 font-medium">
-                      Nenhuma oportunidade válida para mover neste destino.
-                    </p>
-                  </div>
-                )}
-                {invalidCount !== null && invalidCount > 0 && (
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                    <p className="text-xs text-amber-700">
-                      {invalidCount} {invalidCount === 1 ? 'oportunidade não pôde ser processada' : 'oportunidades não puderam ser processadas'}
+                      Nenhuma oportunidade elegível encontrada.
                     </p>
                   </div>
                 )}
@@ -309,10 +322,8 @@ export function BulkMoveOpportunitiesModal({
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-700">
-                <span className="font-semibold text-gray-900">{opportunityIds.length}</span>
-                {' '}
-                {opportunityIds.length === 1 ? 'oportunidade selecionada' : 'oportunidades selecionadas'}
+              <p className="text-sm text-gray-500 italic">
+                Selecione a etapa de destino para calcular as oportunidades elegíveis.
               </p>
             )}
           </div>
@@ -370,8 +381,8 @@ export function BulkMoveOpportunitiesModal({
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitting
               ? 'Movendo...'
-              : validCount !== null && validCount > 0
-                ? `Mover ${validCount} ${validCount === 1 ? 'oportunidade' : 'oportunidades'}`
+              : eligibleCount !== null && eligibleCount > 0 && !exceedsLimit
+                ? `Mover ${eligibleCount} ${eligibleCount === 1 ? 'oportunidade' : 'oportunidades'}`
                 : 'Mover oportunidades'}
           </button>
         </div>

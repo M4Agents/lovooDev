@@ -1,19 +1,16 @@
 // =====================================================
 // API: POST /api/funnel/bulk-move-opportunities/count
 //
-// Retorna a contagem real de oportunidades válidas para
+// Retorna a contagem real de oportunidades elegíveis para
 // o bulk move ANTES de executar a operação.
 //
-// Usado pelo modal de confirmação para exibir ao usuário
-// quantas oportunidades serão efetivamente movidas.
-//
-// POST (body JSON) para suportar arrays grandes de IDs
-// sem limitações de query string.
+// Critério de elegibilidade: mesmos filtros usados pelo board
+// (search, origin, period_days) — sem depender de IDs do frontend.
 //
 // Retorna:
-//   valid_count     — oportunidades que serão movidas
-//   requested_count — total de IDs enviados pelo frontend
-//   invalid_count   — IDs que não pertencem à etapa/funil
+//   eligible_count — total de oportunidades que serão movidas
+//   exceeds_limit  — true se eligible_count > MAX_OPPORTUNITIES
+//   limit          — valor do limite atual (200)
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js'
@@ -51,22 +48,26 @@ export default async function handler(req, res) {
   }
 
   // ── 2. Extrair campos ───────────────────────────────────────────────────
-  const { company_id, from_funnel_id, from_stage_id, opportunity_ids } = req.body ?? {}
+  // opportunity_ids não existe mais — o backend calcula elegíveis pelos filtros.
+  const {
+    company_id,
+    from_funnel_id,
+    from_stage_id,
+    search,
+    origin,
+    period_days,
+  } = req.body ?? {}
 
   if (!company_id)     return res.status(400).json({ error: 'company_id é obrigatório' })
   if (!from_funnel_id) return res.status(400).json({ error: 'from_funnel_id é obrigatório' })
   if (!from_stage_id)  return res.status(400).json({ error: 'from_stage_id é obrigatório' })
 
-  if (!Array.isArray(opportunity_ids) || opportunity_ids.length === 0) {
-    return res.status(400).json({ error: 'opportunity_ids deve ser um array não vazio' })
-  }
-
   // ── 3. Validar membership no banco ──────────────────────────────────────
-  // Mesma matriz de RBAC do endpoint principal:
-  //   admin, manager         → membership ativa direta
+  // Matriz RBAC:
+  //   admin, manager            → membership ativa direta
   //   super_admin, system_admin → membership direta OU Trilha 2 (parent-admin)
-  //   partner                → membership ativa + assignment em partner_company_assignments
-  //   seller                 → bloqueado
+  //   partner                   → membership ativa + assignment em partner_company_assignments
+  //   seller                    → bloqueado
   const ALLOWED_ROLES = ['super_admin', 'system_admin', 'partner', 'admin', 'manager']
 
   const { data: directMembership } = await svc
@@ -102,7 +103,6 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Empresa não encontrada ou sem acesso' })
     }
   } else {
-    // Trilha 1: verificar role permitido
     if (!ALLOWED_ROLES.includes(directMembership.role)) {
       return res.status(403).json({
         error:          'Permissão insuficiente',
@@ -111,7 +111,6 @@ export default async function handler(req, res) {
       })
     }
 
-    // Partner exige assignment explícito em partner_company_assignments para a empresa alvo.
     if (directMembership.role === 'partner') {
       const { data: assignment } = await svc
         .from('partner_company_assignments')
@@ -127,27 +126,28 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 4. Contar IDs válidos no banco ──────────────────────────────────────
-  const requestedCount = opportunity_ids.length
-  const idsToCheck     = opportunity_ids.slice(0, MAX_OPPORTUNITIES)
-
-  const { data: validRows, error: countErr } = await svc
-    .from('opportunity_funnel_positions')
-    .select('opportunity_id')
-    .eq('funnel_id', from_funnel_id)
-    .eq('stage_id', from_stage_id)
-    .in('opportunity_id', idsToCheck)
+  // ── 4. Contar elegíveis via get_funnel_stage_counts ──────────────────────
+  // Usa a RPC existente que aplica os mesmos filtros da listagem do board.
+  // Retorna contagem por stage_id no funil; filtramos pelo from_stage_id.
+  const { data: stageCounts, error: countErr } = await svc.rpc('get_funnel_stage_counts', {
+    p_funnel_id:   from_funnel_id,
+    p_company_id:  company_id,
+    p_search:      search      ?? null,
+    p_origin:      origin      ?? null,
+    p_period_days: period_days ?? null,
+  })
 
   if (countErr) {
     return res.status(500).json({ error: 'Erro ao contar oportunidades', detail: countErr.message })
   }
 
-  const validCount   = validRows?.length ?? 0
-  const invalidCount = requestedCount - validCount
+  const stageRow     = stageCounts?.find(r => r.stage_id === from_stage_id)
+  const eligibleCount = stageRow?.count ?? 0
+  const exceedsLimit  = eligibleCount > MAX_OPPORTUNITIES
 
   return res.status(200).json({
-    valid_count:     validCount,
-    requested_count: requestedCount,
-    invalid_count:   invalidCount,
+    eligible_count: eligibleCount,
+    exceeds_limit:  exceedsLimit,
+    limit:          MAX_OPPORTUNITIES,
   })
 }

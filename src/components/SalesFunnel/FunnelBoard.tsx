@@ -150,11 +150,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // Bulk move
   const [bulkMoveRequest, setBulkMoveRequest] = useState<BulkMoveRequest | null>(null)
 
-  const hasActiveFilters = !!(searchTerm || selectedOrigin || selectedPeriod)
-
   const handleBulkMoveRequest = useCallback((request: BulkMoveRequest) => {
-    setBulkMoveRequest(request)
-  }, [])
+    // Injeta snapshot dos filtros ativos no momento do clique.
+    // O modal usará esses valores para calcular elegíveis no backend.
+    setBulkMoveRequest({
+      ...request,
+      filters: {
+        search:      searchTerm     || undefined,
+        origin:      selectedOrigin || undefined,
+        period_days: periodDays     || undefined,
+      },
+    })
+  }, [searchTerm, selectedOrigin, periodDays])
 
   const handleBulkMoveSuccess = useCallback((movedCount: number) => {
     setBulkMoveRequest(null)
@@ -863,8 +870,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           fromStageId={bulkMoveRequest.fromStageId}
           fromStageName={bulkMoveRequest.fromStageName}
           fromStageType={bulkMoveRequest.fromStageType}
-          opportunityIds={bulkMoveRequest.opportunityIds}
-          hasActiveFilters={hasActiveFilters}
+          filters={bulkMoveRequest.filters}
         />
       )}
     </div>
