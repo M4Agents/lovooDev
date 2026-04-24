@@ -470,30 +470,18 @@ export const OpportunityStageTimeline: React.FC<OpportunityStageTimelineProps> =
       >
         <div className="flex items-center justify-between">
           <div>
-            <p
-              className="text-xs font-semibold uppercase tracking-wide mb-0.5"
-              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#3B82F6' }}
-            >
+            <p className="text-xs font-semibold uppercase tracking-wide mb-0.5 text-gray-700">
               {t('timeline.currentStage.title')}
             </p>
-            <p
-              className="text-sm font-semibold"
-              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#1E3A5F' }}
-            >
+            <p className="text-sm font-semibold text-gray-900">
               {currentStage}
             </p>
           </div>
           <div className="text-right">
-            <p
-              className="text-xs mb-0.5"
-              style={currentStageStyle ? { color: currentStageStyle.fg + 'aa' } : { color: '#93C5FD' }}
-            >
+            <p className="text-xs mb-0.5 text-gray-600">
               {t('timeline.currentStage.timeRunning')}
             </p>
-            <div
-              className="flex items-center gap-1 text-sm font-medium"
-              style={currentStageStyle ? { color: currentStageStyle.fg } : { color: '#1D4ED8' }}
-            >
+            <div className="flex items-center gap-1 text-sm font-medium text-gray-900">
               <Timer className="w-3.5 h-3.5" />
               {summary.currentStageSeconds > 0
                 ? formatDuration(summary.currentStageSeconds, t)
