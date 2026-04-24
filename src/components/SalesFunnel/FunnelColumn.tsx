@@ -51,6 +51,8 @@ interface FunnelColumnProps {
   onDetailClick?: (opportunityId: string) => void
   /** Lista de usuários da empresa para exibir nome do owner no card. */
   companyUsers?: CompanyUser[]
+  /** Override do indicador visual de drag-over — corrige cache estale do @hello-pangea/dnd durante scroll horizontal. */
+  isDraggedOver?: boolean
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -68,7 +70,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   pageSize = 20,
   companyId,
   onDetailClick,
-  companyUsers
+  companyUsers,
+  isDraggedOver
 }) => {
   const { t } = useTranslation('funnel')
   const localTotalValue = leads.reduce((sum, pos) => {
@@ -163,7 +166,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             {...provided.droppableProps}
             className={`
               flex-1 p-4 overflow-y-auto
-              ${snapshot.isDraggingOver ? 'bg-blue-50' : ''}
+              ${(isDraggedOver ?? snapshot.isDraggingOver) ? 'bg-blue-50' : ''}
               transition-colors duration-200
             `}
             style={{
