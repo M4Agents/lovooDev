@@ -270,6 +270,7 @@ export interface OpportunityStageHistory {
   // Joins opcionais
   from_stage?: FunnelStage
   to_stage?: FunnelStage
+  funnel?: { id: string; name: string }
 }
 
 // Alias legado — mapeia para lead_stage_history (tabela antiga via trigger)

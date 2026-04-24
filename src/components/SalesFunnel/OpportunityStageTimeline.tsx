@@ -310,6 +310,14 @@ const TimelineItem: React.FC<TimelineItemProps> = ({
               </p>
             )}
 
+            {/* Funil de vendas */}
+            {entry.funnel?.name && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Funil:{' '}
+                <span className="font-medium text-gray-600">{entry.funnel.name}</span>
+              </p>
+            )}
+
             {/* Entrada */}
             {entry.move_type !== 'funnel_entry' && (
               <p className="text-xs text-gray-400 mt-0.5">

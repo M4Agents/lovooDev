@@ -50,7 +50,8 @@ export function useOpportunityStageHistory(
             .select(`
               *,
               from_stage:funnel_stages!from_stage_id(id, name, color, position),
-              to_stage:funnel_stages!to_stage_id(id, name, color, position)
+              to_stage:funnel_stages!to_stage_id(id, name, color, position),
+              funnel:sales_funnels!funnel_id(id, name)
             `)
             .eq('opportunity_id', opportunityId)
             .eq('company_id', companyId)
