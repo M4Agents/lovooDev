@@ -6,7 +6,7 @@
 // Fluxo:
 //   1. Usuário seleciona funil destino
 //   2. Usuário seleciona etapa destino
-//   3. Modal consulta /api/funnel/bulk-move-count (count real)
+//   3. Modal consulta /api/funnel/bulk-move-opportunities/count
 //   4. Usuário confirma → dispara /api/funnel/bulk-move-opportunities
 // =====================================================
 
@@ -66,6 +66,7 @@ export function BulkMoveOpportunitiesModal({
   const [submitting, setSubmitting]         = useState(false)
 
   const [validCount, setValidCount]         = useState<number | null>(null)
+  const [invalidCount, setInvalidCount]     = useState<number | null>(null)
   const [countError, setCountError]         = useState<string | null>(null)
   const [submitError, setSubmitError]       = useState<string | null>(null)
 
@@ -85,6 +86,7 @@ export function BulkMoveOpportunitiesModal({
     setStages([])
     setSelectedStageId('')
     setValidCount(null)
+    setInvalidCount(null)
     setLoadingStages(true)
     funnelApi.getStages(selectedFunnelId)
       .then(data => setStages(data.filter(s => !s.is_hidden)))
@@ -116,6 +118,7 @@ export function BulkMoveOpportunitiesModal({
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error ?? 'Erro ao contar oportunidades')
       setValidCount(json.valid_count ?? 0)
+      setInvalidCount(json.invalid_count ?? 0)
     } catch (err) {
       setCountError(err instanceof Error ? err.message : 'Erro ao buscar contagem')
     } finally {
@@ -137,6 +140,7 @@ export function BulkMoveOpportunitiesModal({
       setSelectedFunnelId(fromFunnelId)
       setSelectedStageId('')
       setValidCount(null)
+      setInvalidCount(null)
       setCountError(null)
       setSubmitError(null)
     }
@@ -264,6 +268,55 @@ export function BulkMoveOpportunitiesModal({
             )}
           </div>
 
+          {/* Seção de contagem — sempre visível após abrir o modal */}
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+            {loadingCount ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Validando oportunidades...</span>
+              </div>
+            ) : validCount !== null ? (
+              <div className="space-y-2">
+                {validCount > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <p className="text-sm text-gray-800">
+                      <span className="font-semibold text-blue-700">{validCount}</span>
+                      {' / '}
+                      <span className="font-semibold">{opportunityIds.length}</span>
+                      {' '}
+                      {opportunityIds.length === 1 ? 'oportunidade' : 'oportunidades'} serão movidas
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    <p className="text-sm text-red-600 font-medium">
+                      Nenhuma oportunidade válida para mover neste destino.
+                    </p>
+                  </div>
+                )}
+                {invalidCount !== null && invalidCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                    <p className="text-xs text-amber-700">
+                      {invalidCount} {invalidCount === 1 ? 'oportunidade não pôde ser processada' : 'oportunidades não puderam ser processadas'}
+                    </p>
+                  </div>
+                )}
+                {countError && (
+                  <p className="text-xs text-red-600">{countError}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold text-gray-900">{opportunityIds.length}</span>
+                {' '}
+                {opportunityIds.length === 1 ? 'oportunidade selecionada' : 'oportunidades selecionadas'}
+              </p>
+            )}
+          </div>
+
           {/* Resumo visual da movimentação */}
           {selectedStageId && !isSameStage && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 space-y-3">
@@ -272,33 +325,6 @@ export function BulkMoveOpportunitiesModal({
                 <span className="font-medium text-gray-700">{fromStageName}</span>
                 <ArrowRight className="w-4 h-4 text-blue-500 flex-shrink-0" />
                 <span className="font-medium text-blue-700">{selectedStage?.name}</span>
-              </div>
-
-              {/* Contagem */}
-              <div className="text-sm">
-                {loadingCount && (
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verificando oportunidades válidas...</span>
-                  </div>
-                )}
-                {!loadingCount && countError && (
-                  <p className="text-red-600 text-xs">{countError}</p>
-                )}
-                {!loadingCount && validCount !== null && (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                    <span className="text-gray-800">
-                      <span className="font-semibold text-blue-700">{validCount}</span>
-                      {validCount === 1 ? ' oportunidade' : ' oportunidades'} serão movidas
-                      {opportunityIds.length > validCount && (
-                        <span className="text-gray-500 ml-1">
-                          ({opportunityIds.length - validCount} inválidas descartadas)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
               </div>
 
               {/* Alerta de mudança de status */}
