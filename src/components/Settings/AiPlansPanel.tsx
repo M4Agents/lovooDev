@@ -52,23 +52,25 @@ interface AiPlan {
 }
 
 interface CreditPackage {
-  id:                    string
-  name:                  string
-  credits:               number
-  price:                 number
-  is_active:             boolean
-  is_available_for_sale: boolean
-  estimated_tokens:      number
-  estimated_ai_cost:     number
-  estimated_profit:      number
+  id:                     string
+  name:                   string
+  credits:                number
+  price:                  number
+  is_active:              boolean
+  is_available_for_sale:  boolean
+  is_available_for_bonus: boolean
+  estimated_tokens:       number
+  estimated_ai_cost:      number
+  estimated_profit:       number
 }
 
 interface PackageForm {
-  name:                  string
-  credits:               string
-  price:                 string
-  is_active:             boolean
-  is_available_for_sale: boolean
+  name:                   string
+  credits:                string
+  price:                  string
+  is_active:              boolean
+  is_available_for_sale:  boolean
+  is_available_for_bonus: boolean
 }
 
 interface AiPlanCreateForm {
@@ -85,7 +87,7 @@ interface AiPlanEditForm {
   internal_price:  string
 }
 
-const EMPTY_PKG_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true, is_available_for_sale: true }
+const EMPTY_PKG_FORM: PackageForm = { name: '', credits: '', price: '', is_active: true, is_available_for_sale: true, is_available_for_bonus: false }
 
 const EMPTY_AI_PLAN_FORM: AiPlanCreateForm = {
   name: '', slug: '', monthly_credits: '0', internal_price: '0', is_active: true,
@@ -477,6 +479,16 @@ function PackageModal({
                 <p className="text-xs text-slate-400">Exibido para empresas filhas em "Comprar Créditos"</p>
               </div>
             </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.is_available_for_bonus}
+                onChange={e => onChange({ is_available_for_bonus: e.target.checked })}
+                className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <div>
+                <span className="text-sm text-slate-700">Disponível como bônus de consultoria</span>
+                <p className="text-xs text-slate-400">Pode ser vinculado a pacotes consultivos como bônus de créditos de IA</p>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -661,8 +673,9 @@ export function AiPlansPanel() {
       if (packageModal?.mode === 'create') {
         const { error } = await supabase.from('credit_packages').insert({
           name: packageForm.name.trim(), credits, price,
-          is_active: packageForm.is_active,
-          is_available_for_sale: packageForm.is_available_for_sale,
+          is_active:              packageForm.is_active,
+          is_available_for_sale:  packageForm.is_available_for_sale,
+          is_available_for_bonus: packageForm.is_available_for_bonus,
         })
         if (error) throw error
         showSuccessPkgs('Pacote criado com sucesso.')
@@ -671,8 +684,9 @@ export function AiPlansPanel() {
           .from('credit_packages')
           .update({
             name: packageForm.name.trim(), credits, price,
-            is_active: packageForm.is_active,
-            is_available_for_sale: packageForm.is_available_for_sale,
+            is_active:              packageForm.is_active,
+            is_available_for_sale:  packageForm.is_available_for_sale,
+            is_available_for_bonus: packageForm.is_available_for_bonus,
           })
           .eq('id', packageModal.pkg.id)
         if (error) throw error
@@ -708,11 +722,12 @@ export function AiPlansPanel() {
     setPackageForm(
       pkg
         ? {
-            name:                  pkg.name,
-            credits:               String(pkg.credits),
-            price:                 String(pkg.price),
-            is_active:             pkg.is_active,
-            is_available_for_sale: pkg.is_available_for_sale ?? true,
+            name:                   pkg.name,
+            credits:                String(pkg.credits),
+            price:                  String(pkg.price),
+            is_active:              pkg.is_active,
+            is_available_for_sale:  pkg.is_available_for_sale  ?? true,
+            is_available_for_bonus: pkg.is_available_for_bonus ?? false,
           }
         : EMPTY_PKG_FORM
     )
@@ -926,6 +941,7 @@ export function AiPlansPanel() {
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Custo IA</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Preço venda</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Lucro</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Bônus</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
                   <th className="px-4 py-3 text-right  text-xs font-medium text-slate-500 uppercase tracking-wide">Ações</th>
                 </tr>
@@ -945,6 +961,12 @@ export function AiPlansPanel() {
                       <span className={pkg.estimated_profit >= 0 ? 'text-green-600' : 'text-red-500'}>
                         {formatPrice(pkg.estimated_profit)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {pkg.is_available_for_bonus
+                        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">Sim</span>
+                        : <span className="text-xs text-slate-300">—</span>
+                      }
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
