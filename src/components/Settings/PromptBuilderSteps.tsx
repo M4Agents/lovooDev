@@ -15,8 +15,8 @@ import { PromptVariablePicker } from './PromptVariablePicker'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { EnrichDiffModal } from './EnrichDiffModal'
 import {
-  ArrowLeft, ArrowRight, Building2, Check, CheckCircle, ClipboardCopy,
-  Eye, FileText, Loader2, Package, Phone, Globe, Sparkles, X,
+  ArrowLeft, ArrowRight, Building2, Check, CheckCircle, ChevronDown, ChevronUp,
+  ClipboardCopy, Eye, FileText, Loader2, Package, Phone, Globe, Sparkles, X, Zap,
 } from 'lucide-react'
 import { TOOL_CATALOG } from '../../lib/agents/toolCatalog'
 import { promptBuilderApi } from '../../services/promptBuilderApi'
@@ -502,6 +502,78 @@ const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: numb
   { field: 'custom_notes',        label: 'Informações adicionais', rows: 2,                 maxLength: 1500 },
 ]
 
+// ── ToolReferencePanel ────────────────────────────────────────────────────────
+
+/**
+ * Painel colapsível de referência de ferramentas ativas.
+ * Exibe o nome técnico de cada ferramenta habilitada no agente para que o
+ * usuário possa referenciá-la diretamente no prompt.
+ * Clicar no nome técnico copia para a área de transferência.
+ */
+function ToolReferencePanel({ allowedTools }: { allowedTools: string[] }) {
+  const [open, setOpen]         = useState(false)
+  const [copied, setCopied]     = useState<string | null>(null)
+
+  const activeTools = TOOL_CATALOG.filter(t => allowedTools.includes(t.key))
+  if (activeTools.length === 0) return null
+
+  function copyKey(key: string) {
+    navigator.clipboard.writeText(key).catch(() => {})
+    setCopied(key)
+    setTimeout(() => setCopied(null), 1500)
+  }
+
+  return (
+    <div className="border border-amber-200 rounded-lg bg-amber-50/40 text-sm">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-amber-700 hover:text-amber-900 transition-colors"
+      >
+        <span className="flex items-center gap-1.5 font-medium text-xs">
+          <Zap className="w-3.5 h-3.5" />
+          {activeTools.length} {activeTools.length === 1 ? 'ferramenta ativa' : 'ferramentas ativas'} — clique no nome para copiar
+        </span>
+        {open
+          ? <ChevronUp   className="w-3.5 h-3.5 flex-shrink-0" />
+          : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
+        }
+      </button>
+
+      {open && (
+        <div className="border-t border-amber-200 px-3 py-2 space-y-2">
+          {activeTools.map(tool => (
+            <div key={tool.key} className="flex gap-2 items-start">
+              <button
+                type="button"
+                onClick={() => copyKey(tool.key)}
+                title="Clique para copiar o nome da ferramenta"
+                className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-xs font-semibold
+                  transition-colors cursor-pointer border
+                  ${copied === tool.key
+                    ? 'bg-green-100 text-green-700 border-green-300'
+                    : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100'
+                  }`}
+              >
+                {copied === tool.key
+                  ? <><Check className="w-3 h-3" /> copiado</>
+                  : <><ClipboardCopy className="w-3 h-3" /> {tool.key}</>
+                }
+              </button>
+              <span className="text-xs text-gray-600 leading-relaxed pt-0.5">
+                <span className="font-medium text-gray-700">{tool.label}</span>
+                {tool.promptSuggestion && (
+                  <> — {tool.promptSuggestion}</>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function StepPreview({
   config, setConfig,
   catalogCount, companyName, agentName,
@@ -671,7 +743,7 @@ export function StepPreview({
 
           {advancedManualActive ? (
             /* Modo avançado: textarea com autocomplete de variáveis */
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="text-xs text-gray-400 leading-relaxed">
                 Mantenha os marcadores <code className="bg-gray-100 px-1 rounded">[IDENTIDADE]</code>,{' '}
                 <code className="bg-gray-100 px-1 rounded">[OBJETIVO]</code> etc. para preservar a estrutura do agente.
@@ -685,6 +757,7 @@ export function StepPreview({
                            leading-relaxed font-mono focus:outline-none focus:ring-2 focus:ring-blue-400
                            disabled:opacity-50 disabled:bg-gray-50 bg-blue-50/30"
               />
+              <ToolReferencePanel allowedTools={allowedTools} />
             </div>
           ) : (
             /* Modo normal: 5 campos separados */
