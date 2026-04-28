@@ -125,8 +125,8 @@ export function validatePromptConfig(config) {
       continue;
     }
 
-    // Opcional ausente — ok
-    if (value === undefined || value === null) continue;
+    // Opcional ausente ou vazio — ok (string vazia equivale a não fornecido)
+    if (value === undefined || value === null || value === '') continue;
 
     // Tipo inválido
     if (typeof value !== 'string') {

@@ -35,9 +35,11 @@ const ADVANCED_SECTIONS: { key: string; field: keyof FlatPromptConfig }[] = [
   { key: 'INSTRUÇÕES PARA AÇÕES DO AGENTE', field: 'tool_instructions'   },
 ]
 
-/** Monta os 5 campos do prompt_config em um único texto editável com marcadores de seção. */
+/** Monta os campos do prompt_config em um único texto editável com marcadores de seção.
+ *  tool_instructions só é incluído se tiver conteúdo (campo opcional — não gerar seção vazia). */
 export function buildAdvancedText(config: FlatPromptConfig): string {
   return ADVANCED_SECTIONS
+    .filter(({ field }) => field !== 'tool_instructions' || !!config[field]?.trim())
     .map(({ key, field }) => `[${key}]\n${config[field] ?? ''}`)
     .join('\n\n')
 }
