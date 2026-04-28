@@ -187,7 +187,9 @@ export const promptBuilderApi = {
   async sandboxRunChat(payload: {
     company_id:      string
     messages:        ChatMessage[]
-    prompt_config:   FlatPromptConfig
+    // modo estruturado: prompt_config; modo avançado: prompt (raw) — nunca os dois juntos
+    prompt_config?:  FlatPromptConfig
+    prompt?:         string
     agent_name?:     string
     sandbox_memory?: SandboxMemory | null
     agent_id?:       string | null
@@ -220,7 +222,9 @@ export const promptBuilderApi = {
     company_id:      string
     audio:           File
     messages:        ChatMessage[]
-    prompt_config:   FlatPromptConfig
+    // modo estruturado: prompt_config; modo avançado: prompt (raw) — nunca os dois juntos
+    prompt_config?:  FlatPromptConfig
+    prompt?:         string
     agent_name?:     string
     sandbox_memory?: SandboxMemory | null
     agent_id?:       string | null
@@ -228,10 +232,11 @@ export const promptBuilderApi = {
     const auth     = await getAuthHeader()
     const formData = new FormData()
 
-    formData.append('company_id',     payload.company_id)
-    formData.append('audio',          payload.audio)
-    formData.append('prompt_config',  JSON.stringify(payload.prompt_config))
-    formData.append('messages',       JSON.stringify(payload.messages))
+    formData.append('company_id', payload.company_id)
+    formData.append('audio',      payload.audio)
+    formData.append('messages',   JSON.stringify(payload.messages))
+    if (payload.prompt_config)  formData.append('prompt_config',  JSON.stringify(payload.prompt_config))
+    if (payload.prompt)         formData.append('prompt',         payload.prompt)
     if (payload.agent_name)     formData.append('agent_name',     payload.agent_name)
     if (payload.agent_id)       formData.append('agent_id',       payload.agent_id)
     if (payload.sandbox_memory) formData.append('sandbox_memory', JSON.stringify(payload.sandbox_memory))

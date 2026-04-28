@@ -28,16 +28,22 @@ import {
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
 interface Props {
-  companyId:    string
-  promptConfig: FlatPromptConfig
-  agentName:    string
-  companyName:  string
-  agentId?:     string | null   // ID do agente salvo (para knowledge_base)
-  onBack?:      () => void      // opcional: oculta botão Voltar quando não fornecido
-  onSave?:      () => void
-  isSaved?:     boolean
+  companyId:       string
+  promptConfig:    FlatPromptConfig
+  agentName:       string
+  companyName:     string
+  agentId?:        string | null   // ID do agente salvo (para knowledge_base)
+  onBack?:         () => void      // opcional: oculta botão Voltar quando não fornecido
+  onSave?:         () => void
+  isSaved?:        boolean
   /** Modo embutido: oculta botões de navegação (Voltar / Salvar agente). */
-  compact?:     boolean
+  compact?:        boolean
+  /**
+   * Modo avançado: prompt raw completo (substitui prompt_config).
+   * Quando presente, o sandbox envia o texto bruto diretamente ao LLM,
+   * sem parsing para campos nem injeção do nome do sistema.
+   */
+  advancedPrompt?: string
 }
 
 // Mensagem do chat inclui tool_events opcionais (exibidos antes da resposta)
@@ -50,6 +56,7 @@ interface DisplayMessage extends ChatMessage {
 export function AgentTestSandbox({
   companyId, promptConfig, agentName, companyName,
   agentId = null, onBack, onSave, isSaved = false, compact = false,
+  advancedPrompt,
 }: Props) {
   const greeting = buildGreeting(agentName, companyName)
 
@@ -94,12 +101,15 @@ export function AgentTestSandbox({
 
     try {
       const result = await promptBuilderApi.sandboxRunChat({
-        company_id:      companyId,
-        messages:        apiMessages,
-        prompt_config:   promptConfig,
-        agent_name:      agentName || undefined,
-        sandbox_memory:  sandboxMemory,
-        agent_id:        agentId,
+        company_id:     companyId,
+        messages:       apiMessages,
+        // Modo avançado: envia prompt raw — sem parsing e sem injeção do nome do sistema
+        ...(advancedPrompt
+          ? { prompt: advancedPrompt }
+          : { prompt_config: promptConfig, agent_name: agentName || undefined }
+        ),
+        sandbox_memory: sandboxMemory,
+        agent_id:       agentId,
       })
 
       // Obtém blocos do splitting (mesmo pipeline do WhatsApp real).
@@ -239,8 +249,11 @@ export function AgentTestSandbox({
         company_id:     companyId,
         audio:          file,
         messages:       apiMessages,
-        prompt_config:  promptConfig,
-        agent_name:     agentName || undefined,
+        // Modo avançado: envia prompt raw — sem parsing e sem injeção do nome do sistema
+        ...(advancedPrompt
+          ? { prompt: advancedPrompt }
+          : { prompt_config: promptConfig, agent_name: agentName || undefined }
+        ),
         sandbox_memory: sandboxMemory,
         agent_id:       agentId,
       })

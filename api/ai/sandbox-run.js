@@ -426,6 +426,7 @@ export default async function handler(req, res) {
   const {
     company_id,
     prompt_config,
+    prompt,        // modo avançado: prompt raw completo (alternativa ao prompt_config)
     agent_name,
     messages,
     sandbox_memory,
@@ -436,18 +437,24 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'company_id é obrigatório.' });
   }
 
-  const configValidation = validateSandboxConfig(prompt_config);
-  // #region agent log
-  console.log('[DEBUG:sandbox-run] config_validation', {
-    ok:             configValidation.ok,
-    reason:         configValidation.reason ?? null,
-    identity_len:   typeof prompt_config?.identity  === 'string' ? prompt_config.identity.trim().length  : null,
-    objective_len:  typeof prompt_config?.objective === 'string' ? prompt_config.objective.trim().length : null,
-    company_id,
-  });
-  // #endregion
-  if (!configValidation.ok) {
-    return res.status(400).json({ success: false, error: `prompt_config inválido: ${configValidation.reason}` });
+  // Mutex: nunca aceitar prompt + prompt_config juntos
+  const hasRawPrompt    = typeof prompt === 'string' && prompt.trim().length > 0;
+  const hasPromptConfig = prompt_config !== undefined && prompt_config !== null;
+
+  if (hasRawPrompt && hasPromptConfig) {
+    return res.status(400).json({ success: false, error: 'Envie apenas prompt ou prompt_config, nunca os dois.' });
+  }
+
+  if (!hasRawPrompt && !hasPromptConfig) {
+    return res.status(400).json({ success: false, error: 'prompt ou prompt_config é obrigatório.' });
+  }
+
+  // Modo estruturado: validar prompt_config
+  if (hasPromptConfig) {
+    const configValidation = validateSandboxConfig(prompt_config);
+    if (!configValidation.ok) {
+      return res.status(400).json({ success: false, error: `prompt_config inválido: ${configValidation.reason}` });
+    }
   }
 
   const sanitizedMessages = sanitizeMessages(messages);
@@ -470,8 +477,9 @@ export default async function handler(req, res) {
 
   const result = await executeForSandbox({
     company_id,
-    prompt_config,
-    agent_name,
+    prompt_config: hasPromptConfig ? prompt_config : null,
+    raw_prompt:    hasRawPrompt    ? prompt.trim()  : null,
+    agent_name:    hasRawPrompt    ? null            : agent_name, // não injeta nome em modo avançado
     sanitizedMessages,
     safeAgentId,
     sandbox_memory,
@@ -488,6 +496,7 @@ export default async function handler(req, res) {
 export async function executeForSandbox({
   company_id,
   prompt_config,
+  raw_prompt,    // modo avançado: prompt raw completo (substitui prompt_config)
   agent_name,
   sanitizedMessages,
   safeAgentId,
@@ -526,18 +535,27 @@ export async function executeForSandbox({
 
   // ── 5. Montar agente sintético ──────────────────────────────────────────────
 
-  const safeAgentName = typeof agent_name === 'string'
-    ? agent_name.replace(/<[^>]*>/g, '').trim().slice(0, MAX_AGENT_NAME_LEN)
-    : '';
+  let agentPrompt;
 
-  const builtPrompt = buildPromptFromConfig(prompt_config, companyData);
-  if (!builtPrompt) {
-    return { status: 400, body: { success: false, error: 'Falha ao montar prompt do agente.' } };
+  if (raw_prompt) {
+    // Modo avançado: usa o prompt bruto diretamente — sem buildPromptFromConfig,
+    // sem injeção do nome do sistema (a persona está definida no próprio prompt).
+    agentPrompt = raw_prompt;
+  } else {
+    // Modo estruturado: monta o prompt a partir do prompt_config + dados da empresa.
+    const safeAgentName = typeof agent_name === 'string'
+      ? agent_name.replace(/<[^>]*>/g, '').trim().slice(0, MAX_AGENT_NAME_LEN)
+      : '';
+
+    const builtPrompt = buildPromptFromConfig(prompt_config, companyData);
+    if (!builtPrompt) {
+      return { status: 400, body: { success: false, error: 'Falha ao montar prompt do agente.' } };
+    }
+
+    agentPrompt = safeAgentName
+      ? `Seu nome é "${safeAgentName}". Use-o ao se apresentar.\n\n${builtPrompt}`
+      : builtPrompt;
   }
-
-  const agentPrompt = safeAgentName
-    ? `Seu nome é "${safeAgentName}". Use-o ao se apresentar.\n\n${builtPrompt}`
-    : builtPrompt;
 
   const knowledgeBase = agentKnowledge?.knowledge_base?.trim() || null;
   const knowledgeMode = knowledgeBase ? 'inline' : 'none';

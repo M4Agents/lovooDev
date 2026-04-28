@@ -810,7 +810,8 @@ export function StepPreview({
         {/* Direita: sandbox inline no modo avançado; preview ao vivo no modo normal */}
         <div className="min-w-0">
           {advancedManualActive ? (
-            /* Sandbox embutido — usa o config parseado do textarea em tempo quase-real */
+            /* Sandbox embutido — em modo avançado usa o advancedText raw diretamente,
+               preservando todas as seções e a persona definida no prompt. */
             <div className="border border-violet-200 rounded-xl overflow-hidden shadow-sm h-[560px] flex flex-col">
               <AgentTestSandbox
                 compact
@@ -819,6 +820,7 @@ export function StepPreview({
                 agentName={agentName}
                 companyName={companyName}
                 agentId={agentId ?? null}
+                advancedPrompt={advancedText || undefined}
               />
             </div>
           ) : (
