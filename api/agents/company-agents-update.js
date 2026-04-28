@@ -233,10 +233,15 @@ export default async function handler(req, res) {
     }
 
   } else if (hasPrompt) {
-    // Modo legacy: salvar prompt diretamente
+    // Modo legacy / avançado: salvar prompt diretamente
     finalPrompt = prompt.trim();
     if (!finalPrompt) {
       return res.status(400).json({ success: false, error: 'prompt não pode estar vazio.' });
+    }
+    // Modo avançado: se prompt_config foi enviado como null explicitamente, limpar o campo no banco.
+    // Isso garante que agentExecutor use agent.prompt raw em vez do prompt_config desatualizado.
+    if (prompt_config === null) {
+      finalPromptConfig = null;
     }
   }
 

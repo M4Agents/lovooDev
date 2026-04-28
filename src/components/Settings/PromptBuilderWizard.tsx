@@ -382,16 +382,21 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     () => initialAgent?.model_config?.editing_mode === 'advanced_manual'
   )
 
-  // Texto livre do modo avançado — os 5 campos concatenados com marcadores de seção.
+  // Texto livre do modo avançado.
   // Inicializado apenas quando o modo avançado já está ativo ao carregar o agente.
+  // Prioridade 1: agent.prompt raw (salvo por saves anteriores em modo avançado — prompt_config = null).
+  // Prioridade 2: reconstruir via buildAdvancedText (migração de agentes salvos no modo estruturado).
   const [advancedText, setAdvancedText] = useState<string>(() => {
     const isAdvanced = initialAgent?.model_config?.editing_mode === 'advanced_manual'
     if (!isAdvanced) return ''
-    const pc = initialAgent?.prompt_config as Record<string, unknown> | undefined
-    if (pc && 'identity' in pc && !('sections' in pc)) {
+    // Se prompt_config já foi limpo (save avançado anterior), usar prompt raw diretamente
+    if (!initialAgent?.prompt_config) return initialAgent?.prompt ?? ''
+    // Migração: reconstruir texto a partir do flat prompt_config
+    const pc = initialAgent.prompt_config as Record<string, unknown>
+    if ('identity' in pc && !('sections' in pc)) {
       return buildAdvancedText(pc as FlatPromptConfig)
     }
-    return ''
+    return initialAgent?.prompt ?? ''
   })
 
   // Notifica o pai (AgentCreationModal) sempre que tools ou prompt mudam
@@ -472,19 +477,18 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   }
 
   async function handleSave() {
-    // Em modo avançado, parseia o texto livre de volta para prompt_config.
-    // Em modo normal, usa promptConfig diretamente.
-    const effectiveConfig: FlatPromptConfig | null = advancedManualActive
-      ? (() => {
-          const parsed = parseAdvancedText(advancedText)
-          // Garante campos obrigatórios com fallback do promptConfig anterior
-          if (!parsed.identity?.trim())  parsed.identity  = promptConfig?.identity  ?? 'Agente de atendimento'
-          if (!parsed.objective?.trim()) parsed.objective = promptConfig?.objective ?? 'Atender clientes'
-          return parsed
-        })()
-      : promptConfig
+    // Modo avançado: salva o texto bruto diretamente como prompt (sem parsing de campos).
+    // Isso preserva 100% do conteúdo — seções customizadas, estruturas livres, etc.
+    // prompt_config é explicitamente limpo (null) para que o agentExecutor use prompt raw.
+    //
+    // Modo normal: converte promptConfig estruturado → prompt via backend template engine.
 
-    if (!effectiveConfig) return
+    if (advancedManualActive && !advancedText.trim()) {
+      setError('O prompt não pode estar vazio.')
+      return
+    }
+    if (!advancedManualActive && !promptConfig) return
+
     setError(null)
     setSaving(true)
     try {
@@ -509,17 +513,26 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
       if (isEditMode && initialAgent?.id) {
         // Modo edição — atualiza agente existente
         const payload: UpdateCompanyAgentPayload = {
-          company_id:     companyId,
-          agent_id:       initialAgent.id,
-          name:           agentName.trim() || initialAgent.name,
+          company_id:   companyId,
+          agent_id:     initialAgent.id,
+          name:         agentName.trim() || initialAgent.name,
           model,
-          prompt_config:  effectiveConfig,
-          prompt_version: initialAgent.prompt_version ?? 0,
-          knowledge_base: kbPayload ?? '',   // string vazia → backend trata como null
+          knowledge_base: kbPayload ?? '',
           knowledge_mode: kbModePayload,
           allowed_tools:  allowedTools,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
+
+        if (advancedManualActive) {
+          // Modo avançado: prompt raw — sem parsing, sem limites por campo, sem perda de seções
+          payload.prompt        = advancedText.trim()
+          payload.prompt_config = null   // limpa prompt_config → agentExecutor usará prompt diretamente
+        } else {
+          // Modo estruturado: prompt montado pelo backend a partir do prompt_config
+          payload.prompt_config  = promptConfig!
+          payload.prompt_version = initialAgent.prompt_version ?? 0
+        }
+
         saved = await companyOwnAgentsApi.update(payload)
       } else {
         // Modo criação — cria novo agente
@@ -527,12 +540,18 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           company_id:     companyId,
           name:           agentName.trim(),
           model,
-          prompt_config:  effectiveConfig,
           knowledge_base: kbPayload,
           knowledge_mode: kbModePayload,
           allowed_tools:  allowedTools,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
+
+        if (advancedManualActive) {
+          payload.prompt = advancedText.trim()
+        } else {
+          payload.prompt_config = promptConfig!
+        }
+
         saved = await companyOwnAgentsApi.create(payload)
       }
 

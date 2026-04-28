@@ -49,8 +49,9 @@ export interface UpdateCompanyAgentPayload {
   name?:           string
   description?:    string
   // modo legacy: enviar prompt; modo builder: enviar prompt_config + prompt_version (nunca ambos)
+  // modo avançado: enviar prompt + prompt_config: null para limpar o campo e evitar conflito no agentExecutor
   prompt?:         string
-  prompt_config?:  AnyPromptConfig
+  prompt_config?:  AnyPromptConfig | null
   prompt_version?: number
   model?:          string
   knowledge_base?: string
