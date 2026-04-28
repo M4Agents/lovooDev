@@ -53,9 +53,9 @@ const MAX_CATALOG_ITEMS = 15;
  * Os outros campos seguem os limites do schema (identity e objective não são userAnswers).
  */
 const ANSWER_MAX_BY_FIELD = {
-  objective:           300,
-  communication_style: 300,
-  commercial_rules:    500,
+  objective:           600,
+  communication_style: 500,
+  commercial_rules:    800,
   custom_notes:        1500,
 };
 
@@ -224,10 +224,10 @@ NÃO os inclua em nenhum campo do JSON gerado — eles serão contraditos ou dup
 - instruções de indisponibilidade ou estoque de produtos específicos
 
 DEFINIÇÃO DOS CAMPOS:
-- identity: descrição concisa de quem é o agente e sua especialidade (obrigatório, 20–500 chars)
-- objective: objetivo principal do agente em uma frase clara (obrigatório, 20–300 chars)
-- communication_style: tom e estilo de comunicação desejado (opcional, 10–300 chars)
-- commercial_rules: regras comerciais estratégicas, ex: não informar preços sem elevar valor (opcional, 10–500 chars)
+- identity: descrição concisa de quem é o agente e sua especialidade (obrigatório, 20–800 chars)
+- objective: objetivo principal do agente em uma frase clara (obrigatório, 20–600 chars)
+- communication_style: tom e estilo de comunicação desejado (opcional, 10–500 chars)
+- commercial_rules: regras comerciais estratégicas, ex: não informar preços sem elevar valor (opcional, 10–800 chars)
 - custom_notes: comportamento estratégico e padrões de condução das conversas (opcional, 10–1500 chars)
 
 FORMATO DE RESPOSTA (único formato aceito — sem nada antes ou depois):

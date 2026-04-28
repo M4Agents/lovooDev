@@ -286,7 +286,11 @@ export const promptBuilderApi = {
     }
   },
 
-  async runSupportAgent(companyId: string, userMessage: string): Promise<string> {
+  async runSupportAgent(
+    companyId:    string,
+    userMessage:  string,
+    extra_context?: string,
+  ): Promise<string> {
     const auth = await getAuthHeader()
     const res  = await fetch('/api/ai/run', {
       method:  'POST',
@@ -295,6 +299,7 @@ export const promptBuilderApi = {
         use_id:     'system:support_assistant:agent_config',
         company_id: companyId,
         userMessage,
+        ...(extra_context ? { extra_context } : {}),
       }),
     })
     const json = await res.json()

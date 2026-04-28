@@ -20,11 +20,33 @@ interface Props {
    */
   asDrawer?: boolean
   onClose?:  () => void
+  /** Ferramentas habilitadas no agente em edição — enriquece o contexto do assistente. */
+  allowedTools?: string[]
+  /** Texto atual do prompt em modo avançado — enriquece o contexto do assistente. */
+  currentPrompt?: string
+}
+
+// ── Monta extra_context para o assistente de suporte ─────────────────────────
+
+function buildExtraContext(allowedTools?: string[], currentPrompt?: string): string | undefined {
+  const parts: string[] = []
+
+  if (allowedTools && allowedTools.length > 0) {
+    parts.push(`[FERRAMENTAS HABILITADAS NO AGENTE]\n${allowedTools.join(', ')}`)
+  }
+
+  if (currentPrompt && currentPrompt.trim().length > 0) {
+    // Trunca para não ultrapassar o limite do backend (3000 chars total para extra_context)
+    const truncated = currentPrompt.trim().slice(0, 2400)
+    parts.push(`[PROMPT ATUAL DO AGENTE]\n${truncated}`)
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : undefined
 }
 
 // ── Lógica compartilhada de chat ───────────────────────────────────────────────
 
-function useChatState(companyId: string) {
+function useChatState(companyId: string, allowedTools?: string[], currentPrompt?: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role:    'assistant',
@@ -34,6 +56,12 @@ function useChatState(companyId: string) {
   const [input, setInput]     = useState('')
   const [loading, setLoading] = useState(false)
   const endRef                = useRef<HTMLDivElement | null>(null)
+
+  // Refs para acessar valores atuais sem re-criar handleSend
+  const allowedToolsRef  = useRef(allowedTools)
+  const currentPromptRef = useRef(currentPrompt)
+  useEffect(() => { allowedToolsRef.current  = allowedTools  }, [allowedTools])
+  useEffect(() => { currentPromptRef.current = currentPrompt }, [currentPrompt])
 
   function scrollToEnd() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -51,7 +79,8 @@ function useChatState(companyId: string) {
     setLoading(true)
 
     try {
-      const reply = await promptBuilderApi.runSupportAgent(companyId, text)
+      const extra = buildExtraContext(allowedToolsRef.current, currentPromptRef.current)
+      const reply = await promptBuilderApi.runSupportAgent(companyId, text, extra)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch {
       setMessages(prev => [
@@ -130,8 +159,8 @@ function ChatPanel({
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
-export function PromptBuilderSupportChat({ companyId, asDrawer = false, onClose }: Props) {
-  const chat = useChatState(companyId)
+export function PromptBuilderSupportChat({ companyId, asDrawer = false, onClose, allowedTools, currentPrompt }: Props) {
+  const chat = useChatState(companyId, allowedTools, currentPrompt)
   // Usado apenas no modo standalone; ignorado no modo drawer
   const [open, setOpen] = useState(false)
 

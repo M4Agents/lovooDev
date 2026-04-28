@@ -15,7 +15,7 @@
  *   - Step 4 (preview 2 colunas): max-w-6xl
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { HelpCircle, Sparkles, Check, X } from 'lucide-react'
 import { PromptBuilderStepper } from './PromptBuilderStepper'
@@ -46,6 +46,16 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
   const [showConfirm, setShowConfirm] = useState(false)
   const [visible, setVisible]         = useState(false)
   const [isSupportOpen, setSupport]   = useState(false)
+
+  // Contexto do agente em edição — repassado ao drawer de suporte para enriquecer respostas
+  const [agentContext, setAgentContext] = useState<{ allowedTools: string[]; currentPrompt: string }>({
+    allowedTools:  agent?.allowed_tools ?? [],
+    currentPrompt: '',
+  })
+  const handleContextChange = useCallback(
+    (ctx: { allowedTools: string[]; currentPrompt: string }) => setAgentContext(ctx),
+    [],
+  )
 
   // Estado do sandbox
   const [sandboxOpen, setSandboxOpen]           = useState(false)
@@ -266,6 +276,7 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
               onStepChange={setStep}
               onTest={handleTest}
               initialAgent={agent}
+              onContextChange={handleContextChange}
             />
           </div>
 
@@ -291,6 +302,8 @@ export function AgentCreationModal({ isOpen, onClose, companyId, onSaved, onAdva
                 companyId={companyId}
                 asDrawer
                 onClose={() => setSupport(false)}
+                allowedTools={agentContext.allowedTools}
+                currentPrompt={agentContext.currentPrompt}
               />
             </div>
           )}

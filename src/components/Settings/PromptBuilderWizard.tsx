@@ -92,6 +92,11 @@ interface Props {
    * e usa update() em vez de create() ao salvar.
    */
   initialAgent?: CompanyAgent
+  /**
+   * Notifica o pai quando o contexto relevante do agente muda (tools ou prompt).
+   * Usado pelo AgentCreationModal para repassar ao drawer de suporte.
+   */
+  onContextChange?: (ctx: { allowedTools: string[]; currentPrompt: string }) => void
 }
 
 const AVAILABLE_MODELS = [
@@ -300,7 +305,7 @@ function extractAssistantName(identity: string): string {
   return match ? match[1].trim() : ''
 }
 
-export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, insideModal, onStepChange, onTest, initialAgent }: Props) {
+export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, insideModal, onStepChange, onTest, initialAgent, onContextChange }: Props) {
   const { company }                     = useAuth()
   const isEditMode                      = Boolean(initialAgent)
 
@@ -313,6 +318,10 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
 
   // Notifica o modal pai sempre que o step muda
   useEffect(() => { onStepChangeRef.current?.(step) }, [step])
+
+  // Referência estável para onContextChange
+  const onContextChangeRef = useRef(onContextChange)
+  useEffect(() => { onContextChangeRef.current = onContextChange }, [onContextChange])
 
   // Etapa 1 — nome interno (pré-preenchido em modo edição)
   const [agentName, setAgentName]       = useState(initialAgent?.name ?? '')
@@ -384,6 +393,11 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     }
     return ''
   })
+
+  // Notifica o pai (AgentCreationModal) sempre que tools ou prompt mudam
+  useEffect(() => {
+    onContextChangeRef.current?.({ allowedTools, currentPrompt: advancedText })
+  }, [allowedTools, advancedText])
 
   // Estados globais
   const [generating, setGenerating]     = useState(false)
@@ -754,7 +768,11 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
 
       {/* Chat de suporte (visível a partir da etapa 3) */}
       {step >= 3 && step <= 4 && (
-        <PromptBuilderSupportChat companyId={companyId} />
+        <PromptBuilderSupportChat
+          companyId={companyId}
+          allowedTools={allowedTools}
+          currentPrompt={advancedText}
+        />
       )}
     </div>
   )
