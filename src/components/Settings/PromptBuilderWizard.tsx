@@ -441,6 +441,8 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
       }
 
       setPromptConfig(config)
+      setAdvancedText(buildAdvancedText(config))
+      setAdvancedManualActive(true)
       setStep(4)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Não conseguimos gerar a configuração. Tente novamente.')
@@ -663,7 +665,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           catalogCount={catalogItems.length}
           companyName={companyName}
           agentName={finalAgentName}
-          onBack={advancedManualActive ? undefined : () => { setError(null); setStep(3) }}
+          onBack={isEditMode ? undefined : () => { setError(null); setStep(3) }}
           onSave={() => void handleSave()}
           onTest={onTest ? () => onTest(promptConfig, finalAgentName, companyName) : undefined}
           saving={saving}
