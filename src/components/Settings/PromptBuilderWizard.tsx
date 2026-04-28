@@ -316,6 +316,29 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
   const onStepChangeRef = useRef(onStepChange)
   useEffect(() => { onStepChangeRef.current = onStepChange }, [onStepChange])
 
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '57d61d' },
+      body: JSON.stringify({
+        sessionId: '57d61d', location: 'PromptBuilderWizard.tsx:mount', message: 'wizard mount state',
+        data: {
+          isEditMode,
+          initialStep: isEditMode ? 4 : 0,
+          agentId: initialAgent?.id ?? null,
+          hasPromptConfig: initialAgent?.prompt_config != null,
+          editing_mode: (initialAgent?.model_config as Record<string,unknown> | undefined)?.editing_mode ?? null,
+          promptRawLength: initialAgent?.prompt?.length ?? 0,
+        },
+        timestamp: Date.now(),
+        hypothesisId: 'H1',
+      })
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // #endregion
+
   // Notifica o modal pai sempre que o step muda
   useEffect(() => { onStepChangeRef.current?.(step) }, [step])
 
@@ -699,6 +722,20 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
         />
       )}
 
+      {step === 4 && (() => {
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '57d61d' },
+          body: JSON.stringify({
+            sessionId: '57d61d', location: 'PromptBuilderWizard.tsx:step4-condition', message: 'step 4 render gate',
+            data: { step, promptConfigIsNull: promptConfig === null, advancedManualActive, willRender: promptConfig !== null || advancedManualActive },
+            timestamp: Date.now(), hypothesisId: 'H2',
+          })
+        }).catch(() => {})
+        // #endregion
+        return null
+      })()}
       {step === 4 && (promptConfig !== null || advancedManualActive) && (
         <StepPreview
           config={promptConfig ?? { identity: '', objective: '', communication_style: '', commercial_rules: '', custom_notes: '' } as FlatPromptConfig}
