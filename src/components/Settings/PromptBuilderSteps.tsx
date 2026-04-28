@@ -724,7 +724,7 @@ export function StepPreview({
         <div className="min-w-0">
           {advancedManualActive ? (
             /* Sandbox embutido — usa o config parseado do textarea em tempo quase-real */
-            <div className="border border-violet-200 rounded-xl overflow-hidden shadow-sm h-full min-h-[520px] flex flex-col">
+            <div className="border border-violet-200 rounded-xl overflow-hidden shadow-sm h-[560px] flex flex-col">
               <AgentTestSandbox
                 compact
                 companyId={companyId}
