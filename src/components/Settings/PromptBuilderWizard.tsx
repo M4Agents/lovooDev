@@ -699,9 +699,9 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
         />
       )}
 
-      {step === 4 && promptConfig && (
+      {step === 4 && (promptConfig !== null || advancedManualActive) && (
         <StepPreview
-          config={promptConfig}
+          config={promptConfig ?? { identity: '', objective: '', communication_style: '', commercial_rules: '', custom_notes: '' } as FlatPromptConfig}
           setConfig={setPromptConfig}
           catalogCount={catalogItems.length}
           companyName={companyName}
