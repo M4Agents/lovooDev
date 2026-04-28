@@ -43,7 +43,7 @@ const PROMPT_CONFIG_SCHEMA = {
   identity:            { required: true,  minLength: 20, maxLength: 500 },
   objective:           { required: true,  minLength: 20, maxLength: 300 },
   communication_style: { required: false, minLength: 10, maxLength: 300 },
-  commercial_rules:    { required: false, minLength: 10, maxLength: 500 },
+  commercial_rules:    { required: false, minLength: 10, maxLength: 800 },
   custom_notes:        { required: false, minLength: 10, maxLength: 1500 },
 };
 

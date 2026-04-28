@@ -486,12 +486,12 @@ export function StepUserAnswers({
 
 // ── Etapa 4 — Preview premium com 2 colunas ───────────────────────────────────
 
-const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: number; required?: boolean }[] = [
-  { field: 'identity',            label: 'Identidade do agente',  rows: 3, required: true },
-  { field: 'objective',           label: 'Objetivo principal',    rows: 3, required: true },
-  { field: 'communication_style', label: 'Estilo de comunicação', rows: 2 },
-  { field: 'commercial_rules',    label: 'Regras de atendimento', rows: 2 },
-  { field: 'custom_notes',        label: 'Informações adicionais', rows: 2 },
+const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: number; required?: boolean; maxLength?: number }[] = [
+  { field: 'identity',            label: 'Identidade do agente',   rows: 3, required: true, maxLength: 500  },
+  { field: 'objective',           label: 'Objetivo principal',     rows: 3, required: true, maxLength: 300  },
+  { field: 'communication_style', label: 'Estilo de comunicação',  rows: 2,                 maxLength: 300  },
+  { field: 'commercial_rules',    label: 'Regras de atendimento',  rows: 2,                 maxLength: 800  },
+  { field: 'custom_notes',        label: 'Informações adicionais', rows: 2,                 maxLength: 1500 },
 ]
 
 export function StepPreview({
@@ -677,27 +677,45 @@ export function StepPreview({
           ) : (
             /* Modo normal: 5 campos separados */
             <>
-              {PREVIEW_BLOCKS.map(({ field, label, rows, required }) => (
-                <div key={field}>
-                  <label className="flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                    {label}
-                    {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
-                  </label>
-                  <textarea
-                    value={config[field] ?? ''}
-                    onChange={e => update(field, e.target.value)}
-                    disabled={saving}
-                    rows={rows}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
-                                focus:outline-none focus:ring-2 focus:ring-blue-400
-                                disabled:opacity-50 disabled:bg-gray-50 ${
-                      required && !config[field]?.trim()
-                        ? 'border-red-200 bg-red-50 focus:ring-red-300'
-                        : 'border-gray-200'
-                    }`}
-                  />
-                </div>
-              ))}
+              {PREVIEW_BLOCKS.map(({ field, label, rows, required, maxLength }) => {
+                const currentLen = (config[field] ?? '').length
+                const overLimit  = maxLength != null && currentLen > maxLength
+                return (
+                  <div key={field}>
+                    <label className="flex items-center justify-between gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                      <span className="flex items-center gap-1">
+                        {label}
+                        {required && <span className="text-red-400 font-normal normal-case tracking-normal">obrigatório</span>}
+                      </span>
+                      {maxLength != null && (
+                        <span className={`font-normal normal-case tracking-normal tabular-nums ${overLimit ? 'text-red-500' : 'text-gray-400'}`}>
+                          {currentLen}/{maxLength}
+                        </span>
+                      )}
+                    </label>
+                    <textarea
+                      value={config[field] ?? ''}
+                      onChange={e => update(field, e.target.value)}
+                      disabled={saving}
+                      rows={rows}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm resize-y leading-relaxed
+                                  focus:outline-none focus:ring-2
+                                  disabled:opacity-50 disabled:bg-gray-50 ${
+                        overLimit
+                          ? 'border-red-300 bg-red-50 focus:ring-red-300'
+                          : required && !config[field]?.trim()
+                            ? 'border-red-200 bg-red-50 focus:ring-red-300'
+                            : 'border-gray-200 focus:ring-blue-400'
+                      }`}
+                    />
+                    {overLimit && (
+                      <p className="mt-1 text-xs text-red-500">
+                        Reduza em {currentLen - maxLength} caractere{currentLen - maxLength !== 1 ? 's' : ''} para salvar.
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
             </>
           )}
         </div>

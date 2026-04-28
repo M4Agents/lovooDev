@@ -430,7 +430,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
       // operacionais específicos que possam ter chegado via objection_responses.
       const assemblerSpc = conversationAnalysis?.suggested_prompt_config
       if (assemblerSpc) {
-        const cleanRules = validateAssemblerField(assemblerSpc.commercial_rules, 10, 500)
+        const cleanRules = validateAssemblerField(assemblerSpc.commercial_rules, 10, 800)
         if (cleanRules) {
           config.commercial_rules = sanitizeAssemblerField(cleanRules)
         }
