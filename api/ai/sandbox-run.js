@@ -437,6 +437,15 @@ export default async function handler(req, res) {
   }
 
   const configValidation = validateSandboxConfig(prompt_config);
+  // #region agent log
+  console.log('[DEBUG:sandbox-run] config_validation', {
+    ok:             configValidation.ok,
+    reason:         configValidation.reason ?? null,
+    identity_len:   typeof prompt_config?.identity  === 'string' ? prompt_config.identity.trim().length  : null,
+    objective_len:  typeof prompt_config?.objective === 'string' ? prompt_config.objective.trim().length : null,
+    company_id,
+  });
+  // #endregion
   if (!configValidation.ok) {
     return res.status(400).json({ success: false, error: `prompt_config inválido: ${configValidation.reason}` });
   }

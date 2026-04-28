@@ -154,6 +154,9 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ success: false, error: auth.error });
   }
 
+  // #region agent log
+  console.log('[DEBUG:create-agent] auth_resolved', { role: auth.role, callerId: auth.callerId, callerCompanyId: auth.callerCompanyId, company_id_from_body: company_id });
+  // #endregion
   if (!WRITE_ROLES.includes(auth.role)) {
     return res.status(403).json({
       success: false,
@@ -169,12 +172,20 @@ export default async function handler(req, res) {
   try {
     const limits = await getPlanLimits(supabaseAdmin, auth.callerCompanyId);
 
+    // #region agent log
+    console.log('[DEBUG:create-agent] plan_limits', { plan_id: limits.plan_id, plan_slug: limits.plan_slug, has_plan: limits.has_plan, features: limits.features, multiple_agents_enabled: limits.features?.multiple_agents_enabled });
+    // #endregion
+
     if (!checkFeature(limits.features, 'multiple_agents_enabled')) {
       const { count, error: countErr } = await supabaseAdmin
         .from('lovoo_agents')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', auth.callerCompanyId)
         .eq('is_active', true);
+
+      // #region agent log
+      console.log('[DEBUG:create-agent] agent_count_check', { count, countErr: countErr?.message ?? null, would_block: !countErr && count >= 1 });
+      // #endregion
 
       if (!countErr && count >= 1) {
         return res.status(403).json({
@@ -209,6 +220,16 @@ export default async function handler(req, res) {
       // Formato plano — valida com promptTemplate.js e gera snapshot sem companyData
       // (companyData é injetado dinamicamente no runtime pelo agentExecutor)
       const flatValidation = validateFlatConfig(prompt_config);
+      // #region agent log
+      console.log('[DEBUG:create-agent] flat_validation', {
+        valid:            flatValidation.valid,
+        errors:           flatValidation.errors ?? null,
+        identity_len:     typeof prompt_config.identity  === 'string' ? prompt_config.identity.trim().length  : null,
+        objective_len:    typeof prompt_config.objective === 'string' ? prompt_config.objective.trim().length : null,
+        comm_style_len:   typeof prompt_config.communication_style === 'string' ? prompt_config.communication_style.trim().length : null,
+        has_version:      prompt_config.version !== undefined,
+      });
+      // #endregion
       if (!flatValidation.valid) {
         return res.status(422).json({
           success: false,
