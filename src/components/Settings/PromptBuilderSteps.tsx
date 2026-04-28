@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useDeferredValue, useRef, useState } from 'react'
 import { AgentTestSandbox } from './AgentTestSandbox'
 import { LovooAgentDocuments } from './LovooAgentDocuments'
+import { PromptVariablePicker } from './PromptVariablePicker'
 import {
   ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
   Eye, FileText, Loader2, Package, Phone, Globe, Sparkles,
@@ -658,15 +659,15 @@ export function StepPreview({
           )}
 
           {advancedManualActive ? (
-            /* Modo avançado: textarea único com marcadores de seção */
-            <div className="space-y-2">
+            /* Modo avançado: textarea com autocomplete de variáveis */
+            <div className="space-y-1">
               <p className="text-xs text-gray-400 leading-relaxed">
                 Mantenha os marcadores <code className="bg-gray-100 px-1 rounded">[IDENTIDADE]</code>,{' '}
                 <code className="bg-gray-100 px-1 rounded">[OBJETIVO]</code> etc. para preservar a estrutura do agente.
               </p>
-              <textarea
+              <PromptVariablePicker
                 value={advancedText}
-                onChange={e => setAdvancedText(e.target.value)}
+                onChange={setAdvancedText}
                 disabled={saving}
                 rows={22}
                 className="w-full border border-blue-200 rounded-lg px-3 py-3 text-sm resize-y
