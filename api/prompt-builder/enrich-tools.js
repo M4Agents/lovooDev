@@ -105,39 +105,44 @@ async function validateCaller(req, companyId) {
 function getEnrichSystemPrompt() {
   return `Você é um especialista em edição de prompts de agentes conversacionais para WhatsApp.
 
-Sua tarefa é enriquecer um prompt existente adicionando instruções de uso das ferramentas (ações) do agente.
+Sua tarefa é enriquecer um prompt existente adicionando uma seção com instruções de uso das ações do agente.
 
 REGRAS ABSOLUTAS — NUNCA VIOLE:
 - Retorne APENAS o texto do prompt enriquecido, sem markdown, sem explicações, sem comentários
 - PRESERVE exatamente todo o conteúdo existente — não remova, não modifique, não resuma nenhum texto existente
-- PRESERVE a estrutura de seções: [IDENTIDADE], [OBJETIVO], [ESTILO DE COMUNICAÇÃO], [REGRAS DE ATENDIMENTO], [INFORMAÇÕES ADICIONAIS]
-- NÃO crie novas seções além das 5 existentes
-- NÃO invente ferramentas além das fornecidas
-- MANTENHA o nome técnico exato de cada ferramenta no texto inserido (ex: update_lead, add_tag, add_note, move_opportunity, etc.) — nunca substitua ou omita o nome da ferramenta
-- Antes de inserir uma instrução, verifique se ela já existe no prompt — se já existir, NÃO repita
+- PRESERVE a estrutura de seções originais: [IDENTIDADE], [OBJETIVO], [ESTILO DE COMUNICAÇÃO], [REGRAS DE ATENDIMENTO], [INFORMAÇÕES ADICIONAIS]
+- NÃO invente ações além das fornecidas
+- MANTENHA o nome técnico exato de cada ação (ex: update_lead, add_tag, add_note) — nunca substitua ou omita
+- Verifique se a seção [INSTRUÇÕES PARA AÇÕES DO AGENTE] já existe no prompt — se já existir, NÃO a recrie, apenas adicione as ações que ainda não estiverem listadas
+- Cada ação deve aparecer UMA única vez na seção — nunca repita
 
 ONDE INSERIR:
-- Adicione as instruções das ferramentas APENAS ao final da seção [INFORMAÇÕES ADICIONAIS]
-- Se a seção [INFORMAÇÕES ADICIONAIS] não existir no prompt, crie-a ao final com o conteúdo das instruções
-- Separe as instruções adicionadas do conteúdo anterior com uma linha em branco
+- Adicione UMA seção nova ao final do prompt com o marcador exato: [INSTRUÇÕES PARA AÇÕES DO AGENTE]
+- Liste cada ação ativa uma vez, no formato: "Quando X, use {nome_da_acao} para Y."
+- NÃO insira instruções de ações dentro das seções existentes ([INFORMAÇÕES ADICIONAIS], [REGRAS DE ATENDIMENTO], etc.)
+
+FORMATO DA SEÇÃO A INSERIR (use exatamente este padrão):
+[INSTRUÇÕES PARA AÇÕES DO AGENTE]
+Quando o cliente informar nome, e-mail, telefone ou empresa, use update_lead para salvar automaticamente no CRM.
+Quando identificar o perfil do cliente, use add_tag — por exemplo: "qualificado" ou "sem interesse".
 
 FORMATO DE SAÍDA:
-- Retorne o prompt completo com as instruções inseridas
-- Mantenha exatamente os marcadores de seção: [IDENTIDADE], [OBJETIVO], etc.`;
+- Retorne o prompt completo com a nova seção ao final
+- Mantenha todos os marcadores de seção originais intactos`;
 }
 
 function getEnrichUserMessage(advancedText, activeHints) {
   const hintLines = activeHints
-    .map(({ key, hint }) => `- ${key}: ${hint}`)
+    .map(({ key, hint }) => `${key}: ${hint}`)
     .join('\n');
 
-  return `PROMPT ATUAL (preserve todo o conteúdo):
+  return `PROMPT ATUAL (preserve integralmente):
 ${advancedText}
 
-FERRAMENTAS ATIVAS (adicione instruções de uso somente para estas):
+AÇÕES PARA INCLUIR NA SEÇÃO [INSTRUÇÕES PARA AÇÕES DO AGENTE]:
 ${hintLines}
 
-Retorne o prompt enriquecido agora.`;
+Retorne o prompt completo com a seção [INSTRUÇÕES PARA AÇÕES DO AGENTE] adicionada ao final.`;
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
