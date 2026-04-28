@@ -501,7 +501,11 @@ function AgentCard({ agent, companyId, customFieldVariables, onUpdated, onDelete
 
   const isStructured = agent.prompt_config !== null
   // Agentes com formato flat (criados pelo novo wizard) têm identity mas não sections
+  // Agente gerenciado pelo wizard: ou tem prompt_config no formato flat,
+  // ou foi salvo em modo avançado (editing_mode = 'advanced_manual'), que limpa o prompt_config.
   const isFlatAgent = (
+    (agent.model_config as Record<string, unknown> | null)?.editing_mode === 'advanced_manual'
+  ) || (
     agent.prompt_config !== null &&
     typeof agent.prompt_config === 'object' &&
     'identity' in (agent.prompt_config as object) &&
