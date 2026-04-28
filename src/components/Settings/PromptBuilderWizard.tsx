@@ -355,6 +355,12 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     initialAgent?.knowledge_base ?? ''
   )
 
+  // Ferramentas habilitadas para este agente (function calling OpenAI).
+  // Inicializa com o valor existente em modo edição; vazio em modo criação.
+  const [allowedTools, setAllowedTools] = useState<string[]>(
+    initialAgent?.allowed_tools ?? []
+  )
+
   // Documentos RAG — presença de documentos ativos (status ready | processing).
   // Atualizado pelo AgentDocumentsSection via callback onHasActiveDocsChange.
   // Usado apenas para derivar knowledge_mode no save.
@@ -497,6 +503,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           prompt_version: (initialAgent.prompt_version ?? 0) + 1,
           knowledge_base: kbPayload ?? '',   // string vazia → backend trata como null
           knowledge_mode: kbModePayload,
+          allowed_tools:  allowedTools,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.update(payload)
@@ -509,6 +516,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           prompt_config:  effectiveConfig,
           knowledge_base: kbPayload,
           knowledge_mode: kbModePayload,
+          allowed_tools:  allowedTools,
           model_config:   Object.keys(modelConfigPayload).length > 0 ? modelConfigPayload : undefined,
         }
         saved = await companyOwnAgentsApi.create(payload)
@@ -680,6 +688,8 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           setKnowledgeBase={setKnowledgeBase}
           hasActiveDocs={hasActiveDocs}
           onHasActiveDocsChange={setHasActiveDocs}
+          allowedTools={allowedTools}
+          setAllowedTools={setAllowedTools}
         />
       )}
 

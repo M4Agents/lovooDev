@@ -12,6 +12,7 @@ import { useCallback, useEffect, useDeferredValue, useRef, useState } from 'reac
 import { AgentTestSandbox } from './AgentTestSandbox'
 import { LovooAgentDocuments } from './LovooAgentDocuments'
 import { PromptVariablePicker } from './PromptVariablePicker'
+import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import {
   ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
   Eye, FileText, Loader2, Package, Phone, Globe, Sparkles,
@@ -504,6 +505,7 @@ export function StepPreview({
   companyId, agentId,
   knowledgeBase, setKnowledgeBase,
   hasActiveDocs, onHasActiveDocsChange,
+  allowedTools, setAllowedTools,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
@@ -530,6 +532,9 @@ export function StepPreview({
   /** Documentos RAG — presença de docs ativos (ready | processing) */
   hasActiveDocs:          boolean
   onHasActiveDocsChange:  (v: boolean) => void
+  /** Ferramentas habilitadas para function calling */
+  allowedTools:    string[]
+  setAllowedTools: (tools: string[]) => void
 }) {
   // Preview do modo normal — atualiza com prioridade menor
   const deferredConfig       = useDeferredValue(config)
@@ -829,6 +834,13 @@ export function StepPreview({
         onHasActiveDocsChange={onHasActiveDocsChange}
       />
 
+      {/* ── Ações do agente (ferramentas) ───────────────────────────────────── */}
+      <AgentToolsSection
+        allowedTools={allowedTools}
+        setAllowedTools={setAllowedTools}
+        saving={saving}
+      />
+
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700">
           {error}
@@ -989,6 +1001,57 @@ function AgentDocumentsSection({
               </div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AgentToolsSection ─────────────────────────────────────────────────────────
+//
+// Seção colapsável de ferramentas (function calling) dentro do Step 4.
+// Padrão visual igual à KB section e Documentos — header toggle + conteúdo.
+
+function AgentToolsSection({
+  allowedTools, setAllowedTools, saving,
+}: {
+  allowedTools:    string[]
+  setAllowedTools: (tools: string[]) => void
+  saving:          boolean
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100
+                   transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-base leading-none">⚡</span>
+          <span className="text-sm font-semibold text-gray-700">Ações do agente</span>
+          <span className="text-xs text-gray-400 font-normal">(ferramentas)</span>
+          {allowedTools.length > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700
+                             text-xs rounded-full font-medium ml-1">
+              {allowedTools.length} {allowedTools.length === 1 ? 'ação' : 'ações'}
+            </span>
+          )}
+        </div>
+        <span className="text-gray-400 text-xs ml-2 flex-shrink-0">
+          {open ? '▲ Fechar' : '▼ Abrir'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-4 py-4">
+          <AgentToolsSelector
+            selectedTools={allowedTools}
+            onChange={setAllowedTools}
+            disabled={saving}
+          />
         </div>
       )}
     </div>
