@@ -27,11 +27,12 @@ import type { FlatPromptConfig } from '../../services/promptBuilderApi'
 // ── Helpers exportados para o modo de edição avançada ─────────────────────────
 
 const ADVANCED_SECTIONS: { key: string; field: keyof FlatPromptConfig }[] = [
-  { key: 'IDENTIDADE',             field: 'identity'            },
-  { key: 'OBJETIVO',               field: 'objective'           },
-  { key: 'ESTILO DE COMUNICAÇÃO',  field: 'communication_style' },
-  { key: 'REGRAS DE ATENDIMENTO',  field: 'commercial_rules'    },
-  { key: 'INFORMAÇÕES ADICIONAIS', field: 'custom_notes'        },
+  { key: 'IDENTIDADE',                       field: 'identity'            },
+  { key: 'OBJETIVO',                         field: 'objective'           },
+  { key: 'ESTILO DE COMUNICAÇÃO',            field: 'communication_style' },
+  { key: 'REGRAS DE ATENDIMENTO',            field: 'commercial_rules'    },
+  { key: 'INFORMAÇÕES ADICIONAIS',           field: 'custom_notes'        },
+  { key: 'INSTRUÇÕES PARA AÇÕES DO AGENTE', field: 'tool_instructions'   },
 ]
 
 /** Monta os 5 campos do prompt_config em um único texto editável com marcadores de seção. */
@@ -48,11 +49,12 @@ export function buildAdvancedText(config: FlatPromptConfig): string {
 export function parseAdvancedText(text: string): FlatPromptConfig {
   const config: FlatPromptConfig = { identity: '', objective: '', communication_style: '', commercial_rules: '', custom_notes: '' }
   const sectionMap: Record<string, keyof FlatPromptConfig> = {
-    'IDENTIDADE':             'identity',
-    'OBJETIVO':               'objective',
-    'ESTILO DE COMUNICAÇÃO':  'communication_style',
-    'REGRAS DE ATENDIMENTO':  'commercial_rules',
-    'INFORMAÇÕES ADICIONAIS': 'custom_notes',
+    'IDENTIDADE':                       'identity',
+    'OBJETIVO':                         'objective',
+    'ESTILO DE COMUNICAÇÃO':            'communication_style',
+    'REGRAS DE ATENDIMENTO':            'commercial_rules',
+    'INFORMAÇÕES ADICIONAIS':           'custom_notes',
+    'INSTRUÇÕES PARA AÇÕES DO AGENTE': 'tool_instructions',
   }
   const parts = text.split(/\[([^\]]+)\]/)
   for (let i = 1; i < parts.length; i += 2) {
@@ -92,6 +94,7 @@ const PREVIEW_SECTIONS: { field: keyof FlatPromptConfig; icon: string; title: st
   { field: 'communication_style', icon: '💬', title: 'Comunicação' },
   { field: 'commercial_rules',    icon: '📋', title: 'Regras' },
   { field: 'custom_notes',        icon: '📝', title: 'Informações' },
+  { field: 'tool_instructions',   icon: '⚡', title: 'Ações do Agente' },
 ]
 
 function PromptLivePreview({

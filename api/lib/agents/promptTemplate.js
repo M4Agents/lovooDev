@@ -40,11 +40,12 @@
 // ── Schema dos campos do prompt_config ───────────────────────────────────────
 
 const PROMPT_CONFIG_SCHEMA = {
-  identity:            { required: true,  minLength: 20, maxLength: 800  },
-  objective:           { required: true,  minLength: 20, maxLength: 600  },
-  communication_style: { required: false, minLength: 10, maxLength: 500  },
-  commercial_rules:    { required: false, minLength: 10, maxLength: 800  },
-  custom_notes:        { required: false, minLength: 10, maxLength: 1500 },
+  identity:             { required: true,  minLength: 20, maxLength: 800  },
+  objective:            { required: true,  minLength: 20, maxLength: 600  },
+  communication_style:  { required: false, minLength: 10, maxLength: 500  },
+  commercial_rules:     { required: false, minLength: 10, maxLength: 800  },
+  custom_notes:         { required: false, minLength: 10, maxLength: 1500 },
+  tool_instructions:    { required: false, minLength: 10, maxLength: 3000 },
 };
 
 const KNOWN_FIELDS = Object.keys(PROMPT_CONFIG_SCHEMA);
@@ -336,6 +337,10 @@ export function buildPromptFromConfig(config, companyData = null) {
     parts.push(`\nContexto adicional sobre o negócio: ${norm.custom_notes}`);
   }
 
+  if (norm.tool_instructions?.trim()) {
+    parts.push(`\n\n[INSTRUÇÕES PARA AÇÕES DO AGENTE]\n${norm.tool_instructions}`);
+  }
+
   // ── Seção B: Dados da empresa (fonte de verdade — runtime, nunca salvo) ──
   //
   // Usa exclusivamente colunas diretas da tabela companies.
@@ -411,6 +416,7 @@ export function buildPromptFromConfig(config, companyData = null) {
     has_communication_style:  Boolean(norm.communication_style?.trim()),
     has_commercial_rules:     Boolean(norm.commercial_rules?.trim()),
     has_custom_notes:         Boolean(norm.custom_notes?.trim()),
+    has_tool_instructions:    Boolean(norm.tool_instructions?.trim()),
     has_company_section:      companyData ? true : false,
   });
 

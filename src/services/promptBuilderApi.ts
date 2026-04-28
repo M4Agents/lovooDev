@@ -9,11 +9,12 @@ import { supabase } from '../lib/supabase'
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
 export interface FlatPromptConfig {
-  identity:             string
-  objective:            string
-  communication_style?: string
-  commercial_rules?:    string
-  custom_notes?:        string
+  identity:              string
+  objective:             string
+  communication_style?:  string
+  commercial_rules?:     string
+  custom_notes?:         string
+  tool_instructions?:    string
 }
 
 export interface GeneratePromptPayload {
@@ -133,6 +134,9 @@ export function assemblePromptFromConfig(config: FlatPromptConfig): string {
   }
   if (config.custom_notes?.trim()) {
     parts.push(`## Contexto adicional\n\n${config.custom_notes}`)
+  }
+  if (config.tool_instructions?.trim()) {
+    parts.push(`[INSTRUÇÕES PARA AÇÕES DO AGENTE]\n\n${config.tool_instructions}`)
   }
 
   return parts.join('\n\n---\n\n').trim()
