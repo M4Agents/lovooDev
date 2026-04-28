@@ -497,11 +497,11 @@ export function StepUserAnswers({
 // ── Etapa 4 — Preview premium com 2 colunas ───────────────────────────────────
 
 const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: number; required?: boolean; maxLength?: number }[] = [
-  { field: 'identity',            label: 'Identidade do agente',   rows: 3, required: true, maxLength: 800  },
-  { field: 'objective',           label: 'Objetivo principal',     rows: 3, required: true, maxLength: 600  },
-  { field: 'communication_style', label: 'Estilo de comunicação',  rows: 2,                 maxLength: 500  },
-  { field: 'commercial_rules',    label: 'Regras de atendimento',  rows: 2,                 maxLength: 800  },
-  { field: 'custom_notes',        label: 'Informações adicionais', rows: 2,                 maxLength: 1500 },
+  { field: 'identity',            label: 'Identidade do agente',   rows: 3, required: true, maxLength: 2000 },
+  { field: 'objective',           label: 'Objetivo principal',     rows: 3, required: true, maxLength: 1500 },
+  { field: 'communication_style', label: 'Estilo de comunicação',  rows: 2,                 maxLength: 2000 },
+  { field: 'commercial_rules',    label: 'Regras de atendimento',  rows: 2,                 maxLength: 2000 },
+  { field: 'custom_notes',        label: 'Informações adicionais', rows: 2,                 maxLength: 3000 },
 ]
 
 // ── ToolReferencePanel ────────────────────────────────────────────────────────

@@ -40,11 +40,11 @@
 // ── Schema dos campos do prompt_config ───────────────────────────────────────
 
 const PROMPT_CONFIG_SCHEMA = {
-  identity:             { required: true,  minLength: 20, maxLength: 800  },
-  objective:            { required: true,  minLength: 20, maxLength: 600  },
-  communication_style:  { required: false, minLength: 10, maxLength: 500  },
-  commercial_rules:     { required: false, minLength: 10, maxLength: 800  },
-  custom_notes:         { required: false, minLength: 10, maxLength: 1500 },
+  identity:             { required: true,  minLength: 20, maxLength: 2000 },
+  objective:            { required: true,  minLength: 20, maxLength: 1500 },
+  communication_style:  { required: false, minLength: 10, maxLength: 2000 },
+  commercial_rules:     { required: false, minLength: 10, maxLength: 2000 },
+  custom_notes:         { required: false, minLength: 10, maxLength: 3000 },
   tool_instructions:    { required: false, minLength: 10, maxLength: 3000 },
 };
 
