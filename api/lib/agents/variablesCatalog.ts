@@ -73,12 +73,14 @@ export const PROMPT_VARIABLES: PromptVariable[] = [
   // ── Produto em Foco ───────────────────────────────────────────────────────
   // Preenchidas automaticamente quando o backend identifica um produto/serviço
   // de interesse na mensagem do lead. Vazias quando não há match.
-  { group: 'Produto em Foco', variable: '{{produto_nome}}',      description: 'Nome do produto/serviço identificado',    example: 'Curso de Elétrica',  conditional: true },
-  { group: 'Produto em Foco', variable: '{{produto_preco}}',     description: 'Preço formatado (respeita política)',      example: 'R$ 1.200,00',       conditional: true },
-  { group: 'Produto em Foco', variable: '{{produto_descricao}}', description: 'Descrição do produto/serviço',            example: 'Curso técnico...',   conditional: true },
-  { group: 'Produto em Foco', variable: '{{produto_categoria}}', description: 'Categoria do produto/serviço',            example: 'Cursos Técnicos',    conditional: true },
-  { group: 'Produto em Foco', variable: '{{produto_status}}',    description: 'Disponibilidade (disponível/sob consulta)', example: 'disponível',       conditional: true },
-  { group: 'Produto em Foco', variable: '{{produto_estoque}}',   description: 'Status de estoque (em estoque/sem estoque)', example: 'em estoque',      conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_nome}}',                    description: 'Nome do produto/serviço identificado',             example: 'Curso de Elétrica',  conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_preco}}',                   description: 'Preço formatado (respeita política)',               example: 'R$ 1.200,00',       conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_descricao}}',               description: 'Descrição do produto/serviço',                     example: 'Curso técnico...',   conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_categoria}}',               description: 'Categoria do produto/serviço',                     example: 'Cursos Técnicos',    conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_status}}',                  description: 'Disponibilidade (disponível/sob consulta)',         example: 'disponível',        conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_estoque}}',                 description: 'Status de estoque (em estoque/sem estoque)',        example: 'em estoque',        conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_ai_notes}}',                description: 'Notas internas do agente sobre o produto/serviço', example: 'Destacar NR10...',  conditional: true },
+  { group: 'Produto em Foco', variable: '{{produto_orientacao_indisponivel}}', description: 'Orientação do agente quando item indisponível',     example: 'Sempre disponível', conditional: true },
 ]
 
 export const PROMPT_VARIABLE_GROUPS = ['Runtime', 'Empresa', 'Lead', 'Oportunidade', 'Produto em Foco'] as const

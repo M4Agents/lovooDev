@@ -267,12 +267,14 @@ const STOCK_LABELS_VARS = {
  */
 export function buildProductVariables(item) {
   const empty = {
-    produto_nome:      '',
-    produto_preco:     '',
-    produto_descricao: '',
-    produto_categoria: '',
-    produto_status:    '',
-    produto_estoque:   '',
+    produto_nome:                   '',
+    produto_preco:                  '',
+    produto_descricao:              '',
+    produto_categoria:              '',
+    produto_status:                 '',
+    produto_estoque:                '',
+    produto_ai_notes:               '',
+    produto_orientacao_indisponivel: '',
   };
 
   if (!item) return empty;
@@ -289,12 +291,14 @@ export function buildProductVariables(item) {
   }
 
   return {
-    produto_nome:      item.name ?? '',
-    produto_preco:     preco,
-    produto_descricao: item.description ?? '',
-    produto_categoria: item.catalog_categories?.name ?? '',
-    produto_status:    AVAILABILITY_LABELS_VARS[item.availability_status] ?? item.availability_status ?? '',
-    produto_estoque:   STOCK_LABELS_VARS[item.stock_status] ?? '',
+    produto_nome:                   item.name ?? '',
+    produto_preco:                  preco,
+    produto_descricao:              item.description ?? '',
+    produto_categoria:              item.catalog_categories?.name ?? '',
+    produto_status:                 AVAILABILITY_LABELS_VARS[item.availability_status] ?? item.availability_status ?? '',
+    produto_estoque:                STOCK_LABELS_VARS[item.stock_status] ?? '',
+    produto_ai_notes:               item.ai_notes ?? '',
+    produto_orientacao_indisponivel: item.ai_unavailable_guidance ?? '',
   };
 }
 
@@ -377,4 +381,13 @@ export const POLICY_VARIABLES_CATALOG = [
   { group: 'Oportunidade', variable: '{{oportunidade_status}}',        description: 'Status (Aberta/Ganha/Perdida)',     example: 'Aberta' },
   { group: 'Oportunidade', variable: '{{oportunidade_probabilidade}}', description: 'Probabilidade de fechamento',       example: '75%' },
   { group: 'Oportunidade', variable: '{{oportunidade_previsao}}',      description: 'Previsão de fechamento',           example: '30/05/2026' },
+  // Produto em Foco
+  { group: 'Produto em Foco', variable: '{{produto_nome}}',                    description: 'Nome do produto/serviço identificado',             example: 'Curso de Elétrica' },
+  { group: 'Produto em Foco', variable: '{{produto_preco}}',                   description: 'Preço formatado (respeita política)',               example: 'R$ 1.200,00' },
+  { group: 'Produto em Foco', variable: '{{produto_descricao}}',               description: 'Descrição do produto/serviço',                     example: 'Curso técnico...' },
+  { group: 'Produto em Foco', variable: '{{produto_categoria}}',               description: 'Categoria do produto/serviço',                     example: 'Cursos Técnicos' },
+  { group: 'Produto em Foco', variable: '{{produto_status}}',                  description: 'Disponibilidade (disponível/sob consulta)',         example: 'disponível' },
+  { group: 'Produto em Foco', variable: '{{produto_estoque}}',                 description: 'Status de estoque (em estoque/sem estoque)',        example: 'em estoque' },
+  { group: 'Produto em Foco', variable: '{{produto_ai_notes}}',                description: 'Notas internas do agente sobre o produto/serviço', example: 'Destacar NR10...' },
+  { group: 'Produto em Foco', variable: '{{produto_orientacao_indisponivel}}', description: 'Orientação do agente quando item indisponível',     example: 'Sempre disponível' },
 ];

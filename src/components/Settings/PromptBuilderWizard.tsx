@@ -514,7 +514,7 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           name:           agentName.trim() || initialAgent.name,
           model,
           prompt_config:  effectiveConfig,
-          prompt_version: (initialAgent.prompt_version ?? 0) + 1,
+          prompt_version: initialAgent.prompt_version ?? 0,
           knowledge_base: kbPayload ?? '',   // string vazia → backend trata como null
           knowledge_mode: kbModePayload,
           allowed_tools:  allowedTools,
