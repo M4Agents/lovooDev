@@ -535,6 +535,11 @@ export async function executeForSandbox({
 
   // ── 5. Montar agente sintético ──────────────────────────────────────────────
 
+  // safeAgentName declarado no escopo externo pois é reutilizado em syntheticAgent.name
+  const safeAgentName = typeof agent_name === 'string'
+    ? agent_name.replace(/<[^>]*>/g, '').trim().slice(0, MAX_AGENT_NAME_LEN)
+    : '';
+
   let agentPrompt;
 
   if (raw_prompt) {
@@ -543,10 +548,6 @@ export async function executeForSandbox({
     agentPrompt = raw_prompt;
   } else {
     // Modo estruturado: monta o prompt a partir do prompt_config + dados da empresa.
-    const safeAgentName = typeof agent_name === 'string'
-      ? agent_name.replace(/<[^>]*>/g, '').trim().slice(0, MAX_AGENT_NAME_LEN)
-      : '';
-
     const builtPrompt = buildPromptFromConfig(prompt_config, companyData);
     if (!builtPrompt) {
       return { status: 400, body: { success: false, error: 'Falha ao montar prompt do agente.' } };
