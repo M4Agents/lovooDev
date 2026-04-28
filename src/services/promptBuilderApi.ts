@@ -286,6 +286,24 @@ export const promptBuilderApi = {
     }
   },
 
+  async enrichTools(
+    companyId:    string,
+    advancedText: string,
+    allowedTools: string[],
+  ): Promise<string> {
+    const auth = await getAuthHeader()
+    const res  = await fetch('/api/prompt-builder/enrich-tools', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      body:    JSON.stringify({ company_id: companyId, advancedText, allowedTools }),
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? 'Erro ao gerar sugestão de prompt')
+    }
+    return json.suggestedPrompt as string
+  },
+
   async runSupportAgent(
     companyId:    string,
     userMessage:  string,

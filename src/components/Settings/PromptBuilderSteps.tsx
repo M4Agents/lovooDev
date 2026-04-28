@@ -13,10 +13,13 @@ import { AgentTestSandbox } from './AgentTestSandbox'
 import { LovooAgentDocuments } from './LovooAgentDocuments'
 import { PromptVariablePicker } from './PromptVariablePicker'
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
+import { EnrichDiffModal } from './EnrichDiffModal'
 import {
-  ArrowLeft, ArrowRight, Building2, Check, CheckCircle,
-  Eye, FileText, Loader2, Package, Phone, Globe, Sparkles,
+  ArrowLeft, ArrowRight, Building2, Check, CheckCircle, ClipboardCopy,
+  Eye, FileText, Loader2, Package, Phone, Globe, Sparkles, X,
 } from 'lucide-react'
+import { TOOL_CATALOG } from '../../lib/agents/toolCatalog'
+import { promptBuilderApi } from '../../services/promptBuilderApi'
 import type { LovooAgentDocument } from '../../types/lovoo-agents'
 import type { Company } from '../../lib/supabase'
 import type { FlatPromptConfig } from '../../services/promptBuilderApi'
@@ -839,6 +842,10 @@ export function StepPreview({
         allowedTools={allowedTools}
         setAllowedTools={setAllowedTools}
         saving={saving}
+        companyId={companyId}
+        advancedText={advancedText}
+        setAdvancedText={setAdvancedText}
+        advancedManualActive={advancedManualActive}
       />
 
       {error && (
@@ -1007,53 +1014,304 @@ function AgentDocumentsSection({
   )
 }
 
+// ── ManualToolSuggestionsPanel ────────────────────────────────────────────────
+//
+// Modo B: painel inline com sugestões copiáveis por tool ativa.
+// Não requer backend — usa promptSuggestion do toolCatalog.ts.
+
+function ManualToolSuggestionsPanel({
+  allowedTools,
+  onClose,
+}: {
+  allowedTools: string[]
+  onClose:      () => void
+}) {
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const activeTools = TOOL_CATALOG.filter(t => allowedTools.includes(t.key) && t.promptSuggestion)
+
+  function copyText(text: string, key: string) {
+    void navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  function copyAll() {
+    const block = activeTools
+      .map(t => `[${t.label}]\n${t.promptSuggestion}`)
+      .join('\n\n')
+    const full = `# Instruções para ações do agente\n\n${block}`
+    copyText(full, '__all__')
+  }
+
+  if (activeTools.length === 0) {
+    return (
+      <div className="px-4 py-3 text-sm text-gray-500">
+        Nenhuma ação ativa possui sugestão de instrução.
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 pb-4 pt-2 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          Copie as instruções abaixo e cole no campo{' '}
+          <span className="font-mono bg-gray-100 px-1 rounded">[INFORMAÇÕES ADICIONAIS]</span>{' '}
+          do prompt.
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={copyAll}
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800
+                       border border-blue-200 rounded-md px-2.5 py-1 bg-blue-50 hover:bg-blue-100
+                       transition-colors"
+          >
+            <ClipboardCopy className="w-3 h-3" />
+            {copied === '__all__' ? 'Copiado!' : 'Copiar tudo'}
+          </button>
+          <button
+            onClick={onClose}
+            aria-label="Fechar sugestões manuais"
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {activeTools.map(tool => (
+        <div key={tool.key} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-700">{tool.label}</p>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">{tool.promptSuggestion}</p>
+            </div>
+            <button
+              onClick={() => copyText(tool.promptSuggestion!, tool.key)}
+              className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 transition-colors
+                         flex items-center gap-1 border border-blue-200 rounded px-2 py-1
+                         bg-white hover:bg-blue-50"
+            >
+              <ClipboardCopy className="w-3 h-3" />
+              {copied === tool.key ? 'Copiado!' : 'Copiar'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── AgentToolsSection ─────────────────────────────────────────────────────────
 //
 // Seção colapsável de ferramentas (function calling) dentro do Step 4.
-// Padrão visual igual à KB section e Documentos — header toggle + conteúdo.
+// Suporta dois modos de enriquecimento do prompt:
+//   Modo A — "Adaptar com IA": chama backend, exibe diff, usuário aprova.
+//   Modo B — "Ver sugestões manuais": painel inline com instruções copiáveis.
+// Os dois modos são mutuamente exclusivos.
+
+type EnrichState = 'idle' | 'warning' | 'loading' | 'diff' | 'error'
 
 function AgentToolsSection({
   allowedTools, setAllowedTools, saving,
+  companyId, advancedText, setAdvancedText, advancedManualActive,
 }: {
-  allowedTools:    string[]
-  setAllowedTools: (tools: string[]) => void
-  saving:          boolean
+  allowedTools:         string[]
+  setAllowedTools:      (tools: string[]) => void
+  saving:               boolean
+  companyId:            string
+  advancedText:         string
+  setAdvancedText:      (v: string) => void
+  advancedManualActive: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]                           = useState(false)
+  const [enrichState, setEnrichState]             = useState<EnrichState>('idle')
+  const [enrichError, setEnrichError]             = useState<string | null>(null)
+  const [suggestedPrompt, setSuggestedPrompt]     = useState<string | null>(null)
+  const [manualSuggestionsOpen, setManualOpen]    = useState(false)
+
+  const showEnrichButtons = advancedManualActive && allowedTools.length > 0 && !saving
+
+  // Fechar painel manual ao iniciar fluxo IA e vice-versa
+  function startAiFlow() {
+    setManualOpen(false)
+    setEnrichError(null)
+    setEnrichState('warning')
+  }
+
+  function openManual() {
+    if (enrichState !== 'idle') return
+    setManualOpen(v => !v)
+  }
+
+  async function handleConfirmEnrich() {
+    setEnrichState('loading')
+    try {
+      const suggested = await promptBuilderApi.enrichTools(companyId, advancedText, allowedTools)
+      setSuggestedPrompt(suggested)
+      setEnrichState('diff')
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : 'Erro ao gerar sugestão.')
+      setEnrichState('error')
+    }
+  }
+
+  function handleApply() {
+    if (suggestedPrompt) setAdvancedText(suggestedPrompt)
+    setSuggestedPrompt(null)
+    setEnrichState('idle')
+  }
+
+  function handleCopy() {
+    if (suggestedPrompt) void navigator.clipboard.writeText(suggestedPrompt)
+  }
+
+  function handleCancelDiff() {
+    setSuggestedPrompt(null)
+    setEnrichState('idle')
+  }
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100
-                   transition-colors text-left"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-base leading-none">⚡</span>
-          <span className="text-sm font-semibold text-gray-700">Ações do agente</span>
-          <span className="text-xs text-gray-400 font-normal">(ferramentas)</span>
-          {allowedTools.length > 0 && (
-            <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700
-                             text-xs rounded-full font-medium ml-1">
-              {allowedTools.length} {allowedTools.length === 1 ? 'ação' : 'ações'}
-            </span>
-          )}
-        </div>
-        <span className="text-gray-400 text-xs ml-2 flex-shrink-0">
-          {open ? '▲ Fechar' : '▼ Abrir'}
-        </span>
-      </button>
+    <>
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {/* Header toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100
+                     transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base leading-none">⚡</span>
+            <span className="text-sm font-semibold text-gray-700">Ações do agente</span>
+            <span className="text-xs text-gray-400 font-normal">(ferramentas)</span>
+            {allowedTools.length > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-700
+                               text-xs rounded-full font-medium ml-1">
+                {allowedTools.length} {allowedTools.length === 1 ? 'ação' : 'ações'}
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-xs ml-2 flex-shrink-0">
+            {open ? '▲ Fechar' : '▼ Abrir'}
+          </span>
+        </button>
 
-      {open && (
-        <div className="px-4 py-4">
-          <AgentToolsSelector
-            selectedTools={allowedTools}
-            onChange={setAllowedTools}
-            disabled={saving}
-          />
-        </div>
+        {open && (
+          <div className="divide-y divide-gray-100">
+            {/* Seletor de tools */}
+            <div className="px-4 py-4">
+              <AgentToolsSelector
+                selectedTools={allowedTools}
+                onChange={setAllowedTools}
+                disabled={saving}
+              />
+            </div>
+
+            {/* Botões de enriquecimento — apenas no modo avançado com tools ativas */}
+            {showEnrichButtons && (
+              <div className="px-4 py-3 bg-gray-50/60">
+                {/* Aviso de warning */}
+                {enrichState === 'warning' && (
+                  <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
+                    <p className="text-amber-800 font-medium text-xs">Antes de continuar</p>
+                    <p className="text-amber-700 text-xs mt-1">
+                      O prompt será adaptado para incluir instruções das ações do agente.
+                      Recomendamos salvar uma cópia do prompt atual antes de aplicar.
+                    </p>
+                    <div className="flex gap-2 mt-2.5">
+                      <button
+                        onClick={() => void handleConfirmEnrich()}
+                        className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-md
+                                   hover:bg-amber-700 transition-colors font-medium"
+                      >
+                        Continuar
+                      </button>
+                      <button
+                        onClick={() => setEnrichState('idle')}
+                        className="text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-md
+                                   hover:bg-gray-50 transition-colors text-gray-600"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Loading */}
+                {enrichState === 'loading' && (
+                  <div className="mb-3 flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    <span className="text-xs">Gerando sugestão de prompt com IA...</span>
+                  </div>
+                )}
+
+                {/* Erro */}
+                {enrichState === 'error' && (
+                  <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                    <p className="text-xs text-red-700">{enrichError}</p>
+                    <button
+                      onClick={() => setEnrichState('idle')}
+                      className="text-xs text-red-600 underline mt-1"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                )}
+
+                {/* Botões principais (idle) */}
+                {enrichState === 'idle' && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={startAiFlow}
+                      className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5
+                                 bg-blue-600 text-white rounded-lg hover:bg-blue-700
+                                 transition-colors font-medium"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Adaptar com IA
+                    </button>
+                    <button
+                      onClick={openManual}
+                      className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5
+                                  rounded-lg border transition-colors font-medium
+                                  ${manualSuggestionsOpen
+                                    ? 'bg-gray-200 text-gray-700 border-gray-300'
+                                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                  }`}
+                    >
+                      <ClipboardCopy className="w-3.5 h-3.5" />
+                      Ver sugestões manuais
+                    </button>
+                  </div>
+                )}
+
+                {/* Painel de sugestões manuais (Modo B) */}
+                {manualSuggestionsOpen && enrichState === 'idle' && (
+                  <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+                    <ManualToolSuggestionsPanel
+                      allowedTools={allowedTools}
+                      onClose={() => setManualOpen(false)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de diff (Modo A) — renderizado via portal */}
+      {enrichState === 'diff' && suggestedPrompt && (
+        <EnrichDiffModal
+          currentPrompt={advancedText}
+          suggestedPrompt={suggestedPrompt}
+          onApply={handleApply}
+          onCopy={handleCopy}
+          onCancel={handleCancelDiff}
+        />
       )}
-    </div>
+    </>
   )
 }
