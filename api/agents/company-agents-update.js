@@ -202,6 +202,9 @@ export default async function handler(req, res) {
       // (companyData é injetado dinamicamente no runtime pelo agentExecutor)
       const flatValidation = validateFlatConfig(prompt_config);
       if (!flatValidation.valid) {
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'57d61d'},body:JSON.stringify({sessionId:'57d61d',location:'company-agents-update.js:flatValidation',message:'invalid_prompt_config errors',data:{errors:flatValidation.errors,fields:Object.keys(prompt_config||{})},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return res.status(422).json({
           success: false,
           error:   'invalid_prompt_config',
