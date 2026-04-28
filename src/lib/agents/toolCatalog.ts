@@ -35,21 +35,21 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     label:             'Atualizar dados do cliente',
     description:       'Salva informações do cliente como nome, e-mail, telefone ou empresa quando informados durante a conversa.',
     category:          'crm',
-    promptSuggestion:  'Quando o cliente informar nome, e-mail, telefone ou empresa durante a conversa, registre essas informações automaticamente no CRM.',
+    promptSuggestion:  'Quando o cliente informar nome, e-mail, telefone ou empresa, use update_lead para salvar automaticamente no CRM.',
   },
   {
     key:               'add_tag',
     label:             'Adicionar etiqueta ao cliente',
     description:       'Marca o cliente com etiquetas como "qualificado", "sem interesse" ou outras tags configuradas no CRM.',
     category:          'crm',
-    promptSuggestion:  'Marque o cliente com etiquetas como "qualificado", "sem interesse" ou "aguardando retorno" conforme o andamento da conversa.',
+    promptSuggestion:  'Quando identificar o perfil do cliente, use add_tag — por exemplo: "qualificado", "sem interesse" ou "aguardando retorno".',
   },
   {
     key:               'add_note',
     label:             'Registrar anotação interna',
     description:       'Grava observações da conversa no perfil do cliente ou na oportunidade para a equipe visualizar.',
     category:          'crm',
-    promptSuggestion:  'Registre observações internas relevantes sobre o cliente ou sobre pontos importantes da conversa para que a equipe possa visualizar.',
+    promptSuggestion:  'Quando precisar registrar algo importante da conversa para a equipe visualizar, use add_note.',
   },
 
   // ── Oportunidade ─────────────────────────────────────────────────────────────
@@ -58,14 +58,14 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     label:             'Atualizar oportunidade',
     description:       'Edita informações da oportunidade como valor estimado, probabilidade de fechamento ou previsão.',
     category:          'oportunidade',
-    promptSuggestion:  'Atualize o valor estimado, probabilidade ou previsão de fechamento da oportunidade quando o cliente der sinais concretos de avanço.',
+    promptSuggestion:  'Quando o cliente informar valor esperado ou prazo de fechamento, use update_opportunity para atualizar a oportunidade.',
   },
   {
     key:               'move_opportunity',
     label:             'Avançar card no funil',
     description:       'Move o card da oportunidade para a próxima etapa do funil quando o cliente demonstrar progresso.',
     category:          'oportunidade',
-    promptSuggestion:  'Avance o card da oportunidade no funil quando o cliente demonstrar progresso real, como confirmar interesse ou solicitar proposta.',
+    promptSuggestion:  'Quando o cliente avançar no processo — como pedir proposta ou confirmar interesse — use move_opportunity para mover o card no funil.',
   },
 
   // ── Agenda ────────────────────────────────────────────────────────────────────
@@ -74,14 +74,14 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     label:             'Criar atividade ou compromisso',
     description:       'Agenda reuniões, ligações e compromissos confirmados pelo cliente durante a conversa.',
     category:          'agenda',
-    promptSuggestion:  'Agende reuniões, ligações ou compromissos que forem confirmados pelo cliente durante a conversa.',
+    promptSuggestion:  'Quando o cliente confirmar uma reunião, ligação ou compromisso, use create_activity para registrar.',
   },
   {
     key:               'schedule_contact',
     label:             'Agendar retorno de contato',
     description:       'Programa o agente para retomar o contato automaticamente em uma data futura definida.',
     category:          'agenda',
-    promptSuggestion:  'Programe um retorno automático ao cliente na data que ele próprio indicar ou combinar.',
+    promptSuggestion:  'Quando o cliente pedir para ser contatado em uma data futura, use schedule_contact para programar o retorno.',
   },
 
   // ── Atendimento ───────────────────────────────────────────────────────────────
@@ -90,14 +90,14 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     label:             'Transferir para atendente humano',
     description:       'Encaminha a conversa para um atendente da equipe quando solicitado ou quando necessário.',
     category:          'atendimento',
-    promptSuggestion:  'Transfira o atendimento para um atendente humano quando o cliente solicitar falar com uma pessoa ou quando a situação exigir intervenção humana.',
+    promptSuggestion:  'Quando o cliente pedir para falar com um atendente humano ou a situação exigir intervenção, use request_handoff.',
   },
   {
     key:               'send_media',
     label:             'Enviar mídias do catálogo',
     description:       'Envia imagens ou vídeos do produto ou serviço em foco, conforme a intenção definida (apresentação, prova social ou detalhe técnico).',
     category:          'atendimento',
-    promptSuggestion:  'Envie imagens ou vídeos do produto ou serviço em foco de acordo com a intenção identificada na conversa (apresentação, detalhe técnico ou prova social).',
+    promptSuggestion:  'Quando identificar que deve enviar uma imagem ou vídeo do produto em foco, use send_media.',
   },
 ]
 

@@ -43,23 +43,23 @@ const MAX_TOOLS         = 9;
 
 const TOOL_PROMPT_HINTS = {
   update_lead:
-    'Quando o cliente informar nome, e-mail, telefone ou empresa durante a conversa, use a ferramenta update_lead para registrar essas informações automaticamente no CRM.',
+    'Quando o cliente informar nome, e-mail, telefone ou empresa, use update_lead para salvar automaticamente no CRM.',
   add_tag:
-    'Use a ferramenta add_tag para marcar o cliente com etiquetas relevantes como "qualificado", "sem interesse" ou "aguardando retorno" conforme o andamento da conversa.',
+    'Quando identificar o perfil do cliente, use add_tag — por exemplo: "qualificado", "sem interesse" ou "aguardando retorno".',
   add_note:
-    'Use a ferramenta add_note para registrar observações internas relevantes sobre o cliente ou sobre pontos importantes da conversa que a equipe precise saber.',
+    'Quando precisar registrar algo importante da conversa para a equipe visualizar, use add_note.',
   update_opportunity:
-    'Use a ferramenta update_opportunity para atualizar o valor estimado, probabilidade de fechamento ou previsão de fechamento quando o cliente der sinais concretos de avanço.',
+    'Quando o cliente informar valor esperado ou prazo de fechamento, use update_opportunity para atualizar a oportunidade.',
   move_opportunity:
-    'Use a ferramenta move_opportunity para avançar o card da oportunidade no funil quando o cliente demonstrar progresso real, como confirmar interesse ou solicitar proposta.',
+    'Quando o cliente avançar no processo — como pedir proposta ou confirmar interesse — use move_opportunity para mover o card no funil.',
   create_activity:
-    'Use a ferramenta create_activity para agendar reuniões, ligações ou compromissos que forem confirmados pelo cliente durante a conversa.',
+    'Quando o cliente confirmar uma reunião, ligação ou compromisso, use create_activity para registrar.',
   schedule_contact:
-    'Use a ferramenta schedule_contact para programar um retorno automático ao cliente na data que ele próprio indicar ou combinar.',
+    'Quando o cliente pedir para ser contatado em uma data futura, use schedule_contact para programar o retorno.',
   request_handoff:
-    'Use a ferramenta request_handoff para transferir o atendimento para um atendente humano quando o cliente solicitar falar com uma pessoa ou quando a situação exigir intervenção humana.',
+    'Quando o cliente pedir para falar com um atendente humano ou a situação exigir intervenção, use request_handoff.',
   send_media:
-    'Use a ferramenta send_media para enviar imagens ou vídeos do produto ou serviço em foco, de acordo com a intenção identificada na conversa (apresentação, detalhe técnico ou prova social).',
+    'Quando identificar que deve enviar uma imagem ou vídeo do produto em foco, use send_media.',
 };
 
 /** Whitelist autoritativa — qualquer tool fora desta lista é rejeitada com 400. */
@@ -113,7 +113,7 @@ REGRAS ABSOLUTAS — NUNCA VIOLE:
 - PRESERVE a estrutura de seções: [IDENTIDADE], [OBJETIVO], [ESTILO DE COMUNICAÇÃO], [REGRAS DE ATENDIMENTO], [INFORMAÇÕES ADICIONAIS]
 - NÃO crie novas seções além das 5 existentes
 - NÃO invente ferramentas além das fornecidas
-- NÃO mencione termos técnicos como "ferramenta", "tool", "API", "função" no texto inserido — use linguagem natural
+- MANTENHA o nome técnico exato de cada ferramenta no texto inserido (ex: update_lead, add_tag, add_note, move_opportunity, etc.) — nunca substitua ou omita o nome da ferramenta
 - Antes de inserir uma instrução, verifique se ela já existe no prompt — se já existir, NÃO repita
 
 ONDE INSERIR:
