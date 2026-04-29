@@ -168,10 +168,6 @@ export async function buildContext(orchestratorContext) {
   } else {
     console.warn('🤖 [CTX] ⚠️  Falha ao buscar empresa executora (variáveis ficam vazias):', childCompanyResult.reason?.message);
   }
-  // #region agent log
-  console.log('[DEBUG:67ebe7:company_data_state]', JSON.stringify({status:childCompanyResult.status,error:childCompanyResult.reason?.message??null,company_name:childCompany?.name??null,logradouro:childCompany?.logradouro??null,address:childCompany?.address??null,cidade:childCompany?.cidade??null,city:childCompany?.city??null}));
-  // #endregion
-
   // ── ID da empresa-pai (para buscar policy) ────────────────────────────────
 
   let parentCompanyId = null;
@@ -337,9 +333,6 @@ export async function buildContext(orchestratorContext) {
 
   // Aplicar variáveis no prompt do agente
   const processedAgentPrompt = applyPolicyVariables(agent.prompt, allVariables);
-  // #region agent log
-  console.log('[DEBUG:67ebe7:resolved_address_vars]', JSON.stringify({logradouro:allVariables.logradouro,bairro:allVariables.bairro,cidade:allVariables.cidade,estado:allVariables.estado,cep:allVariables.cep,nome_empresa:allVariables.nome_empresa}));
-  // #endregion
 
   // ── Montar ContextBuilderOutput ───────────────────────────────────────────
 
