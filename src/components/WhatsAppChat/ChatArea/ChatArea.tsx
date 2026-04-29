@@ -530,19 +530,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           const newMessages = messagesData?.filter(msg => 
             !prev.some(prevMsg => prevMsg.id === msg.id)
           ) || []
+
+          // Atualizar status de mensagens existentes que mudaram (ex: sending → sent)
+          const withUpdatedStatus = prev.map(msg => {
+            const fresh = messagesData?.find(m => m.id === msg.id)
+            return fresh && fresh.status !== msg.status ? { ...msg, status: fresh.status } : msg
+          })
           
           if (newMessages.length > 0) {
-            // Novas mensagens detectadas
-            
-            // Combinar e ordenar
-            const allMessages = [...prev, ...newMessages].sort((a, b) => 
+            return [...withUpdatedStatus, ...newMessages].sort((a, b) => 
               new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
             )
-            
-            return allMessages
           }
-          
-          return prev
+
+          const hasStatusChange = withUpdatedStatus.some((m, i) => m.status !== prev[i]?.status)
+          return hasStatusChange ? withUpdatedStatus : prev
         })
       } catch (error) {
         console.warn('Erro no polling backup:', error)
