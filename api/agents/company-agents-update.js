@@ -202,9 +202,6 @@ export default async function handler(req, res) {
       // (companyData é injetado dinamicamente no runtime pelo agentExecutor)
       const flatValidation = validateFlatConfig(prompt_config);
       if (!flatValidation.valid) {
-        // #region agent log
-        console.error('[DEBUG:57d61d:post-fix] invalid_prompt_config', JSON.stringify({errors:flatValidation.errors,fields:Object.keys(prompt_config||{})}));
-        // #endregion
         return res.status(422).json({
           success: false,
           error:   'invalid_prompt_config',
