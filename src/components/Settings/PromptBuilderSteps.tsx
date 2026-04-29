@@ -20,9 +20,11 @@ import {
 } from 'lucide-react'
 import { TOOL_CATALOG } from '../../lib/agents/toolCatalog'
 import { promptBuilderApi } from '../../services/promptBuilderApi'
+import { funnelApi } from '../../services/funnelApi'
 import type { LovooAgentDocument } from '../../types/lovoo-agents'
 import type { Company } from '../../lib/supabase'
 import type { FlatPromptConfig } from '../../services/promptBuilderApi'
+import type { SalesFunnel, FunnelStage } from '../../types/sales-funnel'
 
 // ── Helpers exportados para o modo de edição avançada ─────────────────────────
 
@@ -511,12 +513,43 @@ const PREVIEW_BLOCKS: { field: keyof FlatPromptConfig; label: string; rows: numb
  * Exibe o nome técnico de cada ferramenta habilitada no agente para que o
  * usuário possa referenciá-la diretamente no prompt.
  * Clicar no nome técnico copia para a área de transferência.
+ *
+ * Quando move_opportunity está ativa, exibe também as etapas dos funis da
+ * empresa com botão de copiar o stage_id para uso no prompt.
  */
-function ToolReferencePanel({ allowedTools }: { allowedTools: string[] }) {
+function ToolReferencePanel({
+  allowedTools,
+  companyId,
+}: {
+  allowedTools: string[]
+  companyId?:   string
+}) {
   const [open, setOpen]         = useState(false)
   const [copied, setCopied]     = useState<string | null>(null)
+  const [funnels, setFunnels]   = useState<Array<SalesFunnel & { stages: FunnelStage[] }>>([])
+  const [loadingFunnels, setLoadingFunnels] = useState(false)
 
-  const activeTools = TOOL_CATALOG.filter(t => allowedTools.includes(t.key))
+  const activeTools      = TOOL_CATALOG.filter(t => allowedTools.includes(t.key))
+  const hasMoveOpportunity = allowedTools.includes('move_opportunity')
+
+  // Busca funis + etapas quando move_opportunity está ativa e painel abre
+  useEffect(() => {
+    if (!open || !hasMoveOpportunity || !companyId || funnels.length > 0) return
+    setLoadingFunnels(true)
+    funnelApi.getFunnels(companyId)
+      .then(async (list) => {
+        const withStages = await Promise.all(
+          list.map(async (f) => {
+            const stages = await funnelApi.getStages(f.id).catch(() => [] as FunnelStage[])
+            return { ...f, stages }
+          })
+        )
+        setFunnels(withStages.filter(f => f.stages.length > 0))
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFunnels(false))
+  }, [open, hasMoveOpportunity, companyId, funnels.length])
+
   if (activeTools.length === 0) return null
 
   function copyKey(key: string) {
@@ -544,6 +577,7 @@ function ToolReferencePanel({ allowedTools }: { allowedTools: string[] }) {
 
       {open && (
         <div className="border-t border-amber-200 px-3 py-2 space-y-2">
+          {/* Lista de ferramentas */}
           {activeTools.map(tool => (
             <div key={tool.key} className="flex gap-2 items-start">
               <button
@@ -570,6 +604,62 @@ function ToolReferencePanel({ allowedTools }: { allowedTools: string[] }) {
               </span>
             </div>
           ))}
+
+          {/* Seção de etapas do funil — exibida apenas quando move_opportunity está ativa */}
+          {hasMoveOpportunity && companyId && (
+            <div className="mt-3 pt-3 border-t border-amber-200">
+              <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
+                <FileText className="w-3 h-3" />
+                Etapas do funil — copie o ID para usar em move_opportunity
+              </p>
+
+              {loadingFunnels ? (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 py-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Carregando etapas…
+                </div>
+              ) : funnels.length === 0 ? (
+                <p className="text-xs text-gray-500 italic">Nenhum funil encontrado.</p>
+              ) : (
+                <div className="space-y-3">
+                  {funnels.map(funnel => (
+                    <div key={funnel.id}>
+                      <p className="text-xs font-medium text-gray-600 mb-1">{funnel.name}</p>
+                      <div className="space-y-1">
+                        {funnel.stages.map(stage => (
+                          <div key={stage.id} className="flex items-center justify-between gap-2 pl-2">
+                            <span className="flex items-center gap-1.5 text-xs text-gray-700 min-w-0">
+                              <span
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: stage.color ?? '#94a3b8' }}
+                              />
+                              <span className="truncate">{stage.name}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyKey(stage.id)}
+                              title="Copiar ID da etapa"
+                              className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs
+                                transition-colors cursor-pointer border font-mono
+                                ${copied === stage.id
+                                  ? 'bg-green-100 text-green-700 border-green-300'
+                                  : 'bg-white text-gray-500 border-gray-200 hover:border-amber-300 hover:text-amber-800'
+                                }`}
+                            >
+                              {copied === stage.id
+                                ? <><Check className="w-3 h-3" /> copiado</>
+                                : <><ClipboardCopy className="w-3 h-3" /> Copiar ID</>
+                              }
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -759,7 +849,7 @@ export function StepPreview({
                            leading-relaxed font-mono focus:outline-none focus:ring-2 focus:ring-blue-400
                            disabled:opacity-50 disabled:bg-gray-50 bg-blue-50/30"
               />
-              <ToolReferencePanel allowedTools={allowedTools} />
+              <ToolReferencePanel allowedTools={allowedTools} companyId={companyId} />
             </div>
           ) : (
             /* Modo normal: 5 campos separados */

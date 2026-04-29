@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle } from 'lucide-react'
+import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check } from 'lucide-react'
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
@@ -50,6 +50,7 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [moveToStageId, setMoveToStageId] = useState<string>('')
   const [draggedStage, setDraggedStage] = useState<FunnelStage | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [copiedStageId, setCopiedStageId] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
   // Carregar etapas do funil e verificar se pode deletar
@@ -388,6 +389,12 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     setDragOverIndex(null)
   }
 
+  const handleCopyStageId = (stageId: string) => {
+    navigator.clipboard.writeText(stageId).catch(() => {})
+    setCopiedStageId(stageId)
+    setTimeout(() => setCopiedStageId(null), 1500)
+  }
+
   const handleClose = () => {
     if (!loading) {
       setFormData({
@@ -627,6 +634,22 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                       )}
 
                       <span className="text-xs text-gray-500 flex-shrink-0">#{index + 1}</span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyStageId(stage.id)}
+                        title="Copiar ID da etapa"
+                        className={`p-1.5 rounded transition-colors flex-shrink-0 ${
+                          copiedStageId === stage.id
+                            ? 'text-green-600 bg-green-50'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {copiedStageId === stage.id
+                          ? <Check className="w-3.5 h-3.5" />
+                          : <Clipboard className="w-3.5 h-3.5" />
+                        }
+                      </button>
 
                       <label className="flex items-center gap-1 cursor-pointer" title="Ocultar esta etapa do funil visual">
                         <input
