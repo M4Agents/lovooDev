@@ -96,7 +96,7 @@ async function processMessage(payload) {
     );
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'uazapi-webhook-final.js:processMessage',message:'WEBHOOK_FILE_HIT',data:{file:'uazapi-webhook-final',fromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,isDeviceSent:!!payload?.message?.deviceSent,messageId:payload?.message?.id,eventType:payload?.EventType},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    console.log('[DEBUG:67ebe7:WEBHOOK_FINAL_HIT]', JSON.stringify({file:'uazapi-webhook-final',fromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,isDeviceSent:!!payload?.message?.deviceSent,messageId:payload?.message?.id,ts:Date.now()}));
     // #endregion
     
     // 🔍 LOG IDENTIFICADOR DE VERSÃO - INVESTIGAÇÃO DE DEPLOY
