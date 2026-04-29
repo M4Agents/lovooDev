@@ -425,6 +425,71 @@ async function execMoveOpportunity(svc, args, ctx) {
   return { success: true, opportunity_id: opportunityId, to_stage_id: toStageId }
 }
 
+/**
+ * Vincula silenciosamente o item_of_interest à oportunidade em opportunity_items.
+ * Fire-and-forget: nunca lança exceção nem afeta o retorno de execUpdateOpportunity.
+ * Só vincula se:
+ *   - item_of_interest existe no contexto (match único — nunca candidatos ambíguos)
+ *   - o item pertence à empresa (validado por resolveCatalogItemFocus)
+ *   - a oportunidade ainda não tem esse item vinculado
+ */
+async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
+  try {
+    const item = ctx.item_of_interest ?? null
+    if (!item?.id) return
+
+    const focus = await resolveCatalogItemFocus(svc, ctx.company_id, item)
+    if (!focus) return
+
+    const { item_type, item_id } = focus
+    const col = item_type === 'product' ? 'product_id' : 'service_id'
+
+    // Verificar se já existe para evitar duplicata
+    const { data: existing } = await svc
+      .from('opportunity_items')
+      .select('id')
+      .eq('company_id', ctx.company_id)
+      .eq('opportunity_id', opportunityId)
+      .eq(col, item_id)
+      .maybeSingle()
+
+    if (existing) return
+
+    // Buscar nome e preço padrão do item para o snapshot
+    const table = item_type === 'product' ? 'products' : 'services'
+    const { data: catalogItem } = await svc
+      .from(table)
+      .select('name, default_price, description')
+      .eq('id', item_id)
+      .eq('company_id', ctx.company_id)
+      .maybeSingle()
+
+    if (!catalogItem) return
+
+    await svc.rpc('opportunity_add_item', {
+      p_company_id:           ctx.company_id,
+      p_opportunity_id:       opportunityId,
+      p_product_id:           item_type === 'product' ? item_id : null,
+      p_service_id:           item_type === 'service' ? item_id : null,
+      p_quantity:             1,
+      p_unit_price:           catalogItem.default_price ?? null,
+      p_discount_type:        'fixed',
+      p_discount_value:       0,
+      p_name_snapshot:        catalogItem.name ?? null,
+      p_description_snapshot: catalogItem.description ?? null,
+    })
+
+    console.log('[TOOL:update_opportunity] item vinculado à oportunidade', {
+      item_type,
+      item_id,
+      opportunity_id: opportunityId,
+    })
+  } catch (err) {
+    // Silencioso — nunca propagar erro para não quebrar o fluxo principal
+    console.warn('[TOOL:update_opportunity] falha ao vincular item (ignorado):', err?.message)
+  }
+}
+
 async function execUpdateOpportunity(svc, args, ctx) {
   const fields = args.fields ?? {}
   const filtered = {}
@@ -453,6 +518,10 @@ async function execUpdateOpportunity(svc, args, ctx) {
     .eq('company_id', ctx.company_id)
 
   if (error) return { success: false, error: error.message }
+
+  // Vincular item de interesse à oportunidade de forma silenciosa (fire-and-forget)
+  void tryLinkItemToOpportunity(svc, opportunityId, ctx)
+
   return { success: true, updated_fields: Object.keys(filtered) }
 }
 
