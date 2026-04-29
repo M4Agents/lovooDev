@@ -67,10 +67,6 @@ async function processMessage(payload) {
       }
     );
     
-    // #region agent log
-    console.log('[DEBUG:67ebe7:WEBHOOK_FILE_HIT]', JSON.stringify({file:'company_id_dynamic',fromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,isDeviceSent:!!payload?.message?.deviceSent,messageId:payload?.message?.id,ts:Date.now()}));
-    // #endregion
-    
     console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO BASEADO NO ANTIGO');
     
     // Validações
@@ -354,8 +350,6 @@ async function processMessage(payload) {
     console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
     console.error('📎 MÍDIA URL FINAL PARA RPC:', mediaUrl ? mediaUrl.substring(0, 100) + '...' : 'NULL');
 
-    // #region agent log
-    console.log('[DEBUG:67ebe7:WEBHOOK_BEFORE_RPC]', JSON.stringify({direction,messageId,isFromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,ts:Date.now()}));
     // #endregion
     
     const { data: webhookResult, error: webhookError } = await supabase
@@ -384,10 +378,6 @@ async function processMessage(payload) {
     
     console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
     
-    // #region agent log
-    console.log('[DEBUG:67ebe7:WEBHOOK_RPC_RESULT]', JSON.stringify({deduplicated:webhookResult?.deduplicated??false,message_id:webhookResult?.message_id,direction,messageId,ts:Date.now()}));
-    // #endregion
-
     const contactId = webhookResult.contact_id;
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;

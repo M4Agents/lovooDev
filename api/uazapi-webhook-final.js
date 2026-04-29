@@ -95,10 +95,8 @@ async function processMessage(payload) {
       }
     );
 
-    // #region agent log
-    console.log('[DEBUG:67ebe7:WEBHOOK_FINAL_HIT]', JSON.stringify({file:'uazapi-webhook-final',fromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,isDeviceSent:!!payload?.message?.deviceSent,messageId:payload?.message?.id,ts:Date.now()}));
     // #endregion
-    
+
     // 🔍 LOG IDENTIFICADOR DE VERSÃO - INVESTIGAÇÃO DE DEPLOY
     const versionTimestamp = '2025-12-23 08:47:00';
     console.log('🚀 WEBHOOK FINAL EXECUTANDO - VERSÃO:', versionTimestamp);

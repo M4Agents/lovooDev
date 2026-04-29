@@ -164,8 +164,6 @@ export async function sendBlocks(composerOutput) {
       error_message:     sendResult.error_message
     });
 
-    // #region agent log
-    console.log('[DEBUG:67ebe7:GATEWAY_UPDATE_DONE]', JSON.stringify({message_id,uazapi_message_id:sendResult.uazapi_message_id,send_ok:sendResult.ok,run_id,ts:Date.now()}));
     // #endregion
 
     if (sendResult.ok) {
