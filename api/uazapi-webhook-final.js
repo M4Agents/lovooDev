@@ -138,6 +138,16 @@ async function processMessage(payload) {
       direction = 'outbound';
     }
 
+    // Filtrar eco de mensagens enviadas via API pelo sistema (agente, automação, painel).
+    // Essas mensagens são pré-salvas no banco ANTES do envio via Uazapi.
+    // O eco de confirmação que o Uazapi devolve chega antes de updateMessageStatus
+    // gravar o uazapi_message_id, tornando a deduplicação por ID ineficaz.
+    // Mensagens enviadas do celular físico (isDeviceSent=true) NÃO são filtradas.
+    if (direction === 'outbound' && isFromApi && !isDeviceSent) {
+      console.log('[WEBHOOK] Echo de mensagem API filtrado — já pré-salvo pelo sistema:', { messageId: message.id });
+      return { success: true, skipped: true, reason: 'outbound_api_echo' };
+    }
+
     // Extrair dados básicos
     const rawMessageType = (message.messageType || '').toLowerCase();
     const rawType = (message.type || '').toLowerCase();
