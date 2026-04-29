@@ -528,6 +528,9 @@ export async function executeForSandbox({
     loadCompanyData(svc, company_id),
     loadCatalog(svc, company_id),
   ]);
+  // #region agent log
+  console.log('[DEBUG:67ebe7:sandbox_company]', JSON.stringify({company_id,company_name:companyData?.name??null,logradouro:companyData?.logradouro??null,bairro:companyData?.bairro??null,cidade:companyData?.cidade??null,ponto_referencia:companyData?.ponto_referencia??null}));
+  // #endregion
 
   let agentKnowledge = null;
   if (safeAgentId) {
