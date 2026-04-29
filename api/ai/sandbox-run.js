@@ -218,7 +218,7 @@ async function loadCompanyData(svc, companyId) {
       pais, cidade, estado, cep, logradouro, bairro, numero,
       country_code, telefone_principal,
       email_principal, site_principal, ramo_atividade,
-      ponto_referencia, horario_atendimento, ai_profile
+      ponto_referencia, horario_atendimento
     `)
     .eq('id', companyId)
     .maybeSingle();
