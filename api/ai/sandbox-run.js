@@ -37,6 +37,7 @@ import { createClient }                       from '@supabase/supabase-js';
 import { getOpenAIClient }                    from '../lib/openai/client.js';
 import { fetchParentOpenAISettingsForSystem } from '../lib/openai/settingsDb.js';
 import { buildPromptFromConfig }              from '../lib/agents/promptTemplate.js';
+import { buildAllVariables, applyPolicyVariables } from '../lib/utils/policyVariables.js';
 import { runAgentWithConfig }                 from '../lib/agents/runner.js';
 import { getToolsForAgent }                   from '../lib/agents/toolDefinitions.js';
 import { compose }                            from '../lib/agents/responseComposer.js';
@@ -545,7 +546,9 @@ export async function executeForSandbox({
   if (raw_prompt) {
     // Modo avançado: usa o prompt bruto diretamente — sem buildPromptFromConfig,
     // sem injeção do nome do sistema (a persona está definida no próprio prompt).
-    agentPrompt = raw_prompt;
+    // Aplica substituição de variáveis da empresa ({{logradouro}}, {{nome_empresa}}, etc.)
+    const sandboxVars = buildAllVariables(companyData ?? null, null, null, [], null);
+    agentPrompt = applyPolicyVariables(raw_prompt, sandboxVars);
   } else {
     // Modo estruturado: monta o prompt a partir do prompt_config + dados da empresa.
     const builtPrompt = buildPromptFromConfig(prompt_config, companyData);
