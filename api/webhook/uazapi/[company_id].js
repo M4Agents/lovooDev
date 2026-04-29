@@ -67,6 +67,10 @@ async function processMessage(payload) {
       }
     );
     
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'webhook/uazapi/[company_id].js:processMessage',message:'WEBHOOK_FILE_HIT',data:{file:'company_id_dynamic',fromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,isDeviceSent:!!payload?.message?.deviceSent,messageId:payload?.message?.id,eventType:payload?.EventType},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     console.log('🔑 SUPABASE CONECTADO - WEBHOOK NOVO BASEADO NO ANTIGO');
     
     // Validações
@@ -349,6 +353,10 @@ async function processMessage(payload) {
     // USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
     console.log('🔄 USANDO FUNÇÃO SECURITY DEFINER PARA PROCESSAMENTO SEGURO');
     console.error('📎 MÍDIA URL FINAL PARA RPC:', mediaUrl ? mediaUrl.substring(0, 100) + '...' : 'NULL');
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'webhook/uazapi/[company_id].js:beforeRPC',message:'WEBHOOK_BEFORE_RPC',data:{direction,messageId,isFromMe:!!payload?.message?.fromMe,isFromApi:!!payload?.message?.wasSentByApi,ts_webhook_rpc:Date.now()},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
@@ -376,6 +384,10 @@ async function processMessage(payload) {
     
     console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'webhook/uazapi/[company_id].js:afterRPC',message:'WEBHOOK_RPC_RESULT',data:{deduplicated:webhookResult?.deduplicated??false,message_id:webhookResult?.message_id,direction,messageId,ts_after_rpc:Date.now()},timestamp:Date.now(),hypothesisId:'B-C'})}).catch(()=>{});
+    // #endregion
+
     const contactId = webhookResult.contact_id;
     const conversationId = webhookResult.conversation_id;
     const savedMessageId = webhookResult.message_id;

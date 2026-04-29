@@ -164,6 +164,10 @@ export async function sendBlocks(composerOutput) {
       error_message:     sendResult.error_message
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'whatsappGateway.js:afterUpdateStatus',message:'GATEWAY_UPDATE_STATUS_DONE',data:{message_id,uazapi_message_id:sendResult.uazapi_message_id,send_ok:sendResult.ok,run_id,conversation_id,ts_after_update:Date.now()},timestamp:Date.now(),hypothesisId:'B-C'})}).catch(()=>{});
+    // #endregion
+
     if (sendResult.ok) {
       successCount++;
       console.log(`🤖 [GATEWAY] ✅ Bloco ${block.index} enviado:`, {
