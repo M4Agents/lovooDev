@@ -53,12 +53,15 @@ async function resolveConversation(phone, leadName, instanceId, companyId, supab
 
   // Prioridade 1: RPC cria ou retorna conversa existente (requer instanceId)
   if (instanceId) {
-    const { data } = await supabase.rpc('chat_create_or_get_conversation', {
+    const { data, error: rpcError } = await supabase.rpc('chat_create_or_get_conversation', {
       p_company_id: companyId,
       p_instance_id: instanceId,
       p_contact_phone: cleanPhone,
       p_contact_name: leadName || null,
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'whatsappSender.js:62',message:'RPC chat_create_or_get_conversation result',data:{success:data?.success,conversationId:data?.data?.id,rpcError:rpcError?.message??null,phone:cleanPhone},timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
     if (data?.success && data.data?.id) return data.data.id
   }
 
@@ -249,10 +252,18 @@ export async function sendMessageNode(node, context, supabase) {
   }
 
   // 3. Resolver conversa (existente ou criar nova)
+  // instanceId vem do contexto (trigger_data) ou, como fallback, do config do nó de mensagem.
+  // Isso permite que automações com instanceId no nó criem conversas para leads sem histórico.
+  const effectiveInstanceId = context.instanceId || config.instanceId || null
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'whatsappSender.js:252',message:'resolveConversation params',data:{contextInstanceId:context.instanceId,nodeConfigInstanceId:config.instanceId,effectiveInstanceId,phone:lead.phone,companyId:context.companyId},timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+
   const conversationId = await resolveConversation(
     lead.phone,
     lead.name,
-    context.instanceId,
+    effectiveInstanceId,
     context.companyId,
     supabase
   )
