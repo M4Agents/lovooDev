@@ -484,9 +484,20 @@ async function execMoveOpportunity(svc, args, ctx) {
 async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
   try {
     const item = ctx.item_of_interest ?? null
-    if (!item?.id) return
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'entrada',data:{item_id:item?.id??null,item_name:item?.name??null,opportunity_id:opportunityId,company_id:ctx.company_id},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    if (!item?.id) {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'EARLY_RETURN: item_of_interest sem id',data:{item},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
+      return
+    }
 
     const focus = await resolveCatalogItemFocus(svc, ctx.company_id, item)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'resolveCatalogItemFocus result',data:{focus,item_id:item?.id},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     if (!focus) return
 
     const { item_type, item_id } = focus
@@ -512,9 +523,12 @@ async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
       .eq('company_id', ctx.company_id)
       .maybeSingle()
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'catalogItem lookup',data:{catalogItem,item_type,item_id,table},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     if (!catalogItem) return
 
-    await svc.rpc('opportunity_add_item', {
+    const { error: rpcError } = await svc.rpc('opportunity_add_item', {
       p_company_id:           ctx.company_id,
       p_opportunity_id:       opportunityId,
       p_product_id:           item_type === 'product' ? item_id : null,
@@ -526,6 +540,9 @@ async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
       p_name_snapshot:        catalogItem.name ?? null,
       p_description_snapshot: catalogItem.description ?? null,
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'opportunity_add_item result',data:{rpcError:rpcError?.message??null,item_type,item_id,opportunity_id:opportunityId},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
 
     console.log('[TOOL:update_opportunity] item vinculado à oportunidade', {
       item_type,
@@ -534,6 +551,9 @@ async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
     })
   } catch (err) {
     // Silencioso — nunca propagar erro para não quebrar o fluxo principal
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:tryLinkItemToOpportunity',message:'EXCEPTION capturada',data:{error:err?.message},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     console.warn('[TOOL:update_opportunity] falha ao vincular item (ignorado):', err?.message)
   }
 }
