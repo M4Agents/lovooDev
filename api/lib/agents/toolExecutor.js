@@ -183,7 +183,48 @@ async function resolveActiveOpportunity(svc, leadId, companyId, lockedOpportunit
     .limit(1)
     .maybeSingle()
 
-  return data?.id ?? null
+  if (data?.id) return data.id
+
+  // Fallback: busca pelo telefone do lead para cobrir casos onde o lead foi
+  // recriado via webhook (soft-delete + reimport) mas a conversa ainda aponta
+  // para o lead original.
+  const { data: lead } = await svc
+    .from('leads')
+    .select('phone')
+    .eq('id', leadId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (!lead?.phone) return null
+
+  // Busca todos os lead_ids ativos com o mesmo telefone na empresa
+  const { data: siblingLeads } = await svc
+    .from('leads')
+    .select('id')
+    .eq('phone', lead.phone)
+    .eq('company_id', companyId)
+    .is('deleted_at', null)
+    .neq('id', leadId)
+
+  if (!siblingLeads?.length) return null
+
+  const siblingIds = siblingLeads.map(l => l.id)
+
+  const { data: byPhone } = await svc
+    .from('opportunities')
+    .select('id')
+    .in('lead_id', siblingIds)
+    .eq('company_id', companyId)
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (byPhone?.id) {
+    console.log(`[TOOL] resolveActiveOpportunity: fallback por telefone encontrou oportunidade ${byPhone.id} (lead_id original: ${leadId})`)
+  }
+
+  return byPhone?.id ?? null
 }
 
 // ── Implementações das tools ──────────────────────────────────────────────────
@@ -850,9 +891,6 @@ async function updateMessageStatusSafe(svc, { message_id, company_id, ok, uazapi
 
 async function execSendMedia(svc, args, ctx) {
   const intent = args?.intent
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:execSendMedia-entry',message:'send_media chamado',data:{intent,item_of_interest:ctx.item_of_interest,company_id:ctx.company_id,conversation_id:ctx.conversation_id},timestamp:Date.now(),hypothesisId:'H1-H2-H4'})}).catch(()=>{});
-  // #endregion
   if (typeof intent !== 'string' || !(intent in INTENT_TO_USAGE_ROLE)) {
     return {
       success: false,
@@ -875,9 +913,6 @@ async function execSendMedia(svc, args, ctx) {
   const companyId = ctx.company_id
 
   const focus = await resolveCatalogItemFocus(svc, companyId, item)
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:resolveCatalogItemFocus-result',message:'focus resolvido',data:{focus,item_id:item?.id,item_name:item?.name,company_id:companyId},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
   if (!focus) {
     return { success: false, error: 'no_item_context', error_code: 'validation_error' }
   }
@@ -899,9 +934,6 @@ async function execSendMedia(svc, args, ctx) {
     itemId,
     intent,
   })
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:cooldown-check',message:'cooldown resultado',data:{cd,itemType,itemId,intent},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
   if (cd.blocked) {
     return { success: false, error: 'cooldown_active', error_code: 'validation_error' }
   }
@@ -922,9 +954,6 @@ async function execSendMedia(svc, args, ctx) {
     limit,
   })
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:mediaSelector-result',message:'mediaList resultado',data:{mediaList,intent,itemType,itemId,alreadySentAssetIds},timestamp:Date.now(),hypothesisId:'H3-H5'})}).catch(()=>{});
-  // #endregion
   if (!mediaList.length) {
     return {
       success: false,
