@@ -9,22 +9,29 @@
 -- Solução: separar a verificação de existência da obtenção do instance_id,
 -- usando COALESCE(instance_id, last_instance_id) para cobrir ambos os casos.
 --
--- Impacto: backward compatible — fluxos existentes não são afetados pois
--- suas conversas já têm instance_id preenchido (COALESCE retorna o mesmo valor).
+-- Mantém os tipos originais dos parâmetros (text, smallint, text) para evitar
+-- conflito de overload. Backward compatible — fluxos existentes não são afetados.
 -- =====================================================================
 
+-- Remove sobrecarga criada por engano com tipos diferentes (varchar, integer)
+DROP FUNCTION IF EXISTS public.chat_create_message(
+  uuid, uuid, text, character varying, character varying,
+  uuid, text, boolean, uuid, integer, character varying
+);
+
+-- Substitui a função original mantendo os tipos exatos e aplicando a correção
 CREATE OR REPLACE FUNCTION public.chat_create_message(
   p_conversation_id uuid,
   p_company_id      uuid,
   p_content         text,
-  p_message_type    varchar,
-  p_direction       varchar,
-  p_sent_by         uuid    DEFAULT NULL,
-  p_media_url       text    DEFAULT NULL,
-  p_is_ai_generated boolean DEFAULT false,
-  p_ai_run_id       uuid    DEFAULT NULL,
-  p_ai_block_index  integer DEFAULT NULL,
-  p_ai_block_type   varchar DEFAULT NULL
+  p_message_type    text,
+  p_direction       text,
+  p_sent_by         uuid     DEFAULT NULL,
+  p_media_url       text     DEFAULT NULL,
+  p_is_ai_generated boolean  DEFAULT false,
+  p_ai_run_id       uuid     DEFAULT NULL,
+  p_ai_block_index  smallint DEFAULT NULL,
+  p_ai_block_type   text     DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
