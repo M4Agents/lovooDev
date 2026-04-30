@@ -816,71 +816,47 @@ async function processMessage(payload) {
             return { success: true, message: 'reset:/confirmar_reset — expirado' };
           }
 
-          // ── Executar reset completo ───────────────────────────────────────
+          // ── Executar reset completo — deleta a conversa inteira ──────────────
+          // A deleção de chat_conversations faz CASCADE automático em:
+          //   chat_messages, agent_conversation_sessions, agent_processing_locks,
+          //   agent_handoff_events, chat_scheduled_messages,
+          //   chat_conversation_migration_log
+          // agent_processed_messages.conversation_id → SET NULL (link quebrado)
 
-          // 1. Apagar histórico de mensagens
-          const { error: deleteError } = await supabaseAdmin
-            .from('chat_messages')
-            .delete()
-            .eq('conversation_id', conversationId);
+          // Envia resposta ANTES de deletar a conversa (sendReply precisa do conversationId)
+          await sendReply('Pronto! Conversa deletada e resetada. Pode reimportar o lead para começar do zero 😊');
 
-          if (deleteError) {
-            console.error('[RESET] Erro ao apagar mensagens:', deleteError.message);
-          }
-
-          // 2. Limpar memória e desativar pending
-          //    Filtro reset_pending = true: anti-execução-duplicada
-          const { error: memError } = await supabaseAdmin
-            .from('chat_conversations')
-            .update({ memory: {}, reset_pending: false })
-            .eq('id', conversationId)
-            .eq('company_id', company.id)
-            .eq('reset_pending', true);
-
-          if (memError) {
-            console.error('[RESET] Erro ao limpar memória:', memError.message);
-          }
-
-          // 3. Abandonar conversation_flow_states ativos
+          // 1. Deletar conversation_flow_states (sem FK cascade para chat_conversations)
           const { error: flowError } = await supabaseAdmin
             .from('conversation_flow_states')
-            .update({ status: 'abandoned', completed_at: new Date().toISOString() })
+            .delete()
             .eq('conversation_id', conversationId)
-            .eq('company_id', company.id)
-            .neq('status', 'abandoned');
+            .eq('company_id', company.id);
 
           if (flowError) {
-            console.error('[RESET] Erro ao abandonar flow states:', flowError.message);
+            console.error('[RESET] Erro ao deletar flow states:', flowError.message);
           }
 
-          // 4. Encerrar agent_conversation_sessions ativas
-          const { error: sessionError } = await supabaseAdmin
-            .from('agent_conversation_sessions')
-            .update({
-              status:     'ended',
-              end_reason: 'manual_reset',
-              ended_at:   new Date().toISOString(),
-            })
-            .eq('conversation_id', conversationId)
+          // 2. Deletar a conversa — cascade cobre o restante
+          const { error: convDeleteError } = await supabaseAdmin
+            .from('chat_conversations')
+            .delete()
+            .eq('id', conversationId)
             .eq('company_id', company.id)
-            .eq('status', 'active');
+            .eq('reset_pending', true); // anti-execução-duplicada
 
-          if (sessionError) {
-            console.error('[RESET] Erro ao encerrar sessões:', sessionError.message);
+          if (convDeleteError) {
+            console.error('[RESET] Erro ao deletar conversa:', convDeleteError.message);
           }
 
-          console.log('[RESET]', {
-            conversation_id:  conversationId,
-            company_id:       company.id,
-            action:           'executed',
-            messages_deleted: !deleteError,
-            memory_cleared:   !memError,
-            flow_abandoned:   !flowError,
-            session_closed:   !sessionError,
+          console.log('[RESET] conversa deletada por completo', {
+            conversation_id: conversationId,
+            company_id:      company.id,
+            flow_deleted:    !flowError,
+            conv_deleted:    !convDeleteError,
           });
 
-          await sendReply('Pronto! Conversa reiniciada. Vamos começar do zero 😊');
-          return { success: true, message: 'reset:/confirmar_reset — concluído' };
+          return { success: true, message: 'reset:/confirmar_reset — conversa deletada' };
         } catch (err) {
           console.error('[RESET] Erro inesperado em /confirmar_reset:', err.message);
         }
