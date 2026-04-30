@@ -286,8 +286,7 @@ export async function buildContext(orchestratorContext) {
         company_id: companyId,
       });
     } else {
-      // Fallback multi-mensagem
-      // Só ativa quando a mensagem atual não produz match E não há ambiguidade.
+      // Fallback 1 — mensagens inbound anteriores
       // Itera as últimas 5 mensagens inbound da mais recente para a mais antiga.
       const inboundHistory = recentMessages
         .filter(m => m.direction === 'inbound')
@@ -298,16 +297,63 @@ export async function buildContext(orchestratorContext) {
         const { bestMatch: fallbackMatch, isAmbiguous: fallbackAmbiguous } =
           matchCatalogItem(msg.content, catalog);
 
-        // Pula mensagens anteriores que também eram ambíguas
         if (fallbackAmbiguous || !fallbackMatch) continue;
 
         itemOfInterest = fallbackMatch;
         console.log('[CTX:item-fallback]', {
-          source:     'previous_message',
+          source:     'inbound_history',
           item:       fallbackMatch.name,
           company_id: companyId,
         });
         break;
+      }
+
+      // Fallback 2 — campos customizados do lead (ex: cp_curso_desejado preenchido via webhook)
+      // Ativa quando nenhuma mensagem inbound continha nome de produto identificável.
+      if (!itemOfInterest) {
+        const customValues = contact?.custom_values ?? [];
+        for (const cv of customValues) {
+          const val = cv?.value;
+          if (!val || typeof val !== 'string' || val.trim().length < 3) continue;
+
+          const { bestMatch: customMatch, isAmbiguous: customAmbiguous } =
+            matchCatalogItem(val, catalog);
+
+          if (customAmbiguous || !customMatch) continue;
+
+          itemOfInterest = customMatch;
+          console.log('[CTX:item-fallback]', {
+            source:     'custom_field',
+            field:      cv?.lead_custom_fields?.field_name ?? 'unknown',
+            item:       customMatch.name,
+            company_id: companyId,
+          });
+          break;
+        }
+      }
+
+      // Fallback 3 — mensagens outbound recentes (automação/agente)
+      // Cobre o caso onde o nome do curso aparece apenas na mensagem da automação.
+      if (!itemOfInterest) {
+        const outboundHistory = recentMessages
+          .filter(m => m.direction === 'outbound')
+          .slice(-3)
+          .reverse();
+
+        for (const msg of outboundHistory) {
+          const { bestMatch: outboundMatch, isAmbiguous: outboundAmbiguous } =
+            matchCatalogItem(msg.content, catalog);
+
+          if (outboundAmbiguous || !outboundMatch) continue;
+
+          itemOfInterest = outboundMatch;
+          console.log('[CTX:item-fallback]', {
+            source:     'outbound_history',
+            item:       outboundMatch.name,
+            company_id: companyId,
+          });
+          break;
+        }
       }
     }
   }
