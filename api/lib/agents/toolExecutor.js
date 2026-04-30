@@ -563,6 +563,10 @@ async function execUpdateOpportunity(svc, args, ctx) {
     }
   }
 
+  // #region agent log
+  console.log('[DEBUG:67ebe7:update_opp] chamado', { fields_raw: Object.keys(fields), filtered_keys: Object.keys(filtered), lead_id: ctx.lead_id, company_id: ctx.company_id })
+  // #endregion
+
   if (Object.keys(filtered).length === 0) {
     return { success: false, error: 'Nenhum campo válido para atualizar' }
   }
@@ -570,6 +574,9 @@ async function execUpdateOpportunity(svc, args, ctx) {
   const opportunityId = await resolveActiveOpportunity(
     svc, ctx.lead_id, ctx.company_id, ctx.locked_opportunity_id
   )
+  // #region agent log
+  console.log('[DEBUG:67ebe7:update_opp] resolveActiveOpportunity', { opportunityId, lead_id: ctx.lead_id })
+  // #endregion
   if (!opportunityId) {
     return { success: false, error: 'Sem oportunidade aberta para atualizar' }
   }
@@ -579,6 +586,10 @@ async function execUpdateOpportunity(svc, args, ctx) {
     .update({ ...filtered, updated_at: new Date().toISOString() })
     .eq('id', opportunityId)
     .eq('company_id', ctx.company_id)
+
+  // #region agent log
+  console.log('[DEBUG:67ebe7:update_opp] resultado update', { opportunityId, error: error?.message ?? null, filtered_keys: Object.keys(filtered) })
+  // #endregion
 
   if (error) return { success: false, error: error.message }
 
