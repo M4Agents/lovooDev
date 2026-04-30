@@ -332,12 +332,13 @@ export async function buildContext(orchestratorContext) {
         }
       }
 
-      // Fallback 3 — mensagens outbound recentes (automação/agente)
-      // Cobre o caso onde o nome do curso aparece apenas na mensagem da automação.
+      // Fallback 3 — mensagens outbound da conversa (automação/agente)
+      // Busca em toda a janela de mensagens carregadas para cobrir conversas longas
+      // onde o nome do curso apareceu em etapas anteriores (ex: ETAPA 2 → ETAPA 5).
       if (!itemOfInterest) {
         const outboundHistory = recentMessages
           .filter(m => m.direction === 'outbound')
-          .slice(-3)
+          .slice(-20)
           .reverse();
 
         for (const msg of outboundHistory) {
