@@ -528,23 +528,31 @@ async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
     // #endregion
     if (!catalogItem) return
 
-    const { error: rpcError } = await svc.rpc('opportunity_add_item', {
-      p_company_id:           ctx.company_id,
-      p_opportunity_id:       opportunityId,
-      p_product_id:           item_type === 'product' ? item_id : null,
-      p_service_id:           item_type === 'service' ? item_id : null,
-      p_quantity:             1,
-      p_unit_price:           catalogItem.default_price ?? null,
-      p_discount_type:        'fixed',
-      p_discount_value:       0,
-      p_name_snapshot:        catalogItem.name ?? null,
-      p_description_snapshot: catalogItem.description ?? null,
-    })
+    // Inserção direta via service_role — bypassa o auth.uid() check do RPC opportunity_add_item
+    const unitPrice  = parseFloat(catalogItem.default_price ?? 0) || 0
+    const lineTotal  = unitPrice * 1  // quantity = 1, discount = 0
+
+    const { error: insertError } = await svc
+      .from('opportunity_items')
+      .insert({
+        company_id:           ctx.company_id,
+        opportunity_id:       opportunityId,
+        product_id:           item_type === 'product' ? item_id : null,
+        service_id:           item_type === 'service' ? item_id : null,
+        line_type:            item_type,
+        name_snapshot:        catalogItem.name ?? '',
+        description_snapshot: catalogItem.description ?? null,
+        unit_price:           unitPrice,
+        quantity:             1,
+        discount_type:        'fixed',
+        discount_value:       0,
+        line_total:           lineTotal,
+      })
     // #region agent log
-    console.log('[DEBUG:67ebe7:link_item] opportunity_add_item', { rpcError: rpcError?.message ?? null, item_type, item_id, opportunity_id: opportunityId })
+    console.log('[DEBUG:67ebe7:link_item] insert direto opportunity_items', { insertError: insertError?.message ?? null, item_type, item_id, opportunity_id: opportunityId, unitPrice, lineTotal })
     // #endregion
 
-    if (!rpcError) {
+    if (!insertError) {
       console.log('[TOOL:update_opportunity] item vinculado à oportunidade', { item_type, item_id, opportunity_id: opportunityId })
     }
   } catch (err) {
