@@ -173,35 +173,42 @@ async function resolveActiveOpportunity(svc, leadId, companyId, lockedOpportunit
     console.warn('[TOOL] locked_opportunity_id inválido ou de outra empresa — buscando fallback')
   }
 
-  const { data } = await svc
-    .from('opportunities')
-    .select('id')
-    .eq('lead_id', leadId)
-    .eq('company_id', companyId)
-    .eq('status', 'open')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (data?.id) return data.id
-
-  // Fallback: busca pelo telefone do lead para cobrir casos onde o lead foi
-  // recriado via webhook (soft-delete + reimport) mas a conversa ainda aponta
-  // para o lead original.
-  const { data: lead } = await svc
+  // Verifica se o lead da conversa ainda está ativo (não soft-deleted).
+  // Se estiver deletado, a conversa está "órfã" e devemos ir direto ao fallback.
+  const { data: currentLead } = await svc
     .from('leads')
-    .select('phone')
+    .select('phone, deleted_at')
     .eq('id', leadId)
     .eq('company_id', companyId)
     .maybeSingle()
 
-  if (!lead?.phone) return null
+  const leadIsActive = currentLead && currentLead.deleted_at === null
+
+  if (leadIsActive) {
+    const { data } = await svc
+      .from('opportunities')
+      .select('id')
+      .eq('lead_id', leadId)
+      .eq('company_id', companyId)
+      .eq('status', 'open')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (data?.id) return data.id
+  }
+
+  // Fallback: busca pelo telefone do lead para cobrir casos onde o lead foi
+  // recriado via webhook (soft-delete + reimport) mas a conversa ainda aponta
+  // para o lead original.
+  const phone = currentLead?.phone
+  if (!phone) return null
 
   // Busca todos os lead_ids ativos com o mesmo telefone na empresa
   const { data: siblingLeads } = await svc
     .from('leads')
     .select('id')
-    .eq('phone', lead.phone)
+    .eq('phone', phone)
     .eq('company_id', companyId)
     .is('deleted_at', null)
     .neq('id', leadId)
@@ -221,7 +228,7 @@ async function resolveActiveOpportunity(svc, leadId, companyId, lockedOpportunit
     .maybeSingle()
 
   if (byPhone?.id) {
-    console.log(`[TOOL] resolveActiveOpportunity: fallback por telefone encontrou oportunidade ${byPhone.id} (lead_id original: ${leadId})`)
+    console.log(`[TOOL] resolveActiveOpportunity: fallback por telefone encontrou oportunidade ${byPhone.id} (lead_id original: ${leadId}, lead deletado: ${!leadIsActive})`)
   }
 
   return byPhone?.id ?? null
