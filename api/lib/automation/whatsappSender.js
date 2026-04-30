@@ -279,7 +279,7 @@ export async function sendMessageNode(node, context, supabase) {
   context.conversationId = conversationId
 
   // 4. Resolver instância WhatsApp
-  const instance = await resolveInstance(conversationId, context.instanceId, supabase)
+  const instance = await resolveInstance(conversationId, effectiveInstanceId, supabase)
   if (!instance) {
     throw new Error('Instância WhatsApp não encontrada ou não está conectada')
   }
