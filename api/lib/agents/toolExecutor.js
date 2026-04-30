@@ -850,6 +850,9 @@ async function updateMessageStatusSafe(svc, { message_id, company_id, ok, uazapi
 
 async function execSendMedia(svc, args, ctx) {
   const intent = args?.intent
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:execSendMedia-entry',message:'send_media chamado',data:{intent,item_of_interest:ctx.item_of_interest,company_id:ctx.company_id,conversation_id:ctx.conversation_id},timestamp:Date.now(),hypothesisId:'H1-H2-H4'})}).catch(()=>{});
+  // #endregion
   if (typeof intent !== 'string' || !(intent in INTENT_TO_USAGE_ROLE)) {
     return {
       success: false,
@@ -872,6 +875,9 @@ async function execSendMedia(svc, args, ctx) {
   const companyId = ctx.company_id
 
   const focus = await resolveCatalogItemFocus(svc, companyId, item)
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:resolveCatalogItemFocus-result',message:'focus resolvido',data:{focus,item_id:item?.id,item_name:item?.name,company_id:companyId},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+  // #endregion
   if (!focus) {
     return { success: false, error: 'no_item_context', error_code: 'validation_error' }
   }
@@ -893,6 +899,9 @@ async function execSendMedia(svc, args, ctx) {
     itemId,
     intent,
   })
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:cooldown-check',message:'cooldown resultado',data:{cd,itemType,itemId,intent},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
   if (cd.blocked) {
     return { success: false, error: 'cooldown_active', error_code: 'validation_error' }
   }
@@ -913,6 +922,9 @@ async function execSendMedia(svc, args, ctx) {
     limit,
   })
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'toolExecutor.js:mediaSelector-result',message:'mediaList resultado',data:{mediaList,intent,itemType,itemId,alreadySentAssetIds},timestamp:Date.now(),hypothesisId:'H3-H5'})}).catch(()=>{});
+  // #endregion
   if (!mediaList.length) {
     return {
       success: false,

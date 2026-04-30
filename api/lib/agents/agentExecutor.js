@@ -344,6 +344,9 @@ export async function executeAgent(output) {
   // Executado após o LLM responder. Não bloqueia o retorno ao lead.
   if (output.conversation?.id && companyId) {
     const toolResults = runResult.tool_results ?? []
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'67ebe7'},body:JSON.stringify({sessionId:'67ebe7',location:'agentExecutor.js:tool_results',message:'tool_results do runner',data:{tool_results:toolResults,has_send_media:toolResults.some(t=>t.tool_name==='send_media'),item_of_interest:output.item_of_interest,conversation_id:output.conversation?.id},timestamp:Date.now(),hypothesisId:'H1-H3-H4-H5'})}).catch(()=>{});
+    // #endregion
     void evaluateTransition(
       output.conversation.id,
       companyId,
