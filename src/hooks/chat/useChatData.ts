@@ -185,6 +185,15 @@ export const useChatData = (
     }
   }, [companyId])
 
+  // Listener para conversas deletadas
+  useChatEvent('chat:conversation:deleted', (payload: any) => {
+    if (payload.company_id === companyId) {
+      setConversations(prev =>
+        prev.filter(conv => conv.id !== payload.id)
+      )
+    }
+  }, [companyId])
+
   // =====================================================
   // HANDLERS
   // =====================================================
@@ -285,6 +294,7 @@ export const useChatData = (
   // =====================================================
 
   useEffect(() => {
+    if (ChatFeatureManager.shouldUseUnifiedRealtime()) return
     if (!companyId) return
 
     // Subscrever mudanças nas conversas
