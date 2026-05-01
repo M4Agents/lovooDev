@@ -69,19 +69,34 @@ export default async function handler(req, res) {
       try {
         console.log(`📤 Processing message ${message.id}...`)
 
-        // Enviar mensagem via UAZAPI
+        // 1. Criar registro em chat_messages ANTES de enviar (para aparecer no chat)
+        const chatMessageId = await createChatMessageRecord(message)
+        if (!chatMessageId) {
+          console.warn(`[CRON-SCHED][${runId}] ⚠️ chat_message não criado para ${message.id} — mensagem ainda será enviada`)
+        }
+
+        // 2. Enviar mensagem via UAZAPI
         const sendResult = await sendMessageViaUAZAPI(message)
 
         if (sendResult.success) {
-          // Marcar como enviada
+          // 3a. Atualizar chat_message para 'sent'
+          if (chatMessageId) {
+            await supabase
+              .from('chat_messages')
+              .update({ status: 'sent', uazapi_message_id: sendResult.message_id, updated_at: new Date().toISOString() })
+              .eq('id', chatMessageId)
+          }
+
+          // 3b. Marcar mensagem agendada como enviada
+          // p_sent_message_id=null pois o ID da Uazapi não é UUID
           const { error: markError } = await supabase.rpc('mark_scheduled_message_sent', {
             p_message_id: message.id,
-            p_sent_message_id: sendResult.message_id || null
+            p_sent_message_id: null,
           })
 
           // #region agent log
-          console.log(`[CRON-SCHED][${runId}] mark_sent: messageId=${message.id} uazapiId=${sendResult.message_id} markError=${markError?.message ?? 'none'} markCode=${markError?.code ?? 'none'}`)
-          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:mark-sent',message:'mark_scheduled_message_sent result',data:{runId,messageId:message.id,uazapiMessageId:sendResult.message_id,markError:markError?.message??null,markCode:markError?.code??null},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{})
+          console.log(`[CRON-SCHED][${runId}] mark_sent: messageId=${message.id} chatMessageId=${chatMessageId} uazapiId=${sendResult.message_id} markError=${markError?.message ?? 'none'}`)
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:mark-sent',message:'mark_sent result',data:{runId,messageId:message.id,chatMessageId,uazapiMessageId:sendResult.message_id,markError:markError?.message??null},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{})
           // #endregion
 
           results.sent++
@@ -99,7 +114,15 @@ export default async function handler(req, res) {
             }
           }
         } else {
-          // Marcar como falha
+          // 3c. Atualizar chat_message para 'failed'
+          if (chatMessageId) {
+            await supabase
+              .from('chat_messages')
+              .update({ status: 'failed', updated_at: new Date().toISOString() })
+              .eq('id', chatMessageId)
+          }
+
+          // Marcar mensagem agendada como falha
           await supabase.rpc('mark_scheduled_message_failed', {
             p_message_id: message.id,
             p_error_message: sendResult.error || 'Unknown error'
@@ -143,6 +166,32 @@ export default async function handler(req, res) {
       error: error.message
     })
   }
+}
+
+// =====================================================
+// FUNÇÃO: Criar registro em chat_messages antes do envio
+// =====================================================
+
+async function createChatMessageRecord(message) {
+  const content   = message.content || ''
+  const truncated = content.length > 450 ? content.substring(0, 447) + '...' : content
+
+  const { data, error } = await supabase.rpc('chat_create_message', {
+    p_conversation_id: message.conversation_id,
+    p_company_id:      message.company_id,
+    p_content:         truncated,
+    p_message_type:    message.message_type,
+    p_direction:       'outbound',
+    p_sent_by:         message.created_by || null,
+    p_media_url:       message.media_url || null,
+  })
+
+  if (error || !data?.success) {
+    console.error('[CRON-SCHED] chat_create_message error:', error?.message ?? data?.error)
+    return null
+  }
+
+  return data.message_id
 }
 
 // =====================================================
