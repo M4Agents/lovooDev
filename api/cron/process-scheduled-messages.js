@@ -4,12 +4,9 @@
 // Executado a cada minuto via Vercel Cron
 // Processa mensagens pendentes e envia via UAZAPI
 
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
-)
+const supabase = getSupabaseAdmin()
 
 export default async function handler(req, res) {
   // DEBUG: Log completo para diagnóstico
