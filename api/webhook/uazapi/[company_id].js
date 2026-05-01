@@ -334,6 +334,32 @@ async function processMessage(payload) {
     const company = instance.companies;
     console.log('🏢 EMPRESA:', company.name);
     
+    // [IDEMPOTÊNCIA] Early-exit antes de RPC, lead creation e automações
+    // OBS: media processing já ocorreu antes deste ponto neste arquivo
+    if (messageId && company?.id) {
+      try {
+        const supabaseAdmin = getSupabaseAdmin()
+
+        const { data: existingMsg } = await supabaseAdmin
+          .from('chat_messages')
+          .select('id')
+          .eq('company_id', company.id)
+          .eq('uazapi_message_id', messageId)
+          .maybeSingle()
+
+        if (existingMsg) {
+          console.log('[WEBHOOK][IDEMPOTENCY] Duplicata detectada — early-exit:', {
+            messageId,
+            company_id: company.id
+          })
+
+          return { success: true, skipped: true, reason: 'duplicate_message' }
+        }
+      } catch (err) {
+        console.error('[WEBHOOK][IDEMPOTENCY] Erro no check — seguindo fluxo normal:', err)
+      }
+    }
+
     // =====================================================
     // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
     // =====================================================

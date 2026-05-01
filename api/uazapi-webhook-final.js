@@ -303,6 +303,31 @@ async function processMessage(payload) {
     
     console.log('🏢 EMPRESA:', company.name);
     
+    // [IDEMPOTÊNCIA] Early-exit antes de qualquer IO pesado (S3, Whisper, RPC, automações)
+    if (messageId && company?.id) {
+      try {
+        const supabaseAdmin = getSupabaseAdmin()
+
+        const { data: existingMsg } = await supabaseAdmin
+          .from('chat_messages')
+          .select('id')
+          .eq('company_id', company.id)
+          .eq('uazapi_message_id', messageId)
+          .maybeSingle()
+
+        if (existingMsg) {
+          console.log('[WEBHOOK][IDEMPOTENCY] Duplicata detectada — early-exit:', {
+            messageId,
+            company_id: company.id
+          })
+
+          return { success: true, skipped: true, reason: 'duplicate_message' }
+        }
+      } catch (err) {
+        console.error('[WEBHOOK][IDEMPOTENCY] Erro no check — seguindo fluxo normal:', err)
+      }
+    }
+
     // Buscar nome do lead no cadastro
     const { data: existingLead } = await supabase
       .from('leads')
