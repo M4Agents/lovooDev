@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useAccessControl } from './hooks/useAccessControl';
 import { ModernLayout } from './components/ModernLayout';
 import { Login } from './pages/Login';
-import { ModernDashboard } from './pages/ModernDashboard';
+import { NewDashboard } from './pages/NewDashboard';
 import { Analytics } from './pages/Analytics';
 import { AdvancedAnalytics } from './pages/AdvancedAnalytics';
 import { Settings } from './pages/Settings';
@@ -132,7 +132,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <ModernDashboard />
+            <NewDashboard />
           </ProtectedRoute>
         }
       />
