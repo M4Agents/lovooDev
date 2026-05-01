@@ -10,23 +10,18 @@ const supabase = getSupabaseAdmin()
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
 export default async function handler(req, res) {
-  // DEBUG: Log completo para diagnóstico
-  console.log('🔍 CRON DEBUG - Headers:', JSON.stringify(req.headers, null, 2))
-  console.log('🔍 CRON DEBUG - CRON_SECRET exists:', !!process.env.CRON_SECRET)
-  console.log('🔍 CRON DEBUG - CRON_SECRET length:', process.env.CRON_SECRET?.length)
-  
+  // #region agent log
+  const runId = Math.random().toString(36).slice(2, 8)
+  console.log(`[CRON-SCHED][${runId}] ▶ Invocation started at ${new Date().toISOString()}`)
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:handler-entry',message:'Cron invocation started',data:{runId,ts:new Date().toISOString()},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
+  // #endregion
+
   // Verificar se é chamada do cron do Vercel
   const authHeader = req.headers.authorization
   const expectedAuth = `Bearer ${process.env.CRON_SECRET}`
   
-  console.log('🔍 CRON DEBUG - Auth header:', authHeader)
-  console.log('🔍 CRON DEBUG - Expected:', expectedAuth)
-  console.log('🔍 CRON DEBUG - Match:', authHeader === expectedAuth)
-  
   if (authHeader !== expectedAuth) {
-    console.error('❌ Unauthorized cron request')
-    console.error('❌ Received:', authHeader)
-    console.error('❌ Expected:', expectedAuth)
+    console.error(`[CRON-SCHED][${runId}] ❌ Unauthorized`)
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -36,6 +31,11 @@ export default async function handler(req, res) {
     // Buscar mensagens pendentes
     const { data: messages, error: fetchError } = await supabase
       .rpc('get_pending_scheduled_messages')
+
+    // #region agent log
+    console.log(`[CRON-SCHED][${runId}] RPC result: count=${messages?.length ?? 0} error=${fetchError?.message ?? 'none'} ids=${JSON.stringify(messages?.map(m => m.id))}`)
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:after-rpc',message:'get_pending_scheduled_messages result',data:{runId,count:messages?.length??0,ids:messages?.map(m=>m.id),error:fetchError?.message??null},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
+    // #endregion
 
     if (fetchError) {
       console.error('❌ Error fetching pending messages:', fetchError)
@@ -74,10 +74,15 @@ export default async function handler(req, res) {
 
         if (sendResult.success) {
           // Marcar como enviada
-          await supabase.rpc('mark_scheduled_message_sent', {
+          const { error: markError } = await supabase.rpc('mark_scheduled_message_sent', {
             p_message_id: message.id,
             p_sent_message_id: sendResult.message_id || null
           })
+
+          // #region agent log
+          console.log(`[CRON-SCHED][${runId}] mark_sent: messageId=${message.id} uazapiId=${sendResult.message_id} markError=${markError?.message ?? 'none'} markCode=${markError?.code ?? 'none'}`)
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:mark-sent',message:'mark_scheduled_message_sent result',data:{runId,messageId:message.id,uazapiMessageId:sendResult.message_id,markError:markError?.message??null,markCode:markError?.code??null},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{})
+          // #endregion
 
           results.sent++
           console.log(`✅ Message ${message.id} sent successfully`)
@@ -184,6 +189,11 @@ async function sendMessageViaUAZAPI(message) {
     })
 
     const result = await response.json()
+
+    // #region agent log
+    console.log(`[CRON-SCHED] Uazapi response: status=${response.status} ok=${response.ok} messageid=${result?.messageid ?? result?.messageId ?? 'none'} keys=${JSON.stringify(Object.keys(result ?? {}))}`)
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:uazapi-response',message:'Uazapi send response',data:{status:response.status,ok:response.ok,messageid:result?.messageid??result?.messageId??null,resultKeys:Object.keys(result??{})},timestamp:Date.now(),hypothesisId:'H-B'})}).catch(()=>{})
+    // #endregion
 
     if (!response.ok) {
       return { success: false, error: result.error || result.message || `HTTP ${response.status}` }
