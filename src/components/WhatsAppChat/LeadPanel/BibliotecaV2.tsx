@@ -85,22 +85,29 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [fileToDelete, setFileToDelete] = useState<MediaFile | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [cursor, setCursor] = useState<string | null>(null)
+  const PAGE_SIZE = 50
   
   // =====================================================
   // BUSCAR DADOS
   // =====================================================
   
   useEffect(() => {
-    if (companyId) {
+    if (companyId && conversationId) {
       fetchData()
     }
-  }, [companyId])
+  }, [companyId, conversationId])
   
   const fetchData = async () => {
     try {
       setLoading(true)
-      // Buscar arquivos do chat
-      await fetchChatFiles()
+      // Buscar arquivos do chat (primeira página)
+      await fetchChatFiles('all', null, false)
+      
+      // Buscar estatísticas acuradas (COUNT separado)
+      await fetchChatStats()
       
       // Buscar pastas
       await fetchFolders()
@@ -112,19 +119,32 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     }
   }
   
-  const fetchChatFiles = async () => {
+  const fetchChatFiles = async (
+    filter: 'all' | 'image' | 'video' | 'document' = 'all',
+    cursorValue: string | null = null,
+    append = false
+  ) => {
     try {
-      // Buscar DIRETO do Supabase filtrando por conversa específica
-      // Apenas imagens, vídeos e documentos (sem áudios)
-      const { data: messages, error } = await supabase
+      let query = supabase
         .from('chat_messages')
         .select('id, media_url, message_type, content, created_at, company_id, conversation_id')
         .eq('company_id', companyId)
-        .eq('conversation_id', conversationId) // ✅ Filtrar por conversa específica
-        .in('message_type', ['image', 'video', 'document']) // ✅ Sem áudios
+        .eq('conversation_id', conversationId)
         .not('media_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(1000)
+        .limit(PAGE_SIZE)
+
+      if (filter !== 'all') {
+        query = query.eq('message_type', filter)
+      } else {
+        query = query.in('message_type', ['image', 'video', 'document'])
+      }
+
+      if (cursorValue) {
+        query = query.lt('created_at', cursorValue)
+      }
+
+      const { data: messages, error } = await query
       
       if (error) {
         console.error('❌ Erro ao buscar chat_messages:', error)
@@ -150,28 +170,53 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
           source: 'whatsapp_chat'
         }
       })
-      
-      // Calcular estatísticas
-      const stats = files.reduce((acc: any, file) => {
-        acc[file.file_type] = (acc[file.file_type] || 0) + 1
-        acc.total = (acc.total || 0) + 1
-        return acc
-      }, {})
-      
-      setAllChatFiles(files) // Guardar todos os arquivos
-      setChatFiles(files) // Inicialmente mostrar todos
-      setChatStats({
-        total: stats.total || 0,
-        images: stats.image || 0,
-        videos: stats.video || 0,
-        documents: stats.document || 0
-      })
-      setSelectedFilter('all') // Reset filtro
+
+      // Atualizar cursor e hasMore
+      const newHasMore = (messages || []).length === PAGE_SIZE
+      setHasMore(newHasMore)
+      if ((messages || []).length > 0) {
+        setCursor((messages || [])[(messages || []).length - 1].created_at)
+      } else if (!append) {
+        setCursor(null)
+      }
+
+      // Atualizar listas
+      if (append) {
+        setAllChatFiles(prev => [...prev, ...files])
+        setChatFiles(prev => [...prev, ...files])
+      } else {
+        setAllChatFiles(files)
+        setChatFiles(files)
+      }
     } catch (error) {
       console.error('❌ Erro ao buscar arquivos do chat:', error)
     }
   }
   
+  const fetchChatStats = async () => {
+    try {
+      const base = () => supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('conversation_id', conversationId)
+        .not('media_url', 'is', null)
+
+      const [imgRes, vidRes, docRes] = await Promise.all([
+        base().eq('message_type', 'image'),
+        base().eq('message_type', 'video'),
+        base().eq('message_type', 'document'),
+      ])
+
+      const images = imgRes.count ?? 0
+      const videos = vidRes.count ?? 0
+      const documents = docRes.count ?? 0
+      setChatStats({ total: images + videos + documents, images, videos, audios: 0, documents })
+    } catch (error) {
+      console.error('❌ Erro ao buscar estatísticas:', error)
+    }
+  }
+
   const fetchFolders = async () => {
     try {
       // Usar API (mesma que o menu principal usa - já funciona)
@@ -229,20 +274,22 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
       setFolderFiles([])
     }
   }, [currentFolderId])
+
+  const loadMore = async () => {
+    if (!hasMore || loadingMore || !cursor) return
+    setLoadingMore(true)
+    await fetchChatFiles(selectedFilter, cursor, true)
+    setLoadingMore(false)
+  }
   
   // =====================================================
   // FILTROS
   // =====================================================
   
-  const handleFilterChange = (filter: 'all' | 'image' | 'video' | 'document') => {
+  const handleFilterChange = async (filter: 'all' | 'image' | 'video' | 'document') => {
     setSelectedFilter(filter)
-    
-    if (filter === 'all') {
-      setChatFiles(allChatFiles)
-    } else {
-      const filtered = allChatFiles.filter(file => file.file_type === filter)
-      setChatFiles(filtered)
-    }
+    setCursor(null)
+    await fetchChatFiles(filter, null, false)
   }
   
   const handleFileClick = (file: MediaFile) => {
@@ -676,6 +723,17 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            {hasMore && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {loadingMore ? 'Carregando...' : 'Carregar mais'}
+                </button>
               </div>
             )}
           </div>
