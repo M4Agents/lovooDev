@@ -7,6 +7,7 @@
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 
 const supabase = getSupabaseAdmin()
+const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
 export default async function handler(req, res) {
   // DEBUG: Log completo para diagnóstico
@@ -140,98 +141,60 @@ export default async function handler(req, res) {
 }
 
 // =====================================================
+// FUNÇÃO: Normalizar telefone para formato brasileiro
+// =====================================================
+
+function cleanPhone(phone) {
+  let clean = (phone || '').replace(/\D/g, '')
+  if (!clean.startsWith('55') && clean.length <= 11) clean = '55' + clean
+  return clean
+}
+
+// =====================================================
 // FUNÇÃO: Enviar mensagem via UAZAPI
 // =====================================================
 
 async function sendMessageViaUAZAPI(message) {
   try {
-    // Buscar credenciais da instância
     const { data: instance, error: instanceError } = await supabase
       .from('whatsapp_life_instances')
-      .select('instance_name, token')
+      .select('provider_token')
       .eq('id', message.instance_id)
       .single()
 
-    if (instanceError || !instance) {
-      return {
-        success: false,
-        error: 'Instance not found'
-      }
+    if (instanceError || !instance?.provider_token) {
+      return { success: false, error: 'Instance not found or missing provider_token' }
     }
 
-    // Preparar payload baseado no tipo de mensagem
-    let payload = {
-      number: message.contact_phone.replace(/\D/g, ''), // Apenas números
+    const isText   = message.message_type === 'text'
+    const number   = cleanPhone(message.contact_phone)
+    const endpoint = isText ? `${UAZAPI_BASE}/send/text` : `${UAZAPI_BASE}/send/media`
+    const payload  = isText
+      ? { number, text: message.content, delay: 1000 }
+      : { number, type: message.message_type, file: message.media_url, text: message.content || '', delay: 1000 }
+
+    if (!isText && !message.media_url) {
+      return { success: false, error: `media_url ausente para tipo ${message.message_type}` }
     }
 
-    // Adicionar conteúdo baseado no tipo
-    switch (message.message_type) {
-      case 'text':
-        payload.text = message.content
-        break
-
-      case 'image':
-        payload.image = message.media_url
-        payload.caption = message.content || ''
-        break
-
-      case 'video':
-        payload.video = message.media_url
-        payload.caption = message.content || ''
-        break
-
-      case 'audio':
-        payload.audio = message.media_url
-        break
-
-      case 'document':
-        payload.document = message.media_url
-        payload.fileName = message.content || 'document'
-        break
-
-      default:
-        return {
-          success: false,
-          error: `Unsupported message type: ${message.message_type}`
-        }
-    }
-
-    // Determinar endpoint correto
-    const endpoint = message.message_type === 'text' 
-      ? 'send-text' 
-      : `send-${message.message_type}`
-
-    // Enviar via UAZAPI
-    const response = await fetch(
-      `https://api.uazapi.com/instances/${instance.instance_name}/messages/${endpoint}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${instance.token}`
-        },
-        body: JSON.stringify(payload)
-      }
-    )
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token: instance.provider_token },
+      body: JSON.stringify(payload),
+    })
 
     const result = await response.json()
 
     if (!response.ok) {
-      return {
-        success: false,
-        error: result.message || `HTTP ${response.status}`
-      }
+      return { success: false, error: result.error || result.message || `HTTP ${response.status}` }
     }
 
     return {
       success: true,
-      message_id: result.id || result.messageId
+      message_id: result.messageid || result.messageId || null,
     }
 
   } catch (error) {
-    return {
-      success: false,
-      error: error.message
-    }
+    return { success: false, error: error.message }
   }
 }
