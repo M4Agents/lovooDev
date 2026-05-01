@@ -58,9 +58,12 @@ async function processMessage(payload) {
   try {
     const { createClient } = await import('@supabase/supabase-js');
     
+    if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+      throw new Error('Missing Supabase environment variables');
+    }
     const supabase = createClient(
-      'https://etzdsywunlpbgxkphuil.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_ANON_KEY,
       {
         auth: { autoRefreshToken: false, persistSession: false },
         global: { headers: { 'cache-control': 'no-cache' } }
@@ -309,18 +312,25 @@ async function processMessage(payload) {
     
     console.error('📞 DADOS:', { phoneNumber, tempSenderName, instanceName });
     
-    // Buscar instância
-    const { data: instance, error: instanceError } = await supabase
-      .from('whatsapp_life_instances')
-      .select('id, company_id, provider_token, companies(id, name, api_key)')
-      .eq('provider_instance_id', instanceName)
-      .eq('status', 'connected')
-      .single();
-    
-    if (instanceError || !instance) {
+    // Buscar instância via RPC segura
+    const { data: instanceData, error: instanceError } = await supabase.rpc(
+      'get_instance_for_webhook',
+      { p_provider_instance_id: instanceName }
+    );
+
+    if (instanceError || instanceData?.found !== true) {
       return { success: false, error: 'Instância não encontrada: ' + instanceName };
     }
-    
+
+    const instance = {
+      id: instanceData.instance_id,
+      company_id: instanceData.company_id,
+      companies: {
+        id: instanceData.company_id,
+        name: instanceData.company_name
+      }
+    };
+
     const company = instance.companies;
     console.log('🏢 EMPRESA:', company.name);
     

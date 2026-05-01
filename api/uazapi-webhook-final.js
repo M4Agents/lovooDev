@@ -86,9 +86,12 @@ async function processMessage(payload) {
   try {
     const { createClient } = await import('@supabase/supabase-js');
     
+    if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+      throw new Error('Missing Supabase environment variables');
+    }
     const supabase = createClient(
-      'https://etzdsywunlpbgxkphuil.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E',
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_ANON_KEY,
       {
         auth: { autoRefreshToken: false, persistSession: false },
         global: { headers: { 'cache-control': 'no-cache' } }
@@ -210,79 +213,90 @@ async function processMessage(payload) {
     
     // SOLUÇÃO 3: Buscar instância com fallback por phone_number
     console.log('🔍 Buscando instância:', { instanceName, ownerPhone });
-    
-    // Tentar buscar por provider_instance_id primeiro
-    let { data: instance, error: instanceError } = await supabase
-      .from('whatsapp_life_instances')
-      .select('id, company_id, provider_instance_id')
-      .eq('provider_instance_id', instanceName)
-      .eq('status', 'connected')
-      .single();
-    
-    // Se não encontrou, buscar por phone_number (fallback)
-    if (instanceError || !instance) {
+
+    // Tentar buscar por provider_instance_id via RPC segura
+    const { data: instanceData, error: instanceError } = await supabase.rpc(
+      'get_instance_for_webhook',
+      { p_provider_instance_id: instanceName }
+    );
+
+    let instance;
+    let company;
+
+    if (!instanceError && instanceData?.found === true) {
+      instance = {
+        id: instanceData.instance_id,
+        company_id: instanceData.company_id,
+        provider_instance_id: instanceName
+      };
+      company = {
+        id: instanceData.company_id,
+        name: instanceData.company_name,
+        api_key: null
+      };
+      console.log('✅ Instância encontrada por provider_instance_id');
+    } else {
+      // Se não encontrou, buscar por phone_number (fallback)
       console.log('⚠️ Instância não encontrada por provider_instance_id, tentando por phone_number...');
-      
+
       const { data: instanceByPhone, error: phoneError } = await supabase
         .from('whatsapp_life_instances')
         .select('id, company_id, provider_instance_id')
         .eq('phone_number', ownerPhone)
         .eq('status', 'connected')
         .single();
-      
+
       if (phoneError || !instanceByPhone) {
         console.error('❌ Instância não encontrada nem por provider_instance_id nem por phone_number:', { instanceName, ownerPhone });
         return { success: false, error: 'Instância não encontrada: ' + instanceName };
       }
-      
+
       // Encontrou por phone_number! Auto-atualizar provider_instance_id
       console.log('✅ Instância encontrada por phone_number! Auto-atualizando provider_instance_id...');
       console.log('📝 Atualizando de:', instanceByPhone.provider_instance_id, '→', instanceName);
-      
+
       const { error: updateError } = await supabase
         .from('whatsapp_life_instances')
-        .update({ 
+        .update({
           provider_instance_id: instanceName,
           updated_at: new Date().toISOString()
         })
         .eq('id', instanceByPhone.id);
-      
+
       if (updateError) {
         console.error('⚠️ Erro ao atualizar provider_instance_id:', updateError);
       } else {
         console.log('✅ provider_instance_id atualizado com sucesso!');
       }
-      
+
       instance = instanceByPhone;
-    } else {
-      console.log('✅ Instância encontrada por provider_instance_id');
-    }
-    
-    // Buscar empresa usando função SECURITY DEFINER (bypass RLS)
-    console.log('🔍 Buscando empresa com company_id via SECURITY DEFINER:', instance.company_id);
-    
-    const { data: companyResult, error: companyError } = await supabase
-      .rpc('webhook_get_company_by_id', {
-        p_company_id: instance.company_id
+
+      // Buscar empresa usando função SECURITY DEFINER (bypass RLS)
+      console.log('🔍 Buscando empresa com company_id via SECURITY DEFINER:', instance.company_id);
+
+      const { data: companyResult, error: companyError } = await supabase
+        .rpc('webhook_get_company_by_id', {
+          p_company_id: instance.company_id
+        });
+
+      console.log('🏢 Resultado da busca empresa via RPC:', {
+        result: companyResult,
+        error: companyError,
+        company_id_usado: instance.company_id
       });
-      
-    console.log('🏢 Resultado da busca empresa via RPC:', {
-      result: companyResult,
-      error: companyError,
-      company_id_usado: instance.company_id
-    });
-    
-    // Extrair dados da empresa do resultado da função
-    const company = companyResult?.success ? {
-      id: companyResult.id,
-      name: companyResult.name,
-      api_key: companyResult.api_key
-    } : null;
-    
-    // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
-    if (companyError || !company) {
-      console.error('❌ EMPRESA NÃO ENCONTRADA para instância:', instanceName, 'Error:', companyError);
-      return { success: false, error: 'Empresa não encontrada para a instância: ' + instanceName };
+
+      // Extrair dados da empresa do resultado da função
+      company = companyResult?.success ? {
+        id: companyResult.id,
+        name: companyResult.name,
+        api_key: companyResult.api_key
+      } : null;
+
+      // CORREÇÃO CRÍTICA: Verificar se company existe antes de acessar propriedades
+      if (companyError || !company) {
+        console.error('❌ EMPRESA NÃO ENCONTRADA para instância:', instanceName, 'Error:', companyError);
+        return { success: false, error: 'Empresa não encontrada para a instância: ' + instanceName };
+      }
     }
     
     console.log('🏢 EMPRESA:', company.name);
