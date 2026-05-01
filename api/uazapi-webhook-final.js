@@ -237,9 +237,11 @@ async function processMessage(payload) {
       console.log('✅ Instância encontrada por provider_instance_id');
     } else {
       // Se não encontrou, buscar por phone_number (fallback)
+      // Usa supabaseAdmin (service_role) para não depender da policy wli_select_anonymous_webhook
       console.log('⚠️ Instância não encontrada por provider_instance_id, tentando por phone_number...');
 
-      const { data: instanceByPhone, error: phoneError } = await supabase
+      const supabaseAdminFallback = getSupabaseAdmin();
+      const { data: instanceByPhone, error: phoneError } = await supabaseAdminFallback
         .from('whatsapp_life_instances')
         .select('id, company_id, provider_instance_id')
         .eq('phone_number', ownerPhone)
@@ -255,7 +257,7 @@ async function processMessage(payload) {
       console.log('✅ Instância encontrada por phone_number! Auto-atualizando provider_instance_id...');
       console.log('📝 Atualizando de:', instanceByPhone.provider_instance_id, '→', instanceName);
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdminFallback
         .from('whatsapp_life_instances')
         .update({
           provider_instance_id: instanceName,
