@@ -176,6 +176,10 @@ async function createChatMessageRecord(message) {
   const content   = message.content || ''
   const truncated = content.length > 450 ? content.substring(0, 447) + '...' : content
 
+  // #region agent log
+  console.log(`[CHAT-CREATE] conv=${message.conversation_id} company=${message.company_id} type=${message.message_type} sentBy=${message.created_by}`)
+  // #endregion
+
   const { data, error } = await supabase.rpc('chat_create_message', {
     p_conversation_id: message.conversation_id,
     p_company_id:      message.company_id,
@@ -185,6 +189,11 @@ async function createChatMessageRecord(message) {
     p_sent_by:         message.created_by || null,
     p_media_url:       message.media_url || null,
   })
+
+  // #region agent log
+  console.log(`[CHAT-CREATE] result: success=${data?.success} messageId=${data?.message_id ?? 'null'} error=${error?.message ?? data?.error ?? 'none'}`)
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:createChatMessageRecord',message:'chat_create_message result',data:{convId:message.conversation_id,companyId:message.company_id,success:data?.success,messageId:data?.message_id??null,error:error?.message??data?.error??null},timestamp:Date.now(),hypothesisId:'H-F'})}).catch(()=>{})
+  // #endregion
 
   if (error || !data?.success) {
     console.error('[CRON-SCHED] chat_create_message error:', error?.message ?? data?.error)
