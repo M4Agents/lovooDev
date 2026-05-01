@@ -175,6 +175,20 @@ function buildPeriodParams(filters: DashboardFilters): Record<string, string> {
 }
 
 // ---------------------------------------------------------------------------
+// Tipos de funis
+// ---------------------------------------------------------------------------
+
+export interface FunnelItem {
+  id: string
+  name: string
+}
+
+export interface FunnelsResponse {
+  data: FunnelItem[]
+  meta: Record<string, never>
+}
+
+// ---------------------------------------------------------------------------
 // Tipos de itens das listas
 // ---------------------------------------------------------------------------
 
@@ -244,6 +258,13 @@ export interface ConversationFilters extends DashboardFilters {
 // ---------------------------------------------------------------------------
 
 export const dashboardApi = {
+  /**
+   * Lista de funis ativos da empresa para alimentar o seletor de funil.
+   */
+  async getFunnels(companyId: string): Promise<FunnelsResponse> {
+    return apiFetch<FunnelsResponse>('/api/dashboard/funnels', { company_id: companyId })
+  },
+
   /**
    * KPIs executivos + agent_mode + funnel_mode.
    * Requer company_id e período.

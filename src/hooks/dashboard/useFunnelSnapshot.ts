@@ -2,7 +2,9 @@
 // useFunnelSnapshot
 // Pipeline atual: onde estão as oportunidades AGORA.
 // NÃO depende de período — representa estado presente.
-// Só refetch quando companyId ou funnelId mudar.
+// Só refetch quando companyId, funnelId ou funnelMode mudar.
+//
+// Regra crítica: em multi-funnel, NÃO fazer request sem funnelId.
 // =====================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -15,22 +17,31 @@ interface UseFunnelSnapshotResult {
   meta: FunnelSnapshotMeta | null
   loading: boolean
   error: string | null
+  /** true quando funnelId é obrigatório mas ausente — não é erro, é estado esperado */
+  funnelRequired: boolean
   refetch: () => void
 }
 
-export function useFunnelSnapshot(funnelId?: string | null): UseFunnelSnapshotResult {
+export function useFunnelSnapshot(
+  funnelId?: string | null,
+  funnelMode?: 'single-funnel' | 'multi-funnel',
+): UseFunnelSnapshotResult {
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
-  const [data, setData]     = useState<FunnelSnapshotData | null>(null)
-  const [meta, setMeta]     = useState<FunnelSnapshotMeta | null>(null)
+  const [data, setData]       = useState<FunnelSnapshotData | null>(null)
+  const [meta, setMeta]       = useState<FunnelSnapshotMeta | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
 
-  const fetch = useCallback(async () => {
+  // Em multi-funnel sem funnelId: não faz request
+  const funnelRequired = funnelMode === 'multi-funnel' && !funnelId
+
+  const load = useCallback(async () => {
     if (!companyId) return
+    if (funnelMode === 'multi-funnel' && !funnelId) return
 
     abortRef.current?.abort()
     abortRef.current = new AbortController()
@@ -48,13 +59,20 @@ export function useFunnelSnapshot(funnelId?: string | null): UseFunnelSnapshotRe
     } finally {
       setLoading(false)
     }
-  }, [companyId, funnelId])
+  }, [companyId, funnelId, funnelMode])
 
-  // Sem dependência de período — só companyId e funnelId
   useEffect(() => {
-    void fetch()
-    return () => abortRef.current?.abort()
-  }, [fetch])
+    // Limpa dados quando entra em estado de "funil obrigatório"
+    if (funnelRequired) {
+      setData(null)
+      setMeta(null)
+      setError(null)
+      return
+    }
 
-  return { data, meta, loading, error, refetch: fetch }
+    void load()
+    return () => abortRef.current?.abort()
+  }, [load, funnelRequired])
+
+  return { data, meta, loading, error, funnelRequired, refetch: load }
 }

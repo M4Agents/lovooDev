@@ -7,13 +7,14 @@
 
 import React, { useMemo } from 'react'
 import { PeriodFilter } from '../components/PeriodFilter'
-import { ExecutiveSummary }     from '../components/Dashboard/sections/ExecutiveSummary'
-import { ActionCenter }         from '../components/Dashboard/sections/ActionCenter'
-import { useDashboardFilters }  from '../hooks/dashboard/useDashboardFilters'
-import { useDashboardSummary }  from '../hooks/dashboard/useDashboardSummary'
-import { useFunnelSnapshot }    from '../hooks/dashboard/useFunnelSnapshot'
-import { useFunnelFlow }        from '../hooks/dashboard/useFunnelFlow'
-import type { DashboardFilters } from '../services/dashboardApi'
+import { FunnelSelector }         from '../components/Dashboard/filters/FunnelSelector'
+import { ExecutiveSummary }       from '../components/Dashboard/sections/ExecutiveSummary'
+import { ActionCenter }           from '../components/Dashboard/sections/ActionCenter'
+import { useDashboardFilters }    from '../hooks/dashboard/useDashboardFilters'
+import { useDashboardSummary }    from '../hooks/dashboard/useDashboardSummary'
+import { useFunnelSnapshot }      from '../hooks/dashboard/useFunnelSnapshot'
+import { useFunnelFlow }          from '../hooks/dashboard/useFunnelFlow'
+import type { DashboardFilters }  from '../services/dashboardApi'
 
 // ---------------------------------------------------------------------------
 // Sub-componentes auxiliares do layout de funil
@@ -81,7 +82,7 @@ function SectionEmpty({ message }: { message: string }) {
 
 export const NewDashboard: React.FC = () => {
   // Filtros globais — fonte única de verdade
-  const { period, funnelId, setPeriod } = useDashboardFilters()
+  const { period, funnelId, setPeriod, setFunnelId } = useDashboardFilters()
 
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
@@ -91,12 +92,19 @@ export const NewDashboard: React.FC = () => {
 
   // Dados
   const summary  = useDashboardSummary(filters)
-  const snapshot = useFunnelSnapshot(funnelId)
+  const funnelMode = summary.data?.funnel_mode ?? 'single-funnel'
+
+  // Passa funnelMode para useFunnelSnapshot evitar request sem funnelId em multi-funnel
+  const snapshot = useFunnelSnapshot(funnelId, funnelMode)
   const flow     = useFunnelFlow(funnelId, filters)
 
   // Label do período ativo para exibir no header
   const periodLabel = period.label ?? 'Período selecionado'
-  const funnelMode  = summary.data?.funnel_mode ?? 'single-funnel'
+
+  // Seções de funil só são exibidas se:
+  //   - single-funnel (sempre), OU
+  //   - multi-funnel com funnel selecionado
+  const showFunnelSections = funnelMode === 'single-funnel' || !!funnelId
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 space-y-6">
@@ -117,12 +125,12 @@ export const NewDashboard: React.FC = () => {
             onPeriodChange={setPeriod}
           />
 
-          {/* Seletor de funil — só aparece em multi-funnel */}
+          {/* Seletor de funil — só renderiza quando há múltiplos funis */}
           {funnelMode === 'multi-funnel' && (
-            <div className="text-xs text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2">
-              {/* FunnelSelector — implementado no Passo 4 */}
-              Seletor de funil (em breve)
-            </div>
+            <FunnelSelector
+              funnelId={funnelId}
+              onSelect={setFunnelId}
+            />
           )}
         </div>
       </div>
@@ -154,9 +162,13 @@ export const NewDashboard: React.FC = () => {
           <h2 className="text-sm font-semibold text-gray-900 mb-3">Pipeline atual</h2>
           <p className="text-xs text-gray-400 mb-3">Onde estão suas oportunidades agora</p>
 
-          {snapshot.error && <SectionError message={snapshot.error} />}
+          {!showFunnelSections && (
+            <SectionEmpty message="Selecione um funil para visualizar o Pipeline e o Fluxo no período" />
+          )}
 
-          {snapshot.loading && (
+          {showFunnelSections && snapshot.error && <SectionError message={snapshot.error} />}
+
+          {showFunnelSections && snapshot.loading && (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />
@@ -164,7 +176,7 @@ export const NewDashboard: React.FC = () => {
             </div>
           )}
 
-          {!snapshot.loading && !snapshot.error && (
+          {showFunnelSections && !snapshot.loading && !snapshot.error && (
             <>
               {snapshot.data?.stages.length === 0 ? (
                 <SectionEmpty message="Nenhuma oportunidade aberta no funil" />
@@ -187,13 +199,17 @@ export const NewDashboard: React.FC = () => {
           <h2 className="text-sm font-semibold text-gray-900 mb-1">Fluxo no período</h2>
           <p className="text-xs text-gray-400 mb-3">Por onde as oportunidades passaram em {periodLabel}</p>
 
-          {flow.funnelRequired && (
+          {!showFunnelSections && (
             <SectionEmpty message="Selecione um funil para ver o fluxo e a conversão por etapa" />
           )}
 
-          {!flow.funnelRequired && flow.error && <SectionError message={flow.error} />}
+          {showFunnelSections && flow.funnelRequired && (
+            <SectionEmpty message="Selecione um funil para ver o fluxo e a conversão por etapa" />
+          )}
 
-          {!flow.funnelRequired && flow.loading && (
+          {showFunnelSections && !flow.funnelRequired && flow.error && <SectionError message={flow.error} />}
+
+          {showFunnelSections && !flow.funnelRequired && flow.loading && (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />
@@ -201,7 +217,7 @@ export const NewDashboard: React.FC = () => {
             </div>
           )}
 
-          {!flow.funnelRequired && !flow.loading && !flow.error && (
+          {showFunnelSections && !flow.funnelRequired && !flow.loading && !flow.error && (
             <>
               {/* Passagens por etapa */}
               {flow.data?.flow.stages.length === 0 ? (
