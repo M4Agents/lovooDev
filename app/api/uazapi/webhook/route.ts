@@ -2,8 +2,8 @@ export const runtime = 'nodejs';
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzA0NzU1NjQsImV4cCI6MjA0NjA1MTU2NH0.YSzqmkJjmBnWIDGJJoJBKvvOb5eCcNzaEzpvQSKhCNs';
+const supabaseUrl = process.env.VITE_SUPABASE_URL ?? '';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY ?? '';
 
 export async function POST(req: Request) {
   try {
