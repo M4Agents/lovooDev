@@ -72,15 +72,16 @@ BEGIN
       LIMIT 100
       FOR UPDATE SKIP LOCKED
     )
+    -- Cast explícito de varchar → text necessário no RETURNING (sem coerção implícita)
     RETURNING t.id, t.conversation_id, t.company_id, t.instance_id, t.created_by,
-              t.content, t.message_type, t.media_url, t.scheduled_for,
-              t.recurring_type, t.recurring_config
+              t.content, t.message_type::text, t.media_url::text, t.scheduled_for,
+              t.recurring_type::text, t.recurring_config
   )
   SELECT
     c.id, c.conversation_id, c.company_id, c.instance_id, c.created_by,
     c.content, c.message_type, c.media_url, c.scheduled_for,
     c.recurring_type, c.recurring_config,
-    cc.contact_phone, cc.contact_name
+    cc.contact_phone::text, cc.contact_name::text
   FROM claimed c
   LEFT JOIN chat_conversations cc ON c.conversation_id = cc.id;
 END;
