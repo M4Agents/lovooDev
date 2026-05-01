@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
@@ -26,6 +26,10 @@ export default function SalesFunnel() {
   const navigate = useNavigate()
   const { company, user } = useAuth()
   const companyId = company?.id
+
+  // Deep-link do Dashboard: /sales-funnel?opportunity_id=xxx
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightOpportunityId = searchParams.get('opportunity_id') ?? null
 
   const {
     funnels,
@@ -252,6 +256,25 @@ export default function SalesFunnel() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
+      {/* Banner de contexto — visível quando navegado a partir do Dashboard */}
+      {highlightOpportunityId && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-2 flex items-center justify-between">
+          <p className="text-xs text-blue-700">
+            Navegado a partir do Dashboard — use a busca ou os filtros para localizar a oportunidade.
+          </p>
+          <button
+            className="text-xs text-blue-500 hover:text-blue-700 underline ml-4"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('opportunity_id')
+              setSearchParams(next)
+            }}
+          >
+            Limpar
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">

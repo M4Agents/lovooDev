@@ -5,6 +5,7 @@
 // NÃO MODIFICA páginas existentes
 
 import React from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { AdaptiveChatLayout } from '../components/WhatsAppChat/ChatLayout'
@@ -17,6 +18,10 @@ import { InstanceDisconnectedNotification } from '../components/WhatsAppChat/Ins
 const ChatPage: React.FC = () => {
   const { t } = useTranslation('chat')
   const { user, company } = useAuth()
+
+  // Deep-link do Dashboard: /chat?conversation_id=xxx
+  const [searchParams] = useSearchParams()
+  const initialConversationId = searchParams.get('conversation_id') ?? undefined
 
   // =====================================================
   // VERIFICAÇÕES DE ACESSO
@@ -55,9 +60,10 @@ const ChatPage: React.FC = () => {
   return (
     <div className="h-[calc(100vh-80px)] bg-gray-50">
       <InstanceDisconnectedNotification />
-      <AdaptiveChatLayout 
+      <AdaptiveChatLayout
         companyId={company.id}
         userId={user.id}
+        initialConversationId={initialConversationId}
       />
     </div>
   )

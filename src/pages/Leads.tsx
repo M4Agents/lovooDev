@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
@@ -73,6 +74,16 @@ export const Leads: React.FC = () => {
   const { company } = useAuth();
   const { canViewLead, canEditLead, canDeleteLead } = useLeadPermissions();
   const { leadStats } = usePlanLeadStats(company?.id);
+
+  // Deep-link do Dashboard: /leads?lead_id=xxx
+  // TODO: auto-abertura do modal de lead aguarda padronização de IDs.
+  //   O Dashboard retorna lead_id como UUID (string) via api/dashboard/leads.ts,
+  //   mas esta página carrega leads com id numérico (Lead.id: number).
+  //   Quando os IDs forem padronizados, implementar:
+  //     const target = leads.find(l => String(l.id) === highlightLeadId)
+  //     if (target) { setSelectedLead(target); setShowViewModal(true) }
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightLeadId = searchParams.get('lead_id') ?? null
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -420,6 +431,25 @@ export const Leads: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Banner de contexto — visível quando navegado a partir do Dashboard */}
+      {highlightLeadId && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center justify-between">
+          <p className="text-xs text-blue-700">
+            Navegado a partir do Dashboard — use a busca para localizar o lead.
+          </p>
+          <button
+            className="text-xs text-blue-500 hover:text-blue-700 underline ml-4"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('lead_id')
+              setSearchParams(next)
+            }}
+          >
+            Limpar
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
