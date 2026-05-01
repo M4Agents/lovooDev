@@ -87,10 +87,16 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     // 5. Flow + Conversão em paralelo
     // ------------------------------------------------------------------
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-flow.ts:step5',message:'chamando flow+conversão',data:{companyId,funnelId,resolvedRange},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     const [flow, conversions] = await Promise.all([
       buildFunnelFlowMetrics(svc, companyId, funnelId, resolvedRange),
       buildFunnelStageConversionMetrics(svc, companyId, funnelId, resolvedRange),
     ])
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-flow.ts:step5-ok',message:'flow+conversão ok',data:{flowStages:flow.stages.length,conversions:conversions.conversions.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
 
     // ------------------------------------------------------------------
     // 6. Resposta
@@ -118,6 +124,9 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-flow.ts:catch',message:'erro no flow',data:{error:msg,stack:err instanceof Error?err.stack?.slice(0,400):null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     console.error('[dashboard/funnel-flow] Erro inesperado:', msg)
     jsonError(res, 500, 'Erro interno do servidor')
   }

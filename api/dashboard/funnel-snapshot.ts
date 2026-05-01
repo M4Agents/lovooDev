@@ -96,7 +96,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     // 4. Snapshot
     // ------------------------------------------------------------------
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-snapshot.ts:step4',message:'chamando buildFunnelSnapshotMetrics',data:{companyId,effectiveFunnelId,funnelMode},timestamp:Date.now(),hypothesisId:'H1-H3'})}).catch(()=>{});
+    // #endregion
     const snapshot = await buildFunnelSnapshotMetrics(svc, companyId, effectiveFunnelId)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-snapshot.ts:step4-ok',message:'snapshot ok',data:{stagesCount:snapshot.stages.length},timestamp:Date.now(),hypothesisId:'H1-H3'})}).catch(()=>{});
+    // #endregion
 
     // ------------------------------------------------------------------
     // 5. Resposta
@@ -114,6 +120,9 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'funnel-snapshot.ts:catch',message:'erro no snapshot',data:{error:msg,stack:err instanceof Error?err.stack?.slice(0,400):null},timestamp:Date.now(),hypothesisId:'H1-H3'})}).catch(()=>{});
+    // #endregion
     console.error('[dashboard/funnel-snapshot] Erro inesperado:', msg)
     jsonError(res, 500, 'Erro interno do servidor')
   }
