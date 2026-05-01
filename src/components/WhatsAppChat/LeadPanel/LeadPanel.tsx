@@ -563,21 +563,16 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         // Normalizar telefone (remover caracteres especiais)
         const normalizedPhone = conversation.contact_phone.replace(/\D/g, '')
         
-        // Buscar lead pelo telefone normalizado
-        const { data: leads, error } = await supabase
+        // Buscar lead diretamente pelo phone_normalized via SQL
+        const { data: matchingLead, error } = await supabase
           .from('leads')
           .select('id, responsible_user_id, phone')
           .eq('company_id', companyId)
+          .eq('phone_normalized', normalizedPhone)
           .is('deleted_at', null)
+          .maybeSingle()
         
         if (error) throw error
-        
-        // Filtrar leads que tenham telefone correspondente (normalizado)
-        const matchingLead = leads?.find(lead => {
-          if (!lead.phone) return false
-          const leadPhone = lead.phone.replace(/\D/g, '')
-          return leadPhone === normalizedPhone
-        })
         
         if (matchingLead) {
           setCurrentLeadId(matchingLead.id)
