@@ -27,6 +27,9 @@ CREATE INDEX idx_chat_scheduled_messages_scheduled_for
   WHERE status IN ('pending', 'processing');
 
 -- 3. Reescrever get_pending_scheduled_messages com atomic claim
+-- Nota: aliases de tabela são obrigatórios para evitar ambiguidade entre
+-- os nomes das colunas de RETURNS TABLE (que viram variáveis PL/pgSQL)
+-- e as colunas da tabela chat_scheduled_messages dentro do corpo da função.
 CREATE OR REPLACE FUNCTION get_pending_scheduled_messages()
 RETURNS TABLE (
   id UUID,
@@ -49,29 +52,29 @@ SET search_path = 'public'
 AS $$
 BEGIN
   -- Limpar mensagens presas em 'processing' há mais de 5 minutos
-  UPDATE chat_scheduled_messages
+  UPDATE chat_scheduled_messages AS stale
   SET status = 'pending', updated_at = NOW()
-  WHERE status = 'processing'
-    AND updated_at < NOW() - INTERVAL '5 minutes';
+  WHERE stale.status = 'processing'
+    AND stale.updated_at < NOW() - INTERVAL '5 minutes';
 
   -- Reclamar atomicamente as mensagens pendentes.
   -- FOR UPDATE SKIP LOCKED garante que invocações concorrentes do cron
   -- não processam a mesma mensagem simultaneamente.
   RETURN QUERY
   WITH claimed AS (
-    UPDATE chat_scheduled_messages
+    UPDATE chat_scheduled_messages AS t
     SET status = 'processing', updated_at = NOW()
-    WHERE id IN (
-      SELECT id FROM chat_scheduled_messages
-      WHERE status = 'pending'
-        AND scheduled_for <= NOW()
-      ORDER BY scheduled_for ASC
+    WHERE t.id IN (
+      SELECT s.id FROM chat_scheduled_messages s
+      WHERE s.status = 'pending'
+        AND s.scheduled_for <= NOW()
+      ORDER BY s.scheduled_for ASC
       LIMIT 100
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, conversation_id, company_id, instance_id, created_by,
-              content, message_type, media_url, scheduled_for,
-              recurring_type, recurring_config
+    RETURNING t.id, t.conversation_id, t.company_id, t.instance_id, t.created_by,
+              t.content, t.message_type, t.media_url, t.scheduled_for,
+              t.recurring_type, t.recurring_config
   )
   SELECT
     c.id, c.conversation_id, c.company_id, c.instance_id, c.created_by,
