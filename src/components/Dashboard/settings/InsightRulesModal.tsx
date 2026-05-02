@@ -152,18 +152,15 @@ export const InsightRulesModal: React.FC<InsightRulesModalProps> = ({
     }
   }, [policies, originalPolicies])
 
-  if (!isOpen) return null
-
-  // ---------------------------------------------------------------------------
-  // Computed
-  // ---------------------------------------------------------------------------
-
+  // useMemo deve ficar ANTES de qualquer early return (Rules of Hooks)
   const diff: DiffItem[] = useMemo(
     () => (originalPolicies && form ? computeDiff(originalPolicies, form) : []),
     [originalPolicies, form],
   )
 
   const hasChanges = diff.length > 0
+
+  if (!isOpen) return null
 
   // ---------------------------------------------------------------------------
   // Handlers
