@@ -114,6 +114,7 @@ interface PlanFormData {
   scheduling_agent_enabled: boolean;
   cycle_report_enabled: boolean;
   advanced_debug_logs_enabled: boolean;
+  dashboard_insight_customization_enabled: boolean;
   // Plano de IA
   ai_plan_id: string;
   // Stripe (somente admin)
@@ -125,12 +126,13 @@ interface PlanFormData {
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const FEATURE_FLAGS: { key: keyof PlanFormData; label: string }[] = [
-  { key: 'opportunity_items_enabled',   label: 'Itens em Oportunidades' },
-  { key: 'multiple_agents_enabled',     label: 'Múltiplos Agentes de IA' },
-  { key: 'follow_up_agent_enabled',     label: 'Agente de Follow-up' },
-  { key: 'scheduling_agent_enabled',    label: 'Agente de Agendamento' },
-  { key: 'cycle_report_enabled',        label: 'Relatório de Ciclo de Vendas' },
-  { key: 'advanced_debug_logs_enabled', label: 'Logs Avançados de Debug' },
+  { key: 'opportunity_items_enabled',                label: 'Itens em Oportunidades' },
+  { key: 'multiple_agents_enabled',                  label: 'Múltiplos Agentes de IA' },
+  { key: 'follow_up_agent_enabled',                  label: 'Agente de Follow-up' },
+  { key: 'scheduling_agent_enabled',                 label: 'Agente de Agendamento' },
+  { key: 'cycle_report_enabled',                     label: 'Relatório de Ciclo de Vendas' },
+  { key: 'advanced_debug_logs_enabled',              label: 'Logs Avançados de Debug' },
+  { key: 'dashboard_insight_customization_enabled',  label: 'Configuração de Regras de Insights' },
 ];
 
 const EMPTY_FORM: PlanFormData = {
@@ -160,6 +162,7 @@ const EMPTY_FORM: PlanFormData = {
   scheduling_agent_enabled: false,
   cycle_report_enabled: false,
   advanced_debug_logs_enabled: false,
+  dashboard_insight_customization_enabled: false,
   ai_plan_id: '',
   stripe_price_id_monthly: '',
 };
@@ -190,12 +193,13 @@ const generateSlug = (name: string): string =>
     .trim();
 
 const featuresFromPlan = (plan: Plan): Partial<PlanFormData> => ({
-  opportunity_items_enabled:   !!plan.features?.opportunity_items_enabled,
-  multiple_agents_enabled:     !!plan.features?.multiple_agents_enabled,
-  follow_up_agent_enabled:     !!plan.features?.follow_up_agent_enabled,
-  scheduling_agent_enabled:    !!plan.features?.scheduling_agent_enabled,
-  cycle_report_enabled:        !!plan.features?.cycle_report_enabled,
-  advanced_debug_logs_enabled: !!plan.features?.advanced_debug_logs_enabled,
+  opportunity_items_enabled:                  !!plan.features?.opportunity_items_enabled,
+  multiple_agents_enabled:                    !!plan.features?.multiple_agents_enabled,
+  follow_up_agent_enabled:                    !!plan.features?.follow_up_agent_enabled,
+  scheduling_agent_enabled:                   !!plan.features?.scheduling_agent_enabled,
+  cycle_report_enabled:                       !!plan.features?.cycle_report_enabled,
+  advanced_debug_logs_enabled:                !!plan.features?.advanced_debug_logs_enabled,
+  dashboard_insight_customization_enabled:    !!plan.features?.dashboard_insight_customization_enabled,
 });
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -331,12 +335,13 @@ export const PlansManagement: React.FC = () => {
       }
 
       const featuresJsonb = {
-        opportunity_items_enabled:   formData.opportunity_items_enabled,
-        multiple_agents_enabled:     formData.multiple_agents_enabled,
-        follow_up_agent_enabled:     formData.follow_up_agent_enabled,
-        scheduling_agent_enabled:    formData.scheduling_agent_enabled,
-        cycle_report_enabled:        formData.cycle_report_enabled,
-        advanced_debug_logs_enabled: formData.advanced_debug_logs_enabled,
+        opportunity_items_enabled:                 formData.opportunity_items_enabled,
+        multiple_agents_enabled:                   formData.multiple_agents_enabled,
+        follow_up_agent_enabled:                   formData.follow_up_agent_enabled,
+        scheduling_agent_enabled:                  formData.scheduling_agent_enabled,
+        cycle_report_enabled:                      formData.cycle_report_enabled,
+        advanced_debug_logs_enabled:               formData.advanced_debug_logs_enabled,
+        dashboard_insight_customization_enabled:   formData.dashboard_insight_customization_enabled,
       };
 
       let planId = editingPlan?.id;

@@ -23,6 +23,15 @@ export async function canCustomizeInsights(
   if (!companyId) return false
 
   try {
+    // Empresa pai tem acesso irrestrito a features de configuração
+    const { data: company } = await svc
+      .from('companies')
+      .select('company_type')
+      .eq('id', companyId)
+      .maybeSingle()
+
+    if (company?.company_type === 'parent') return true
+
     const limits = await getPlanLimits(svc, companyId)
     return limits.features?.['dashboard_insight_customization_enabled'] === true
   } catch {
