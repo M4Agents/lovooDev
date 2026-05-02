@@ -9,9 +9,11 @@ import React, { useMemo } from 'react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { FunnelSelector }         from '../components/Dashboard/filters/FunnelSelector'
 import { ExecutiveSummary }       from '../components/Dashboard/sections/ExecutiveSummary'
+import { IntelligenceCentral }    from '../components/Dashboard/sections/IntelligenceCentral'
 import { ActionCenter }           from '../components/Dashboard/sections/ActionCenter'
 import { useDashboardFilters }    from '../hooks/dashboard/useDashboardFilters'
 import { useDashboardSummary }    from '../hooks/dashboard/useDashboardSummary'
+import { useDashboardInsights }   from '../hooks/dashboard/useDashboardInsights'
 import { useFunnelSnapshot }      from '../hooks/dashboard/useFunnelSnapshot'
 import { useFunnelFlow }          from '../hooks/dashboard/useFunnelFlow'
 import type { DashboardFilters }  from '../services/dashboardApi'
@@ -91,7 +93,8 @@ export const NewDashboard: React.FC = () => {
   )
 
   // Dados
-  const summary  = useDashboardSummary(filters)
+  const summary    = useDashboardSummary(filters)
+  const insights   = useDashboardInsights(filters)
   const funnelMode = summary.data?.funnel_mode ?? 'single-funnel'
 
   // Passa funnelMode para useFunnelSnapshot evitar request sem funnelId em multi-funnel
@@ -141,6 +144,17 @@ export const NewDashboard: React.FC = () => {
           data={summary.data}
           loading={summary.loading}
           error={summary.error}
+          dashboardFilters={filters}
+          periodLabel={periodLabel}
+        />
+      </section>
+
+      {/* ── Inteligência Comercial ──────────────────────────────────────── */}
+      <section>
+        <IntelligenceCentral
+          data={insights.data}
+          loading={insights.loading}
+          error={insights.error}
           dashboardFilters={filters}
           periodLabel={periodLabel}
         />

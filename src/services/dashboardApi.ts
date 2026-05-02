@@ -189,6 +189,30 @@ export interface FunnelsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Tipos de insights
+// ---------------------------------------------------------------------------
+
+export type InsightType    = 'cooling_opportunity' | 'hot_opportunity' | 'funnel_bottleneck' | 'conversion_drop' | 'ai_tool_issue'
+export type InsightPriority = 'critical' | 'high' | 'medium' | 'low'
+
+export interface InsightItem {
+  id:          string
+  type:        InsightType
+  priority:    InsightPriority
+  title:       string
+  description: string
+  entityType:  'opportunities' | 'leads' | 'conversations' | 'funnel'
+  filters:     Record<string, unknown>
+  actionLabel: string
+}
+
+export interface InsightsResponse {
+  ok:   boolean
+  data: InsightItem[]
+  meta: DashboardMeta
+}
+
+// ---------------------------------------------------------------------------
 // Tipos de itens das listas
 // ---------------------------------------------------------------------------
 
@@ -263,6 +287,16 @@ export const dashboardApi = {
    */
   async getFunnels(companyId: string): Promise<FunnelsResponse> {
     return apiFetch<FunnelsResponse>('/api/dashboard/funnels', { company_id: companyId })
+  },
+
+  /**
+   * Insights automáticos calculados por SQL/regras — sem LLM.
+   */
+  async getInsights(companyId: string, filters: DashboardFilters): Promise<InsightsResponse> {
+    return apiFetch<InsightsResponse>('/api/dashboard/insights', {
+      company_id: companyId,
+      ...buildPeriodParams(filters),
+    })
   },
 
   /**
