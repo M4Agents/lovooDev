@@ -7,9 +7,10 @@
 // com os filtros específicos do insight + filtros globais.
 // =====================================================
 
-import React from 'react'
-import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronRight, Settings } from 'lucide-react'
+import React, { useState } from 'react'
+import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronRight, Settings, Info } from 'lucide-react'
 import { EntityListDrawer }      from '../interactive/EntityListDrawer'
+import { InsightRulesModal }     from '../settings/InsightRulesModal'
 import { useInteractiveMetrics } from '../../../hooks/dashboard/useInteractiveMetrics'
 import type { EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, InsightPriority, InsightType, DashboardFilters } from '../../../services/dashboardApi'
@@ -19,12 +20,14 @@ import type { InsightItem, InsightPriority, InsightType, DashboardFilters } from
 // ---------------------------------------------------------------------------
 
 interface IntelligenceCentralProps {
-  data:            InsightItem[]
-  loading:         boolean
-  error:           string | null
-  canCustomize:    boolean
-  dashboardFilters: DashboardFilters
-  periodLabel:     string
+  data:                InsightItem[]
+  loading:             boolean
+  error:               string | null
+  canCustomize:        boolean
+  dashboardFilters:    DashboardFilters
+  periodLabel:         string
+  companyId:           string | null
+  onRefetchInsights:   () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +90,32 @@ function resolveEntityType(insight: InsightItem): 'opportunities' | 'leads' | 'c
 }
 
 // ---------------------------------------------------------------------------
+// formatInsightReason — explica por que o insight apareceu, sem linguagem técnica.
+// Retorna null quando não houver supporting_data relevante; nesse caso o bloco
+// "Por que apareceu?" não é renderizado.
+// ---------------------------------------------------------------------------
+
+function formatInsightReason(insight: InsightItem): string | null {
+  const sd = insight.supporting_data
+  if (!sd) return null
+
+  switch (insight.type) {
+    case 'cooling_opportunity': {
+      const threshold = sd.threshold_days as number | undefined
+      if (!threshold) return null
+      const days = sd.days_since_last_interaction as number | undefined
+      const base = `Regra: oportunidades sem interação há mais de ${threshold} dia${threshold !== 1 ? 's' : ''}.`
+      if (days != null && days > 0) {
+        return `${base} Caso mais crítico: ${days} dia${days !== 1 ? 's' : ''} sem interação.`
+      }
+      return base
+    }
+    default:
+      return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // InsightCard
 // ---------------------------------------------------------------------------
 
@@ -100,35 +129,47 @@ function InsightCard({ insight, onAction }: InsightCardProps) {
   const cfg       = TYPE_CONFIG[insight.type]
   const cardClass = PRIORITY_COLORS[insight.priority]
   const badgeClass = PRIORITY_BADGE[insight.priority]
+  const reason    = formatInsightReason(insight)
 
   return (
-    <div className={`rounded-lg border p-3 flex items-start gap-3 ${cardClass}`}>
-      {/* Ícone */}
-      <div className="mt-0.5 flex-shrink-0 opacity-70">
-        {cfg.icon}
-      </div>
-
-      {/* Conteúdo */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${badgeClass}`}>
-            {PRIORITY_LABEL[insight.priority]}
-          </span>
-          <span className="text-xs opacity-60">{cfg.label}</span>
+    <div className={`rounded-lg border p-3 ${cardClass}`}>
+      {/* Linha principal: ícone + conteúdo + botão */}
+      <div className="flex items-start gap-3">
+        {/* Ícone */}
+        <div className="mt-0.5 flex-shrink-0 opacity-70">
+          {cfg.icon}
         </div>
-        <p className="text-sm font-semibold leading-snug truncate">{insight.title}</p>
-        <p className="text-xs opacity-70 mt-0.5 leading-snug">{insight.description}</p>
+
+        {/* Conteúdo */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${badgeClass}`}>
+              {PRIORITY_LABEL[insight.priority]}
+            </span>
+            <span className="text-xs opacity-60">{cfg.label}</span>
+          </div>
+          <p className="text-sm font-semibold leading-snug truncate">{insight.title}</p>
+          <p className="text-xs opacity-70 mt-0.5 leading-snug">{insight.description}</p>
+        </div>
+
+        {/* Ação */}
+        <button
+          type="button"
+          onClick={() => onAction(insight)}
+          className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap"
+        >
+          {insight.actionLabel}
+          <ChevronRight size={12} />
+        </button>
       </div>
 
-      {/* Ação */}
-      <button
-        type="button"
-        onClick={() => onAction(insight)}
-        className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap"
-      >
-        {insight.actionLabel}
-        <ChevronRight size={12} />
-      </button>
+      {/* Bloco "Por que apareceu?" — visível apenas quando houver razão */}
+      {reason && (
+        <div className="mt-2 ml-7 flex items-start gap-1.5 rounded-md bg-white/40 border border-current/10 px-2 py-1.5">
+          <Info size={11} className="opacity-50 flex-shrink-0 mt-0.5" />
+          <p className="text-xs opacity-60 leading-relaxed">{reason}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -144,13 +185,21 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   canCustomize,
   dashboardFilters,
   periodLabel,
+  companyId,
+  onRefetchInsights,
 }) => {
   const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
+  const [rulesModalOpen, setRulesModalOpen] = useState(false)
 
   const handleAction = (insight: InsightItem) => {
     const entityType    = resolveEntityType(insight)
     const drawerFilters = buildDrawerFilters(insight, dashboardFilters)
     openDrawer(entityType, insight.title, insight.description, drawerFilters)
+  }
+
+  function handleSaved() {
+    setRulesModalOpen(false)
+    onRefetchInsights()
   }
 
   return (
@@ -159,6 +208,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
       <div className="flex items-start justify-between mb-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Inteligência Comercial</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Baseada em comportamento real</p>
           <p className="text-xs text-gray-400 mt-0.5">Insights automáticos · {periodLabel}</p>
         </div>
 
@@ -166,9 +216,8 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
         {canCustomize && (
           <button
             type="button"
-            disabled
-            title="Configuração de regras disponível em breve"
-            className="flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-md px-2.5 py-1.5 hover:bg-gray-50 cursor-not-allowed opacity-70"
+            onClick={() => setRulesModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-indigo-600 border border-indigo-200 rounded-md px-2.5 py-1.5 hover:bg-indigo-50 transition-colors"
           >
             <Settings size={12} />
             Configurar regras
@@ -212,6 +261,14 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
           ))}
         </div>
       )}
+
+      {/* Modal de configuração de regras */}
+      <InsightRulesModal
+        isOpen={rulesModalOpen}
+        onClose={() => setRulesModalOpen(false)}
+        onSaved={handleSaved}
+        companyId={companyId}
+      />
 
       {/* Drawer */}
       {drawer.open && drawer.entityType && (

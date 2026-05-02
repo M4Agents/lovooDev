@@ -153,6 +153,32 @@ async function apiFetch<T>(path: string, params: Record<string, string>): Promis
   return res.json() as Promise<T>
 }
 
+async function apiPost<T>(path: string, queryParams: Record<string, string>, body: unknown): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  const url = new URL(path, window.location.origin)
+  Object.entries(queryParams).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v)
+  })
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error(json?.error ?? `Erro ${res.status} em ${path}`)
+  }
+
+  return res.json() as Promise<T>
+}
+
 // ---------------------------------------------------------------------------
 // buildParams: converte DashboardFilters nos query params do backend
 // ---------------------------------------------------------------------------
@@ -195,15 +221,30 @@ export interface FunnelsResponse {
 export type InsightType    = 'cooling_opportunity' | 'hot_opportunity' | 'funnel_bottleneck' | 'conversion_drop' | 'ai_tool_issue'
 export type InsightPriority = 'critical' | 'high' | 'medium' | 'low'
 
+export interface InsightPoliciesData {
+  cooling_threshold_days:    number
+  hot_probability_threshold: number
+  conversion_drop_threshold: number
+  bottleneck_min_days:       number
+  ai_error_rate_threshold:   number
+}
+
+export interface InsightPoliciesResponse {
+  ok:       boolean
+  data:     InsightPoliciesData
+  defaults: InsightPoliciesData
+}
+
 export interface InsightItem {
-  id:          string
-  type:        InsightType
-  priority:    InsightPriority
-  title:       string
-  description: string
-  entityType:  'opportunities' | 'leads' | 'conversations' | 'funnel'
-  filters:     Record<string, unknown>
-  actionLabel: string
+  id:               string
+  type:             InsightType
+  priority:         InsightPriority
+  title:            string
+  description:      string
+  entityType:       'opportunities' | 'leads' | 'conversations' | 'funnel'
+  filters:          Record<string, unknown>
+  actionLabel:      string
+  supporting_data?: Record<string, unknown>
 }
 
 export interface InsightsResponse {
@@ -297,6 +338,21 @@ export const dashboardApi = {
       company_id: companyId,
       ...buildPeriodParams(filters),
     })
+  },
+
+  /**
+   * Retorna policies de insights da empresa (mescladas com defaults).
+   */
+  async getInsightPolicies(companyId: string): Promise<InsightPoliciesResponse> {
+    return apiFetch<InsightPoliciesResponse>('/api/dashboard/insight-policies', { company_id: companyId })
+  },
+
+  /**
+   * Salva policies customizadas (requer plano com feature habilitada).
+   * Campos omitidos mantêm o valor existente no banco.
+   */
+  async saveInsightPolicies(companyId: string, policies: Partial<InsightPoliciesData>): Promise<InsightPoliciesResponse> {
+    return apiPost<InsightPoliciesResponse>('/api/dashboard/insight-policies', { company_id: companyId }, policies)
   },
 
   /**

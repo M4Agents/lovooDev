@@ -36,14 +36,15 @@ type InsightType    = 'cooling_opportunity' | 'hot_opportunity' | 'funnel_bottle
 type InsightPriority = 'critical' | 'high' | 'medium' | 'low'
 
 interface InsightItem {
-  id:          string
-  type:        InsightType
-  priority:    InsightPriority
-  title:       string
-  description: string
-  entityType:  'opportunities' | 'leads' | 'conversations' | 'funnel'
-  filters:     Record<string, unknown>
-  actionLabel: string
+  id:              string
+  type:            InsightType
+  priority:        InsightPriority
+  title:           string
+  description:     string
+  entityType:      'opportunities' | 'leads' | 'conversations' | 'funnel'
+  filters:         Record<string, unknown>
+  actionLabel:     string
+  supporting_data?: Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +97,11 @@ async function computeHotOpportunities(
 
 // ---------------------------------------------------------------------------
 // Insight 2 — Oportunidades sem atualização (esfriando)
-// Regra: status=open, updated_at < now() - cooling_threshold_days
+// Regra: COALESCE(last_interaction_at, updated_at) < now() - cooling_threshold_days
+// Fallback: se last_interaction_at for NULL, usa updated_at
 // ---------------------------------------------------------------------------
+
+type CoolingRow = { id: string; last_interaction_at: string | null; updated_at: string }
 
 async function computeCoolingOpportunities(
   svc: SupabaseClient,
@@ -107,12 +111,19 @@ async function computeCoolingOpportunities(
 ): Promise<InsightItem | null> {
   const cutoff = new Date(Date.now() - policies.cooling_threshold_days * 86_400_000).toISOString()
 
+  // Filtro equivalente a: COALESCE(last_interaction_at, updated_at) < cutoff
+  // PostgREST: (last_interaction_at IS NOT NULL AND last_interaction_at < cutoff)
+  //         OR (last_interaction_at IS NULL AND updated_at < cutoff)
+  const coolingFilter = `last_interaction_at.lt.${cutoff},and(last_interaction_at.is.null,updated_at.lt.${cutoff})`
+
+  // count: 'exact' sem head: true retorna data + count total em uma única query
   let query = svc
     .from('opportunities')
-    .select('id', { count: 'exact', head: true })
+    .select('id, last_interaction_at, updated_at', { count: 'exact' })
     .eq('company_id', companyId)
     .eq('status', 'open')
-    .lt('updated_at', cutoff)
+    .or(coolingFilter)
+    .limit(500) // defensivo; count continua refletindo o total real
 
   if (funnelId) {
     const { data: positions } = await svc
@@ -124,9 +135,37 @@ async function computeCoolingOpportunities(
     query = query.in('id', oppIds)
   }
 
-  const { count, error } = await query
+  const { data: rows, count, error } = await query
   if (error) throw new Error(`cooling_opportunity: ${error.message}`)
   if (!count || count === 0) return null
+
+  // Calcular oportunidade mais estagnada dentro do sample retornado
+  const now = Date.now()
+  let maxDays = 0
+  let worstRow: CoolingRow | null = null
+
+  for (const row of (rows as CoolingRow[] ?? [])) {
+    const ref = row.last_interaction_at ?? row.updated_at
+    const days = Math.floor((now - new Date(ref).getTime()) / (1000 * 60 * 60 * 24))
+    if (days > maxDays) {
+      maxDays = days
+      worstRow  = row
+    }
+  }
+
+  // Log de debug (DEV only) — usa rows já buscados, sem query extra
+  // #region agent log DEV
+  const isDev = process.env.NODE_ENV !== 'production' && process.env.VERCEL_ENV !== 'production'
+  if (isDev) {
+    const debugSample = (rows as CoolingRow[] ?? []).slice(0, 3).map((r) => ({
+      opportunity_id:      r.id,
+      last_interaction_at: r.last_interaction_at,
+      updated_at:          r.updated_at,
+      used_field:          r.last_interaction_at ? 'last_interaction_at' : 'updated_at',
+    }))
+    console.log('[insights/cooling] debug sample:', JSON.stringify(debugSample))
+  }
+  // #endregion
 
   const priority: InsightPriority = count >= 10 ? 'critical' : count >= 5 ? 'high' : 'medium'
 
@@ -139,6 +178,13 @@ async function computeCoolingOpportunities(
     entityType:  'opportunities',
     filters:     { status: 'open', funnelId: funnelId ?? undefined },
     actionLabel: 'Ver oportunidades',
+    supporting_data: {
+      threshold_days:              policies.cooling_threshold_days,
+      reference:                   'last_interaction',
+      last_interaction_at:         worstRow?.last_interaction_at ?? null,
+      updated_at:                  worstRow?.updated_at ?? null,
+      days_since_last_interaction: maxDays,
+    },
   }
 }
 

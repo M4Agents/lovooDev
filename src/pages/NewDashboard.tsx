@@ -16,6 +16,7 @@ import { useDashboardSummary }    from '../hooks/dashboard/useDashboardSummary'
 import { useDashboardInsights }   from '../hooks/dashboard/useDashboardInsights'
 import { useFunnelSnapshot }      from '../hooks/dashboard/useFunnelSnapshot'
 import { useFunnelFlow }          from '../hooks/dashboard/useFunnelFlow'
+import { useAuth }                from '../contexts/AuthContext'
 import type { DashboardFilters }  from '../services/dashboardApi'
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,9 @@ function SectionEmpty({ message }: { message: string }) {
 // ---------------------------------------------------------------------------
 
 export const NewDashboard: React.FC = () => {
+  const { company } = useAuth()
+  const companyId = company?.id ?? null
+
   // Filtros globais — fonte única de verdade
   const { period, funnelId, setPeriod, setFunnelId } = useDashboardFilters()
 
@@ -158,6 +162,8 @@ export const NewDashboard: React.FC = () => {
           canCustomize={insights.canCustomize}
           dashboardFilters={filters}
           periodLabel={periodLabel}
+          companyId={companyId}
+          onRefetchInsights={insights.refetch}
         />
       </section>
 
