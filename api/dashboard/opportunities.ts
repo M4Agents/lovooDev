@@ -130,7 +130,7 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     const [countResult, dataResult] = await Promise.all([
       buildBaseQuery('id', true),
-      buildBaseQuery('id, title, probability, status, updated_at, lead_id')
+      buildBaseQuery('id, title, probability, status, updated_at, lead_id, last_interaction_at')
         .order('updated_at', { ascending: false })
         .range(offset, offset + limit - 1),
     ])
@@ -139,7 +139,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (dataResult.error)  throw new Error(`data: ${dataResult.error.message}`)
 
     const opps = (dataResult.data ?? []) as Array<{
-      id: string; title: string; probability: number; status: string; updated_at: string; lead_id: string
+      id: string; title: string; probability: number; status: string; updated_at: string; lead_id: string; last_interaction_at: string | null
     }>
     const total = countResult.count ?? 0
 
@@ -188,13 +188,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     // 10. Montar payload final
     // ------------------------------------------------------------------
     const data = opps.map(o => ({
-      opportunity_id: o.id,
-      title:          o.title ?? '',
-      lead_name:      leadMap.get(o.lead_id) ?? '—',
-      stage_name:     stageMap.get(o.id) ?? '—',
-      probability:    o.probability ?? 0,
-      status:         o.status ?? '',
-      updated_at:     o.updated_at,
+      opportunity_id:      o.id,
+      title:               o.title ?? '',
+      lead_name:           leadMap.get(o.lead_id) ?? '—',
+      lead_id:             Number(o.lead_id),
+      stage_name:          stageMap.get(o.id) ?? '—',
+      probability:         o.probability ?? 0,
+      status:              o.status ?? '',
+      updated_at:          o.updated_at,
+      last_interaction_at: o.last_interaction_at ?? null,
     }))
 
     return res.status(200).json({

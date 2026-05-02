@@ -3,43 +3,47 @@
 // Seção de inteligência automática do Dashboard.
 // Exibe até 5 insights calculados por SQL/regras — sem LLM.
 //
-// Cada insight tem botão de ação que abre EntityListDrawer
-// com os filtros específicos do insight + filtros globais.
+// Ação "Ver oportunidades" expande lista inline abaixo do card.
+// Ações por linha: Chat (ChatModalSimple) e Ver oportunidade
+// (OpportunityDetailModal) — sem navegação de rota.
 // =====================================================
 
 import React, { useState } from 'react'
-import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronRight, Settings, Info } from 'lucide-react'
-import { EntityListDrawer }      from '../interactive/EntityListDrawer'
-import { InsightRulesModal }     from '../settings/InsightRulesModal'
-import { useInteractiveMetrics } from '../../../hooks/dashboard/useInteractiveMetrics'
-import type { EntityListFilters } from '../../../hooks/dashboard/useEntityList'
-import type { InsightItem, InsightPriority, InsightType, DashboardFilters } from '../../../services/dashboardApi'
+import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info } from 'lucide-react'
+import { InsightExpandableList }  from '../interactive/InsightExpandableList'
+import { InsightRulesModal }      from '../settings/InsightRulesModal'
+import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
+import ChatModalSimple            from '../../SalesFunnel/ChatModalSimple'
+import { funnelApi }              from '../../../services/funnelApi'
+import { useAuth }                from '../../../contexts/AuthContext'
+import type { Opportunity }       from '../../../types/sales-funnel'
+import type { InsightItem, InsightPriority, InsightType, DashboardFilters, OpportunityItem } from '../../../services/dashboardApi'
 
 // ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
 interface IntelligenceCentralProps {
-  data:                InsightItem[]
-  loading:             boolean
-  error:               string | null
-  canCustomize:        boolean
-  dashboardFilters:    DashboardFilters
-  periodLabel:         string
-  companyId:           string | null
-  onRefetchInsights:   () => void
+  data:              InsightItem[]
+  loading:           boolean
+  error:             string | null
+  canCustomize:      boolean
+  dashboardFilters:  DashboardFilters
+  periodLabel:       string
+  companyId:         string | null
+  onRefetchInsights: () => void
 }
 
 // ---------------------------------------------------------------------------
-// Configuração visual por tipo
+// Configuração visual
 // ---------------------------------------------------------------------------
 
 const TYPE_CONFIG: Record<InsightType, { icon: React.ReactNode; label: string }> = {
-  hot_opportunity:    { icon: <Flame      size={16} />, label: 'Oportunidade' },
-  cooling_opportunity:{ icon: <Clock      size={16} />, label: 'Atenção'      },
-  funnel_bottleneck:  { icon: <AlertTriangle size={16} />, label: 'Gargalo'   },
-  conversion_drop:    { icon: <TrendingDown  size={16} />, label: 'Conversão' },
-  ai_tool_issue:      { icon: <Bot        size={16} />, label: 'IA'           },
+  hot_opportunity:    { icon: <Flame        size={16} />, label: 'Oportunidade' },
+  cooling_opportunity:{ icon: <Clock        size={16} />, label: 'Atenção'      },
+  funnel_bottleneck:  { icon: <AlertTriangle size={16} />, label: 'Gargalo'    },
+  conversion_drop:    { icon: <TrendingDown  size={16} />, label: 'Conversão'  },
+  ai_tool_issue:      { icon: <Bot          size={16} />, label: 'IA'          },
 }
 
 const PRIORITY_COLORS: Record<InsightPriority, string> = {
@@ -64,35 +68,7 @@ const PRIORITY_LABEL: Record<InsightPriority, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function buildDrawerFilters(
-  insight: InsightItem,
-  dashboardFilters: DashboardFilters,
-): EntityListFilters {
-  const base: EntityListFilters = {
-    period:   dashboardFilters.period,
-    funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
-  }
-
-  if (insight.filters.stage_id)        base.stage_id        = insight.filters.stage_id as string
-  if (insight.filters.status)          base.status          = insight.filters.status as string
-  if (insight.filters.probability_min) base.probability_min = insight.filters.probability_min as number
-
-  return base
-}
-
-function resolveEntityType(insight: InsightItem): 'opportunities' | 'leads' | 'conversations' {
-  if (insight.entityType === 'funnel') return 'opportunities'
-  if (insight.entityType === 'leads' || insight.entityType === 'conversations') return insight.entityType
-  return 'opportunities'
-}
-
-// ---------------------------------------------------------------------------
-// formatInsightReason — explica por que o insight apareceu, sem linguagem técnica.
-// Retorna null quando não houver supporting_data relevante; nesse caso o bloco
-// "Por que apareceu?" não é renderizado.
+// formatInsightReason
 // ---------------------------------------------------------------------------
 
 function formatInsightReason(insight: InsightItem): string | null {
@@ -116,31 +92,37 @@ function formatInsightReason(insight: InsightItem): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// InsightCard
+// InsightCard — card + lista expansível
 // ---------------------------------------------------------------------------
 
 interface InsightCardProps {
-  insight:         InsightItem
+  insight:          InsightItem
   dashboardFilters: DashboardFilters
-  onAction:        (insight: InsightItem) => void
+  isExpanded:       boolean
+  onToggle:         () => void
+  onOpenChat:       (leadId: number) => void
+  onOpenOpportunity:(item: OpportunityItem) => void
 }
 
-function InsightCard({ insight, onAction }: InsightCardProps) {
+function InsightCard({
+  insight,
+  dashboardFilters,
+  isExpanded,
+  onToggle,
+  onOpenChat,
+  onOpenOpportunity,
+}: InsightCardProps) {
   const cfg       = TYPE_CONFIG[insight.type]
   const cardClass = PRIORITY_COLORS[insight.priority]
   const badgeClass = PRIORITY_BADGE[insight.priority]
   const reason    = formatInsightReason(insight)
 
   return (
-    <div className={`rounded-lg border p-3 ${cardClass}`}>
-      {/* Linha principal: ícone + conteúdo + botão */}
-      <div className="flex items-start gap-3">
-        {/* Ícone */}
-        <div className="mt-0.5 flex-shrink-0 opacity-70">
-          {cfg.icon}
-        </div>
+    <div className={`rounded-lg border ${cardClass}`}>
+      {/* Linha principal */}
+      <div className="flex items-start gap-3 p-3">
+        <div className="mt-0.5 flex-shrink-0 opacity-70">{cfg.icon}</div>
 
-        {/* Conteúdo */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
             <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${badgeClass}`}>
@@ -152,22 +134,34 @@ function InsightCard({ insight, onAction }: InsightCardProps) {
           <p className="text-xs opacity-70 mt-0.5 leading-snug">{insight.description}</p>
         </div>
 
-        {/* Ação */}
+        {/* Botão de expansão */}
         <button
           type="button"
-          onClick={() => onAction(insight)}
+          onClick={onToggle}
           className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap"
         >
           {insight.actionLabel}
-          <ChevronRight size={12} />
+          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
       </div>
 
-      {/* Bloco "Por que apareceu?" — visível apenas quando houver razão */}
+      {/* Bloco "Por que apareceu?" */}
       {reason && (
-        <div className="mt-2 ml-7 flex items-start gap-1.5 rounded-md bg-white/40 border border-current/10 px-2 py-1.5">
+        <div className="mx-3 mb-3 flex items-start gap-1.5 rounded-md bg-white/40 border border-current/10 px-2 py-1.5">
           <Info size={11} className="opacity-50 flex-shrink-0 mt-0.5" />
           <p className="text-xs opacity-60 leading-relaxed">{reason}</p>
+        </div>
+      )}
+
+      {/* Lista inline expansível */}
+      {isExpanded && (
+        <div className="px-3 pb-3">
+          <InsightExpandableList
+            insight={insight}
+            dashboardFilters={dashboardFilters}
+            onOpenChat={onOpenChat}
+            onOpenOpportunity={onOpenOpportunity}
+          />
         </div>
       )}
     </div>
@@ -188,13 +182,45 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   companyId,
   onRefetchInsights,
 }) => {
-  const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
+  const { user } = useAuth()
+
+  // Expansão inline
+  const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null)
+
+  // Modal de chat
+  const [chatLeadId, setChatLeadId] = useState<number | null>(null)
+  const [chatOpen,   setChatOpen]   = useState(false)
+
+  // Modal de oportunidade
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null)
+  const [oppModalOpen,        setOppModalOpen]        = useState(false)
+  const [loadingOpp,          setLoadingOpp]          = useState(false)
+
+  // Modal de configuração
   const [rulesModalOpen, setRulesModalOpen] = useState(false)
 
-  const handleAction = (insight: InsightItem) => {
-    const entityType    = resolveEntityType(insight)
-    const drawerFilters = buildDrawerFilters(insight, dashboardFilters)
-    openDrawer(entityType, insight.title, insight.description, drawerFilters)
+  function handleToggle(insightId: string) {
+    setExpandedInsightId((prev) => (prev === insightId ? null : insightId))
+  }
+
+  function handleOpenChat(leadId: number) {
+    setChatLeadId(leadId)
+    setChatOpen(true)
+  }
+
+  async function handleOpenOpportunity(item: OpportunityItem) {
+    setLoadingOpp(true)
+    try {
+      const opp = await funnelApi.getOpportunityById(item.opportunity_id)
+      if (opp) {
+        setSelectedOpportunity(opp)
+        setOppModalOpen(true)
+      }
+    } catch {
+      // falha silenciosa — oportunidade não encontrada
+    } finally {
+      setLoadingOpp(false)
+    }
   }
 
   function handleSaved() {
@@ -212,7 +238,6 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
           <p className="text-xs text-gray-400 mt-0.5">Insights automáticos · {periodLabel}</p>
         </div>
 
-        {/* Botão "Configurar regras" — visível apenas se plano permitir */}
         {canCustomize && (
           <button
             type="button"
@@ -234,7 +259,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
         </div>
       )}
 
-      {/* Erro controlado */}
+      {/* Erro */}
       {!loading && error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}
@@ -256,9 +281,20 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
               key={insight.id}
               insight={insight}
               dashboardFilters={dashboardFilters}
-              onAction={handleAction}
+              isExpanded={expandedInsightId === insight.id}
+              onToggle={() => handleToggle(insight.id)}
+              onOpenChat={handleOpenChat}
+              onOpenOpportunity={handleOpenOpportunity}
             />
           ))}
+        </div>
+      )}
+
+      {/* Indicador de carregamento de oportunidade */}
+      {loadingOpp && (
+        <div className="fixed bottom-4 right-4 z-40 bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          Carregando oportunidade...
         </div>
       )}
 
@@ -270,16 +306,24 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
         companyId={companyId}
       />
 
-      {/* Drawer */}
-      {drawer.open && drawer.entityType && (
-        <EntityListDrawer
-          open={drawer.open}
-          onClose={closeDrawer}
-          title={drawer.title}
-          description={drawer.description}
-          entityType={drawer.entityType}
-          filters={drawer.filters}
-          primaryAction={{ label: 'Abrir', onClick: () => {} }}
+      {/* Modal de chat */}
+      {chatLeadId != null && companyId && user?.id && (
+        <ChatModalSimple
+          isOpen={chatOpen}
+          onClose={() => { setChatOpen(false); setChatLeadId(null) }}
+          leadId={chatLeadId}
+          companyId={companyId}
+          userId={user.id}
+        />
+      )}
+
+      {/* Modal de oportunidade */}
+      {selectedOpportunity && companyId && (
+        <OpportunityDetailModal
+          isOpen={oppModalOpen}
+          onClose={() => { setOppModalOpen(false); setSelectedOpportunity(null) }}
+          opportunity={selectedOpportunity}
+          companyId={companyId}
         />
       )}
     </div>

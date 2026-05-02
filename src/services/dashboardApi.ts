@@ -258,13 +258,15 @@ export interface InsightsResponse {
 // ---------------------------------------------------------------------------
 
 export interface OpportunityItem {
-  opportunity_id: string
-  title: string
-  lead_name: string
-  stage_name: string
-  probability: number
-  status: string
-  updated_at: string
+  opportunity_id:      string
+  title:               string
+  lead_name:           string
+  lead_id:             number
+  stage_name:          string
+  probability:         number
+  status:              string
+  updated_at:          string
+  last_interaction_at: string | null
 }
 
 export interface LeadItem {
