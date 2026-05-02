@@ -1,34 +1,32 @@
 // =====================================================
 // InsightExpandableList
-// Lista inline expansível dentro de um insight card.
-// Renderiza apenas quando expanded=true (lazy).
-// Suporte a opportunities (padrão) e conversations.
+// Lista inline compacta dentro de um insight card.
+// Layout 2-linhas por item: Nome + Etapa / Prob + Última int. + Ações.
+// Ações sempre visíveis e próximas do conteúdo.
 //
-// Carregamento progressivo: busca 30 itens de uma vez,
-// exibe 10 por vez com botão "Carregar mais" — sem drawer.
+// Carregamento único de até 10 itens (source=insight_inline).
+// Cache via CSS hidden — sem refetch ao reabrir o mesmo card.
 // =====================================================
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { MessageCircle, Eye, AlertCircle, ChevronDown } from 'lucide-react'
+import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
-
-const PAGE_SIZE = 10
 
 // ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
 interface InsightExpandableListProps {
-  insight:          InsightItem
-  dashboardFilters: DashboardFilters
-  onOpenChat:       (leadId: number) => void
-  onOpenOpportunity:(item: OpportunityItem) => void
-  onLoadingChange?: (loading: boolean) => void
+  insight:           InsightItem
+  dashboardFilters:  DashboardFilters
+  onOpenChat:        (leadId: number) => void
+  onOpenOpportunity: (item: OpportunityItem) => void
+  onLoadingChange?:  (loading: boolean) => void
 }
 
 // ---------------------------------------------------------------------------
-// Helpers de formatação
+// Helpers
 // ---------------------------------------------------------------------------
 
 function formatRelativeDate(iso: string | null | undefined): string {
@@ -36,14 +34,14 @@ function formatRelativeDate(iso: string | null | undefined): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
   if (diff === 0) return 'hoje'
   if (diff === 1) return 'ontem'
-  return `há ${diff} dias`
+  return `há ${diff}d`
 }
 
 function buildFilters(insight: InsightItem, dashboardFilters: DashboardFilters): EntityListFilters {
   const base: EntityListFilters = {
     period:   dashboardFilters.period,
     funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
-    limit:    30,
+    limit:    10,
     source:   'insight_inline',
   }
   if (insight.filters.stage_id)        base.stage_id        = insight.filters.stage_id as string
@@ -58,21 +56,21 @@ function resolveEntityType(insight: InsightItem): 'opportunities' | 'conversatio
 }
 
 // ---------------------------------------------------------------------------
-// Skeleton de loading
+// Skeleton
 // ---------------------------------------------------------------------------
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-2 p-3">
+    <div className="space-y-1 p-2">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="h-10 bg-current/5 animate-pulse rounded-md" />
+        <div key={i} className="h-9 bg-current/5 animate-pulse rounded" />
       ))}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Linha de oportunidade
+// Linha de oportunidade — layout compacto 2-linhas
 // ---------------------------------------------------------------------------
 
 function OpportunityRow({
@@ -80,41 +78,56 @@ function OpportunityRow({
   onOpenChat,
   onOpenOpportunity,
 }: {
-  item: OpportunityItem
-  onOpenChat: (leadId: number) => void
+  item:              OpportunityItem
+  onOpenChat:        (leadId: number) => void
   onOpenOpportunity: (item: OpportunityItem) => void
 }) {
   const interactionDate = item.last_interaction_at ?? item.updated_at
+  const probColor = item.probability >= 70
+    ? 'text-green-600'
+    : item.probability >= 40
+      ? 'text-yellow-600'
+      : 'text-red-500'
+
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-current/5 transition-colors group">
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-current/5 transition-colors">
+      {/* Nome + Etapa */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium truncate">{item.lead_name || item.title}</p>
-        <p className="text-xs opacity-50 truncate">{item.stage_name || '—'}</p>
+        <p className="text-xs font-medium truncate leading-tight">
+          {item.lead_name || item.title}
+        </p>
+        <p className="text-xs opacity-50 truncate leading-tight">
+          {item.stage_name || '—'}
+        </p>
       </div>
-      <div className="w-14 text-right flex-shrink-0">
-        <span className={`text-xs font-semibold ${item.probability >= 70 ? 'text-green-600' : item.probability >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
-          {item.probability}%
-        </span>
-      </div>
-      <div className="w-20 text-right flex-shrink-0">
-        <span className="text-xs opacity-50">{formatRelativeDate(interactionDate)}</span>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+
+      {/* Prob. */}
+      <span className={`text-xs font-semibold flex-shrink-0 w-8 text-right ${probColor}`}>
+        {item.probability}%
+      </span>
+
+      {/* Última interação */}
+      <span className="text-xs opacity-50 flex-shrink-0 w-14 text-right">
+        {formatRelativeDate(interactionDate)}
+      </span>
+
+      {/* Ações — sempre visíveis */}
+      <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           type="button"
           title="Chat"
           onClick={() => onOpenChat(item.lead_id)}
-          className="p-1 rounded hover:bg-current/10 transition-colors"
+          className="p-1 rounded hover:bg-current/15 transition-colors"
         >
-          <MessageCircle size={13} />
+          <MessageCircle size={12} />
         </button>
         <button
           type="button"
           title="Ver oportunidade"
           onClick={() => onOpenOpportunity(item)}
-          className="p-1 rounded hover:bg-current/10 transition-colors"
+          className="p-1 rounded hover:bg-current/15 transition-colors"
         >
-          <Eye size={13} />
+          <Eye size={12} />
         </button>
       </div>
     </div>
@@ -122,33 +135,33 @@ function OpportunityRow({
 }
 
 // ---------------------------------------------------------------------------
-// Linha de conversa
+// Linha de conversa — layout compacto
 // ---------------------------------------------------------------------------
 
 function ConversationRow({
   item,
   onOpenChat,
 }: {
-  item: ConversationItem
-  onOpenChat: (leadId: number) => void
+  item:        ConversationItem
+  onOpenChat:  (leadId: number) => void
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-current/5 transition-colors group">
+    <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-current/5 transition-colors">
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium truncate">{item.lead_name}</p>
-        <p className="text-xs opacity-50 truncate">{item.status}</p>
+        <p className="text-xs font-medium truncate leading-tight">{item.lead_name}</p>
+        <p className="text-xs opacity-50 truncate leading-tight">{item.status}</p>
       </div>
-      <div className="w-20 text-right flex-shrink-0">
-        <span className="text-xs opacity-50">{formatRelativeDate(item.last_message_at)}</span>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span className="text-xs opacity-50 flex-shrink-0 w-14 text-right">
+        {formatRelativeDate(item.last_message_at)}
+      </span>
+      <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           type="button"
           title="Chat"
           onClick={() => onOpenChat(0)}
-          className="p-1 rounded hover:bg-current/10 transition-colors"
+          className="p-1 rounded hover:bg-current/15 transition-colors"
         >
-          <MessageCircle size={13} />
+          <MessageCircle size={12} />
         </button>
       </div>
     </div>
@@ -186,40 +199,10 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
     onLoadingChange?.(loading)
   }, [loading, onLoadingChange])
 
-  // Controle de quantos itens estão visíveis.
-  // Resetar ao mudar os dados (novo filtro/período).
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
-  useEffect(() => {
-    setDisplayCount(PAGE_SIZE)
-  }, [data])
-
-  const total        = meta?.total ?? 0
-  const visibleItems = data.slice(0, displayCount)
-  // Itens carregados localmente além do displayCount atual
-  const moreInMemory = data.length - displayCount
-  // Itens ainda não buscados (além dos 30 do batch inicial)
-  const remaining    = total - displayCount
-
-  function handleLoadMore() {
-    setDisplayCount(prev => prev + PAGE_SIZE)
-  }
+  const total = meta?.total ?? data.length
 
   return (
     <div className="mt-2 rounded-md bg-white/50 border border-current/10 overflow-hidden">
-      {/* Cabeçalho */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-current/10 bg-current/5">
-        <span className="flex-1 text-xs font-medium opacity-60">Nome</span>
-        {entityType === 'opportunities' && (
-          <>
-            <span className="w-14 text-right text-xs font-medium opacity-60">Prob.</span>
-            <span className="w-20 text-right text-xs font-medium opacity-60">Última int.</span>
-          </>
-        )}
-        {entityType === 'conversations' && (
-          <span className="w-20 text-right text-xs font-medium opacity-60">Último msg</span>
-        )}
-        <span className="w-12 flex-shrink-0" />
-      </div>
 
       {/* Loading */}
       {loading && <LoadingSkeleton />}
@@ -233,52 +216,42 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
       )}
 
       {/* Vazio */}
-      {!loading && !error && visibleItems.length === 0 && (
+      {!loading && !error && data.length === 0 && (
         <div className="px-3 py-4 text-center text-xs opacity-50">
           Nenhum item encontrado para este insight.
         </div>
       )}
 
-      {/* Linhas visíveis */}
-      {!loading && !error && visibleItems.length > 0 && (
-        <div>
-          {entityType === 'opportunities'
-            ? (visibleItems as OpportunityItem[]).map((item) => (
-                <OpportunityRow
-                  key={item.opportunity_id}
-                  item={item}
-                  onOpenChat={onOpenChat}
-                  onOpenOpportunity={onOpenOpportunity}
-                />
-              ))
-            : (visibleItems as ConversationItem[]).map((item) => (
-                <ConversationRow
-                  key={item.conversation_id}
-                  item={item}
-                  onOpenChat={onOpenChat}
-                />
-              ))
-          }
-
-          {/* Rodapé: contador + botão Carregar mais */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-current/10 bg-current/5">
-            <p className="text-xs opacity-50">
-              {displayCount >= total
-                ? `${total} ${total === 1 ? 'item' : 'itens'}`
-                : `Mostrando ${displayCount} de ${total}`}
-            </p>
-            {moreInMemory > 0 && (
-              <button
-                type="button"
-                onClick={handleLoadMore}
-                className="flex items-center gap-1 text-xs font-medium underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
-              >
-                <ChevronDown size={11} />
-                Carregar mais ({Math.min(PAGE_SIZE, moreInMemory)} de {remaining} restantes)
-              </button>
-            )}
+      {/* Lista */}
+      {!loading && !error && data.length > 0 && (
+        <>
+          <div className="px-1 pt-1">
+            {entityType === 'opportunities'
+              ? (data as OpportunityItem[]).map((item) => (
+                  <OpportunityRow
+                    key={item.opportunity_id}
+                    item={item}
+                    onOpenChat={onOpenChat}
+                    onOpenOpportunity={onOpenOpportunity}
+                  />
+                ))
+              : (data as ConversationItem[]).map((item) => (
+                  <ConversationRow
+                    key={item.conversation_id}
+                    item={item}
+                    onOpenChat={onOpenChat}
+                  />
+                ))
+            }
           </div>
-        </div>
+
+          {/* Rodapé */}
+          <div className="px-3 py-1.5 border-t border-current/10 bg-current/5">
+            <p className="text-xs opacity-40">
+              {total === 1 ? '1 item' : `${data.length}${total > data.length ? ` de ${total}` : ''} itens`}
+            </p>
+          </div>
+        </>
       )}
     </div>
   )

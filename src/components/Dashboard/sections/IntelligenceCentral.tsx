@@ -312,7 +312,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
 
       {/* Lista de insights */}
       {!loading && !error && data.length > 0 && (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {data.map((insight) => (
             <InsightCard
               key={insight.id}
