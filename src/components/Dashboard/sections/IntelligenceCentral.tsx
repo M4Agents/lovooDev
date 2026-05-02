@@ -49,10 +49,17 @@ const TYPE_CONFIG: Record<InsightType, { icon: React.ReactNode; label: string }>
 }
 
 const PRIORITY_COLORS: Record<InsightPriority, string> = {
-  critical: 'bg-red-50 border-red-200 text-red-700',
-  high:     'bg-orange-50 border-orange-200 text-orange-700',
-  medium:   'bg-yellow-50 border-yellow-200 text-yellow-700',
-  low:      'bg-blue-50 border-blue-200 text-blue-700',
+  critical: 'bg-white border-gray-200 text-gray-800',
+  high:     'bg-white border-gray-200 text-gray-800',
+  medium:   'bg-white border-gray-200 text-gray-800',
+  low:      'bg-white border-gray-200 text-gray-800',
+}
+
+const PRIORITY_LEFT_BORDER: Record<InsightPriority, string> = {
+  critical: 'border-l-red-400',
+  high:     'border-l-orange-400',
+  medium:   'border-l-yellow-400',
+  low:      'border-l-blue-400',
 }
 
 const PRIORITY_BADGE: Record<InsightPriority, string> = {
@@ -116,6 +123,7 @@ function InsightCard({
 }: InsightCardProps) {
   const cfg        = TYPE_CONFIG[insight.type]
   const cardClass  = PRIORITY_COLORS[insight.priority]
+  const leftBorder = PRIORITY_LEFT_BORDER[insight.priority]
   const badgeClass = PRIORITY_BADGE[insight.priority]
   const reason     = formatInsightReason(insight)
 
@@ -145,7 +153,7 @@ function InsightCard({
   }
 
   return (
-    <div className={`rounded-lg border ${cardClass}`}>
+    <div className={`rounded-lg border-l-4 border ${leftBorder} ${cardClass}`}>
       {/* Linha principal */}
       <div className="flex items-start gap-3 p-3">
         <div className="mt-0.5 flex-shrink-0 opacity-70">{cfg.icon}</div>
@@ -181,9 +189,9 @@ function InsightCard({
 
       {/* Bloco "Por que apareceu?" */}
       {reason && (
-        <div className="mx-3 mb-3 flex items-start gap-1.5 rounded-md bg-white/40 border border-current/10 px-2 py-1.5">
-          <Info size={11} className="opacity-50 flex-shrink-0 mt-0.5" />
-          <p className="text-xs opacity-60 leading-relaxed">{reason}</p>
+        <div className="mx-3 mb-3 flex items-start gap-1.5 rounded-md bg-gray-50 border border-gray-100 px-2 py-1.5">
+          <Info size={11} className="text-gray-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-gray-500 leading-relaxed">{reason}</p>
         </div>
       )}
 
