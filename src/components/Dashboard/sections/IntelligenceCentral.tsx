@@ -124,14 +124,14 @@ function InsightCard({
   const reason     = formatInsightReason(insight)
 
   // Cache: lista permanece montada após o primeiro expand.
-  // Fechar o card apenas oculta com CSS (hidden) — sem desmontar/remontar.
-  // Resultado: ao reabrir, renderização é imediata sem novo request.
-  const [wasExpanded, setWasExpanded] = useState(false)
-  const [listLoading, setListLoading] = useState(false)
+  // Usando useRef em vez de useEffect para evitar ciclo de render extra —
+  // wasExpanded é atualizado sincronamente durante o render.
+  const wasExpandedRef = React.useRef(false)
+  if (isExpanded) wasExpandedRef.current = true
+  const wasExpanded = wasExpandedRef.current
 
-  useEffect(() => {
-    if (isExpanded) setWasExpanded(true)
-  }, [isExpanded])
+  // listLoading começa true se isExpanded (spinner aparece imediatamente no clique)
+  const [listLoading, setListLoading] = useState(() => isExpanded)
 
   const handleLoadingChange = useCallback((loading: boolean) => {
     // #region agent log
