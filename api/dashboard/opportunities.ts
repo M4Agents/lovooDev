@@ -92,7 +92,6 @@ export default async function handler(req: any, res: any): Promise<void> {
       let posQuery = svc
         .from('opportunity_funnel_positions')
         .select('opportunity_id')
-        .eq('company_id', companyId)
 
       if (funnelId) posQuery = posQuery.eq('funnel_id', funnelId)
       if (stageId)  posQuery = posQuery.eq('stage_id', stageId)
