@@ -126,16 +126,23 @@ function InsightCard({
   if (isExpanded) wasExpandedRef.current = true
   const wasExpanded = wasExpandedRef.current
 
-  // listLoading começa true se isExpanded (spinner aparece imediatamente no clique)
-  const [listLoading, setListLoading] = useState(() => isExpanded)
+  const [listLoading, setListLoading] = useState(false)
 
   const handleLoadingChange = useCallback((loading: boolean) => {
     // #region agent log
-    // Log H-C: callback chegou ao InsightCard?
     console.log('[DBG-254195][handleLoadingChange]', {loading})
     // #endregion
     setListLoading(loading)
   }, [])
+
+  // Ao clicar para expandir pela primeira vez: ativa spinner imediatamente,
+  // no mesmo ciclo do clique — sem esperar callback assíncrono de efeitos.
+  function handleToggleWithLoading() {
+    if (!isExpanded && !wasExpandedRef.current) {
+      setListLoading(true)
+    }
+    onToggle()
+  }
 
   return (
     <div className={`rounded-lg border ${cardClass}`}>
@@ -161,7 +168,7 @@ function InsightCard({
         {/* #endregion */}
         <button
           type="button"
-          onClick={onToggle}
+          onClick={handleToggleWithLoading}
           disabled={isExpanded && listLoading}
           className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap disabled:opacity-70"
         >
