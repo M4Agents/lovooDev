@@ -177,8 +177,20 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
 
   const { data, meta, loading, error } = useEntityList(entityType, filters, true)
 
+  // #region agent log
+  // Log H-A/H-D: loading inicial ao montar
+  useEffect(() => {
+    console.log('[DBG-254195][mount] InsightExpandableList montado', {loading_initial: loading, entityType, onLoadingChange_defined: !!onLoadingChange})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // #endregion
+
   // Notifica o card pai quando loading muda, para atualizar o botão de expansão
   useEffect(() => {
+    // #region agent log
+    // Log H-A/H-B: efeito disparado — loading mudou?
+    console.log('[DBG-254195][loading-effect]', {loading, onLoadingChange_defined: !!onLoadingChange})
+    // #endregion
     onLoadingChange?.(loading)
   }, [loading, onLoadingChange])
 
