@@ -290,10 +290,12 @@ export async function buildFunnelSnapshotMetrics(
   if (!stages || stages.length === 0) return { funnel_id: funnelId, stages: [] }
 
   // 2. Posições atuais de todas as oportunidades no funil
+  // Nota: opportunity_funnel_positions não possui coluna company_id.
+  // Segurança garantida: funnel_id já foi validado como pertencente à empresa
+  // via assertFunnelBelongsToCompany antes de chegar aqui.
   const { data: positions, error: posErr } = await svc
     .from('opportunity_funnel_positions')
     .select('stage_id, entered_stage_at, updated_at')
-    .eq('company_id', companyId)
     .eq('funnel_id', funnelId)
     .limit(10_000)
 
@@ -376,9 +378,11 @@ export async function buildFunnelFlowMetrics(
   if (!stages || stages.length === 0) return { funnel_id: funnelId, stages: [] }
 
   // 2. Histórico de movimentações no período
+  // Nota: trigger_source ainda não existe (migração Pre-Fase 1-B pendente).
+  // Removido do select — by_trigger_source retornará zeros até a migração rodar.
   const { data: history, error: histErr } = await svc
     .from('opportunity_stage_history')
-    .select('opportunity_id, to_stage_id, trigger_source')
+    .select('opportunity_id, to_stage_id')
     .eq('company_id', companyId)
     .eq('funnel_id', funnelId)
     .gte('created_at', resolvedRange.start)
