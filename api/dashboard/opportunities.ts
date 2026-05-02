@@ -12,7 +12,8 @@
 //   status          (opcional)
 //   probability_min (opcional, number)
 //   page            (default 1)
-//   limit           (default 20, max 20)
+//   limit           (default 20, max 20 — ou default 10, max 10 se source=insight_inline)
+//   source          (opcional — 'insight_inline' ativa modo compacto de limite)
 // =====================================================
 
 import { getSupabaseAdmin }  from '../lib/automation/supabaseAdmin.js'
@@ -24,8 +25,10 @@ import {
   jsonError,
 } from '../lib/dashboard/auth.js'
 
-const DEFAULT_LIMIT = 20
-const MAX_LIMIT     = 20
+const DEFAULT_LIMIT         = 20
+const MAX_LIMIT             = 20
+const INLINE_DEFAULT_LIMIT  = 10
+const INLINE_MAX_LIMIT      = 10
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
@@ -69,7 +72,10 @@ export default async function handler(req: any, res: any): Promise<void> {
     const funnelId     = typeof req.query.funnel_id       === 'string' ? req.query.funnel_id.trim()       : null
     const stageId      = typeof req.query.stage_id        === 'string' ? req.query.stage_id.trim()        : null
     const status       = typeof req.query.status          === 'string' ? req.query.status.trim()          : null
+    const source       = typeof req.query.source          === 'string' ? req.query.source.trim()          : null
     const probabilityMin = req.query.probability_min !== undefined ? Number(req.query.probability_min) : null
+
+    const isInlineMode = source === 'insight_inline'
 
     if (funnelId) {
       const valid = await assertFunnelBelongsToCompany(svc, funnelId, companyId)
@@ -77,10 +83,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ------------------------------------------------------------------
-    // 5. Paginação
+    // 5. Paginação — limits diferenciados por source
     // ------------------------------------------------------------------
+    const effectiveDefault = isInlineMode ? INLINE_DEFAULT_LIMIT : DEFAULT_LIMIT
+    const effectiveMax     = isInlineMode ? INLINE_MAX_LIMIT     : MAX_LIMIT
+
     const page  = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1)
-    const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(String(req.query.limit ?? String(DEFAULT_LIMIT)), 10) || DEFAULT_LIMIT))
+    const limit = Math.min(effectiveMax, Math.max(1, parseInt(String(req.query.limit ?? String(effectiveDefault)), 10) || effectiveDefault))
     const offset = (page - 1) * limit
 
     // ------------------------------------------------------------------

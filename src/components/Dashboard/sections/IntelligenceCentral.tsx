@@ -4,11 +4,13 @@
 // Exibe até 5 insights calculados por SQL/regras — sem LLM.
 //
 // Ação "Ver oportunidades" expande lista inline abaixo do card.
+// Cache local: lista permanece montada (hidden) após primeiro load —
+// reabrir o mesmo insight renderiza instantaneamente sem novo fetch.
 // Ações por linha: Chat (ChatModalSimple) e Ver oportunidade
 // (OpportunityDetailModal) — sem navegação de rota.
 // =====================================================
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info } from 'lucide-react'
 import { InsightExpandableList }  from '../interactive/InsightExpandableList'
 import { InsightRulesModal }      from '../settings/InsightRulesModal'
@@ -112,10 +114,18 @@ function InsightCard({
   onOpenChat,
   onOpenOpportunity,
 }: InsightCardProps) {
-  const cfg       = TYPE_CONFIG[insight.type]
-  const cardClass = PRIORITY_COLORS[insight.priority]
+  const cfg        = TYPE_CONFIG[insight.type]
+  const cardClass  = PRIORITY_COLORS[insight.priority]
   const badgeClass = PRIORITY_BADGE[insight.priority]
-  const reason    = formatInsightReason(insight)
+  const reason     = formatInsightReason(insight)
+
+  // Cache: lista permanece montada após o primeiro expand.
+  // Fechar o card apenas oculta com CSS (hidden) — sem desmontar/remontar.
+  // Resultado: ao reabrir, renderização é imediata sem novo request.
+  const [wasExpanded, setWasExpanded] = useState(false)
+  useEffect(() => {
+    if (isExpanded) setWasExpanded(true)
+  }, [isExpanded])
 
   return (
     <div className={`rounded-lg border ${cardClass}`}>
@@ -153,15 +163,17 @@ function InsightCard({
         </div>
       )}
 
-      {/* Lista inline expansível */}
-      {isExpanded && (
-        <div className="px-3 pb-3">
-          <InsightExpandableList
-            insight={insight}
-            dashboardFilters={dashboardFilters}
-            onOpenChat={onOpenChat}
-            onOpenOpportunity={onOpenOpportunity}
-          />
+      {/* Lista inline: montada uma vez, oculta quando fechada (cache via CSS hidden) */}
+      {wasExpanded && (
+        <div className={isExpanded ? undefined : 'hidden'} aria-hidden={!isExpanded}>
+          <div className="px-3 pb-3">
+            <InsightExpandableList
+              insight={insight}
+              dashboardFilters={dashboardFilters}
+              onOpenChat={onOpenChat}
+              onOpenOpportunity={onOpenOpportunity}
+            />
+          </div>
         </div>
       )}
     </div>

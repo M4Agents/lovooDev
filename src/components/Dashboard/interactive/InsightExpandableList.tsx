@@ -8,7 +8,7 @@
 // =====================================================
 
 import React, { useMemo } from 'react'
-import { MessageCircle, Eye, Loader2, AlertCircle } from 'lucide-react'
+import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
 
@@ -39,6 +39,8 @@ function buildFilters(insight: InsightItem, dashboardFilters: DashboardFilters):
   const base: EntityListFilters = {
     period:   dashboardFilters.period,
     funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
+    limit:    10,
+    source:   'insight_inline',
   }
   if (insight.filters.stage_id)        base.stage_id        = insight.filters.stage_id as string
   if (insight.filters.status)          base.status          = insight.filters.status as string
@@ -171,6 +173,8 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
 
   const { data, loading, error } = useEntityList(entityType, filters, true)
 
+  // Backend retorna no máximo 10 itens para source=insight_inline.
+  // O slice é segurança extra para o caso de outros callers sem limit.
   const items = data.slice(0, 10)
 
   return (

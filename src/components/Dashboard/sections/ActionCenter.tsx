@@ -9,7 +9,7 @@
 // =====================================================
 
 import React from 'react'
-import { Flame, Users, ArrowRight, TrendingUp } from 'lucide-react'
+import { Users, ArrowRight, TrendingUp } from 'lucide-react'
 import { EntityListDrawer }      from '../interactive/EntityListDrawer'
 import { useInteractiveMetrics } from '../../../hooks/dashboard/useInteractiveMetrics'
 import { trackEvent }            from '../../../lib/analytics/trackEvent'
@@ -95,26 +95,6 @@ export const ActionCenter: React.FC<ActionCenterProps> = ({
   }
 
   const actions = [
-    {
-      id: 'hot-opportunities',
-      icon: <Flame size={18} className="text-orange-600" />,
-      iconBg: 'bg-orange-50',
-      title: 'Oportunidades quentes',
-      description: `Prob. ≥ 70%, abertas · No período: ${periodLabel}`,
-      buttonLabel: 'Ver todas',
-      onAction: () => {
-        trackEvent('dashboard_open_drawer', {
-          source: 'action_center',
-          entityType: 'opportunities',
-        })
-        openDrawer(
-          'opportunities',
-          'Oportunidades quentes',
-          `Probabilidade ≥ 70%, abertas · ${periodLabel}`,
-          { ...baseFilters, probability_min: 70, status: 'open' },
-        )
-      },
-    },
     {
       id: 'recent-leads',
       icon: <Users size={18} className="text-blue-600" />,

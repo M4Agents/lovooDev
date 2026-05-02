@@ -401,9 +401,11 @@ export const dashboardApi = {
       ...buildPeriodParams(filters),
       page:  String(filters.page  ?? 1),
     }
-    if (filters.stage_id)         params.stage_id         = filters.stage_id
-    if (filters.status)           params.status           = filters.status
-    if (filters.probability_min != null) params.probability_min = String(filters.probability_min)
+    if (filters.stage_id)                params.stage_id         = filters.stage_id
+    if (filters.status)                  params.status           = filters.status
+    if (filters.probability_min != null) params.probability_min  = String(filters.probability_min)
+    if (filters.limit != null)           params.limit            = String(filters.limit)
+    if (filters.source)                  params.source           = filters.source
     return apiFetch<ListResponse<OpportunityItem>>('/api/dashboard/opportunities', params)
   },
 

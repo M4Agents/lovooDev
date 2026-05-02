@@ -30,6 +30,8 @@ export interface EntityListFilters extends DashboardFilters {
   status?:          string | null
   probability_min?: number | null
   ai_state?:        string | null
+  limit?:           number
+  source?:          string
 }
 
 export interface EntityListState {
@@ -113,6 +115,8 @@ export function useEntityList(
     filters.status,
     filters.probability_min,
     filters.ai_state,
+    filters.limit,
+    filters.source,
   ])
 
   // Re-fetch quando filtros ou page mudam
@@ -135,6 +139,8 @@ export function useEntityList(
     filters.status,
     filters.probability_min,
     filters.ai_state,
+    filters.limit,
+    filters.source,
   ])
 
   const nextPage = useCallback(() => {
