@@ -10,19 +10,21 @@ import { dashboardApi } from '../../services/dashboardApi'
 import type { InsightItem, DashboardFilters } from '../../services/dashboardApi'
 
 interface UseDashboardInsightsResult {
-  data:    InsightItem[]
-  loading: boolean
-  error:   string | null
-  refetch: () => void
+  data:         InsightItem[]
+  canCustomize: boolean
+  loading:      boolean
+  error:        string | null
+  refetch:      () => void
 }
 
 export function useDashboardInsights(filters: DashboardFilters): UseDashboardInsightsResult {
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
-  const [data,    setData]    = useState<InsightItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
+  const [data,         setData]         = useState<InsightItem[]>([])
+  const [canCustomize, setCanCustomize] = useState(false)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
 
@@ -43,6 +45,7 @@ export function useDashboardInsights(filters: DashboardFilters): UseDashboardIns
     try {
       const res = await dashboardApi.getInsights(companyId, filters)
       setData(res.data)
+      setCanCustomize(res.meta.can_customize ?? false)
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return
       setError(e instanceof Error ? e.message : 'Erro ao carregar insights')
@@ -56,5 +59,5 @@ export function useDashboardInsights(filters: DashboardFilters): UseDashboardIns
     return () => abortRef.current?.abort()
   }, [load])
 
-  return { data, loading, error, refetch: load }
+  return { data, canCustomize, loading, error, refetch: load }
 }

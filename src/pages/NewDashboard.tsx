@@ -155,6 +155,7 @@ export const NewDashboard: React.FC = () => {
           data={insights.data}
           loading={insights.loading}
           error={insights.error}
+          canCustomize={insights.canCustomize}
           dashboardFilters={filters}
           periodLabel={periodLabel}
         />

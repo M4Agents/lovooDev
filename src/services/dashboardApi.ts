@@ -209,7 +209,7 @@ export interface InsightItem {
 export interface InsightsResponse {
   ok:   boolean
   data: InsightItem[]
-  meta: DashboardMeta
+  meta: DashboardMeta & { can_customize: boolean }
 }
 
 // ---------------------------------------------------------------------------

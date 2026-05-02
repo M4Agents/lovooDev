@@ -8,7 +8,7 @@
 // =====================================================
 
 import React from 'react'
-import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronRight } from 'lucide-react'
+import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronRight, Settings } from 'lucide-react'
 import { EntityListDrawer }      from '../interactive/EntityListDrawer'
 import { useInteractiveMetrics } from '../../../hooks/dashboard/useInteractiveMetrics'
 import type { EntityListFilters } from '../../../hooks/dashboard/useEntityList'
@@ -22,6 +22,7 @@ interface IntelligenceCentralProps {
   data:            InsightItem[]
   loading:         boolean
   error:           string | null
+  canCustomize:    boolean
   dashboardFilters: DashboardFilters
   periodLabel:     string
 }
@@ -140,6 +141,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   data,
   loading,
   error,
+  canCustomize,
   dashboardFilters,
   periodLabel,
 }) => {
@@ -154,9 +156,24 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       {/* Cabeçalho */}
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold text-gray-900">Inteligência Comercial</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Insights automáticos · {periodLabel}</p>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Inteligência Comercial</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Insights automáticos · {periodLabel}</p>
+        </div>
+
+        {/* Botão "Configurar regras" — visível apenas se plano permitir */}
+        {canCustomize && (
+          <button
+            type="button"
+            disabled
+            title="Configuração de regras disponível em breve"
+            className="flex items-center gap-1.5 text-xs text-gray-400 border border-gray-200 rounded-md px-2.5 py-1.5 hover:bg-gray-50 cursor-not-allowed opacity-70"
+          >
+            <Settings size={12} />
+            Configurar regras
+          </button>
+        )}
       </div>
 
       {/* Loading */}
