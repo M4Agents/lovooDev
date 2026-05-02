@@ -19,6 +19,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { resolvePeriod, type ResolvedRange } from '../lib/dashboard/period.js'
+import { getInsightPolicies, type InsightPolicies } from '../lib/dashboard/insightPolicies.js'
 import {
   extractToken,
   assertMembership,
@@ -46,7 +47,7 @@ interface InsightItem {
 
 // ---------------------------------------------------------------------------
 // Insight 1 — Oportunidades quentes
-// Regra: status=open, probability>=70, updated_at no período
+// Regra: status=open, probability>=hot_probability_threshold, updated_at no período
 // ---------------------------------------------------------------------------
 
 async function computeHotOpportunities(
@@ -54,13 +55,14 @@ async function computeHotOpportunities(
   companyId: string,
   resolvedRange: ResolvedRange,
   funnelId: string | null,
+  policies: InsightPolicies,
 ): Promise<InsightItem | null> {
   let query = svc
     .from('opportunities')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
     .eq('status', 'open')
-    .gte('probability', 70)
+    .gte('probability', policies.hot_probability_threshold)
     .gte('updated_at', resolvedRange.start)
     .lte('updated_at', resolvedRange.end)
 
@@ -84,7 +86,7 @@ async function computeHotOpportunities(
     type:        'hot_opportunity',
     priority:    'high',
     title:       `${count} oportunidade${count > 1 ? 's' : ''} quente${count > 1 ? 's' : ''}`,
-    description: `Com probabilidade ≥ 70% e abertas no período`,
+    description: `Com probabilidade ≥ ${policies.hot_probability_threshold}% e abertas no período`,
     entityType:  'opportunities',
     filters:     { probability_min: 70, status: 'open', funnelId: funnelId ?? undefined },
     actionLabel: 'Ver oportunidades',
@@ -93,15 +95,16 @@ async function computeHotOpportunities(
 
 // ---------------------------------------------------------------------------
 // Insight 2 — Oportunidades sem atualização (esfriando)
-// Regra: status=open, updated_at < now() - 3 dias
+// Regra: status=open, updated_at < now() - cooling_threshold_days
 // ---------------------------------------------------------------------------
 
 async function computeCoolingOpportunities(
   svc: SupabaseClient,
   companyId: string,
   funnelId: string | null,
+  policies: InsightPolicies,
 ): Promise<InsightItem | null> {
-  const cutoff = new Date(Date.now() - 3 * 86_400_000).toISOString()
+  const cutoff = new Date(Date.now() - policies.cooling_threshold_days * 86_400_000).toISOString()
 
   let query = svc
     .from('opportunities')
@@ -131,7 +134,7 @@ async function computeCoolingOpportunities(
     type:        'cooling_opportunity',
     priority,
     title:       `${count} oportunidade${count > 1 ? 's' : ''} sem atualização`,
-    description: `Abertas há mais de 3 dias sem movimentação`,
+    description: `Abertas há mais de ${policies.cooling_threshold_days} dia${policies.cooling_threshold_days > 1 ? 's' : ''} sem movimentação`,
     entityType:  'opportunities',
     filters:     { status: 'open', funnelId: funnelId ?? undefined },
     actionLabel: 'Ver oportunidades',
@@ -140,7 +143,7 @@ async function computeCoolingOpportunities(
 
 // ---------------------------------------------------------------------------
 // Insight 3 — Gargalo no pipeline
-// Regra: etapa com maior avg_days_in_stage >= 3 dias
+// Regra: etapa com maior avg_days_in_stage >= bottleneck_min_days
 // Requer funnel_id
 // ---------------------------------------------------------------------------
 
@@ -148,6 +151,7 @@ async function computeFunnelBottleneck(
   svc: SupabaseClient,
   _companyId: string,
   funnelId: string,
+  policies: InsightPolicies,
 ): Promise<InsightItem | null> {
   // Etapas do funil
   const { data: stages, error: stagesErr } = await svc
@@ -198,7 +202,7 @@ async function computeFunnelBottleneck(
     }
   }
 
-  if (worstAvg < 3 || !worstStageId) return null
+  if (worstAvg < policies.bottleneck_min_days || !worstStageId) return null
 
   return {
     id:          'funnel_bottleneck',
@@ -214,7 +218,7 @@ async function computeFunnelBottleneck(
 
 // ---------------------------------------------------------------------------
 // Insight 4 — Queda de conversão entre etapas
-// Regra: menor conversion_rate_pct < 40% no período
+// Regra: menor conversion_rate_pct < conversion_drop_threshold no período
 // Requer funnel_id
 // ---------------------------------------------------------------------------
 
@@ -223,6 +227,7 @@ async function computeConversionDrop(
   companyId: string,
   funnelId: string,
   resolvedRange: ResolvedRange,
+  policies: InsightPolicies,
 ): Promise<InsightItem | null> {
   // Etapas ordenadas
   const { data: stages, error: stagesErr } = await svc
@@ -279,7 +284,7 @@ async function computeConversionDrop(
     }
   }
 
-  if (worstRate >= 40) return null
+  if (worstRate >= policies.conversion_drop_threshold) return null
 
   return {
     id:          'conversion_drop',
@@ -295,13 +300,14 @@ async function computeConversionDrop(
 
 // ---------------------------------------------------------------------------
 // Insight 5 — Falhas de tools da IA
-// Regra: agent_tool_executions, últimos 7 dias, success=false, taxa >= 20%
+// Regra: agent_tool_executions, últimos 7 dias, success=false, taxa >= ai_error_rate_threshold
 // Tabela e colunas são opcionais — falha silenciosa
 // ---------------------------------------------------------------------------
 
 async function computeAiToolIssues(
   svc: SupabaseClient,
   companyId: string,
+  policies: InsightPolicies,
 ): Promise<InsightItem | null> {
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
 
@@ -327,7 +333,7 @@ async function computeAiToolIssues(
   if (total === 0 || failed === 0) return null
 
   const rate = (failed / total) * 100
-  if (rate < 20) return null
+  if (rate < policies.ai_error_rate_threshold) return null
 
   const priority: InsightPriority = rate >= 50 ? 'high' : 'medium'
 
@@ -391,16 +397,19 @@ export default async function handler(req: any, res: any): Promise<void> {
       funnelId = rawFunnelId
     }
 
-    // 5. Calcular insights em paralelo — falha isolada nunca quebra o endpoint
+    // 5. Buscar policies da empresa (mescla com defaults — falha silenciosa)
+    const policies = await getInsightPolicies(svc, companyId)
+
+    // 6. Calcular insights em paralelo — falha isolada nunca quebra o endpoint
     const tasks = [
-      computeHotOpportunities(svc, companyId, resolvedRange, funnelId),
-      computeCoolingOpportunities(svc, companyId, funnelId),
-      computeAiToolIssues(svc, companyId),
+      computeHotOpportunities(svc, companyId, resolvedRange, funnelId, policies),
+      computeCoolingOpportunities(svc, companyId, funnelId, policies),
+      computeAiToolIssues(svc, companyId, policies),
       // Insights de funil só disponíveis quando funnel_id fornecido
       ...(funnelId
         ? [
-            computeFunnelBottleneck(svc, companyId, funnelId),
-            computeConversionDrop(svc, companyId, funnelId, resolvedRange),
+            computeFunnelBottleneck(svc, companyId, funnelId, policies),
+            computeConversionDrop(svc, companyId, funnelId, resolvedRange, policies),
           ]
         : []),
     ]
@@ -414,7 +423,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
       .slice(0, 5)
 
-    // 6. Resposta — cache curto (insights mudam com movimentações)
+    // 7. Resposta — cache curto (insights mudam com movimentações)
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120')
 
     return res.status(200).json({
