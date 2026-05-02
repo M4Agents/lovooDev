@@ -27,8 +27,8 @@ import {
 
 const DEFAULT_LIMIT         = 20
 const MAX_LIMIT             = 20
-const INLINE_DEFAULT_LIMIT  = 10
-const INLINE_MAX_LIMIT      = 10
+const INLINE_DEFAULT_LIMIT  = 30
+const INLINE_MAX_LIMIT      = 30
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')

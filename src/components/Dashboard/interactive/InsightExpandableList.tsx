@@ -4,13 +4,16 @@
 // Renderiza apenas quando expanded=true (lazy).
 // Suporte a opportunities (padrão) e conversations.
 //
-// Sem navegação de rota — ações abrem modais inline.
+// Carregamento progressivo: busca 30 itens de uma vez,
+// exibe 10 por vez com botão "Carregar mais" — sem drawer.
 // =====================================================
 
-import React, { useMemo, useEffect } from 'react'
-import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { MessageCircle, Eye, AlertCircle, ChevronDown } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
+
+const PAGE_SIZE = 10
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -21,7 +24,6 @@ interface InsightExpandableListProps {
   dashboardFilters: DashboardFilters
   onOpenChat:       (leadId: number) => void
   onOpenOpportunity:(item: OpportunityItem) => void
-  onViewAll?:       () => void
   onLoadingChange?: (loading: boolean) => void
 }
 
@@ -41,7 +43,7 @@ function buildFilters(insight: InsightItem, dashboardFilters: DashboardFilters):
   const base: EntityListFilters = {
     period:   dashboardFilters.period,
     funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
-    limit:    10,
+    limit:    30,
     source:   'insight_inline',
   }
   if (insight.filters.stage_id)        base.stage_id        = insight.filters.stage_id as string
@@ -85,25 +87,18 @@ function OpportunityRow({
   const interactionDate = item.last_interaction_at ?? item.updated_at
   return (
     <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-current/5 transition-colors group">
-      {/* Nome + etapa */}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium truncate">{item.lead_name || item.title}</p>
         <p className="text-xs opacity-50 truncate">{item.stage_name || '—'}</p>
       </div>
-
-      {/* Probabilidade */}
       <div className="w-14 text-right flex-shrink-0">
         <span className={`text-xs font-semibold ${item.probability >= 70 ? 'text-green-600' : item.probability >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
           {item.probability}%
         </span>
       </div>
-
-      {/* Última interação */}
       <div className="w-20 text-right flex-shrink-0">
         <span className="text-xs opacity-50">{formatRelativeDate(interactionDate)}</span>
       </div>
-
-      {/* Ações */}
       <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           type="button"
@@ -169,7 +164,6 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
   dashboardFilters,
   onOpenChat,
   onOpenOpportunity,
-  onViewAll,
   onLoadingChange,
 }) => {
   const entityType = resolveEntityType(insight)
@@ -178,31 +172,41 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
   const { data, meta, loading, error } = useEntityList(entityType, filters, true)
 
   // #region agent log
-  // Log H-A/H-D: loading inicial ao montar
   useEffect(() => {
     console.log('[DBG-254195][mount] InsightExpandableList montado', {loading_initial: loading, entityType, onLoadingChange_defined: !!onLoadingChange})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // #endregion
 
-  // Notifica o card pai quando loading muda, para atualizar o botão de expansão
+  // Notifica o card pai quando loading muda (spinner no botão de expansão)
   useEffect(() => {
     // #region agent log
-    // Log H-A/H-B: efeito disparado — loading mudou?
     console.log('[DBG-254195][loading-effect]', {loading, onLoadingChange_defined: !!onLoadingChange})
     // #endregion
     onLoadingChange?.(loading)
   }, [loading, onLoadingChange])
 
-  // Backend retorna no máximo 10 itens para source=insight_inline.
-  // O slice é segurança extra para o caso de outros callers sem limit.
-  const items    = data.slice(0, 10)
-  const total    = meta?.total ?? 0
-  const hasMore  = total > items.length
+  // Controle de quantos itens estão visíveis.
+  // Resetar ao mudar os dados (novo filtro/período).
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
+  useEffect(() => {
+    setDisplayCount(PAGE_SIZE)
+  }, [data])
+
+  const total        = meta?.total ?? 0
+  const visibleItems = data.slice(0, displayCount)
+  // Itens carregados localmente além do displayCount atual
+  const moreInMemory = data.length - displayCount
+  // Itens ainda não buscados (além dos 30 do batch inicial)
+  const remaining    = total - displayCount
+
+  function handleLoadMore() {
+    setDisplayCount(prev => prev + PAGE_SIZE)
+  }
 
   return (
     <div className="mt-2 rounded-md bg-white/50 border border-current/10 overflow-hidden">
-      {/* Cabeçalho da tabela */}
+      {/* Cabeçalho */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-current/10 bg-current/5">
         <span className="flex-1 text-xs font-medium opacity-60">Nome</span>
         {entityType === 'opportunities' && (
@@ -229,17 +233,17 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
       )}
 
       {/* Vazio */}
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && visibleItems.length === 0 && (
         <div className="px-3 py-4 text-center text-xs opacity-50">
           Nenhum item encontrado para este insight.
         </div>
       )}
 
-      {/* Linhas */}
-      {!loading && !error && items.length > 0 && (
+      {/* Linhas visíveis */}
+      {!loading && !error && visibleItems.length > 0 && (
         <div>
           {entityType === 'opportunities'
-            ? (items as OpportunityItem[]).map((item) => (
+            ? (visibleItems as OpportunityItem[]).map((item) => (
                 <OpportunityRow
                   key={item.opportunity_id}
                   item={item}
@@ -247,7 +251,7 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
                   onOpenOpportunity={onOpenOpportunity}
                 />
               ))
-            : (items as ConversationItem[]).map((item) => (
+            : (visibleItems as ConversationItem[]).map((item) => (
                 <ConversationRow
                   key={item.conversation_id}
                   item={item}
@@ -255,22 +259,25 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
                 />
               ))
           }
-          {hasMore && (
-            <div className="flex items-center justify-between px-3 py-2 border-t border-current/10 bg-current/5">
-              <p className="text-xs opacity-50">
-                Mostrando {items.length} de {total} itens
-              </p>
-              {onViewAll && (
-                <button
-                  type="button"
-                  onClick={onViewAll}
-                  className="text-xs font-medium underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
-                >
-                  Ver todos ({total})
-                </button>
-              )}
-            </div>
-          )}
+
+          {/* Rodapé: contador + botão Carregar mais */}
+          <div className="flex items-center justify-between px-3 py-2 border-t border-current/10 bg-current/5">
+            <p className="text-xs opacity-50">
+              {displayCount >= total
+                ? `${total} ${total === 1 ? 'item' : 'itens'}`
+                : `Mostrando ${displayCount} de ${total}`}
+            </p>
+            {moreInMemory > 0 && (
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                className="flex items-center gap-1 text-xs font-medium underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
+              >
+                <ChevronDown size={11} />
+                Carregar mais ({Math.min(PAGE_SIZE, moreInMemory)} de {remaining} restantes)
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
