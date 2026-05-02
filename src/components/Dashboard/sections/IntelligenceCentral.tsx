@@ -10,15 +10,17 @@
 // (OpportunityDetailModal) — sem navegação de rota.
 // =====================================================
 
-import React, { useState, useEffect } from 'react'
-import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info, Loader2 } from 'lucide-react'
 import { InsightExpandableList }  from '../interactive/InsightExpandableList'
+import { EntityListDrawer }       from '../interactive/EntityListDrawer'
 import { InsightRulesModal }      from '../settings/InsightRulesModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import ChatModalSimple            from '../../SalesFunnel/ChatModalSimple'
 import { funnelApi }              from '../../../services/funnelApi'
 import { useAuth }                from '../../../contexts/AuthContext'
 import type { Opportunity }       from '../../../types/sales-funnel'
+import type { EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, InsightPriority, InsightType, DashboardFilters, OpportunityItem } from '../../../services/dashboardApi'
 
 // ---------------------------------------------------------------------------
@@ -104,6 +106,7 @@ interface InsightCardProps {
   onToggle:         () => void
   onOpenChat:       (leadId: number) => void
   onOpenOpportunity:(item: OpportunityItem) => void
+  onViewAll:        (insight: InsightItem) => void
 }
 
 function InsightCard({
@@ -113,6 +116,7 @@ function InsightCard({
   onToggle,
   onOpenChat,
   onOpenOpportunity,
+  onViewAll,
 }: InsightCardProps) {
   const cfg        = TYPE_CONFIG[insight.type]
   const cardClass  = PRIORITY_COLORS[insight.priority]
@@ -123,9 +127,15 @@ function InsightCard({
   // Fechar o card apenas oculta com CSS (hidden) — sem desmontar/remontar.
   // Resultado: ao reabrir, renderização é imediata sem novo request.
   const [wasExpanded, setWasExpanded] = useState(false)
+  const [listLoading, setListLoading] = useState(false)
+
   useEffect(() => {
     if (isExpanded) setWasExpanded(true)
   }, [isExpanded])
+
+  const handleLoadingChange = useCallback((loading: boolean) => {
+    setListLoading(loading)
+  }, [])
 
   return (
     <div className={`rounded-lg border ${cardClass}`}>
@@ -144,14 +154,17 @@ function InsightCard({
           <p className="text-xs opacity-70 mt-0.5 leading-snug">{insight.description}</p>
         </div>
 
-        {/* Botão de expansão */}
+        {/* Botão de expansão — mostra spinner enquanto os dados carregam */}
         <button
           type="button"
           onClick={onToggle}
-          className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap"
+          disabled={isExpanded && listLoading}
+          className="flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md border border-current/20 hover:bg-current/10 transition-colors flex-shrink-0 whitespace-nowrap disabled:opacity-70"
         >
-          {insight.actionLabel}
-          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          {isExpanded && listLoading
+            ? <><Loader2 size={12} className="animate-spin" /> Carregando...</>
+            : <>{insight.actionLabel}{isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</>
+          }
         </button>
       </div>
 
@@ -172,6 +185,8 @@ function InsightCard({
               dashboardFilters={dashboardFilters}
               onOpenChat={onOpenChat}
               onOpenOpportunity={onOpenOpportunity}
+              onViewAll={() => onViewAll(insight)}
+              onLoadingChange={handleLoadingChange}
             />
           </div>
         </div>
@@ -210,6 +225,20 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
 
   // Modal de configuração
   const [rulesModalOpen, setRulesModalOpen] = useState(false)
+
+  // Drawer "Ver todos" — sem limite, usa filtros do insight
+  const [drawerInsight, setDrawerInsight] = useState<InsightItem | null>(null)
+
+  function buildDrawerFilters(insight: InsightItem): EntityListFilters {
+    const base: EntityListFilters = {
+      period:   dashboardFilters.period,
+      funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
+    }
+    if (insight.filters.stage_id)        base.stage_id        = insight.filters.stage_id as string
+    if (insight.filters.status)          base.status          = insight.filters.status as string
+    if (insight.filters.probability_min) base.probability_min = insight.filters.probability_min as number
+    return base
+  }
 
   function handleToggle(insightId: string) {
     setExpandedInsightId((prev) => (prev === insightId ? null : insightId))
@@ -297,6 +326,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
               onToggle={() => handleToggle(insight.id)}
               onOpenChat={handleOpenChat}
               onOpenOpportunity={handleOpenOpportunity}
+              onViewAll={setDrawerInsight}
             />
           ))}
         </div>
@@ -336,6 +366,18 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
           onClose={() => { setOppModalOpen(false); setSelectedOpportunity(null) }}
           opportunity={selectedOpportunity}
           companyId={companyId}
+        />
+      )}
+
+      {/* Drawer "Ver todos" — lista completa sem limite */}
+      {drawerInsight && (
+        <EntityListDrawer
+          open={!!drawerInsight}
+          onClose={() => setDrawerInsight(null)}
+          title={drawerInsight.title}
+          description={drawerInsight.description}
+          entityType={drawerInsight.entityType === 'conversations' ? 'conversations' : 'opportunities'}
+          filters={buildDrawerFilters(drawerInsight)}
         />
       )}
     </div>

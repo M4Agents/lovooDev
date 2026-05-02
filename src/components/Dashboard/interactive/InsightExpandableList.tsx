@@ -7,7 +7,7 @@
 // Sem navegação de rota — ações abrem modais inline.
 // =====================================================
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
@@ -21,6 +21,8 @@ interface InsightExpandableListProps {
   dashboardFilters: DashboardFilters
   onOpenChat:       (leadId: number) => void
   onOpenOpportunity:(item: OpportunityItem) => void
+  onViewAll?:       () => void
+  onLoadingChange?: (loading: boolean) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -167,15 +169,24 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
   dashboardFilters,
   onOpenChat,
   onOpenOpportunity,
+  onViewAll,
+  onLoadingChange,
 }) => {
   const entityType = resolveEntityType(insight)
   const filters    = useMemo(() => buildFilters(insight, dashboardFilters), [insight, dashboardFilters])
 
-  const { data, loading, error } = useEntityList(entityType, filters, true)
+  const { data, meta, loading, error } = useEntityList(entityType, filters, true)
+
+  // Notifica o card pai quando loading muda, para atualizar o botão de expansão
+  useEffect(() => {
+    onLoadingChange?.(loading)
+  }, [loading, onLoadingChange])
 
   // Backend retorna no máximo 10 itens para source=insight_inline.
   // O slice é segurança extra para o caso de outros callers sem limit.
-  const items = data.slice(0, 10)
+  const items    = data.slice(0, 10)
+  const total    = meta?.total ?? 0
+  const hasMore  = total > items.length
 
   return (
     <div className="mt-2 rounded-md bg-white/50 border border-current/10 overflow-hidden">
@@ -232,10 +243,21 @@ export const InsightExpandableList: React.FC<InsightExpandableListProps> = ({
                 />
               ))
           }
-          {data.length > 10 && (
-            <p className="text-center text-xs opacity-40 py-2 border-t border-current/10">
-              Mostrando 10 de {data.length} itens
-            </p>
+          {hasMore && (
+            <div className="flex items-center justify-between px-3 py-2 border-t border-current/10 bg-current/5">
+              <p className="text-xs opacity-50">
+                Mostrando {items.length} de {total} itens
+              </p>
+              {onViewAll && (
+                <button
+                  type="button"
+                  onClick={onViewAll}
+                  className="text-xs font-medium underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  Ver todos ({total})
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

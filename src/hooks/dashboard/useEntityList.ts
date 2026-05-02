@@ -60,7 +60,9 @@ export function useEntityList(
 
   const [data,    setData]    = useState<EntityItem[]>([])
   const [meta,    setMeta]    = useState<ListMeta | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Inicializa como true quando enabled=true para mostrar skeleton imediatamente
+  // ao montar o componente, sem esperar o useEffect do primeiro ciclo de render.
+  const [loading, setLoading] = useState(() => enabled && !!entityType)
   const [error,   setError]   = useState<string | null>(null)
   const [page,    setPage]    = useState(1)
 
