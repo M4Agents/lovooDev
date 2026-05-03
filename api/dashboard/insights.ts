@@ -21,6 +21,7 @@ import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { resolvePeriod, type ResolvedRange } from '../lib/dashboard/period.js'
 import { getInsightPolicies, type InsightPolicies } from '../lib/dashboard/insightPolicies.js'
 import { canCustomizeInsights } from '../lib/dashboard/insightAccess.js'
+import { canAiAnalysis }        from '../lib/dashboard/aiAnalysisAccess.js'
 import {
   extractToken,
   assertMembership,
@@ -445,10 +446,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // 5. Buscar policies da empresa (mescla com defaults — falha silenciosa)
-    // e verificar permissão de customização — em paralelo para não bloquear
-    const [policies, canCustomize] = await Promise.all([
+    // e verificar permissões — em paralelo para não bloquear
+    const [policies, canCustomize, canAnalysis] = await Promise.all([
       getInsightPolicies(svc, companyId),
       canCustomizeInsights(svc, companyId),
+      canAiAnalysis(svc, companyId),
     ])
 
     // 6. Calcular insights em paralelo — falha isolada nunca quebra o endpoint
@@ -482,10 +484,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       data: insights,
       meta: {
         period,
-        start_date:    resolvedRange.start,
-        end_date:      resolvedRange.end,
-        funnel_id:     funnelId ?? null,
-        can_customize: canCustomize,
+        start_date:      resolvedRange.start,
+        end_date:        resolvedRange.end,
+        funnel_id:       funnelId ?? null,
+        can_customize:   canCustomize,
+        can_ai_analysis: canAnalysis,
       },
     })
 

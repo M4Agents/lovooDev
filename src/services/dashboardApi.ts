@@ -250,7 +250,7 @@ export interface InsightItem {
 export interface InsightsResponse {
   ok:   boolean
   data: InsightItem[]
-  meta: DashboardMeta & { can_customize: boolean }
+  meta: DashboardMeta & { can_customize: boolean; can_ai_analysis: boolean }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +309,108 @@ export interface OpportunityFilters extends DashboardFilters {
   status?: string | null
   probability_min?: number | null
   page?: number
+  limit?: number
+  source?: string
+}
+
+// ---------------------------------------------------------------------------
+// Tipos para IA Analítica sob demanda
+// ---------------------------------------------------------------------------
+
+export type AiAnalysisType   = 'cooling_opportunities' | 'conversion_drop' | 'funnel_overview'
+export type AiAnalysisStatus = 'pending' | 'processing' | 'awaiting_credits' | 'completed' | 'failed' | 'credit_failed'
+
+export interface AiNextBestAction {
+  title:       string
+  description: string
+  action_type: 'open_filtered_opportunities' | 'open_funnel_stage'
+  filters:     Record<string, unknown>
+  impact:      'high' | 'medium' | 'low'
+}
+
+export interface AiAnalysisOutput {
+  title:               string
+  summary:             string
+  findings:            string[]
+  recommended_actions: string[]
+  next_best_actions:   AiNextBestAction[]
+  limitations:         string[]
+}
+
+export interface AiAnalysisResult {
+  id:                string
+  analysis_type:     AiAnalysisType
+  funnel_id:         string | null
+  period:            string | null
+  status:            AiAnalysisStatus
+  output:            AiAnalysisOutput | null
+  credits_used:      number | null
+  estimated_credits: number | null
+  model:             string | null
+  error_message:     string | null
+  completed_at:      string | null
+  started_at:        string | null
+  created_at:        string
+  // campos extras para awaiting_credits / credit_failed
+  balance_available?: number
+  required_balance?:  number
+  missing_credits?:   number
+  message?:           string
+}
+
+export interface AiAnalysisSummary {
+  id:                string
+  analysis_type:     AiAnalysisType
+  funnel_id:         string | null
+  period:            string | null
+  status:            AiAnalysisStatus
+  estimated_credits: number | null
+  credits_used:      number | null
+  model:             string | null
+  created_at:        string
+  completed_at:      string | null
+  title:             string | null
+}
+
+/** Resposta do POST /api/dashboard/ai-analysis (múltiplas formas) */
+export interface AiAnalysisPostResponse {
+  ok:               boolean
+  status?:          AiAnalysisStatus | string
+  analysis_id?:     string | null
+  cache_available?: boolean
+  processing?:      boolean
+  data?:            AiAnalysisResult
+  balance_available?: number
+  estimated_credits?: number
+  required_balance?:  number
+  missing_credits?:   number
+  error?:             string
+  message?:           string
+  created_at?:        string
+}
+
+export interface AiAnalysesListResponse {
+  ok:   boolean
+  data: AiAnalysisSummary[]
+  meta: { total: number; page: number; limit: number; total_pages: number; has_more: boolean }
+}
+
+// ---------------------------------------------------------------------------
+// Tipos para prompts complementares de IA (E2)
+// ---------------------------------------------------------------------------
+
+export interface AiPromptItem {
+  id:            string | null
+  analysis_type: AiAnalysisType
+  custom_prompt: string
+  is_active:     boolean
+  updated_by:    string | null
+  updated_at:    string | null
+}
+
+export interface AiPromptsResponse {
+  ok:   boolean
+  data: AiPromptItem[]
 }
 
 export interface LeadFilters extends DashboardFilters {
@@ -437,5 +539,77 @@ export const dashboardApi = {
     }
     if (filters.ai_state) params.ai_state = filters.ai_state
     return apiFetch<ListResponse<ConversationItem>>('/api/dashboard/conversations', params)
+  },
+
+  // ── IA Analítica ──────────────────────────────────────────────────────────
+
+  /**
+   * Solicita análise de IA (novo, resume ou cache).
+   * Retorna o objeto bruto — não lança em 402 (saldo insuficiente).
+   */
+  async requestAiAnalysis(
+    companyId: string,
+    params: {
+      analysis_type?: AiAnalysisType
+      period?: string
+      funnel_id?: string | null
+      analysis_id?: string  // resume mode
+    },
+  ): Promise<{ status: number; data: AiAnalysisPostResponse }> {
+    const token = await getToken()
+    if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+    const res = await fetch('/api/dashboard/ai-analysis', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_id: companyId, ...params }),
+    })
+
+    const data = await res.json().catch(() => ({}))
+    return { status: res.status, data }
+  },
+
+  /**
+   * Carrega análise específica por ID (sem chamar LLM).
+   */
+  async getAiAnalysis(analysisId: string): Promise<{ ok: boolean; data: AiAnalysisResult }> {
+    return apiFetch<{ ok: boolean; data: AiAnalysisResult }>(
+      `/api/dashboard/ai-analysis/${analysisId}`, {},
+    )
+  },
+
+  /**
+   * Histórico paginado de análises da empresa.
+   */
+  async getAiAnalyses(
+    companyId: string,
+    options: { page?: number; status?: string; analysis_type?: string } = {},
+  ): Promise<AiAnalysesListResponse> {
+    const params: Record<string, string> = { company_id: companyId, page: String(options.page ?? 1) }
+    if (options.status)        params.status        = options.status
+    if (options.analysis_type) params.analysis_type = options.analysis_type
+    return apiFetch<AiAnalysesListResponse>('/api/dashboard/ai-analyses', params)
+  },
+
+  // ── Prompts complementares (E2) ───────────────────────────────────────────
+
+  /**
+   * Lista os prompts complementares da empresa (3 tipos MVP, com fallback).
+   */
+  async getAiPrompts(companyId: string): Promise<AiPromptsResponse> {
+    return apiFetch<AiPromptsResponse>('/api/dashboard/ai-prompts', { company_id: companyId })
+  },
+
+  /**
+   * Salva/atualiza o prompt complementar de um tipo de análise.
+   * Requer role admin/super_admin/system_admin.
+   */
+  async saveAiPrompt(
+    companyId: string,
+    params: { analysis_type: AiAnalysisType; custom_prompt: string; is_active: boolean },
+  ): Promise<{ ok: boolean; data: AiPromptItem }> {
+    return apiPost<{ ok: boolean; data: AiPromptItem }>(
+      '/api/dashboard/ai-prompts', { company_id: companyId }, params,
+    )
   },
 }

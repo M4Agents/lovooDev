@@ -11,13 +11,15 @@
 // =====================================================
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info, Loader2 } from 'lucide-react'
+import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp, Settings, Info, Loader2, Brain } from 'lucide-react'
 import { InsightExpandableList }  from '../interactive/InsightExpandableList'
 import { InsightRulesModal }      from '../settings/InsightRulesModal'
+import { AiAnalysisModal }        from '../settings/AiAnalysisModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import ChatModalSimple            from '../../SalesFunnel/ChatModalSimple'
 import { funnelApi }              from '../../../services/funnelApi'
 import { useAuth }                from '../../../contexts/AuthContext'
+import { useDashboardAiAnalysis } from '../../../hooks/dashboard/useDashboardAiAnalysis'
 import type { Opportunity }       from '../../../types/sales-funnel'
 import type { InsightItem, InsightPriority, InsightType, DashboardFilters, OpportunityItem } from '../../../services/dashboardApi'
 
@@ -30,9 +32,11 @@ interface IntelligenceCentralProps {
   loading:           boolean
   error:             string | null
   canCustomize:      boolean
+  canAiAnalysis:     boolean
   dashboardFilters:  DashboardFilters
   periodLabel:       string
   companyId:         string | null
+  resumeAnalysisId?: string | null
   onRefetchInsights: () => void
 }
 
@@ -222,9 +226,11 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   loading,
   error,
   canCustomize,
+  canAiAnalysis,
   dashboardFilters,
   periodLabel,
   companyId,
+  resumeAnalysisId,
   onRefetchInsights,
 }) => {
   const { user } = useAuth()
@@ -243,6 +249,16 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
 
   // Modal de configuração
   const [rulesModalOpen, setRulesModalOpen] = useState(false)
+
+  // IA Analítica
+  const ai = useDashboardAiAnalysis(companyId)
+
+  // Abrir modal de IA ao retornar do checkout com resume_analysis
+  useEffect(() => {
+    if (resumeAnalysisId) {
+      void ai.open(resumeAnalysisId)
+    }
+  }, [resumeAnalysisId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleToggle(insightId: string) {
     setExpandedInsightId((prev) => (prev === insightId ? null : insightId))
@@ -291,6 +307,17 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
           >
             <Settings size={12} />
             Configurar regras
+          </button>
+        )}
+
+        {canAiAnalysis && (
+          <button
+            type="button"
+            onClick={() => ai.open()}
+            className="flex items-center gap-1.5 text-xs text-purple-700 border border-purple-200 rounded-md px-2.5 py-1.5 hover:bg-purple-50 transition-colors"
+          >
+            <Brain size={12} />
+            Análise com IA
           </button>
         )}
       </div>
@@ -371,6 +398,30 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
           companyId={companyId}
         />
       )}
+
+      {/* Modal de IA Analítica */}
+      <AiAnalysisModal
+        isOpen={ai.step !== 'closed'}
+        step={ai.step}
+        analysisType={ai.analysisType}
+        analysisId={ai.analysisId}
+        result={ai.result}
+        creditInfo={ai.creditInfo}
+        error={ai.error}
+        loading={ai.loading}
+        history={ai.history}
+        historyLoading={ai.historyLoading}
+        funnelId={dashboardFilters.funnelId}
+        onClose={ai.close}
+        onSelectType={ai.selectType}
+        onBack={ai.backToSelecting}
+        onExecute={() => ai.execute(dashboardFilters.funnelId)}
+        onContinue={ai.continueAfterCredits}
+        onViewAnalysis={ai.viewAnalysis}
+        onOpenHistory={ai.openHistory}
+        onInitiateCheckout={ai.initiateCheckout}
+        onReset={ai.reset}
+      />
     </div>
   )
 }

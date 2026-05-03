@@ -5,7 +5,7 @@
 // Rota atual (src/App.tsx): /dashboard → ModernDashboard (NÃO alterado neste passo)
 // =====================================================
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { FunnelSelector }         from '../components/Dashboard/filters/FunnelSelector'
 import { ExecutiveSummary }       from '../components/Dashboard/sections/ExecutiveSummary'
@@ -101,6 +101,22 @@ export const NewDashboard: React.FC = () => {
   const insights   = useDashboardInsights(filters)
   const funnelMode = summary.data?.funnel_mode ?? 'single-funnel'
 
+  // Lê ?resume_analysis da URL (pós-checkout de créditos para retomada de análise de IA)
+  const [resumeAnalysisId, setResumeAnalysisId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('resume_analysis')
+    if (id) {
+      setResumeAnalysisId(id)
+      // Remove o param da URL sem recarregar a página
+      params.delete('resume_analysis')
+      params.delete('credits')
+      const clean = window.location.pathname + (params.toString() ? `?${params.toString()}` : '')
+      window.history.replaceState({}, '', clean)
+    }
+  }, [])
+
   // Passa funnelMode para useFunnelSnapshot evitar request sem funnelId em multi-funnel
   const snapshot = useFunnelSnapshot(funnelId, funnelMode)
   const flow     = useFunnelFlow(funnelId, filters)
@@ -160,9 +176,11 @@ export const NewDashboard: React.FC = () => {
           loading={insights.loading}
           error={insights.error}
           canCustomize={insights.canCustomize}
+          canAiAnalysis={insights.canAiAnalysis}
           dashboardFilters={filters}
           periodLabel={periodLabel}
           companyId={companyId}
+          resumeAnalysisId={resumeAnalysisId}
           onRefetchInsights={insights.refetch}
         />
       </section>

@@ -9,14 +9,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, Link2Off, Info, BarChart2,
+  Bot, Plus, Pencil, Trash2, Loader2, AlertCircle, Link2, Link2Off, Info, BarChart2, Brain,
 } from 'lucide-react'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { fetchOpenAIModels } from '../../services/openaiIntegrationApi'
 import type { AgentUseBinding, LovooAgent } from '../../types/lovoo-agents'
 import { AGENT_FUNCTIONAL_USES } from '../../types/lovoo-agents'
-import { LovooAgentForm } from './LovooAgentForm'
-import { AgentLogsPanel } from './AgentLogsPanel'
+import { LovooAgentForm }            from './LovooAgentForm'
+import { AgentLogsPanel }            from './AgentLogsPanel'
+import { AiAnalyticsPromptsPanel }   from './AiAnalyticsPromptsPanel'
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -41,8 +42,8 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
   const [editingAgent, setEditingAgent] = useState<LovooAgent | null | undefined>(undefined)
   // undefined = form fechado | null = criação | LovooAgent = edição
 
-  // Sub-tab: 'agents' = gestão de agentes/bindings | 'logs' = Custos e Uso de IA
-  const [activeSubTab, setActiveSubTab] = useState<'agents' | 'logs'>('agents')
+  // Sub-tab: 'agents' = gestão de agentes/bindings | 'logs' = Custos e Uso de IA | 'ia-analitica' = prompts IA Analítica
+  const [activeSubTab, setActiveSubTab] = useState<'agents' | 'logs' | 'ia-analitica'>('agents')
 
   const [deletingId, setDeletingId]     = useState<string | null>(null)
   const [bindingLoading, setBindingLoading] = useState<string | null>(null)
@@ -237,11 +238,40 @@ export const LovooAgentsPanel: React.FC<Props> = ({ companyId }) => {
             <BarChart2 className="w-4 h-4" />
             {t('tabs.logs')}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('ia-analitica')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeSubTab === 'ia-analitica'
+                ? 'border-violet-600 text-violet-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Brain className="w-4 h-4" />
+            IA Analítica
+          </button>
         </div>
       </div>
 
       {/* ── Sub-tab: Custos e Uso de IA ── */}
       {activeSubTab === 'logs' && <AgentLogsPanel />}
+
+      {/* ── Sub-tab: IA Analítica — prompts complementares ── */}
+      {activeSubTab === 'ia-analitica' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="mb-5">
+            <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+              <Brain className="w-4 h-4 text-violet-600" />
+              Prompts da IA Analítica
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Configure um complemento de instrução para cada tipo de análise. Opcional por tipo.
+            </p>
+          </div>
+          <AiAnalyticsPromptsPanel companyId={companyId} />
+        </div>
+      )}
 
       {/* ── Sub-tab: Agentes (conteúdo existente) ── */}
       {activeSubTab === 'agents' && (<>

@@ -4,7 +4,14 @@
 // Inicia a compra de um pacote de créditos avulsos via Stripe Checkout Session.
 //
 // BODY (JSON):
-//   { "package_id": "<uuid>" }
+//   { "package_id": "<uuid>", "analysis_id"?: "<uuid>" }
+//
+//   analysis_id (opcional):
+//     Quando presente, vincula a compra a uma análise de IA com saldo insuficiente.
+//     - success_url redireciona para /dashboard?resume_analysis={analysis_id}&credits=success
+//     - Dedup é ignorado (sempre sessão nova para garantir success_url correto)
+//     - analysis_id incluído no metadata da sessão Stripe e da credit_order
+//     - Webhook não é afetado — usa apenas company_id e credit_order_id do metadata
 //
 // QUERY PARAM:
 //   ?company_id=<uuid>  — obrigatório para super_admin/system_admin atuando em filha
@@ -24,6 +31,7 @@
 //   - stripe_customer_id nunca retornado ao frontend
 //   - Roles permitidos: admin (própria empresa), super_admin/system_admin (qualquer client)
 //   - Dedup por status real da sessão Stripe (não janela de tempo)
+//   - Dedup para fluxo Settings exclui sessões criadas via IA (metadata->>'analysis_id' IS NULL)
 // =============================================================================
 
 import { resolveCreditsContext } from '../lib/credits/authContext.js'
@@ -45,11 +53,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Body inválido' })
   }
 
-  const { package_id } = body
+  const { package_id, analysis_id: rawAnalysisId } = body
 
   if (!package_id || typeof package_id !== 'string') {
     return res.status(400).json({ ok: false, error: 'package_id é obrigatório' })
   }
+
+  // analysis_id opcional — vincula compra a uma análise IA com saldo insuficiente
+  // Validação: deve ser string não-vazia se fornecido
+  const analysisId = (typeof rawAnalysisId === 'string' && rawAnalysisId.trim())
+    ? rawAnalysisId.trim()
+    : null
 
   // ── 2. Auth + contexto multi-tenant ───────────────────────────────────────
   // effectiveCompanyId vem sempre de resolveCreditsContext — nunca do body
@@ -128,21 +142,37 @@ export default async function handler(req, res) {
     }
 
     // ── 5. Dedup — reutilizar sessão Stripe se ainda estiver aberta ───────────
-    // Fonte de verdade: status da sessão no Stripe, não janela de tempo
-    const { data: existingOrder, error: dupError } = await svc
-      .from('credit_orders')
-      .select('id, stripe_session_id')
-      .eq('company_id', effectiveCompanyId)
-      .eq('package_id', package_id)
-      .eq('status', 'checkout_created')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Fonte de verdade: status da sessão no Stripe, não janela de tempo.
+    //
+    // Regra de isolamento por contexto:
+    //   • analysis_id presente → skip dedup (sempre sessão nova).
+    //     Motivo: success_url contém analysis_id específico; reutilizar sessão
+    //     de outro contexto enviaria o usuário para a análise errada.
+    //   • analysis_id ausente (Settings) → dedup normal, mas filtra apenas
+    //     sessões também sem analysis_id para não devolver URL de análise IA.
+    let existingOrder = null
 
-    if (dupError) {
-      console.error('[POST /api/credit-orders/checkout] Erro ao verificar pedidos existentes:', dupError.message)
-      return res.status(500).json({ ok: false, error: 'Erro ao verificar pedidos existentes' })
+    if (!analysisId) {
+      // Fluxo Settings: buscar sessão aberta para este pacote SEM analysis_id no metadata
+      const dupQuery = await svc
+        .from('credit_orders')
+        .select('id, stripe_session_id')
+        .eq('company_id', effectiveCompanyId)
+        .eq('package_id', package_id)
+        .eq('status', 'checkout_created')
+        .filter('metadata->>analysis_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (dupQuery.error) {
+        console.error('[POST /api/credit-orders/checkout] Erro ao verificar pedidos existentes:', dupQuery.error.message)
+        return res.status(500).json({ ok: false, error: 'Erro ao verificar pedidos existentes' })
+      }
+
+      existingOrder = dupQuery.data
     }
+    // analysis_id presente: existingOrder permanece null → sempre criará nova sessão
 
     if (existingOrder?.stripe_session_id) {
       try {
@@ -220,6 +250,8 @@ export default async function handler(req, res) {
           package_name:       pkg.name,
           currency:           'BRL',
           stripe_customer_id: stripeCustomerId,
+          // Incluído apenas quando compra vinculada a análise IA (para rastreabilidade)
+          ...(analysisId ? { analysis_id: analysisId } : {}),
         },
       })
       .select('id')
@@ -233,6 +265,28 @@ export default async function handler(req, res) {
     // ── 8. Criar Stripe Checkout Session ─────────────────────────────────────
     // Não define payment_method_types — herda meios de pagamento configurados na conta Stripe
     // (cartão + Pix), mantendo consistência automática com os planos
+
+    // success_url:
+    //   • analysis_id presente → redireciona para /dashboard com resume_analysis
+    //   • sem analysis_id     → fluxo padrão (Settings)
+    const successUrl = analysisId
+      ? `${appBaseUrl}/dashboard?resume_analysis=${analysisId}&credits=success`
+      : `${appBaseUrl}/settings?tab=planos-uso&credits=success&session_id={CHECKOUT_SESSION_ID}`
+
+    const cancelUrl = analysisId
+      ? `${appBaseUrl}/dashboard`
+      : `${appBaseUrl}/settings?tab=planos-uso`
+
+    // Stripe metadata:
+    //   • analysis_id incluído para rastreabilidade (webhook não o usa, mas facilita suporte)
+    //   • type + company_id + credit_order_id são os campos lidos pelo webhook
+    const stripeMetadata = {
+      type:            'credit_purchase',
+      company_id:      effectiveCompanyId,
+      credit_order_id: order.id,
+      ...(analysisId ? { analysis_id: analysisId } : {}),
+    }
+
     const session = await stripe.checkout.sessions.create(
       {
         mode:     'payment',
@@ -252,15 +306,9 @@ export default async function handler(req, res) {
           },
         ],
 
-        // Metadata disponível no webhook para roteamento e fulfillment
-        metadata: {
-          type:            'credit_purchase',
-          company_id:      effectiveCompanyId,
-          credit_order_id: order.id,
-        },
-
-        success_url: `${appBaseUrl}/settings?tab=planos-uso&credits=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url:  `${appBaseUrl}/settings?tab=planos-uso`,
+        metadata:    stripeMetadata,
+        success_url: successUrl,
+        cancel_url:  cancelUrl,
       },
       { idempotencyKey: `credit-checkout-${order.id}` }
     )
@@ -278,6 +326,7 @@ export default async function handler(req, res) {
       package:         pkg.name,
       credits:         pkg.credits,
       price_brl:       pkg.price,
+      ...(analysisId ? { analysis_id: analysisId, flow: 'ai_analysis' } : { flow: 'settings' }),
     })
 
     // ── 10. Resposta — checkout_url apenas (nada de dados Stripe internos) ────
