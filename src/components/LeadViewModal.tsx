@@ -15,10 +15,11 @@ import {
   Megaphone,
   ChevronDown,
   ChevronUp,
-  MessageCircle,
   Globe,
   Hash,
+  RefreshCw,
 } from 'lucide-react';
+import { LeadEntriesSection } from './LeadEntriesSection';
 import { useAuth } from '../contexts/AuthContext';
 import { chatApi } from '../services/chat/chatApi';
 
@@ -258,7 +259,6 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
 
   const status  = getStatusConfig(lead.status);
   const origin  = getOriginConfig(lead.origin);
-  const phoneDigits = lead.phone?.replace(/\D/g, '') ?? '';
   const responsible = companyUsers.find(
     u => (u.user_id ?? u.id) === lead.responsible_user_id
   );
@@ -317,44 +317,13 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
             </div>
           </div>
 
-          {/* Quick actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            {!lead.is_over_plan && phoneDigits && (
-              <a
-                href={`https://wa.me/55${phoneDigits}`}
-                target="_blank"
-                rel="noreferrer"
-                title="WhatsApp"
-                className="p-2 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
-              >
-                <MessageCircle className="w-5 h-5" />
-              </a>
-            )}
-            {!lead.is_over_plan && lead.phone && (
-              <a
-                href={`tel:${lead.phone}`}
-                title="Ligar"
-                className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
-              >
-                <Phone className="w-5 h-5" />
-              </a>
-            )}
-            {!lead.is_over_plan && lead.email && (
-              <a
-                href={`mailto:${lead.email}`}
-                title="Enviar e-mail"
-                className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors"
-              >
-                <Mail className="w-5 h-5" />
-              </a>
-            )}
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors ml-1"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* ── BODY ───────────────────────────────────────────────────────── */}
@@ -469,6 +438,18 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
               ))}
             </Section>
           )}
+
+          {/* ── Histórico de Entradas ───────────────────────────────────── */}
+          <Section title="Histórico de Entradas" icon={<RefreshCw className="w-4 h-4" />}>
+            <div className="sm:col-span-2">
+              <p className="text-xs text-slate-500 mb-3">
+                Registro de cada vez que este lead chegou ao sistema, por qualquer canal.
+              </p>
+              {company?.id && (
+                <LeadEntriesSection leadId={lead.id} companyId={company.id} />
+              )}
+            </div>
+          </Section>
 
           {/* ── Informações Técnicas (colapsável) ───────────────────────── */}
           <Section
