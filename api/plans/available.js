@@ -59,7 +59,8 @@ export default async function handler(req, res) {
       svc.from('company_users')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', effectiveCompanyId)
-        .eq('is_active', true),
+        .eq('is_active', true)
+        .eq('is_platform_member', false),
       svc.from('sales_funnels')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', effectiveCompanyId)

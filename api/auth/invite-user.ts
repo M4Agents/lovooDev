@@ -70,6 +70,7 @@ export default async function handler(req: any, res: any) {
           .select('*', { count: 'exact', head: true })
           .eq('company_id', company_id)
           .eq('is_active', true)
+          .eq('is_platform_member', false)
 
         if (!countErr) {
           assertLimitFromLoaded(limits, 'max_users', activeUsers ?? 0)

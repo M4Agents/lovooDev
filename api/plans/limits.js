@@ -159,7 +159,7 @@ export default async function handler(req, res) {
     const [leadStatsReal, storageStats, userStats, funnelStats, autoFlowStats] = await Promise.all([
       getLeadStats(svc, effectiveCompanyId, limits.max_leads),
       getStorageStats(svc, effectiveCompanyId, limits.storage_mb),
-      getResourceStats(svc, 'company_users',   effectiveCompanyId, limits.max_users,         { is_active: true }),
+      getResourceStats(svc, 'company_users',   effectiveCompanyId, limits.max_users,         { is_active: true, is_platform_member: false }),
       getResourceStats(svc, 'sales_funnels',   effectiveCompanyId, limits.max_funnels,       { is_active: true }),
       getResourceStats(svc, 'automation_flows', effectiveCompanyId, limits.max_automation_flows, { is_active: true }),
     ])

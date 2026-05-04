@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       svc.from('leads').select('*', { count: 'exact', head: true })
         .eq('company_id', effectiveCompanyId).is('deleted_at', null),
       svc.from('company_users').select('*', { count: 'exact', head: true })
-        .eq('company_id', effectiveCompanyId).eq('is_active', true),
+        .eq('company_id', effectiveCompanyId).eq('is_active', true).eq('is_platform_member', false),
       svc.from('sales_funnels').select('*', { count: 'exact', head: true })
         .eq('company_id', effectiveCompanyId).eq('is_active', true),
       svc.from('automation_flows').select('*', { count: 'exact', head: true })
