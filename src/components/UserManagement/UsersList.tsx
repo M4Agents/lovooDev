@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, Settings } from 'lucide-react';
 import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
-import { getCompanyUsers, getManagedUsers, deactivateUser, ROLE_TIER } from '../../services/userApi';
+import { getCompanyUsers, getManagedUsers, deactivateUser, getAssignableRoles } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAccessControl } from '../../hooks/useAccessControl';
 import { InviteLink } from './InviteLink';
@@ -39,10 +39,9 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
   const canManageUser = (targetUser: CompanyUser): boolean => {
     if (!currentRole) return false;
     if (authUser?.id && targetUser.user_id === authUser.id) return true;
-    const callerTier = ROLE_TIER[currentRole];
-    const targetTier = ROLE_TIER[targetUser.role];
-    if (callerTier === undefined || targetTier === undefined) return false;
-    return callerTier > targetTier;
+    const companyType = (company?.company_type ?? 'client') as 'parent' | 'client';
+    const assignable = getAssignableRoles(currentRole as UserRole, companyType);
+    return assignable.includes(targetUser.role as UserRole);
   };
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [loading, setLoading] = useState(true);
