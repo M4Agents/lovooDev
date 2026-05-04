@@ -596,7 +596,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <div key={field.id} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <Type className="w-4 h-4 inline mr-1" />
-              {field.field_label}
+              {field.field_label || field.field_name}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <input
@@ -605,7 +605,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
               onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
               required={field.is_required}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder={`Digite ${field.field_label.toLowerCase()}`}
+              placeholder={`Digite ${(field.field_label || field.field_name).toLowerCase()}`}
             />
           </div>
         );
@@ -615,7 +615,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <div key={field.id} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <Type className="w-4 h-4 inline mr-1" />
-              {field.field_label}
+              {field.field_label || field.field_name}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <input
@@ -624,7 +624,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
               onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
               required={field.is_required}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder={`Digite ${field.field_label.toLowerCase()}`}
+              placeholder={`Digite ${(field.field_label || field.field_name).toLowerCase()}`}
             />
           </div>
         );
@@ -634,7 +634,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <div key={field.id} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <Type className="w-4 h-4 inline mr-1" />
-              {field.field_label}
+              {field.field_label || field.field_name}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <input
@@ -652,7 +652,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <div key={field.id} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <List className="w-4 h-4 inline mr-1" />
-              {field.field_label}
+              {field.field_label || field.field_name}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <select
@@ -673,7 +673,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <div key={field.id} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <List className="w-4 h-4 inline mr-1" />
-              {field.field_label}
+              {field.field_label || field.field_name}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
             <select

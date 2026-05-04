@@ -864,10 +864,9 @@ export const Leads: React.FC = () => {
 
       <LeadViewModal
         isOpen={showViewModal}
-        onClose={() => {
-          setShowViewModal(false);
-        }}
+        onClose={() => setShowViewModal(false)}
         lead={selectedLead}
+        companyUsers={companyUsers}
         onEdit={(lead) => {
           setSelectedLead(lead);
           setShowViewModal(false);
