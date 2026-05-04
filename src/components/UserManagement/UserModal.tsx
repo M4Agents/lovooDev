@@ -61,6 +61,14 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     profilePicture: null as File | null // 🔧 NOVO: Campo para foto de perfil
   });
 
+  // Estados de senha inicial (criação)
+  const [useInitialPassword, setUseInitialPassword] = useState(false);
+  const [initialPassword, setInitialPassword] = useState('');
+  const [initialPasswordConfirm, setInitialPasswordConfirm] = useState('');
+  const [forceInitialPasswordChange, setForceInitialPasswordChange] = useState(true);
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
+  const [showInitialPasswordConfirm, setShowInitialPasswordConfirm] = useState(false);
+
   // ESTADOS LEGADOS - Mantidos para compatibilidade (não utilizados atualmente)
   const [selectedTemplate, setSelectedTemplate] = useState<UserTemplate | null>(null);
   const [useAdvancedPermissions, setUseAdvancedPermissions] = useState(false);
@@ -186,6 +194,14 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // Fase 2: auto-selecionar template padrão para o role inicial (seller)
         const defaultTemplate = getDefaultTemplateForRole('seller');
         setSelectedTemplate(defaultTemplate || null);
+
+        // Reset campos de senha inicial
+        setUseInitialPassword(false);
+        setInitialPassword('');
+        setInitialPasswordConfirm('');
+        setForceInitialPasswordChange(true);
+        setShowInitialPassword(false);
+        setShowInitialPasswordConfirm(false);
       }
       setError(null);
       
@@ -326,6 +342,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         return;
       }
 
+      // Validar senha inicial (criação)
+      if (!isEditing && useInitialPassword) {
+        if (initialPassword.length < 6) {
+          setError('A senha deve ter no mínimo 6 caracteres.');
+          setLoading(false);
+          return;
+        }
+        if (initialPassword !== initialPasswordConfirm) {
+          setError('As senhas não coincidem.');
+          setLoading(false);
+          return;
+        }
+      }
+
       // Fase 3: Perfil de permissão obrigatório na criação
       if (!isEditing && !selectedTemplate) {
         setError(t('users.userModal.messages.profileRequired'));
@@ -414,7 +444,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           email: formData.email.trim(),
           role: formData.role,
           permissions: finalPermissions, // Usar permissões calculadas
-          sendInvite: formData.sendInvite
+          sendInvite: formData.sendInvite,
+          ...(useInitialPassword && initialPassword
+            ? { initialPassword, forceInitialPasswordChange }
+            : {})
         };
 
         const result = await createCompanyUser(createRequest);
@@ -955,26 +988,123 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             />
           )}
 
-          {/* Enviar convite (apenas para criação) */}
+          {/* Acesso inicial — senha ou link de convite (apenas para criação) */}
           {!isEditing && (
-            <div>
-              <label className="flex items-center gap-3">
+            <div className="space-y-3">
+
+              {/* Opção: definir senha */}
+              <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={formData.sendInvite}
-                  onChange={(e) => setFormData(prev => ({ ...prev, sendInvite: e.target.checked }))}
+                  checked={useInitialPassword}
+                  onChange={(e) => {
+                    setUseInitialPassword(e.target.checked);
+                    if (e.target.checked) {
+                      setFormData(prev => ({ ...prev, sendInvite: false }));
+                    }
+                  }}
                   className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   disabled={loading}
                 />
                 <div>
-                  <span className="text-sm font-medium text-slate-700">
-                    {t('users.userModal.sendInvite')}
-                  </span>
-                  <p className="text-xs text-slate-500">
-                    {t('users.userModal.sendInviteHint')}
-                  </p>
+                  <span className="text-sm font-medium text-slate-700">Definir senha de acesso</span>
+                  <p className="text-xs text-slate-500">O usuário acessa com email e senha. Não requer link de convite.</p>
                 </div>
               </label>
+
+              {/* Campos de senha quando opção ativada */}
+              {useInitialPassword && (
+                <div className="ml-7 space-y-3 border-l-2 border-blue-100 pl-4">
+
+                  {/* Campo senha */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Senha</label>
+                    <div className="relative">
+                      <input
+                        type={showInitialPassword ? 'text' : 'password'}
+                        value={initialPassword}
+                        onChange={(e) => setInitialPassword(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        disabled={loading}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowInitialPassword(v => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        tabIndex={-1}
+                      >
+                        {showInitialPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirmar senha */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Confirmar senha</label>
+                    <div className="relative">
+                      <input
+                        type={showInitialPasswordConfirm ? 'text' : 'password'}
+                        value={initialPasswordConfirm}
+                        onChange={(e) => setInitialPasswordConfirm(e.target.value)}
+                        placeholder="Repita a senha"
+                        disabled={loading}
+                        className={`w-full border rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          initialPasswordConfirm && initialPassword !== initialPasswordConfirm
+                            ? 'border-red-400 bg-red-50'
+                            : 'border-slate-300'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowInitialPasswordConfirm(v => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        tabIndex={-1}
+                      >
+                        {showInitialPasswordConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {initialPasswordConfirm && initialPassword !== initialPasswordConfirm && (
+                      <p className="text-xs text-red-500 mt-1">As senhas não coincidem.</p>
+                    )}
+                  </div>
+
+                  {/* Flag: exigir troca na primeira entrada */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={forceInitialPasswordChange}
+                      onChange={(e) => setForceInitialPasswordChange(e.target.checked)}
+                      disabled={loading}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-600">Exigir troca de senha no primeiro acesso</span>
+                  </label>
+
+                </div>
+              )}
+
+              {/* Opção: enviar link de convite */}
+              {!useInitialPassword && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.sendInvite}
+                    onChange={(e) => setFormData(prev => ({ ...prev, sendInvite: e.target.checked }))}
+                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    disabled={loading}
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      {t('users.userModal.sendInvite')}
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      {t('users.userModal.sendInviteHint')}
+                    </p>
+                  </div>
+                </label>
+              )}
+
             </div>
           )}
 

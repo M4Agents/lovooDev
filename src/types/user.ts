@@ -141,6 +141,8 @@ export interface CreateUserRequest {
   role: UserRole;
   permissions?: Partial<UserPermissions>;
   sendInvite?: boolean;
+  initialPassword?: string;
+  forceInitialPasswordChange?: boolean;
 }
 
 export interface UpdateUserRequest {

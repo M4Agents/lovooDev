@@ -496,6 +496,31 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       updated_at: functionResult.updated_at
     };
 
+    // Aplicar senha inicial se fornecida
+    if (request.initialPassword && finalUserId) {
+      try {
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'aplicando senha inicial ao usuário criado',data:{userId:finalUserId,companyId:request.companyId,force:request.forceInitialPasswordChange},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const { changePassword } = await import('./authAdmin');
+        const pwResult = await changePassword(
+          finalUserId,
+          request.initialPassword,
+          request.companyId,
+          request.forceInitialPasswordChange ?? true
+        );
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'resultado aplicação senha inicial',data:{success:pwResult.success,error:pwResult.error??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (!pwResult.success) {
+          // Não bloqueia a criação — loga o erro e continua
+          console.warn('UserAPI: Usuário criado, mas não foi possível definir a senha inicial:', pwResult.error);
+        }
+      } catch (pwErr) {
+        console.warn('UserAPI: Falha ao definir senha inicial (não crítico):', pwErr);
+      }
+    }
+
     // Adicionar informações da empresa manualmente (para compatibilidade)
     const result = {
       ...data,

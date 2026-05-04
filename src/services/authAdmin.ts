@@ -109,13 +109,35 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
  */
 export const generateMagicLink = async (email: string) => {
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:generateMagicLink',message:'generateMagicLink called — buscando sessão',data:{email},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:generateMagicLink',message:'token obtido',data:{hasToken:!!token},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (!token) {
+      return { success: false, error: 'Não autenticado' };
+    }
+
     const response = await fetch('/api/auth/generate-magic-link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({ email })
     });
 
     const result = await response.json();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:generateMagicLink',message:'generate-magic-link resposta',data:{status:response.status,success:result.success,hasLink:!!result.magicLink,error:result.error??null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (result.success) {
       return {

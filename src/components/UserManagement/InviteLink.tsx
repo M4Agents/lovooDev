@@ -61,13 +61,37 @@ export const InviteLink: React.FC<InviteLinkProps> = ({ isOpen, onClose, user })
     setMagicLink('');
 
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'InviteLink.tsx:generateMagicLink',message:'InviteLink.generateMagicLink called — buscando sessão',data:{email},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'InviteLink.tsx:generateMagicLink',message:'token obtido',data:{hasToken:!!token},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      if (!token) {
+        setLinkError('Não autenticado');
+        setLoadingLink(false);
+        return;
+      }
+
       const response = await fetch('/api/auth/generate-magic-link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ email })
       });
 
       const result = await response.json();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'InviteLink.tsx:generateMagicLink',message:'generate-magic-link resposta',data:{status:response.status,hasLink:!!result.magicLink,error:result.error??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (!response.ok || result.error) {
         setLinkError(result.error || t('users.invite.fallbackGenerateError'));
