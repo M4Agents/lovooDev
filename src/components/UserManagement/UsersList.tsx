@@ -356,9 +356,6 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                       <div className="text-sm text-slate-900">
                         {user.companies?.name || t('users.notAvailable')}
                       </div>
-                      <div className="text-sm text-slate-500">
-                        {user.companies?.company_type === 'parent' ? t('users.companyType.parent') : t('users.companyType.client')}
-                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                       {new Date(user.created_at).toLocaleDateString('pt-BR')}
