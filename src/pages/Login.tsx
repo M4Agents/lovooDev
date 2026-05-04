@@ -77,8 +77,38 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
+    <div className="relative min-h-screen overflow-hidden flex items-center justify-center p-4">
+
+      {/* Camada 1 — background base com radial-gradients + linear 135deg */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          background: [
+            'radial-gradient(ellipse 80% 50% at 20% 20%, rgba(37,99,235,0.18), transparent 60%)',
+            'radial-gradient(ellipse 60% 60% at 80% 70%, rgba(236,72,153,0.16), transparent 55%)',
+            'radial-gradient(ellipse 50% 70% at 60% 10%, rgba(124,58,237,0.14), transparent 65%)',
+            'linear-gradient(135deg, #f8fbff 0%, #ffffff 45%, #fff7fb 100%)',
+          ].join(', '),
+        }}
+      />
+
+      {/* Camada 2 — blobs grandes com blur */}
+      <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-blue-200/60 blur-3xl z-0 pointer-events-none" />
+      <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-violet-200/55 blur-3xl z-0 pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-rose-200/50 blur-3xl z-0 pointer-events-none" />
+
+      {/* Camada 3 — textura grain sutil */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none mix-blend-overlay"
+        style={{
+          opacity: 0.03,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`,
+          backgroundSize: '128px 128px',
+        }}
+      />
+
+      {/* Conteúdo — z-10 para ficar sobre todas as camadas de fundo */}
+      <div className="relative z-10 w-full max-w-lg">
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Header integrado ao card */}
