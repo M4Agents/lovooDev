@@ -37,10 +37,26 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
   try {
     console.log('AuthAdmin: Inviting user:', request.email);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:inviteUser',message:'inviteUser called — buscando sessão para Authorization header',data:{email:request.email},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:inviteUser',message:'token obtido',data:{hasToken:!!token},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (!token) {
+      return { user: null, success: false, error: 'Não autenticado' };
+    }
+
     const response = await fetch('/api/auth/invite-user', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         email: request.email,
@@ -54,6 +70,10 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     if (!response.ok || result.error) {
       console.error('AuthAdmin: API route failed:', result.error);
 
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:inviteUser',message:'invite-user falhou após fix',data:{status:response.status,error:result.error},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       return {
         user: null,
         success: false,
@@ -62,6 +82,11 @@ export const inviteUser = async (request: InviteUserRequest): Promise<AuthUserRe
     }
 
     console.log('AuthAdmin: User invited successfully via API route');
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'authAdmin.ts:inviteUser',message:'invite-user SUCCESS após fix',data:{status:response.status,hasUser:!!result.user,hasInviteLink:!!result.inviteLink},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     return {
       user: result.user,
       success: true,
