@@ -27,16 +27,18 @@ export interface UsersListRef {
 
 export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUser, onEditUser }, ref) => {
   const { t } = useTranslation('settings.app');
-  const { company, currentRole } = useAuth();
+  const { company, currentRole, user: authUser } = useAuth();
   const { canCreateUsers, canEditUsers, canDeleteUsers } = useAccessControl();
 
   /**
    * Verifica se o caller pode gerenciar (editar/desativar/excluir) o targetUser.
-   * Regra: caller só pode gerenciar usuários com tier ESTRITAMENTE menor que o seu.
-   * Se currentRole for null (não autenticado ou em carregamento), bloqueia tudo.
+   * Regras:
+   *  - O próprio usuário sempre pode editar o próprio perfil (foto, display name).
+   *  - Para terceiros: caller precisa ter tier ESTRITAMENTE maior que o alvo.
    */
   const canManageUser = (targetUser: CompanyUser): boolean => {
     if (!currentRole) return false;
+    if (authUser?.id && targetUser.user_id === authUser.id) return true;
     const callerTier = ROLE_TIER[currentRole];
     const targetTier = ROLE_TIER[targetUser.role];
     if (callerTier === undefined || targetTier === undefined) return false;
