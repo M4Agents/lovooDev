@@ -448,6 +448,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
           setSelectedUser(null);
         }}
         user={selectedUser}
+        companyId={company?.id ?? ''}
       />
       
       {/* Modal de Exclusão Elegante */}
