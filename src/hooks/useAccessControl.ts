@@ -53,9 +53,9 @@ export function useAccessControl() {
     userRoles.some(r => r.role === 'super_admin' || r.role === 'system_admin')
 
   // ── Navegação / páginas SaaS ───────────────────────────────
-  // Apenas super_admin acessa as páginas de gestão da plataforma.
-  // system_admin e partner NÃO acessam — ajuste obrigatório conforme spec.
-  const canAccessCompanies     = isSaaSAdmin
+  // super_admin e system_admin acessam a gestão de empresas (Governância Lovoo).
+  // Apenas super_admin acessa planos e analytics SaaS.
+  const canAccessCompanies     = isSaaSAdmin || isSystemAdmin
   const canAccessPlans         = isSaaSAdmin
   const canAccessSaaSAnalytics = isSaaSAdmin
 
