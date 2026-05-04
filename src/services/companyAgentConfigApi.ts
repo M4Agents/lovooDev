@@ -13,6 +13,18 @@ import { supabase } from '../lib/supabase'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
+export interface ScheduleWindow {
+  day:   number  // 0 = Dom, 1 = Seg, ..., 6 = Sab
+  start: string  // "HH:MM"
+  end:   string  // "HH:MM"
+}
+
+export interface OperatingSchedule {
+  enabled:  boolean
+  timezone: string
+  windows:  ScheduleWindow[]
+}
+
 export interface AgentCapabilities {
   can_auto_reply:   boolean
   can_inform_prices: boolean
@@ -31,6 +43,7 @@ export interface CompanyAgentAssignment {
   display_name:         string
   capabilities:         AgentCapabilities
   price_display_policy: PriceDisplayPolicy
+  operating_schedule:   OperatingSchedule | null
   is_active:            boolean
   created_at:           string
   updated_at:           string
@@ -67,6 +80,7 @@ export interface UpdateAssignmentPayload {
   agent_id?:             string
   capabilities?:         Partial<AgentCapabilities>
   price_display_policy?: PriceDisplayPolicy
+  operating_schedule?:   OperatingSchedule | null
 }
 
 export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms'
@@ -77,6 +91,7 @@ export interface CreateAssignmentPayload {
   display_name:          string
   capabilities?:         Partial<AgentCapabilities>
   price_display_policy?: PriceDisplayPolicy
+  operating_schedule?:   OperatingSchedule | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

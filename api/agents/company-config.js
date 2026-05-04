@@ -93,6 +93,7 @@ export default async function handler(req, res) {
       display_name,
       capabilities,
       price_display_policy,
+      operating_schedule,
       is_active,
       created_at,
       updated_at,
@@ -161,6 +162,7 @@ export default async function handler(req, res) {
     display_name:         a.display_name,
     capabilities:         a.capabilities ?? {},
     price_display_policy: a.price_display_policy,
+    operating_schedule:   a.operating_schedule ?? null,
     is_active:            a.is_active,
     created_at:           a.created_at,
     updated_at:           a.updated_at

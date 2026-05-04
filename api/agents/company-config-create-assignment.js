@@ -16,6 +16,7 @@
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { validateOperatingSchedule } from '../lib/agents/scheduleValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
     display_name,
     capabilities,
     price_display_policy,
+    operating_schedule,
   } = req.body ?? {};
 
   // ── Validação de campos obrigatórios ──────────────────────────────────────
@@ -111,6 +113,15 @@ export default async function handler(req, res) {
       success: false,
       error: `price_display_policy inválido. Valores permitidos: ${VALID_PRICE_POLICIES.join(', ')}.`
     });
+  }
+
+  // ── Validar operating_schedule (se enviado) ───────────────────────────────
+
+  if (operating_schedule !== undefined) {
+    const scheduleValidation = validateOperatingSchedule(operating_schedule);
+    if (!scheduleValidation.valid) {
+      return res.status(400).json({ success: false, error: scheduleValidation.reason });
+    }
   }
 
   // ── Validar caller (JWT + membership) ─────────────────────────────────────
@@ -208,9 +219,10 @@ export default async function handler(req, res) {
       price_display_policy: VALID_PRICE_POLICIES.includes(price_display_policy)
                               ? price_display_policy
                               : 'disabled',
+      operating_schedule:   operating_schedule ?? null,
       is_active:            true,
     })
-    .select('id, company_id, agent_id, channel, display_name, capabilities, price_display_policy, is_active, created_at, updated_at, lovoo_agents(id, name)')
+    .select('id, company_id, agent_id, channel, display_name, capabilities, price_display_policy, operating_schedule, is_active, created_at, updated_at, lovoo_agents(id, name)')
     .single();
 
   if (insertErr) {
@@ -266,6 +278,7 @@ export default async function handler(req, res) {
       display_name:         newAssignment.display_name,
       capabilities:         newAssignment.capabilities,
       price_display_policy: newAssignment.price_display_policy,
+      operating_schedule:   newAssignment.operating_schedule ?? null,
       is_active:            newAssignment.is_active,
       created_at:           newAssignment.created_at,
       updated_at:           newAssignment.updated_at,

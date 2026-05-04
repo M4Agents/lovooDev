@@ -18,7 +18,10 @@ import {
   type PriceDisplayPolicy,
   type AgentCapabilities,
   type AgentChannel,
+  type OperatingSchedule,
 } from '../../services/companyAgentConfigApi'
+import { useAccessControl } from '../../hooks/useAccessControl'
+import { AgentScheduleEditor } from './AgentScheduleEditor'
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -33,6 +36,7 @@ interface AssignmentDraft {
   is_active:            boolean
   capabilities:         AgentCapabilities
   price_display_policy: PriceDisplayPolicy
+  operating_schedule:   OperatingSchedule | null
 }
 
 const PRICE_POLICY_LABELS: Record<PriceDisplayPolicy, string> = {
@@ -59,6 +63,8 @@ interface AssignmentCardProps {
 }
 
 function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: AssignmentCardProps) {
+  const { canManageConversationalAgents } = useAccessControl()
+
   const [draft, setDraft] = useState<AssignmentDraft>({
     agent_id:             assignment.agent_id,
     is_active:            assignment.is_active,
@@ -67,7 +73,8 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
       can_inform_prices: assignment.capabilities?.can_inform_prices ?? false,
       can_send_media:    true
     },
-    price_display_policy: assignment.price_display_policy
+    price_display_policy: assignment.price_display_policy,
+    operating_schedule:   assignment.operating_schedule ?? null,
   })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -77,7 +84,8 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.is_active            !== assignment.is_active            ||
     draft.price_display_policy !== assignment.price_display_policy ||
     draft.capabilities.can_auto_reply    !== (assignment.capabilities?.can_auto_reply    ?? false) ||
-    draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false)
+    draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false) ||
+    JSON.stringify(draft.operating_schedule) !== JSON.stringify(assignment.operating_schedule ?? null)
 
   const handleSave = async () => {
     setSaveState('saving')
@@ -87,7 +95,8 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         agent_id:             draft.agent_id,
         is_active:            draft.is_active,
         capabilities:         draft.capabilities,
-        price_display_policy: draft.price_display_policy
+        price_display_policy: draft.price_display_policy,
+        operating_schedule:   draft.operating_schedule,
       })
       setSaveState('saved')
       onSaved(updated)
@@ -208,6 +217,13 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
       </div>
+
+      {/* Horário de atendimento */}
+      <AgentScheduleEditor
+        value={draft.operating_schedule}
+        onChange={(v) => setDraft((d) => ({ ...d, operating_schedule: v }))}
+        readOnly={!canManageConversationalAgents}
+      />
 
       {/* Rodapé: erro + botão salvar */}
       {saveError && (

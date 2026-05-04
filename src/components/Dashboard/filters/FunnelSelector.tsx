@@ -9,6 +9,11 @@
 //
 // Dados:
 //   Internamente usa useFunnels() para buscar a lista.
+//
+// Comportamento:
+//   Ao carregar a lista, se funnelId for nulo ou pertencer
+//   a outra empresa (ID não encontrado na lista), seleciona
+//   automaticamente o funil com is_default=true ou o primeiro.
 // =====================================================
 
 import React, { useRef, useState, useEffect } from 'react'
@@ -36,6 +41,21 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({ funnelId, onSele
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Auto-seleção do funil padrão:
+  // Dispara quando funnelId está ausente ou não pertence à empresa atual.
+  // Prioridade: is_default=true → primeiro da lista.
+  useEffect(() => {
+    if (loading || funnels.length === 0) return
+
+    const isCurrentValid = funnels.some((f) => f.id === funnelId)
+    if (isCurrentValid) return
+
+    const defaultFunnel = funnels.find((f) => f.is_default) ?? funnels[0]
+    if (defaultFunnel) {
+      onSelect(defaultFunnel.id)
+    }
+  }, [loading, funnels, funnelId, onSelect])
 
   const selected: FunnelItem | undefined = funnels.find((f) => f.id === funnelId)
 

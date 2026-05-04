@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
+import { validateOperatingSchedule } from '../lib/agents/scheduleValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: 'Configuração interna inválida.' });
   }
 
-  const { company_id, assignment_id, is_active, agent_id, capabilities, price_display_policy } =
+  const { company_id, assignment_id, is_active, agent_id, capabilities, price_display_policy, operating_schedule } =
     req.body ?? {};
 
   // ── Validação de entrada ───────────────────────────────────────────────────
@@ -89,6 +90,15 @@ export default async function handler(req, res) {
       success: false,
       error: `price_display_policy inválido: "${price_display_policy}". Valores permitidos: ${VALID_PRICE_POLICIES.join(', ')}.`
     });
+  }
+
+  // ── Validar operating_schedule (se enviado) ───────────────────────────────
+
+  if (operating_schedule !== undefined) {
+    const scheduleValidation = validateOperatingSchedule(operating_schedule);
+    if (!scheduleValidation.valid) {
+      return res.status(400).json({ success: false, error: scheduleValidation.reason });
+    }
   }
 
   // ── Validar caller (JWT + membership + role) ──────────────────────────────
@@ -139,9 +149,11 @@ export default async function handler(req, res) {
 
   const updatePayload = {};
 
-  if (is_active !== undefined)           updatePayload.is_active            = Boolean(is_active);
-  if (agent_id  !== undefined)           updatePayload.agent_id             = agent_id;
+  if (is_active !== undefined)            updatePayload.is_active            = Boolean(is_active);
+  if (agent_id  !== undefined)            updatePayload.agent_id             = agent_id;
   if (price_display_policy !== undefined) updatePayload.price_display_policy = price_display_policy;
+  // operating_schedule: null limpa o schedule (sem restrição); objeto = nova config validada
+  if (operating_schedule !== undefined)   updatePayload.operating_schedule   = operating_schedule ?? null;
 
   if (capabilities !== undefined && typeof capabilities === 'object' && capabilities !== null) {
     // Merge apenas as capabilities conhecidas — nunca substituir com campos arbitrários
@@ -173,7 +185,7 @@ export default async function handler(req, res) {
     .update(updatePayload)
     .eq('id', assignment_id)
     .eq('company_id', company_id)
-    .select('id, is_active, agent_id, capabilities, price_display_policy, updated_at')
+    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, updated_at')
     .single();
 
   if (updateErr) {

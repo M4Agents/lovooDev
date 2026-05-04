@@ -59,6 +59,7 @@ const SKIP = {
   AI_INACTIVE:       'ai_inactive',        // → DB: 'skipped_ai_inactive'
   NO_RULE:           'no_rule',            // → DB: 'skipped_no_rule'
   CAPABILITY_DENIED: 'capability_denied',  // → DB: 'skipped_no_rule'
+  OUT_OF_SCHEDULE:   'out_of_schedule',    // → DB: 'skipped_out_of_schedule'
   ERROR:             'error',              // → DB: 'error'
 };
 
@@ -67,8 +68,98 @@ const SKIP_TO_DB_RESULT = {
   [SKIP.AI_INACTIVE]:       'skipped_ai_inactive',
   [SKIP.NO_RULE]:           'skipped_no_rule',
   [SKIP.CAPABILITY_DENIED]: 'skipped_no_rule',
+  [SKIP.OUT_OF_SCHEDULE]:   'skipped_out_of_schedule',
   [SKIP.ERROR]:             'error',
 };
+
+// ── Schedule helper ───────────────────────────────────────────────────────────
+
+/**
+ * Verifica se o momento atual está dentro de alguma janela do operating_schedule.
+ *
+ * Regras:
+ *   - schedule null ou undefined → true (sem restrição)
+ *   - enabled = false            → true (sem restrição)
+ *   - enabled = true + windows=[]→ false (fail-safe: restrição ativa sem janelas = bloqueio)
+ *   - timezone inválido          → false (fail-safe: configuração corrompida = bloqueio)
+ *   - enabled = true + windows   → verifica se start <= agora < end no dia atual do schedule
+ *
+ * Comparação: start <= horaAtual < end  (HH:MM lexicográfico)
+ * Referência de tempo: sempre o timezone do schedule, nunca o servidor.
+ *
+ * @param {object|null} schedule - operating_schedule do banco
+ * @param {{ assignmentId?: string, conversationId?: string, companyId?: string }} context - Para log
+ * @returns {{ allowed: boolean, reason?: string, meta?: object }}
+ */
+function isWithinSchedule(schedule, context = {}) {
+  if (!schedule || schedule.enabled === false) {
+    return { allowed: true };
+  }
+
+  const windows = schedule.windows ?? [];
+  if (windows.length === 0) {
+    const meta = { assignment_id: context.assignmentId, company_id: context.companyId, conversation_id: context.conversationId };
+    console.warn('🤖 [ROUTER] ⏰ schedule bloqueado — enabled=true mas windows vazio:', meta);
+    return { allowed: false, reason: 'empty_schedule', meta };
+  }
+
+  const tz = schedule.timezone;
+  let dayOfWeek, currentTime;
+
+  try {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone:  tz,
+      weekday:   'short',
+      hour:      '2-digit',
+      minute:    '2-digit',
+      hour12:    false
+    }).formatToParts(now);
+
+    const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const weekdayStr = parts.find((p) => p.type === 'weekday')?.value ?? '';
+    dayOfWeek = dayMap[weekdayStr];
+
+    if (dayOfWeek === undefined) throw new Error(`weekday desconhecido: "${weekdayStr}"`);
+
+    const hour   = parts.find((p) => p.type === 'hour')?.value   ?? '00';
+    const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+    // Intl pode retornar '24' para meia-noite em alguns ambientes — normalizar
+    const h = String(parseInt(hour, 10) % 24).padStart(2, '0');
+    const m = String(parseInt(minute, 10)).padStart(2, '0');
+    currentTime = `${h}:${m}`;
+
+  } catch (err) {
+    const meta = {
+      assignment_id:   context.assignmentId,
+      company_id:      context.companyId,
+      conversation_id: context.conversationId,
+      timezone_used:   tz,
+    };
+    console.error('🤖 [ROUTER] ⚠️  schedule com timezone inválido — bloqueando (fail-safe):', { ...meta, error: err.message });
+    return { allowed: false, reason: 'invalid_timezone', meta };
+  }
+
+  const todayWindows = windows.filter((w) => w.day === dayOfWeek);
+  const matched = todayWindows.some((w) => w.start <= currentTime && currentTime < w.end);
+
+  const meta = {
+    assignment_id:   context.assignmentId,
+    company_id:      context.companyId,
+    conversation_id: context.conversationId,
+    timezone_used:   tz,
+    day_calculated:  dayOfWeek,
+    time_calculated: currentTime,
+    windows_checked: todayWindows,
+  };
+
+  if (!matched) {
+    console.log('🤖 [ROUTER] ⏰ schedule bloqueado — fora da janela:', { ...meta, reason: 'no_window_matched' });
+    return { allowed: false, reason: 'no_window_matched', meta };
+  }
+
+  return { allowed: true };
+}
 
 // ── Função principal ──────────────────────────────────────────────────────────
 
@@ -154,6 +245,37 @@ export async function routeConversationEvent(event) {
       conversation_id: event.conversation_id,
     });
 
+    // Verificar schedule do assignment vinculado à conversa (via ai_assignment_id)
+    if (conversation.ai_assignment_id) {
+      const { data: flowAssignment } = await svc
+        .from('company_agent_assignments')
+        .select('operating_schedule')
+        .eq('id', conversation.ai_assignment_id)
+        .eq('company_id', event.company_id)
+        .maybeSingle();
+
+      if (flowAssignment) {
+        const flowScheduleCheck = isWithinSchedule(flowAssignment.operating_schedule, {
+          assignmentId:   conversation.ai_assignment_id,
+          companyId:      event.company_id,
+          conversationId: event.conversation_id,
+        });
+
+        if (!flowScheduleCheck.allowed) {
+          console.log('🤖 [ROUTER] ⏰ Fluxo ativo — fora do horário de atendimento:', {
+            event:           'agent_skip_out_of_schedule',
+            assignment_id:   conversation.ai_assignment_id,
+            company_id:      event.company_id,
+            conversation_id: event.conversation_id,
+            ...flowScheduleCheck.meta,
+            reason:          flowScheduleCheck.reason,
+          });
+          await updateProcessedResult(svc, event.uazapi_message_id, SKIP.OUT_OF_SCHEDULE, conversation.ai_assignment_id);
+          return buildDecision(false, SKIP.OUT_OF_SCHEDULE, conversation, event);
+        }
+      }
+    }
+
     await updateProcessedResult(svc, event.uazapi_message_id, null, conversation.ai_assignment_id);
 
     return {
@@ -215,7 +337,7 @@ export async function routeConversationEvent(event) {
 
   const { data: assignment, error: assignError } = await svc
     .from('company_agent_assignments')
-    .select('id, agent_id, capabilities, price_display_policy, is_active, display_name')
+    .select('id, agent_id, capabilities, price_display_policy, is_active, display_name, operating_schedule')
     .eq('id', matchedRule.assignment_id)
     .eq('company_id', event.company_id)  // garante multi-tenant
     .single();
@@ -252,7 +374,31 @@ export async function routeConversationEvent(event) {
     return buildDecision(false, SKIP.CAPABILITY_DENIED, conversation, event);
   }
 
-  // ── PASSO 6: Atualizar agent_processed_messages com assignment_id resolvido ──
+  // ── PASSO 6: Verificar operating_schedule ────────────────────────────────
+  // O schedule restringe quando a IA pode responder sem alterar o ai_state.
+  // Comparação: start <= horário_atual_local < end (timezone do schedule).
+  // Fail-safe: timezone inválido ou windows vazio com enabled=true → bloquear.
+
+  const scheduleCheck = isWithinSchedule(assignment.operating_schedule, {
+    assignmentId:   assignment.id,
+    companyId:      event.company_id,
+    conversationId: event.conversation_id,
+  });
+
+  if (!scheduleCheck.allowed) {
+    console.log('🤖 [ROUTER] ⏰ Fora do horário de atendimento — skip registrado:', {
+      event:          'agent_skip_out_of_schedule',
+      assignment_id:  assignment.id,
+      company_id:     event.company_id,
+      conversation_id: event.conversation_id,
+      ...scheduleCheck.meta,
+      reason:         scheduleCheck.reason,
+    });
+    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.OUT_OF_SCHEDULE, assignment.id);
+    return buildDecision(false, SKIP.OUT_OF_SCHEDULE, conversation, event);
+  }
+
+  // ── PASSO 7: Atualizar agent_processed_messages com assignment_id resolvido ──
   // Mantém result = 'processed' (correto: o Router decidiu processar).
   // assignment_id agora preenchido para rastreabilidade.
 

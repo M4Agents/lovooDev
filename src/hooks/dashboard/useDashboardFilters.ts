@@ -3,15 +3,18 @@
 // Estado global de filtros do Dashboard de Inteligência Comercial.
 // Fonte única de verdade para period e funnelId em todos os hooks.
 //
-// Persistência: localStorage (chave lovoo_dashboard_filters)
+// Persistência: localStorage com chave isolada por empresa
+//   (lovoo_dashboard_filters_<companyId>)
+//   Garante que trocar de empresa recarrega os filtros da empresa correta.
 // Compatível com PeriodFilter.tsx — usa o mesmo tipo PeriodFilter.
 // =====================================================
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 import { PREDEFINED_PERIODS } from '../../types/analytics'
 import type { PeriodFilter } from '../../types/analytics'
 
-const STORAGE_KEY = 'lovoo_dashboard_filters'
+const STORAGE_KEY_PREFIX = 'lovoo_dashboard_filters'
 const DEFAULT_PERIOD_TYPE = '7days' as const
 
 // ---------------------------------------------------------------------------
@@ -43,9 +46,9 @@ function buildPeriodFilter(type: string, startISO?: string, endISO?: string): Pe
   return base
 }
 
-function loadFromStorage(): { period: PeriodFilter; funnelId: string | null } {
+function loadFromStorage(key: string): { period: PeriodFilter; funnelId: string | null } {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) throw new Error('empty')
     const parsed: PersistedFilters = JSON.parse(raw)
     return {
@@ -60,7 +63,7 @@ function loadFromStorage(): { period: PeriodFilter; funnelId: string | null } {
   }
 }
 
-function saveToStorage(period: PeriodFilter, funnelId: string | null): void {
+function saveToStorage(key: string, period: PeriodFilter, funnelId: string | null): void {
   try {
     const payload: PersistedFilters = {
       periodType: period.type,
@@ -70,7 +73,7 @@ function saveToStorage(period: PeriodFilter, funnelId: string | null): void {
       if (period.startDate) payload.startDateISO = period.startDate.toISOString()
       if (period.endDate)   payload.endDateISO   = period.endDate.toISOString()
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    localStorage.setItem(key, JSON.stringify(payload))
   } catch {
     // localStorage pode estar indisponível (modo privado, storage cheio)
   }
@@ -91,17 +94,37 @@ export interface DashboardFiltersState {
 }
 
 export function useDashboardFilters(): DashboardFiltersState {
-  const [period, setPeriodState] = useState<PeriodFilter>(() => loadFromStorage().period)
-  const [funnelId, setFunnelIdState] = useState<string | null>(() => loadFromStorage().funnelId)
+  const { company } = useAuth()
+  const companyId = company?.id ?? null
 
-  // Persiste sempre que algum filtro muda
+  // Chave isolada por empresa — evita conflito de funnelId entre empresas
+  const storageKey = companyId
+    ? `${STORAGE_KEY_PREFIX}_${companyId}`
+    : STORAGE_KEY_PREFIX
+
+  const [period, setPeriodState] = useState<PeriodFilter>(() => loadFromStorage(storageKey).period)
+  const [funnelId, setFunnelIdState] = useState<string | null>(() => loadFromStorage(storageKey).funnelId)
+
+  // Rastreia a chave anterior para detectar troca de empresa
+  const prevKeyRef = useRef(storageKey)
+
+  // Quando a empresa muda: carrega os filtros da nova empresa.
+  // Quando apenas period/funnelId mudam: persiste no storage.
   useEffect(() => {
-    saveToStorage(period, funnelId)
-  }, [period, funnelId])
+    const keyChanged = prevKeyRef.current !== storageKey
+    prevKeyRef.current = storageKey
+
+    if (keyChanged) {
+      const saved = loadFromStorage(storageKey)
+      setPeriodState(saved.period)
+      setFunnelIdState(saved.funnelId)
+    } else {
+      saveToStorage(storageKey, period, funnelId)
+    }
+  }, [storageKey, period, funnelId])
 
   const setPeriod = useCallback((next: PeriodFilter) => {
     setPeriodState(() => {
-      // Limpa datas customizadas quando muda para período predefinido
       if (next.type !== 'custom') {
         return { ...next, startDate: undefined, endDate: undefined }
       }

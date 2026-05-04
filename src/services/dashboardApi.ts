@@ -207,6 +207,7 @@ function buildPeriodParams(filters: DashboardFilters): Record<string, string> {
 export interface FunnelItem {
   id: string
   name: string
+  is_default: boolean
 }
 
 export interface FunnelsResponse {

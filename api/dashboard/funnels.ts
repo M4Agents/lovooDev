@@ -49,9 +49,10 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     const { data, error } = await svc
       .from('sales_funnels')
-      .select('id, name')
+      .select('id, name, is_default')
       .eq('company_id', companyId)
       .eq('is_active', true)
+      .order('is_default', { ascending: false })
       .order('name')
 
     if (error) {
