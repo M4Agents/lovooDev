@@ -792,12 +792,18 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'internal_error' });
     }
 
-    // ── 11. Pipeline pós-criação ──────────────────────────────────────────────
-    await executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields });
+    // ── 11. Pipeline pós-criação (não bloqueante) ─────────────────────────────
+    // Lead criado com sucesso: resposta 200 é enviada imediatamente.
+    // Custom fields, tags, webhooks, automações e logs rodam em background.
+    // Falhas no pipeline NUNCA influenciam a resposta HTTP.
+    executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields })
+      .catch(err => console.error('[webhook-lead] pipeline error (non-blocking):', err?.message));
 
     return res.status(200).json({ success: true, lead_id: lead.lead_id });
 
   } catch (error) {
+    // Apenas erros no bloco crítico (autenticação, rate limit, criação do lead)
+    // chegam aqui e retornam 500.
     console.error('[webhook-lead] Unhandled exception', { message: error?.message });
     return res.status(500).json({ success: false, error: 'internal_error' });
   }
