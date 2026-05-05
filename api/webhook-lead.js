@@ -3,6 +3,7 @@
 // Método: POST com api_key no body + dados do formulário
 // Padrão baseado no webhook-visitor que funciona 100%
 
+import { createHash } from 'crypto';
 import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreatedTrigger.js';
 import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js';
@@ -246,6 +247,36 @@ async function triggerAdvancedWebhooks(leadData, companyId) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// callRateLimit — chama a RPC atômica de rate limiting
+//
+// Fail-closed em produção: qualquer falha na RPC bloqueia a requisição,
+// evitando que instabilidade do banco seja explorada para bypass.
+// Em dev/staging: fail-open para não bloquear desenvolvimento.
+// ---------------------------------------------------------------------------
+async function callRateLimit(anonClient, params) {
+  try {
+    const { data, error } = await anonClient.rpc(
+      'check_and_log_webhook_rate_limit',
+      params
+    );
+    if (error) {
+      console.error('[webhook-lead] rate limit RPC error', { message: error.message });
+      if (process.env.NODE_ENV === 'production') {
+        return { allowed: false, error: 'rate_limit_unavailable' };
+      }
+      return { allowed: true, error: error.message };
+    }
+    return data || { allowed: false, error: 'no_response' };
+  } catch (err) {
+    console.error('[webhook-lead] rate limit exception', { message: err?.message });
+    if (process.env.NODE_ENV === 'production') {
+      return { allowed: false, error: 'rate_limit_unavailable' };
+    }
+    return { allowed: true, error: err?.message };
+  }
+}
+
 export default async function handler(req, res) {
   console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
   console.log('Timestamp:', new Date().toISOString());
@@ -272,15 +303,13 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Validação de lote — deve acontecer ANTES de qualquer destructuring
-    // A API aceita apenas 1 lead por requisição
+    // ── 1. Rejeição de lote — antes de qualquer destructuring ────────────────
     const BATCH_FIELDS = ['leads', 'contacts', 'items', 'records'];
-    const batchError = { error: 'validation_error', message: 'Envie apenas um lead por requisição' };
+    const batchError   = { error: 'validation_error', message: 'Envie apenas um lead por requisição' };
 
     if (Array.isArray(req.body)) {
       return res.status(400).json(batchError);
     }
-
     if (req.body && typeof req.body === 'object') {
       for (const field of BATCH_FIELDS) {
         if (Array.isArray(req.body[field])) {
@@ -289,44 +318,111 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log('📥 PAYLOAD RECEBIDO:', req.body);
-    console.log('📊 PAYLOAD DETALHADO:');
-    console.log('- Tipo do payload:', typeof req.body);
-    console.log('- Keys do payload:', Object.keys(req.body || {}));
-    console.log('- Valores do payload:', JSON.stringify(req.body, null, 2));
-    console.log('Lead webhook received raw body:', req.body);
-    console.log('Lead webhook received headers:', req.headers);
-    
-    const { api_key, ...form_data } = req.body;
-    
+    // ── 2. Validar presença da api_key antes de gerar hash ───────────────────
+    const api_key = req.body?.api_key;
     if (!api_key) {
-      console.error('Missing api_key in payload:', req.body);
-      res.status(400).json({ error: 'api_key is required' });
-      return;
+      return res.status(400).json({ error: 'validation_error', message: 'api_key is required' });
     }
-    
-    console.log('Lead webhook received data:', { api_key, form_data });
-    
-    // Process data using direct SQL execution (mesmo padrão do webhook-visitor)
+
+    // ── 3. Metadados imutáveis da requisição ─────────────────────────────────
+    const requestId   = generateUUID();
+    const apiKeyHash  = createHash('sha256').update(api_key).digest('hex');
+    const ip          = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+                     || req.socket?.remoteAddress
+                     || 'unknown';
+    const method      = req.method;
+    const path        = '/api/webhook-lead';
+    const userAgent   = req.headers['user-agent'] || null;
+    const payloadSize = parseInt(req.headers['content-length'] || '0', 10) || null;
+
+    // ── 4. Clientes Supabase ─────────────────────────────────────────────────
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
+    const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+                     || process.env.VITE_SUPABASE_ANON_KEY
+                     || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+    const anonClient  = createClient(supabaseUrl, anonKey);
+
+    // ── 5. Rate limit pré-auth — por IP + hash (anti brute-force) ────────────
+    const preAuth = await callRateLimit(anonClient, {
+      p_request_id:   requestId,
+      p_company_id:   null,
+      p_api_key_hash: apiKeyHash,
+      p_ip_address:   ip,
+      p_method:       method,
+      p_path:         path,
+      p_user_agent:   userAgent,
+      p_payload_size: payloadSize,
+    });
+
+    if (!preAuth.allowed) {
+      return res.status(429).json({ error: 'rate_limited', message: 'Muitas requisições. Tente novamente em instantes.' });
+    }
+
+    // ── 6. Resolver company_id via service_role (evita oracle público de api_key)
+    const svcKey    = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const svcClient = createClient(supabaseUrl, svcKey);
+
+    const { data: companyRow } = await svcClient
+      .from('companies')
+      .select('id')
+      .eq('api_key', api_key)
+      .single();
+
+    const companyId = companyRow?.id || null;
+
+    if (!companyId) {
+      // Registrar tentativa com key inválida (fire-and-forget, não bloqueia resposta)
+      anonClient.rpc('log_webhook_invalid_key', {
+        p_request_id:   requestId,
+        p_api_key_hash: apiKeyHash,
+        p_ip_address:   ip,
+        p_method:       method,
+        p_path:         path,
+      }).catch(err => {
+        console.error('[webhook-lead] Failed to log invalid key', { message: err?.message });
+      });
+      return res.status(401).json({ error: 'invalid_key', message: 'API key inválida' });
+    }
+
+    // ── 7. Rate limit pós-auth — por company_id (controla volume por empresa) ─
+    const postAuth = await callRateLimit(anonClient, {
+      p_request_id:   requestId,
+      p_company_id:   companyId,
+      p_api_key_hash: apiKeyHash,
+      p_ip_address:   ip,
+      p_method:       method,
+      p_path:         path,
+      p_user_agent:   userAgent,
+      p_payload_size: payloadSize,
+    });
+
+    if (!postAuth.allowed) {
+      return res.status(429).json({ error: 'rate_limited', message: 'Limite de importações atingido. Tente novamente em instantes.' });
+    }
+
+    // ── 8. Destructuring completo + processamento do lead ────────────────────
+    const { api_key: _discarded, ...form_data } = req.body;
+
     const result = await createLeadDirectSQL({
       api_key,
       form_data,
-      user_agent: req.headers['user-agent'] || 'Webhook Lead',
-      ip_address: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-      referrer: req.headers.referer || 'direct'
+      user_agent:  userAgent,
+      ip_address:  ip,
+      referrer:    req.headers.referer || 'direct',
+      requestId,
+      anonClient,
     });
-    
+
     if (result.success) {
-      console.log('SUCCESS: Lead created via webhook:', result.lead_id);
-      res.status(200).json({ success: true, lead_id: result.lead_id });
+      return res.status(200).json({ success: true, lead_id: result.lead_id });
     } else {
-      console.error('ERROR: Webhook lead creation failed:', result.error);
-      res.status(500).json({ success: false, error: result.error });
+      return res.status(500).json({ success: false, error: result.error });
     }
-    
+
   } catch (error) {
-    console.error('ERROR: Exception in lead webhook:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[webhook-lead] Unhandled exception', { message: error?.message });
+    return res.status(500).json({ success: false, error: 'internal_error' });
   }
 }
 
@@ -567,10 +663,28 @@ async function createLeadDirectSQL(params) {
       });
     }
 
+    // Atualizar log técnico (webhook_api_logs) com resultado final — fire-and-forget
+    if (params.requestId && params.anonClient) {
+      params.anonClient.rpc('update_webhook_log_result', {
+        p_request_id: params.requestId,
+        p_result:     lead.is_duplicate ? 'duplicate' : 'success',
+        p_lead_id:    lead.lead_id,
+      }).catch(err => {
+        console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message });
+      });
+    }
+
     return { success: true, lead_id: lead.lead_id };
     
   } catch (error) {
     console.error('Exception in createLeadDirectSQL:', error);
+    if (params?.requestId && params?.anonClient) {
+      params.anonClient.rpc('update_webhook_log_result', {
+        p_request_id: params.requestId,
+        p_result:     'error',
+        p_error_code: String(error?.message || 'unknown').substring(0, 100),
+      }).catch(() => {});
+    }
     return { success: false, error: error.message };
   }
 }
