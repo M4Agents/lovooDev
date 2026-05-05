@@ -165,9 +165,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedLead[]>([]);
   const [importResults, setImportResults] = useState<{
-    success: number;
-    errors: number;
-    total: number;
+    success:    number;
+    errors:     number;
+    total:      number;
+    duplicates: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState('');
@@ -276,9 +277,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
         return;
       }
 
+      if (lines.length - 1 > 1000) {
+        alert(`O arquivo contém ${lines.length - 1} leads. O limite é de 1.000 leads por importação. Divida o arquivo e importe em partes.`);
+        return;
+      }
+
       // Detectar separador automaticamente
       const separator = detectSeparator(lines[0]);
-      console.log('📊 Separador detectado:', separator === ',' ? 'vírgula (,)' : 'ponto e vírgula (;)');
 
       // Parse CSV
       const headers = lines[0].split(separator).map(h => h.trim().replace(/"/g, ''));
@@ -412,9 +417,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
       return;
     }
 
+    if (lines.length - 1 > 1000) {
+      alert(`O arquivo contém ${lines.length - 1} leads. O limite é de 1.000 leads por importação. Divida o arquivo e importe em partes.`);
+      return;
+    }
+
     // Detectar separador automaticamente
     const separator = detectSeparator(lines[0]);
-    console.log('📊 Separador detectado:', separator === ',' ? 'vírgula (,)' : 'ponto e vírgula (;)');
 
     // Parse CSV (mesma lógica da função parseFile)
     const headers = lines[0].split(separator).map(h => h.trim().replace(/"/g, ''));
@@ -529,77 +538,76 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const handleImport = async () => {
     if (!company?.id || parsedData.length === 0) return;
 
+    if (parsedData.length > 1000) {
+      alert('O arquivo excede o limite de 1.000 leads. Divida o arquivo e importe em partes.');
+      return;
+    }
+
     setStep('importing');
     setLoading(true);
 
     try {
-      // Preparar dados para importação
+      // Preparar payload para o endpoint backend
       const leadsToImport = parsedData.map(lead => {
-        const leadData: any = {
-          name: lead.name,
-          email: lead.email || undefined,
-          phone: lead.phone || undefined,
-          origin: lead.origin || 'import',
-          status: lead.status || 'novo',
-          interest: lead.interest || undefined,
-          tags: lead.tags || undefined,
-          company_name: lead.company_name || undefined,
-          company_cnpj: lead.company_cnpj || undefined,
-          company_razao_social: lead.company_razao_social || undefined,
+        const leadData: Record<string, any> = {
+          name:                  lead.name,
+          email:                 lead.email                 || undefined,
+          phone:                 lead.phone                 || undefined,
+          origin:                lead.origin                || 'file_import',
+          status:                lead.status                || 'novo',
+          interest:              lead.interest              || undefined,
+          tags:                  lead.tags                  || undefined,
+          company_name:          lead.company_name          || undefined,
+          company_cnpj:          lead.company_cnpj          || undefined,
+          company_razao_social:  lead.company_razao_social  || undefined,
           company_nome_fantasia: lead.company_nome_fantasia || undefined,
-          company_cep: lead.company_cep || undefined,
-          company_cidade: lead.company_cidade || undefined,
-          company_estado: lead.company_estado || undefined,
-          company_endereco: lead.company_endereco || undefined,
-          company_telefone: lead.company_telefone || undefined,
-          company_email: lead.company_email || undefined,
-          company_site: lead.company_site || undefined,
+          company_cep:           lead.company_cep           || undefined,
+          company_cidade:        lead.company_cidade        || undefined,
+          company_estado:        lead.company_estado        || undefined,
+          company_endereco:      lead.company_endereco      || undefined,
+          company_telefone:      lead.company_telefone      || undefined,
+          company_email:         lead.company_email         || undefined,
+          company_site:          lead.company_site          || undefined,
         };
 
-        // Adicionar campos personalizados mapeados
+        // Campos personalizados mapeados via UI (custom_<uuid>)
         Object.entries(columnMapping).forEach(([columnName, fieldId]) => {
           if (fieldId && lead[columnName]) {
-            // Usar fieldId como chave para que a API reconheça como campo personalizado
             leadData[`custom_${fieldId}`] = lead[columnName];
           }
         });
 
-        // Manter campos com IDs numéricos (sistema existente)
+        // Campos com IDs numéricos vindos diretamente do cabeçalho do CSV
         Object.keys(lead).forEach(key => {
           if (/^\d+$/.test(key) && lead[key]) {
             leadData[key] = lead[key];
           }
         });
 
-        return leadData;
+        // Remover entradas undefined/vazias para reduzir payload
+        return Object.fromEntries(
+          Object.entries(leadData).filter(([, v]) => v !== undefined && v !== '')
+        );
       });
 
-      // Importar em lotes de 100
-      let successCount = 0;
-      let errorCount = 0;
-      const batchSize = 100;
-
-      for (let i = 0; i < leadsToImport.length; i += batchSize) {
-        const batch = leadsToImport.slice(i, i + batchSize);
-        try {
-          await api.importLeads(company.id, batch, selectedFunnelId || undefined, selectedStageId || undefined);
-          successCount += batch.length;
-        } catch (error) {
-          console.error('Error importing batch:', error);
-          errorCount += batch.length;
-        }
-      }
+      const result = await api.importLeadsViaFile(
+        company.id,
+        leadsToImport,
+        selectedFunnelId || undefined,
+        selectedStageId  || undefined,
+      );
 
       setImportResults({
-        success: successCount,
-        errors: errorCount,
-        total: leadsToImport.length
+        success:    result.summary.success,
+        errors:     result.summary.error,
+        total:      result.summary.total_submitted,
+        duplicates: result.summary.duplicate ?? 0,
       });
 
       setStep('complete');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error importing leads:', error);
-      alert('Erro durante a importação. Tente novamente.');
+      alert(error?.message || 'Erro durante a importação. Tente novamente.');
       setStep('preview');
     } finally {
       setLoading(false);
@@ -999,27 +1007,38 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                 {importResults.success > 0 ? 'Importação Concluída com Sucesso!' : 'Importação Concluída'}
               </h3>
               <p className="text-gray-600 mb-6">
-                {importResults.success === 1 
-                  ? `${importResults.success} lead importado com sucesso`
-                  : `${importResults.success} leads importados com sucesso`
-                }
+                {importResults.success === 1
+                  ? `${importResults.success} lead importado`
+                  : `${importResults.success} leads importados`}
+                {importResults.duplicates > 0 && (
+                  <span className="text-yellow-600">
+                    {importResults.duplicates === 1
+                      ? `, ${importResults.duplicates} duplicado`
+                      : `, ${importResults.duplicates} duplicados`}
+                  </span>
+                )}
                 {importResults.errors > 0 && (
                   <span className="text-red-600">
-                    {importResults.errors === 1 
-                      ? `, ${importResults.errors} lead com erro`
-                      : `, ${importResults.errors} leads com erro`
-                    }
+                    {importResults.errors === 1
+                      ? `, ${importResults.errors} com erro`
+                      : `, ${importResults.errors} com erro`}
                   </span>
                 )}
               </p>
-              
-              <div className="bg-gray-50 rounded-lg p-6 mb-6 max-w-md mx-auto">
-                <div className="grid grid-cols-3 gap-4 text-center">
+
+              <div className="bg-gray-50 rounded-lg p-6 mb-6 max-w-lg mx-auto">
+                <div className="grid grid-cols-4 gap-3 text-center">
                   <div>
                     <div className="text-2xl font-bold text-green-600">
                       {importResults.success}
                     </div>
                     <div className="text-sm text-gray-500">Importados</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {importResults.duplicates}
+                    </div>
+                    <div className="text-sm text-gray-500">Duplicados</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-red-600">

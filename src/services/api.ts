@@ -1316,270 +1316,48 @@ export const api = {
     }
   },
 
-  // Bulk Import Functions
-  async importLeads(companyId: string, leads: Array<{
-    name: string;
-    email?: string;
-    phone?: string;
-    origin?: string;
-    status?: string;
-    interest?: string;
-    // Campos da empresa
-    company_name?: string;
-    company_cnpj?: string;
-    company_razao_social?: string;
-    company_nome_fantasia?: string;
-    company_cep?: string;
-    company_cidade?: string;
-    company_estado?: string;
-    company_endereco?: string;
-    company_telefone?: string;
-    company_email?: string;
-    company_site?: string;
-    [key: string]: any;
-  }>, funnelId?: string, stageId?: string) {
-    console.log('API: importLeads called with:', { companyId, count: leads.length });
-    
-    try {
-      // Buscar campos personalizados da empresa via RPC (contorna RLS)
-      const { data: customFields, error: fieldsError } = await supabase
-        .rpc('get_all_custom_fields_for_import', {
-          p_company_id: companyId
-        });
+  // ── Importação de leads por arquivo (segura via backend) ──────────────────
+  // company_id vai no query param; JWT + company_users resolvem o tenant.
+  // Substitui o insert direto anterior (removido — rollback via git revert).
+  async importLeadsViaFile(
+    companyId: string,
+    leads: Array<Record<string, any>>,
+    funnelId?: string,
+    stageId?: string,
+  ) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão não encontrada. Faça login novamente.');
 
-      if (fieldsError) {
-        console.error('Error fetching custom fields:', fieldsError);
-      }
+    const url = `/api/leads/import-file?company_id=${encodeURIComponent(companyId)}`;
 
-      const customFieldsMap = new Map();
-      if (customFields) {
-        customFields.forEach((field: any) => {
-          customFieldsMap.set(field.numeric_id?.toString(), field);
-        });
-      }
+    const response = await fetch(url, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        leads,
+        funnel_id: funnelId ?? null,
+        stage_id:  stageId  ?? null,
+      }),
+    });
 
-      console.log('Custom fields loaded for import:', customFieldsMap.size);
+    const data = await response.json();
 
-      const results = [];
-      
-      // Processar leads um por vez para garantir campos personalizados
-      for (const leadData of leads) {
-        try {
-          // Separar campos padrão dos personalizados
-          const { 
-            name, email, phone, origin, status, interest,
-            company_name, company_cnpj, company_razao_social, company_nome_fantasia,
-            company_cep, company_cidade, company_estado, company_endereco,
-            company_telefone, company_email, company_site,
-            tags,
-            ...otherFields 
-          } = leadData;
-
-          // Campos padrão do lead
-          const standardFields = {
-            name, email, phone, origin: origin || 'import', status, interest,
-            company_name, company_cnpj, company_razao_social, company_nome_fantasia,
-            company_cep, company_cidade, company_estado, company_endereco,
-            company_telefone, company_email, company_site,
-            company_id: companyId
-          };
-
-          // DIAGNÓSTICO TEMPORÁRIO
-          console.log('🔍 [importLeads] leadData recebido:', {
-            company_name: leadData?.company_name,
-            tags: leadData?.tags,
-            name: leadData?.name
-          });
-          console.log('🔍 [importLeads] standardFields.company_name:', standardFields.company_name);
-
-          // Criar lead com campos padrão
-          const { data: lead, error: leadError } = await supabase
-            .from('leads')
-            .insert(standardFields)
-            .select()
-            .single();
-
-          if (leadError) throw leadError;
-
-          // Processar campos personalizados (sistema híbrido)
-          const customValues = [];
-          for (const [key, value] of Object.entries(otherFields)) {
-            if (value && value !== '') {
-              // Verificar se é um ID numérico (campo personalizado)
-              if (/^\d+$/.test(key)) {
-                const customField = customFieldsMap.get(key);
-                if (customField) {
-                  customValues.push({
-                    lead_id: lead.id,
-                    field_id: customField.id,
-                    value: String(value)
-                  });
-                  console.log(`Custom field mapped: ID ${key} -> ${customField.field_name} = ${value}`);
-                }
-              }
-              // Verificar se é um campo mapeado (custom_fieldId)
-              else if (key.startsWith('custom_')) {
-                const fieldId = key.replace('custom_', '');
-                customValues.push({
-                  lead_id: lead.id,
-                  field_id: fieldId,
-                  value: String(value)
-                });
-                console.log(`Custom field mapped: ${key} -> ${fieldId} = ${value}`);
-              }
-            }
-          }
-
-          // Inserir valores dos campos personalizados
-          if (customValues.length > 0) {
-            const { error: customError } = await supabase
-              .from('lead_custom_values')
-              .insert(customValues);
-
-            if (customError) {
-              console.error('Error inserting custom field values:', customError);
-            } else {
-              console.log(`Inserted ${customValues.length} custom field values for lead ${lead.id}`);
-            }
-          }
-
-          // Processar tags se fornecidas
-          if (tags && typeof tags === 'string' && tags.trim() !== '') {
-            try {
-              const tagNames = tags.split(',').map(t => t.trim()).filter(Boolean);
-              console.log(`Processing ${tagNames.length} tags for lead ${lead.id}:`, tagNames);
-
-              for (const tagName of tagNames) {
-                // Buscar tag existente (case-insensitive)
-                const { data: existingTag } = await supabase
-                  .from('lead_tags')
-                  .select('id')
-                  .eq('company_id', companyId)
-                  .ilike('name', tagName)
-                  .eq('is_active', true)
-                  .maybeSingle();
-
-                let tagId: string;
-
-                if (existingTag) {
-                  // Tag já existe, usar ID existente
-                  tagId = existingTag.id;
-                  console.log(`Tag "${tagName}" já existe, usando ID: ${tagId}`);
-                } else {
-                  // Criar nova tag
-                  const { data: newTag, error: tagError } = await supabase
-                    .from('lead_tags')
-                    .insert({
-                      company_id: companyId,
-                      name: tagName,
-                      color: '#3B82F6', // Cor padrão azul
-                      is_active: true
-                    })
-                    .select('id')
-                    .single();
-
-                  if (tagError) {
-                    console.error(`Error creating tag "${tagName}":`, tagError);
-                    continue;
-                  }
-
-                  tagId = newTag.id;
-                  console.log(`Tag "${tagName}" criada com ID: ${tagId}`);
-                }
-
-                // Associar tag ao lead (ignorar se já existe)
-                const { error: assignError } = await supabase
-                  .from('lead_tag_assignments')
-                  .insert({
-                    lead_id: lead.id,
-                    tag_id: tagId
-                  })
-                  .select();
-
-                if (assignError) {
-                  // Ignorar erro de duplicata (constraint violation)
-                  if (assignError.code !== '23505') {
-                    console.error(`Error assigning tag "${tagName}" to lead:`, assignError);
-                  }
-                } else {
-                  console.log(`Tag "${tagName}" associada ao lead ${lead.id}`);
-                }
-              }
-            } catch (tagError) {
-              console.error('Error processing tags:', tagError);
-              // Continuar mesmo se houver erro nas tags
-            }
-          }
-
-          // Se funil específico foi selecionado, mover lead para o funil/etapa desejado
-          if (funnelId && lead?.id) {
-            let targetStageId = stageId;
-            if (!targetStageId) {
-              const { data: firstStage } = await supabase
-                .from('funnel_stages')
-                .select('id')
-                .eq('funnel_id', funnelId)
-                .eq('stage_type', 'active')
-                .order('position', { ascending: true })
-                .limit(1)
-                .single();
-              if (firstStage) targetStageId = firstStage.id;
-            }
-            if (targetStageId) {
-              // Buscar opportunity criada pelo trigger para este lead
-              const { data: opportunity } = await supabase
-                .from('opportunities')
-                .select('id')
-                .eq('lead_id', lead.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-
-              if (opportunity) {
-                // Atualizar opportunity_funnel_positions com funil/etapa selecionados
-                await supabase
-                  .from('opportunity_funnel_positions')
-                  .update({
-                    funnel_id: funnelId,
-                    stage_id: targetStageId,
-                    entered_stage_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('opportunity_id', opportunity.id);
-              }
-            }
-          }
-
-          results.push(lead);
-
-          // Disparar automação backend (fire-and-forget — nunca bloqueia a importação)
-          supabase.auth.getSession().then(({ data: sessionData }) => {
-            const token = sessionData.session?.access_token
-            if (!token || !lead.company_id) return
-
-            fetch('/api/automation/trigger-event', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                event_type: 'lead.created',
-                company_id: lead.company_id,
-                data: { lead_id: lead.id, source: 'import' },
-              }),
-            }).catch(err => console.error('[api.importLeads] automation trigger failed:', err))
-          }).catch(() => { /* sem sessão — ignora silenciosamente */ })
-
-        } catch (leadError) {
-          console.error('Error importing individual lead:', leadError);
-          // Continuar com próximo lead em caso de erro
-        }
-      }
-
-      console.log('API: Leads imported successfully:', results.length);
-      return results;
-    } catch (error) {
-      console.error('Error in importLeads:', error);
-      throw error;
+    if (!response.ok) {
+      throw new Error(data.message || data.error || 'Erro na importação de leads');
     }
+
+    return data as {
+      summary: {
+        total_submitted: number;
+        success:         number;
+        duplicate:       number;
+        error:           number;
+      };
+    };
   },
 
   async getLeadStats(

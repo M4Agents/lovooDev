@@ -108,6 +108,17 @@ export function useAccessControl() {
     currentRole === 'super_admin' ||
     isImpersonating
 
+  // ── Importação de leads por arquivo ───────────────────────
+  // admin/system_admin/super_admin: acesso implícito.
+  // manager/seller: somente se company_users.permissions.import_leads === true.
+  // isImpersonating: super_admin impersonando empresa mantém acesso.
+  const canImportLeads =
+    currentRole === 'admin' ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin' ||
+    hasPermission('import_leads') ||
+    isImpersonating
+
   // ── Consultoria ────────────────────────────────────────────
   // Compra de pacotes consultivos: mesma hierarquia de canPurchaseAiCredits
   const canPurchaseConsulting =
@@ -205,5 +216,8 @@ export function useAccessControl() {
 
     // Histórico de importações via API
     canViewImportHistory,
+
+    // Importação de leads por arquivo
+    canImportLeads,
   }
 }

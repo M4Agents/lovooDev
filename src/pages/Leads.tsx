@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { useLeadPermissions } from '../hooks/useLeadPermissions';
+import { useAccessControl } from '../hooks/useAccessControl';
 import { usePlanLeadStats } from '../hooks/usePlanLeadStats';
 import { PlanLeadLimitBanner } from '../components/PlanLeadLimitBanner';
 import { LeadModal } from '../components/LeadModal';
@@ -73,6 +74,7 @@ interface LeadStats {
 export const Leads: React.FC = () => {
   const { company } = useAuth();
   const { canViewLead, canEditLead, canDeleteLead } = useLeadPermissions();
+  const { canImportLeads } = useAccessControl();
   const { leadStats } = usePlanLeadStats(company?.id);
 
   // Deep-link do Dashboard: /leads?lead_id=xxx
@@ -476,13 +478,15 @@ export const Leads: React.FC = () => {
             <Tag className="w-4 h-4" />
             Tags
           </button>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Importar
-          </button>
+          {canImportLeads && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Importar
+            </button>
+          )}
           
           {/* Dropdown de Exportação */}
           <div className="relative">
