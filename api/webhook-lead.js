@@ -939,7 +939,7 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
         source:         'webhook',
       });
       // #endregion
-      await handleLeadReentry({
+      const reentryResult = await handleLeadReentry({
         newLeadId:       lead.lead_id,
         existingLeadId:  lead.duplicate_of_lead_id,
         companyId,
@@ -950,7 +950,12 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
         supabase:        supabaseAdmin,
       });
       // #region agent log
-      console.error('[DBG-56e383][REENTRY-C] handleLeadReentry completed OK');
+      console.error('[DBG-56e383][REENTRY-C] handleLeadReentry result', {
+        action:      reentryResult?.action,
+        skipped:     reentryResult?.skipped,
+        reason:      reentryResult?.reason,
+        leadEntryId: reentryResult?.leadEntryId,
+      });
       // #endregion
     } catch (err) {
       // #region agent log
