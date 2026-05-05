@@ -272,6 +272,23 @@ export default async function handler(req, res) {
   }
   
   try {
+    // Validação de lote — deve acontecer ANTES de qualquer destructuring
+    // A API aceita apenas 1 lead por requisição
+    const BATCH_FIELDS = ['leads', 'contacts', 'items', 'records'];
+    const batchError = { error: 'validation_error', message: 'Envie apenas um lead por requisição' };
+
+    if (Array.isArray(req.body)) {
+      return res.status(400).json(batchError);
+    }
+
+    if (req.body && typeof req.body === 'object') {
+      for (const field of BATCH_FIELDS) {
+        if (Array.isArray(req.body[field])) {
+          return res.status(400).json(batchError);
+        }
+      }
+    }
+
     console.log('📥 PAYLOAD RECEBIDO:', req.body);
     console.log('📊 PAYLOAD DETALHADO:');
     console.log('- Tipo do payload:', typeof req.body);
@@ -310,6 +327,37 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('ERROR: Exception in lead webhook:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// logImportEvent — registra cada desfecho de importação na tabela funcional
+//
+// REGRA CRÍTICA: companyId deve vir SEMPRE da validação da api_key no backend
+// (lead.company_id retornado pela RPC public_create_lead_webhook).
+// NUNCA passar companyId vindo de req.body ou de qualquer campo do payload.
+//
+// A falha ao gravar o log NÃO impede a criação do lead nem altera a resposta,
+// mas é capturada e registrada no log técnico sem dados sensíveis.
+// ---------------------------------------------------------------------------
+async function logImportEvent(supabase, companyId, status, opts = {}) {
+  try {
+    await supabase.rpc('log_lead_import_event', {
+      p_company_id:         companyId,
+      p_status:             status,
+      p_error_code:         opts.errorCode     || null,
+      p_error_message:      opts.errorMessage  || null,
+      p_lead_id:            opts.leadId        || null,
+      p_payload_summary:    opts.summary       || null,
+      p_external_reference: opts.ref           || null,
+    });
+  } catch (err) {
+    console.error('[webhook-lead] Failed to log lead import event', {
+      status,
+      company_id: companyId,
+      error_code: opts.errorCode || null,
+      message: err?.message || String(err),
+    });
   }
 }
 
@@ -363,11 +411,13 @@ async function createLeadDirectSQL(params) {
     
     if (leadError) {
       console.error('Erro ao criar lead:', leadError);
+      // company_id não disponível neste ponto — log apenas técnico (sem lead_import_events)
       return { success: false, error: leadError.message };
     }
     
     if (!lead || !lead.success) {
       console.error('RPC falhou:', lead);
+      // api_key inválida ou outro erro pré-inserção — company_id não resolvido
       return { success: false, error: lead?.error || 'Falha ao criar lead' };
     }
     
@@ -488,6 +538,33 @@ async function createLeadDirectSQL(params) {
       } catch (err) {
         console.error('[webhook-lead] handleLeadReentry failed:', err);
       }
+    }
+
+    // Registrar desfecho funcional — company_id vem exclusivamente de lead.company_id
+    // (resolvido internamente pela RPC a partir da api_key, nunca do payload)
+    const payloadSummary = {
+      name:  detectedFields.name  || null,
+      email: detectedFields.email || null,
+      phone: detectedFields.phone || null,
+    };
+    const externalRef = params.form_data?.ref
+      || params.form_data?.reference
+      || params.form_data?.id_externo
+      || params.form_data?.external_id
+      || null;
+
+    if (lead.is_duplicate) {
+      await logImportEvent(supabase, lead.company_id, 'duplicate', {
+        leadId:  lead.duplicate_of_lead_id || lead.lead_id,
+        summary: payloadSummary,
+        ref:     externalRef,
+      });
+    } else {
+      await logImportEvent(supabase, lead.company_id, 'success', {
+        leadId:  lead.lead_id,
+        summary: payloadSummary,
+        ref:     externalRef,
+      });
     }
 
     return { success: true, lead_id: lead.lead_id };
