@@ -15,6 +15,7 @@
 import { createClient }          from '@supabase/supabase-js';
 import { getPlanLimits }         from '../lib/plans/limitChecker.js';
 import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
+import { handleLeadReentry, hashPayload } from '../lib/leads/handleLeadReentry.js';
 
 const SUPABASE_URL   = process.env.SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
 const MAX_LEADS      = 1_000;
@@ -355,10 +356,11 @@ export default async function handler(req, res) {
   const validUuidFields = await loadValidUuidFields(svc, companyId, leads);
 
   // ── 10. Processar leads (best-effort — erros por linha não param o lote) ──
-  let successCount   = 0;
-  let duplicateCount = 0;
-  let errorCount     = 0;
-  let planLimitHit   = false;
+  let successCount          = 0;
+  let duplicateCount        = 0;
+  let duplicateReentryCount = 0;
+  let errorCount            = 0;
+  let planLimitHit          = false;
 
   for (const rawLead of leads) {
     if (planLimitHit) { errorCount++; continue; }
@@ -390,6 +392,35 @@ export default async function handler(req, res) {
 
       if (isDuplicate) {
         duplicateCount++;
+
+        // Registrar reentrada no lead existente — espelha o comportamento do webhook.
+        // newLeadId === existingLeadId (ambos apontam para o mesmo lead) → handleLeadReentry
+        // entra no caminho de reentrada direta, sem gravar new_lead_id no metadata.
+        const existingLeadId = result.duplicate_of_lead_id || leadId;
+        const payloadRef = {
+          name:  rawLead.name  || null,
+          email: rawLead.email || null,
+          phone: rawLead.phone || null,
+        };
+        try {
+          await handleLeadReentry({
+            newLeadId:       leadId,         // === existingLeadId → reentrada direta
+            existingLeadId,
+            companyId,
+            source:          'file_import',
+            externalEventId: null,
+            originChannel:   rawLead.utm_source || rawLead.origin || null,
+            metadata:        { payload_hash: hashPayload(payloadRef) },
+            supabase:        svc,
+          });
+          duplicateReentryCount++;
+        } catch (err) {
+          console.error('[import-file] lead reentry error:', {
+            message: err?.message,
+            leadId:  existingLeadId,
+          });
+        }
+
         if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
         continue;
       }
@@ -431,11 +462,12 @@ export default async function handler(req, res) {
       p_company_id:      companyId,
       p_status:          logStatus,
       p_payload_summary: {
-        source:    'file_import',
-        total:     leads.length,
-        success:   successCount,
-        duplicate: duplicateCount,
-        error:     errorCount,
+        source:              'file_import',
+        total:               leads.length,
+        success:             successCount,
+        duplicate:           duplicateCount,
+        duplicate_reentries: duplicateReentryCount,
+        error:               errorCount,
       },
     });
   } catch (logErr) {
