@@ -9,6 +9,36 @@ import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.j
 import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
 
 // =====================================================
+// EXTRAÇÃO DE REPLY ID DO PAYLOAD UAZAPI
+// =====================================================
+// Suporta múltiplos campos candidatos utilizados por versões diferentes da API.
+// Retorna string com o ID da mensagem original ou null se não encontrado.
+// Não lança exceção — fail-safe por design.
+function extractReplyId(message) {
+  try {
+    if (!message || typeof message !== 'object') return null;
+
+    // Candidatos em ordem de prioridade (mais específico primeiro)
+    const candidates = [
+      message?.contextInfo?.quotedMessage?.key?.id,
+      message?.contextInfo?.stanzaId,
+      message?.quotedMsgId,
+      message?.quoted?.id,
+      message?.referencedMessageId,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// =====================================================
 // NORMALIZAÇÃO DE MESSAGE_TYPE
 // =====================================================
 // Mapeia tipos específicos do WhatsApp para tipos aceitos pela constraint
@@ -207,7 +237,17 @@ async function processMessage(payload) {
       }
     }
 
-    const messageId = message.id;
+    const messageId  = message.id;
+    const replyToId  = extractReplyId(message);
+    // Log de diagnóstico de reply — sanitizado (sem conteúdo da mensagem)
+    console.log('[WEBHOOK][REPLY-DIAG] campos candidatos presentes:', {
+      quotedMsgId:           message.quotedMsgId             ? 'present' : 'absent',
+      contextInfoStanzaId:   message.contextInfo?.stanzaId   ? 'present' : 'absent',
+      contextInfoQuotedId:   message.contextInfo?.quotedMessage?.key?.id ? 'present' : 'absent',
+      quotedId:              message.quoted?.id              ? 'present' : 'absent',
+      referencedMessageId:   message.referencedMessageId     ? 'present' : 'absent',
+      resolved:              replyToId ? 'yes' : 'none',
+    });
     const instanceName = payload.instanceName;
     const ownerPhone = payload.owner; // Telefone da instância
     
@@ -674,16 +714,17 @@ async function processMessage(payload) {
     // Restante do código...
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
-        p_company_id: company.id,
-        p_instance_id: instance.id,
-        p_phone_number: phoneNumber,
-        p_sender_name: senderName,
-        p_content: messageText,
-        p_message_type: normalizedType,
-        p_media_url: finalMediaUrl,
-        p_direction: direction,
-        p_uazapi_message_id: messageId,
-        p_profile_picture_url: payload.chat?.imagePreview || null
+        p_company_id:                 company.id,
+        p_instance_id:                instance.id,
+        p_phone_number:               phoneNumber,
+        p_sender_name:                senderName,
+        p_content:                    messageText,
+        p_message_type:               normalizedType,
+        p_media_url:                  finalMediaUrl,
+        p_direction:                  direction,
+        p_uazapi_message_id:          messageId,
+        p_profile_picture_url:        payload.chat?.imagePreview || null,
+        p_reply_to_uazapi_message_id: replyToId || null,
       });
     
     if (webhookError) {

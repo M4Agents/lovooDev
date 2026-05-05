@@ -49,6 +49,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [selectedActivity, setSelectedActivity] = useState<any>(null)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
+
+  // Estado de reply — mensagem sendo respondida
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null)
   
   // Estado para Drag & Drop (movido para componente principal)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -82,6 +85,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         console.warn('Erro ao limpar cache:', error)
       }
     }
+    // Resetar reply ao trocar de conversa — evita reply cruzado entre conversas
+    setReplyingTo(null)
   }, [conversationId])
 
   // Sincronizar aiState com o objeto conversation quando carregado/alterado
@@ -396,6 +401,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (!messageForm.content.trim() && !messageForm.media_url) return
 
     // 1. Criar mensagem local imediatamente (UX instantâneo)
+    const currentReply = replyingTo
     const tempMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
       conversation_id: conversationId,
@@ -410,21 +416,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       sent_by: userId,
       timestamp: new Date(),
       created_at: new Date(),
-      updated_at: new Date()
+      updated_at: new Date(),
+      reply_to_message_id:   currentReply?.id,
+      reply_to_content:      currentReply?.content,
+      reply_to_direction:    currentReply?.direction,
+      reply_to_message_type: currentReply?.message_type,
     }
 
     try {
       setSending(true)
-      // Enviando mensagem...
-      
+      setReplyingTo(null)
+
       // Adicionar mensagem local imediatamente
       setMessages(prev => {
-        // Adicionando mensagem temporária...
         return [...prev, tempMessage]
       })
-      
+
+      // Incluir reply_to_message_id no form enviado ao banco
+      const formWithReply: SendMessageForm = {
+        ...messageForm,
+        reply_to_message_id: currentReply?.id,
+      }
+
       // 2. Enviar para o banco
-      const messageId = await chatApi.sendMessage(conversationId, companyId, messageForm, userId)
+      const messageId = await chatApi.sendMessage(conversationId, companyId, formWithReply, userId)
       // Mensagem enviada com sucesso
       
       // 3. Atualizar mensagem local com ID real (manter status 'sending')
@@ -1364,6 +1379,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     getSafeVideoUrl={getSafeVideoUrl}
                     onVideoError={handleVideoError}
                     onResetVideoError={resetVideoError}
+                    onReply={setReplyingTo}
                     showTimestamp={
                       index === 0 ||
                       (messages[index - 1] && (() => {
@@ -1387,6 +1403,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Barra de reply — exibida acima do input quando há mensagem sendo respondida */}
+      {replyingTo && (
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 flex items-center gap-3">
+          <div className="flex-1 min-w-0 border-l-4 border-green-500 pl-3">
+            <p className="text-xs font-semibold text-green-700 mb-0.5">
+              {replyingTo.direction === 'outbound' ? 'Você' : 'Contato'}
+            </p>
+            <p className="text-xs text-gray-600 truncate">
+              {replyingTo.content || (replyingTo.message_type !== 'text' ? `[${replyingTo.message_type}]` : '')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyingTo(null)}
+            className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+            title="Cancelar resposta"
+            aria-label="Cancelar resposta"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-gray-200 bg-white p-4">
@@ -1430,6 +1471,7 @@ interface MessageBubbleProps {
   getSafeVideoUrl: (url: string) => string | null
   onVideoError: (messageId: string, error: any) => void
   onResetVideoError: (messageId: string) => void
+  onReply?: (message: ChatMessage) => void
 }
 
 // Função para transformar URLs em links clicáveis
@@ -1639,8 +1681,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   videoErrors,
   getSafeVideoUrl,
   onVideoError,
-  onResetVideoError
+  onResetVideoError,
+  onReply
 }) => {
+  const [hovered, setHovered] = React.useState(false)
   const { t } = useTranslation('chat')
   const formatDateTime = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
@@ -1709,14 +1753,52 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   })()
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Botão Responder — aparece no hover, lado esquerdo para outbound */}
+      {isOwn && hovered && onReply && (
+        <div className="order-1 flex items-center pr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={() => onReply(message)}
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            title="Responder"
+            aria-label="Responder mensagem"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <div className={`max-w-xs lg:max-w-md ${isOwn ? 'order-2' : 'order-1'}`}>
         {showTimestamp && (
           <div className="text-center text-[11px] text-gray-500 mb-2">
             {formatDateTime(message.timestamp)}
           </div>
         )}
-        
+
+        {/* Botão Responder para mensagens inbound — lado direito */}
+        {!isOwn && hovered && onReply && (
+          <div className="flex justify-end mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => onReply(message)}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              title="Responder"
+              aria-label="Responder mensagem"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Layout especial para mensagens de áudio - Estilo WhatsApp Web */}
         {message.media_url && isAudioMessage ? (
           <AudioWhatsAppPlayer 
@@ -1734,6 +1816,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 : 'bg-white text-gray-900'
             }`}
           >
+
+          {/* Preview de mensagem respondida — exibido dentro do bubble */}
+          {message.reply_to_message_id && (
+            <div className={`mb-2 rounded px-2 py-1.5 text-xs border-l-4 ${
+              isOwn
+                ? 'bg-[#c6e6b0] border-green-600'
+                : 'bg-gray-100 border-gray-400'
+            }`}>
+              <p className={`font-semibold mb-0.5 ${isOwn ? 'text-green-800' : 'text-gray-700'}`}>
+                {message.reply_to_direction === 'outbound' ? 'Você' : 'Contato'}
+              </p>
+              <p className="text-gray-600 truncate">
+                {message.reply_to_content
+                  || (message.reply_to_message_type && message.reply_to_message_type !== 'text'
+                    ? `[${message.reply_to_message_type}]`
+                    : '...')}
+              </p>
+            </div>
+          )}
 
           {message.media_url && actualMessageType === 'image' && (
             <div className="mb-1">

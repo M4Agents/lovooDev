@@ -54,6 +54,32 @@ export default async function handler(req, res) {
   }
 }
 
+// =====================================================
+// EXTRAÇÃO DE REPLY ID DO PAYLOAD UAZAPI
+// =====================================================
+function extractReplyId(message) {
+  try {
+    if (!message || typeof message !== 'object') return null;
+
+    const candidates = [
+      message?.contextInfo?.quotedMessage?.key?.id,
+      message?.contextInfo?.stanzaId,
+      message?.quotedMsgId,
+      message?.quoted?.id,
+      message?.referencedMessageId,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function processMessage(payload) {
   try {
     const { createClient } = await import('@supabase/supabase-js');
@@ -307,6 +333,16 @@ async function processMessage(payload) {
     // Usar URL processada para o RPC
     mediaUrl = finalMediaUrl;
     const messageId = message.id;
+    const replyToId = extractReplyId(message);
+    // Log de diagnóstico de reply — sanitizado (sem conteúdo da mensagem)
+    console.log('[WEBHOOK][REPLY-DIAG] campos candidatos presentes:', {
+      quotedMsgId:           message.quotedMsgId             ? 'present' : 'absent',
+      contextInfoStanzaId:   message.contextInfo?.stanzaId   ? 'present' : 'absent',
+      contextInfoQuotedId:   message.contextInfo?.quotedMessage?.key?.id ? 'present' : 'absent',
+      quotedId:              message.quoted?.id              ? 'present' : 'absent',
+      referencedMessageId:   message.referencedMessageId     ? 'present' : 'absent',
+      resolved:              replyToId ? 'yes' : 'none',
+    });
     const timestamp = message.messageTimestamp;
     const instanceName = payload.instanceName;
     
@@ -390,16 +426,17 @@ async function processMessage(payload) {
     
     const { data: webhookResult, error: webhookError } = await supabase
       .rpc('process_webhook_message_safe', {
-        p_company_id: company.id,
-        p_instance_id: instance.id,
-        p_phone_number: phoneNumber,
-        p_sender_name: senderName,
-        p_content: messageText,
-        p_message_type: isMediaMessage ? (rawMediaType || 'document') : 'text',
-        p_media_url: mediaUrl,
-        p_direction: direction,
-        p_uazapi_message_id: messageId,
-        p_profile_picture_url: payload.chat?.imagePreview || null
+        p_company_id:                 company.id,
+        p_instance_id:                instance.id,
+        p_phone_number:               phoneNumber,
+        p_sender_name:                senderName,
+        p_content:                    messageText,
+        p_message_type:               isMediaMessage ? (rawMediaType || 'document') : 'text',
+        p_media_url:                  mediaUrl,
+        p_direction:                  direction,
+        p_uazapi_message_id:          messageId,
+        p_profile_picture_url:        payload.chat?.imagePreview || null,
+        p_reply_to_uazapi_message_id: replyToId || null,
       });
     
     if (webhookError) {

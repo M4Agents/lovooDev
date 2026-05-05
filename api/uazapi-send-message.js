@@ -90,13 +90,17 @@ export default async function handler(req, res) {
       ? `${UAZAPI_CONFIG.BASE_URL}${UAZAPI_CONFIG.ENDPOINTS.SEND_TEXT}`
       : `${UAZAPI_CONFIG.BASE_URL}${UAZAPI_CONFIG.ENDPOINTS.SEND_MEDIA}`;
 
+    // replyid só é incluído se a mensagem original tiver uazapi_message_id
+    const replyId = messageData.reply_to_uazapi_message_id || null;
+
     let payload;
     if (messageData.message_type === 'text') {
       payload = {
         number: messageData.phone,
         text: messageData.content,
         delay: 1000,
-        linkPreview: true
+        linkPreview: true,
+        ...(replyId ? { replyid: replyId } : {})
       };
     } else {
       payload = {
@@ -104,12 +108,17 @@ export default async function handler(req, res) {
         type: messageData.message_type,
         file: messageData.media_url,
         text: messageData.content || '',
-        delay: 1000
+        delay: 1000,
+        ...(replyId ? { replyid: replyId } : {})
       };
       
       if (messageData.message_type === 'document' && messageData.media_url) {
         payload.docName = extractFileName(messageData.media_url);
       }
+    }
+
+    if (replyId) {
+      console.log('[send-message] reply incluído no payload Uazapi:', { replyId });
     }
 
     console.log('📤 Enviando para Uazapi:', { endpoint, payload });
