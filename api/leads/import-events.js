@@ -64,15 +64,6 @@ async function validateCaller(req, companyId) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  // #region agent log
-  const _dbg = (msg, data, hyp) => fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'import-events.js',message:msg,data,hypothesisId:hyp,timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
-  // #region agent log — H-A/B/C: estado inicial do handler
-  _dbg('handler_entry', { method: req.method, hasAnonKey: !!ANON_KEY, anonKeyLen: ANON_KEY.length, hasSupabaseUrl: !!SUPABASE_URL, company_id: req.query?.company_id ?? null }, 'A-B-C');
-  // #endregion
-
-  try {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -98,10 +89,6 @@ export default async function handler(req, res) {
 
   // Autenticação + role validados no backend antes de qualquer query
   const auth = await validateCaller(req, company_id);
-
-  // #region agent log — H-A/B: resultado da autenticação
-  _dbg('validate_caller_result', { ok: auth.ok, status: auth.status ?? null, error: auth.error ?? null, role: auth.role ?? null }, 'A-B');
-  // #endregion
 
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
@@ -149,10 +136,6 @@ export default async function handler(req, res) {
 
   const { data, error } = await query;
 
-  // #region agent log — H-A/D: resultado da query
-  _dbg('query_result', { hasError: !!error, errorMsg: error?.message ?? null, errorCode: error?.code ?? null, rowCount: data?.length ?? null }, 'A-D');
-  // #endregion
-
   if (error) {
     console.error('[import-events] query error:', error.message);
     return res.status(500).json({ error: 'Erro ao buscar histórico de importações' });
@@ -171,11 +154,4 @@ export default async function handler(req, res) {
     },
   });
 
-  } catch (unexpectedErr) {
-    // #region agent log — H-C: exceção não tratada
-    _dbg('unhandled_exception', { message: unexpectedErr?.message ?? String(unexpectedErr), stack: (unexpectedErr?.stack ?? '').slice(0, 300) }, 'C');
-    // #endregion
-    console.error('[import-events] unhandled exception:', unexpectedErr);
-    return res.status(500).json({ error: 'Erro interno inesperado' });
-  }
 }
