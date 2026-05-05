@@ -8,22 +8,12 @@ import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreated
 import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js';
 
+const MAX_PAYLOAD_BYTES = 10_240; // 10 KB por requisição
+
 // Função para disparar webhooks avançados automaticamente
-async function triggerAdvancedWebhooks(leadData, companyId) {
-  console.log('🚀 FUNÇÃO triggerAdvancedWebhooks INICIADA');
-  console.log('📋 PARÂMETROS RECEBIDOS:');
-  console.log('  - leadData:', JSON.stringify(leadData, null, 2));
-  console.log('  - companyId:', companyId);
-  console.log('🚀 DISPARANDO WEBHOOKS AVANÇADOS');
-  console.log('Lead ID:', leadData.lead_id);
-  console.log('Company ID:', companyId);
-  
+// supabase: client passado pelo caller (svcClient) — sem criação interna de credenciais
+async function triggerAdvancedWebhooks(leadData, companyId, supabase) {
   try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
     // 1. Buscar configurações ativas de webhook para lead_created
     const { data: configs, error: configError } = await supabase.rpc('get_webhook_trigger_configs', {
       p_company_id: companyId
@@ -303,122 +293,179 @@ export default async function handler(req, res) {
   }
   
   try {
-    // ── 1. Rejeição de lote — antes de qualquer destructuring ────────────────
+    // ── 1. Rejeição de lote ───────────────────────────────────────────────────
     const BATCH_FIELDS = ['leads', 'contacts', 'items', 'records'];
     const batchError   = { error: 'validation_error', message: 'Envie apenas um lead por requisição' };
-
-    if (Array.isArray(req.body)) {
-      return res.status(400).json(batchError);
-    }
+    if (Array.isArray(req.body)) return res.status(400).json(batchError);
     if (req.body && typeof req.body === 'object') {
       for (const field of BATCH_FIELDS) {
-        if (Array.isArray(req.body[field])) {
-          return res.status(400).json(batchError);
-        }
+        if (Array.isArray(req.body[field])) return res.status(400).json(batchError);
       }
     }
 
-    // ── 2. Validar presença da api_key antes de gerar hash ───────────────────
+    // ── 2. Tamanho do payload ─────────────────────────────────────────────────
+    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+    if (contentLength > MAX_PAYLOAD_BYTES) {
+      return res.status(413).json({ error: 'payload_too_large', message: 'Payload excede o limite permitido.' });
+    }
+
+    // ── 3. Presença da api_key ────────────────────────────────────────────────
     const api_key = req.body?.api_key;
     if (!api_key) {
       return res.status(400).json({ error: 'validation_error', message: 'api_key is required' });
     }
 
-    // ── 3. Metadados imutáveis da requisição ─────────────────────────────────
+    // ── 4. Metadados imutáveis da requisição ──────────────────────────────────
     const requestId   = generateUUID();
     const apiKeyHash  = createHash('sha256').update(api_key).digest('hex');
     const ip          = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
                      || req.socket?.remoteAddress
                      || 'unknown';
-    const method      = req.method;
-    const path        = '/api/webhook-lead';
     const userAgent   = req.headers['user-agent'] || null;
-    const payloadSize = parseInt(req.headers['content-length'] || '0', 10) || null;
+    const payloadSize = contentLength || null;
 
-    // ── 4. Clientes Supabase ─────────────────────────────────────────────────
+    // ── 5. Clientes Supabase — fail-fast se env var ausente ───────────────────
+    // Sem fallback hardcoded: ausência de env var falha explicitamente com 500
     const { createClient } = await import('@supabase/supabase-js');
-    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-                     || process.env.VITE_SUPABASE_ANON_KEY
-                     || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+    const supabaseUrl = process.env.SUPABASE_URL
+                     || process.env.NEXT_PUBLIC_SUPABASE_URL
+                     || process.env.VITE_SUPABASE_URL;
+    const anonKey     = process.env.SUPABASE_ANON_KEY
+                     || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+                     || process.env.VITE_SUPABASE_ANON_KEY;
+    const svcKey      = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl) throw new Error('[webhook-lead] Missing SUPABASE_URL env var');
+    if (!anonKey)     throw new Error('[webhook-lead] Missing Supabase anon key env var');
+    if (!svcKey)      throw new Error('[webhook-lead] Missing SUPABASE_SERVICE_ROLE_KEY env var');
     const anonClient  = createClient(supabaseUrl, anonKey);
+    const svcClient   = createClient(supabaseUrl, svcKey);
 
-    // ── 5. Rate limit pré-auth — por IP + hash (anti brute-force) ────────────
+    // ── 6. Rate limit pré-auth — IP + hash (anti brute-force) ────────────────
     const preAuth = await callRateLimit(anonClient, {
       p_request_id:   requestId,
       p_company_id:   null,
       p_api_key_hash: apiKeyHash,
       p_ip_address:   ip,
-      p_method:       method,
-      p_path:         path,
+      p_method:       'POST',
+      p_path:         '/api/webhook-lead',
       p_user_agent:   userAgent,
       p_payload_size: payloadSize,
     });
-
     if (!preAuth.allowed) {
       return res.status(429).json({ error: 'rate_limited', message: 'Muitas requisições. Tente novamente em instantes.' });
     }
 
-    // ── 6. Resolver company_id via service_role (evita oracle público de api_key)
-    const svcKey    = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const svcClient = createClient(supabaseUrl, svcKey);
-
+    // ── 7. Resolver company_id via service_role ───────────────────────────────
+    // company_id vem EXCLUSIVAMENTE deste lookup — nunca de req.body
     const { data: companyRow } = await svcClient
-      .from('companies')
-      .select('id')
-      .eq('api_key', api_key)
-      .single();
-
+      .from('companies').select('id').eq('api_key', api_key).single();
     const companyId = companyRow?.id || null;
-
     if (!companyId) {
-      // Registrar tentativa com key inválida (fire-and-forget, não bloqueia resposta)
       anonClient.rpc('log_webhook_invalid_key', {
         p_request_id:   requestId,
         p_api_key_hash: apiKeyHash,
         p_ip_address:   ip,
-        p_method:       method,
-        p_path:         path,
-      }).catch(err => {
-        console.error('[webhook-lead] Failed to log invalid key', { message: err?.message });
-      });
+        p_method:       'POST',
+        p_path:         '/api/webhook-lead',
+      }).catch(err => console.error('[webhook-lead] Failed to log invalid key', { message: err?.message }));
       return res.status(401).json({ error: 'invalid_key', message: 'API key inválida' });
     }
 
-    // ── 7. Rate limit pós-auth — por company_id (controla volume por empresa) ─
+    // ── 8. Rate limit pós-auth — por company_id ───────────────────────────────
     const postAuth = await callRateLimit(anonClient, {
       p_request_id:   requestId,
       p_company_id:   companyId,
       p_api_key_hash: apiKeyHash,
       p_ip_address:   ip,
-      p_method:       method,
-      p_path:         path,
+      p_method:       'POST',
+      p_path:         '/api/webhook-lead',
       p_user_agent:   userAgent,
       p_payload_size: payloadSize,
     });
-
     if (!postAuth.allowed) {
       return res.status(429).json({ error: 'rate_limited', message: 'Limite de importações atingido. Tente novamente em instantes.' });
     }
 
-    // ── 8. Destructuring completo + processamento do lead ────────────────────
+    // ── 9. Normalização do payload ────────────────────────────────────────────
     const { api_key: _discarded, ...form_data } = req.body;
+    // TODO Fase 5: substituir detectFormFields por sanitizePayload(form_data, FIELD_WHITELIST)
+    const detectedFields = detectFormFields(form_data);
+    if (!detectedFields.name && !detectedFields.email) {
+      return res.status(400).json({ error: 'validation_error', message: 'Pelo menos nome ou email é obrigatório' });
+    }
 
-    const result = await createLeadDirectSQL({
-      api_key,
-      form_data,
-      user_agent:  userAgent,
-      ip_address:  ip,
-      referrer:    req.headers.referer || 'direct',
-      requestId,
-      anonClient,
+    // ── 10. Criação atômica do lead via RPC restrita a service_role ───────────
+    // company_id vem do step 7 — nunca de req.body
+    // A RPC valida empresa ativa + max_leads + deduplica + insere em uma transação
+    const { data: lead, error: leadError } = await svcClient.rpc('create_lead_from_company', {
+      p_company_id: companyId,
+      lead_data: {
+        name:             detectedFields.name            || 'Lead sem nome',
+        email:            detectedFields.email           || null,
+        phone:            detectedFields.phone           || null,
+        interest:         detectedFields.interest        || null,
+        company_name:     detectedFields.company_name    || null,
+        company_cnpj:     detectedFields.company_cnpj    || null,
+        company_email:    detectedFields.company_email   || null,
+        visitor_id:       form_data.visitor_id           || null,
+        campanha:         detectedFields.campanha        || null,
+        conjunto_anuncio: detectedFields.conjunto_anuncio || null,
+        anuncio:          detectedFields.anuncio         || null,
+        utm_medium:       detectedFields.utm_medium      || null,
+      },
     });
 
-    if (result.success) {
-      return res.status(200).json({ success: true, lead_id: result.lead_id });
-    } else {
-      return res.status(500).json({ success: false, error: result.error });
+    if (leadError) {
+      console.error('[webhook-lead] RPC create_lead_from_company error', { message: leadError.message });
+      anonClient.rpc('update_webhook_log_result', {
+        p_request_id: requestId, p_result: 'error', p_error_code: 'rpc_error',
+      }).catch(() => {});
+      return res.status(500).json({ success: false, error: 'internal_error' });
     }
+
+    if (!lead?.success) {
+      const errCode = lead?.error || 'unknown';
+
+      if (errCode === 'plan_limit_exceeded') {
+        const payloadSummary = {
+          name:  detectedFields.name  || null,
+          email: detectedFields.email || null,
+          phone: detectedFields.phone || null,
+        };
+        svcClient.rpc('log_lead_import_event', {
+          p_company_id:      companyId,
+          p_status:          'plan_limit',
+          p_error_code:      'plan_limit_exceeded',
+          p_error_message:   `Limite de ${lead.max_allowed ?? '?'} leads atingido`,
+          p_lead_id:         null,
+          p_payload_summary: payloadSummary,
+          p_external_reference: null,
+        }).catch(err => console.error('[webhook-lead] Failed to log plan_limit event', { message: err?.message }));
+        anonClient.rpc('update_webhook_log_result', {
+          p_request_id: requestId, p_result: 'plan_limit',
+        }).catch(() => {});
+        return res.status(403).json({ error: 'plan_limit', message: 'Limite de leads do plano atingido.' });
+      }
+
+      if (errCode === 'company_not_found') {
+        anonClient.rpc('update_webhook_log_result', {
+          p_request_id: requestId, p_result: 'error', p_error_code: 'company_not_found',
+        }).catch(() => {});
+        return res.status(401).json({ error: 'invalid_key', message: 'Empresa não encontrada.' });
+      }
+
+      console.error('[webhook-lead] RPC returned failure', { error: errCode });
+      anonClient.rpc('update_webhook_log_result', {
+        p_request_id: requestId, p_result: 'error',
+        p_error_code: String(errCode).substring(0, 100),
+      }).catch(() => {});
+      return res.status(500).json({ success: false, error: 'internal_error' });
+    }
+
+    // ── 11. Pipeline pós-criação ──────────────────────────────────────────────
+    await executeLeadPipeline(lead, detectedFields, form_data, { svcClient, anonClient, requestId });
+
+    return res.status(200).json({ success: true, lead_id: lead.lead_id });
 
   } catch (error) {
     console.error('[webhook-lead] Unhandled exception', { message: error?.message });
@@ -430,7 +477,7 @@ export default async function handler(req, res) {
 // logImportEvent — registra cada desfecho de importação na tabela funcional
 //
 // REGRA CRÍTICA: companyId deve vir SEMPRE da validação da api_key no backend
-// (lead.company_id retornado pela RPC public_create_lead_webhook).
+// (lead.company_id retornado pela RPC create_lead_from_company via svcClient).
 // NUNCA passar companyId vindo de req.body ou de qualquer campo do payload.
 //
 // A falha ao gravar o log NÃO impede a criação do lead nem altera a resposta,
@@ -457,236 +504,127 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
   }
 }
 
-async function createLeadDirectSQL(params) {
-  try {
-    // Use the Supabase client with direct SQL execution (mesmo padrão do webhook-visitor)
-    const { createClient } = await import('@supabase/supabase-js');
-    
-    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    // Usando chave anon que funcionava + RPC com SECURITY DEFINER para contornar RLS
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    console.log('🔑 USANDO CHAVE ANON + RPC SECURITY DEFINER PARA CONTORNAR RLS');
-    console.log('Processando webhook para API key:', params.api_key);
-    console.log('Visitor ID recebido:', params.form_data.visitor_id || 'não fornecido');
-    
-    // 1. Detectar campos automaticamente
-    const detectedFields = detectFormFields(params.form_data);
-    
-    if (!detectedFields.name && !detectedFields.email) {
-      return { 
-        success: false, 
-        error: 'Pelo menos nome ou email é obrigatório' 
-      };
-    }
-    
-    console.log('Campos detectados:', detectedFields);
-    
-    // 2. Criar lead via RPC (padrão Analytics V5 - contorna RLS)
-    const { data: lead, error: leadError } = await supabase
-      .rpc('public_create_lead_webhook', {
-        lead_data: {
-          api_key: params.api_key,
-          name: detectedFields.name || 'Lead sem nome',
-          email: detectedFields.email || null,
-          phone: detectedFields.phone || null,
-          interest: detectedFields.interest || null,
-          company_name: detectedFields.company_name || null,
-          company_cnpj: detectedFields.company_cnpj || null,
-          company_email: detectedFields.company_email || null,
-          visitor_id: params.form_data.visitor_id || null,
-          // Campos de marketing / UTM
-          campanha:         detectedFields.campanha || null,
-          conjunto_anuncio: detectedFields.conjunto_anuncio || null,
-          anuncio:          detectedFields.anuncio || null,
-          utm_medium:       detectedFields.utm_medium || null,
-        }
-      });
-    
-    if (leadError) {
-      console.error('Erro ao criar lead:', leadError);
-      // company_id não disponível neste ponto — log apenas técnico (sem lead_import_events)
-      return { success: false, error: leadError.message };
-    }
-    
-    if (!lead || !lead.success) {
-      console.error('RPC falhou:', lead);
-      // api_key inválida ou outro erro pré-inserção — company_id não resolvido
-      return { success: false, error: lead?.error || 'Falha ao criar lead' };
-    }
-    
-    console.log('Lead criado com ID:', lead.lead_id);
-    
-    // 3. Processar conexão visitor-lead (Sistema Híbrido)
-    if (params.form_data.visitor_id) {
-      console.log('Visitor ID detectado:', params.form_data.visitor_id);
-      await processVisitorConnection(supabase, lead.lead_id, lead.company_id, params.form_data.visitor_id, detectedFields);
-    } else {
-      console.log('Visitor ID não fornecido - tentando busca retroativa inteligente');
-      await processRetroactiveVisitorSearch(supabase, lead.lead_id, lead.company_id, detectedFields);
-    }
-    
-    // 4. Processar campos personalizados (mapeamento inteligente)
-    const customFieldsProcessed = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
+// ---------------------------------------------------------------------------
+// executeLeadPipeline — processa tudo após a criação do lead
+//
+// Recebe o resultado da RPC create_lead_from_company + dados normalizados.
+// Nunca cria clientes Supabase próprios — usa svcClient + anonClient do handler.
+// Erros em cada etapa são capturados individualmente para não interromper o fluxo.
+// ---------------------------------------------------------------------------
+async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient, anonClient, requestId }) {
+  const companyId = lead.company_id;
 
-    // 4.5 Processar e atribuir tags
-    if (params.form_data.tags) {
-      await processTagsForLead(supabase, lead.company_id, lead.lead_id, params.form_data.tags);
+  // 1. Visitor connection
+  try {
+    if (form_data.visitor_id) {
+      await processVisitorConnection(svcClient, lead.lead_id, companyId, form_data.visitor_id, detectedFields);
+    } else {
+      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, detectedFields);
     }
-    if (customFieldsProcessed.length > 0) {
-      console.log(`🔧 ${customFieldsProcessed.length} campos personalizados processados`);
-    }
-    
-    // 5. Inserir valores dos campos personalizados
-    console.log('💾 INSERINDO VALORES DOS CAMPOS PERSONALIZADOS');
+  } catch (err) {
+    console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
+  }
+
+  // 2. Campos personalizados — processar + inserir
+  let customFieldsProcessed = [];
+  try {
+    customFieldsProcessed = await processCustomFields(svcClient, companyId, form_data, detectedFields);
     if (customFieldsProcessed.length > 0) {
       const customValues = customFieldsProcessed.map(field => ({
-        lead_id: lead.lead_id,
+        lead_id:  lead.lead_id,
         field_id: field.field_id,
-        value: String(field.value)
+        value:    String(field.value),
       }));
-      
-      console.log('💾 Valores a serem inseridos:', customValues);
-      
-      // Usar RPC para inserir valores contornando RLS (mesmo padrão dos campos)
-      console.log('💾 Chamando RPC insert_custom_field_values_webhook...');
-      const { data: insertResult, error: customError } = await supabase
+      const { data: insertResult, error: customError } = await svcClient
         .rpc('insert_custom_field_values_webhook', {
           lead_id_param: lead.lead_id,
-          field_values: customValues
+          field_values:  customValues,
         });
-      
-      console.log('💾 Resultado da RPC inserção:', { insertResult, customError });
-      
       if (customError) {
-        console.error('❌ ERRO ao inserir valores dos campos personalizados via RPC:', customError);
-      } else if (insertResult && insertResult.success) {
-        console.log(`✅ ${insertResult.inserted_count} valores de campos personalizados inseridos com sucesso via RPC`);
-      } else {
-        console.error('❌ RPC retornou erro:', insertResult);
-      }
-    } else {
-      console.log('⚠️ Nenhum campo personalizado para inserir');
-    }
-    
-    // 6. DISPARAR WEBHOOKS AVANÇADOS AUTOMATICAMENTE
-    console.log('🚀 INICIANDO DISPARO DE WEBHOOKS AVANÇADOS');
-    console.log('📊 DADOS PARA WEBHOOK:');
-    console.log('  - lead_id:', lead.lead_id);
-    console.log('  - company_id:', lead.company_id);
-    console.log('  - name:', detectedFields.name || 'Lead sem nome');
-    console.log('  - email:', detectedFields.email || null);
-    console.log('  - phone:', detectedFields.phone || null);
-    
-    try {
-      console.log('🎯 CHAMANDO triggerAdvancedWebhooks...');
-      console.log('📊 Passando campos personalizados processados:', customFieldsProcessed.length);
-      await triggerAdvancedWebhooks({
-        lead_id: lead.lead_id,
-        name: detectedFields.name || 'Lead sem nome',
-        email: detectedFields.email || null,
-        phone: detectedFields.phone || null,
-        custom_fields_processed: customFieldsProcessed // NOVO: passar dados já processados
-      }, lead.company_id);
-      console.log('✅ Webhooks avançados disparados com sucesso');
-    } catch (webhookError) {
-      console.error('❌ Erro ao disparar webhooks avançados:', webhookError);
-      console.error('❌ Stack trace:', webhookError.stack);
-      // Não falhar a criação do lead por causa do webhook
-    }
-    
-    // Disparar automação backend apenas para leads novos
-    // #region agent log
-    console.error(`[DBG-3620d6][H2-dispatch] is_duplicate=${lead.is_duplicate} leadId=${lead.lead_id} companyId=${lead.company_id}`);
-    // #endregion
-    if (!lead.is_duplicate) {
-      // #region agent log
-      console.error(`[DBG-3620d6][H2-dispatch] INICIANDO dispatchLeadCreatedTrigger (await) leadId=${lead.lead_id}`);
-      // #endregion
-      try {
-        await dispatchLeadCreatedTrigger({ companyId: lead.company_id, leadId: lead.lead_id, source: 'webhook' });
-      } catch (err) {
-        console.error('[webhook-lead] automation trigger failed:', err);
-      }
-      // #region agent log
-      console.error(`[DBG-3620d6][H2-dispatch] CONCLUÍDO dispatchLeadCreatedTrigger leadId=${lead.lead_id}`);
-      // #endregion
-    }
-
-    // Processar reentrada para leads duplicados — await garante execução completa antes da resposta
-    if (lead.is_duplicate && lead.duplicate_of_lead_id) {
-      const supabaseAdmin = getSupabaseAdmin();
-      const originChannel = params.form_data?.utm_source || params.form_data?.origin || null;
-      const payloadRef = { name: detectedFields.name, phone: detectedFields.phone, email: detectedFields.email };
-      try {
-        await handleLeadReentry({
-          newLeadId: lead.lead_id,
-          existingLeadId: lead.duplicate_of_lead_id,
-          companyId: lead.company_id,
-          source: 'webhook',
-          externalEventId: params.form_data?.webhook_id || null,
-          originChannel,
-          metadata: { payload_hash: hashPayload(payloadRef) },
-          supabase: supabaseAdmin,
-        });
-      } catch (err) {
-        console.error('[webhook-lead] handleLeadReentry failed:', err);
+        console.error('[webhook-lead] Custom fields insert error', { message: customError.message });
+      } else if (!insertResult?.success) {
+        console.error('[webhook-lead] Custom fields RPC returned failure', insertResult);
       }
     }
-
-    // Registrar desfecho funcional — company_id vem exclusivamente de lead.company_id
-    // (resolvido internamente pela RPC a partir da api_key, nunca do payload)
-    const payloadSummary = {
-      name:  detectedFields.name  || null,
-      email: detectedFields.email || null,
-      phone: detectedFields.phone || null,
-    };
-    const externalRef = params.form_data?.ref
-      || params.form_data?.reference
-      || params.form_data?.id_externo
-      || params.form_data?.external_id
-      || null;
-
-    if (lead.is_duplicate) {
-      await logImportEvent(supabase, lead.company_id, 'duplicate', {
-        leadId:  lead.duplicate_of_lead_id || lead.lead_id,
-        summary: payloadSummary,
-        ref:     externalRef,
-      });
-    } else {
-      await logImportEvent(supabase, lead.company_id, 'success', {
-        leadId:  lead.lead_id,
-        summary: payloadSummary,
-        ref:     externalRef,
-      });
-    }
-
-    // Atualizar log técnico (webhook_api_logs) com resultado final — fire-and-forget
-    if (params.requestId && params.anonClient) {
-      params.anonClient.rpc('update_webhook_log_result', {
-        p_request_id: params.requestId,
-        p_result:     lead.is_duplicate ? 'duplicate' : 'success',
-        p_lead_id:    lead.lead_id,
-      }).catch(err => {
-        console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message });
-      });
-    }
-
-    return { success: true, lead_id: lead.lead_id };
-    
-  } catch (error) {
-    console.error('Exception in createLeadDirectSQL:', error);
-    if (params?.requestId && params?.anonClient) {
-      params.anonClient.rpc('update_webhook_log_result', {
-        p_request_id: params.requestId,
-        p_result:     'error',
-        p_error_code: String(error?.message || 'unknown').substring(0, 100),
-      }).catch(() => {});
-    }
-    return { success: false, error: error.message };
+  } catch (err) {
+    console.error('[webhook-lead] Custom fields pipeline error', { message: err?.message });
   }
+
+  // 3. Tags
+  try {
+    if (form_data.tags) {
+      await processTagsForLead(svcClient, companyId, lead.lead_id, form_data.tags);
+    }
+  } catch (err) {
+    console.error('[webhook-lead] Tags pipeline error', { message: err?.message });
+  }
+
+  // 4. Webhooks avançados — svcClient passado diretamente (sem criação interna)
+  try {
+    await triggerAdvancedWebhooks({
+      lead_id:                 lead.lead_id,
+      name:                    detectedFields.name  || 'Lead sem nome',
+      email:                   detectedFields.email || null,
+      phone:                   detectedFields.phone || null,
+      custom_fields_processed: customFieldsProcessed,
+    }, companyId, svcClient);
+  } catch (err) {
+    console.error('[webhook-lead] Advanced webhooks error', { message: err?.message });
+  }
+
+  // 5. Automação — somente leads novos
+  if (!lead.is_duplicate) {
+    try {
+      await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
+    } catch (err) {
+      console.error('[webhook-lead] Automation trigger failed', { message: err?.message });
+    }
+  }
+
+  // 6. Reentrada — somente duplicados
+  if (lead.is_duplicate && lead.duplicate_of_lead_id) {
+    const supabaseAdmin  = getSupabaseAdmin();
+    const originChannel  = form_data?.utm_source || form_data?.origin || null;
+    const payloadRef     = { name: detectedFields.name, phone: detectedFields.phone, email: detectedFields.email };
+    try {
+      await handleLeadReentry({
+        newLeadId:       lead.lead_id,
+        existingLeadId:  lead.duplicate_of_lead_id,
+        companyId,
+        source:          'webhook',
+        externalEventId: form_data?.webhook_id || null,
+        originChannel,
+        metadata:        { payload_hash: hashPayload(payloadRef) },
+        supabase:        supabaseAdmin,
+      });
+    } catch (err) {
+      console.error('[webhook-lead] Lead reentry failed', { message: err?.message });
+    }
+  }
+
+  // 7. Log funcional (lead_import_events)
+  const payloadSummary = {
+    name:  detectedFields.name  || null,
+    email: detectedFields.email || null,
+    phone: detectedFields.phone || null,
+  };
+  const externalRef = form_data?.ref
+    || form_data?.reference
+    || form_data?.id_externo
+    || form_data?.external_id
+    || null;
+  await logImportEvent(svcClient, companyId, lead.is_duplicate ? 'duplicate' : 'success', {
+    leadId:  lead.is_duplicate ? (lead.duplicate_of_lead_id || lead.lead_id) : lead.lead_id,
+    summary: payloadSummary,
+    ref:     externalRef,
+  });
+
+  // 8. Log técnico (webhook_api_logs) — fire-and-forget
+  anonClient.rpc('update_webhook_log_result', {
+    p_request_id: requestId,
+    p_result:     lead.is_duplicate ? 'duplicate' : 'success',
+    p_lead_id:    lead.lead_id,
+  }).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
 }
 
 function detectFormFields(formData) {
