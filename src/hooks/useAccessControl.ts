@@ -99,6 +99,15 @@ export function useAccessControl() {
   // system_admin tem acesso aqui diferente de canManageAiGovernance (só isSaaSAdmin).
   const canManageNotifications = isSaaSAdmin || isSystemAdmin
 
+  // ── Histórico de importações via API ──────────────────────
+  // Restrito a admin+: quem configura a API key também pode ver o histórico.
+  // manager e seller não operam a API de importação.
+  const canViewImportHistory =
+    currentRole === 'admin' ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin' ||
+    isImpersonating
+
   // ── Consultoria ────────────────────────────────────────────
   // Compra de pacotes consultivos: mesma hierarquia de canPurchaseAiCredits
   const canPurchaseConsulting =
@@ -193,5 +202,8 @@ export function useAccessControl() {
     canViewLeads,
     canViewAllLeads,
     canEditAllLeads,
+
+    // Histórico de importações via API
+    canViewImportHistory,
   }
 }
