@@ -10,6 +10,294 @@ import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js
 
 const MAX_PAYLOAD_BYTES = 10_240; // 10 KB por requisição
 
+// =============================================================================
+// Fase 5 — Sanitização por whitelist
+// =============================================================================
+
+// Campos cujo envio causa rejeição imediata (400) — nunca devem vir do cliente
+const BLOCKED_FIELDS = new Set([
+  'company_id', 'user_id', 'role', 'permissions', 'plan_id',
+  'is_admin', 'is_active', 'deleted_at', 'created_at', 'updated_at',
+  'password', 'token', 'secret', 'authorization', 'jwt',
+]);
+
+// Map: alias_lowercase → { canonical, maxLen, normalize? }
+// Aliases em lowercase; normalize: 'email' aplica lowercase + trim
+const FIELD_WHITELIST = new Map([
+  // Autenticação (extraído antes de chegar ao lead)
+  ['api_key',        { canonical: 'api_key',         maxLen: 128 }],
+
+  // Nome
+  ['name',           { canonical: 'name',             maxLen: 255 }],
+  ['nome',           { canonical: 'name',             maxLen: 255 }],
+  ['full_name',      { canonical: 'name',             maxLen: 255 }],
+  ['fullname',       { canonical: 'name',             maxLen: 255 }],
+  ['first_name',     { canonical: 'name',             maxLen: 255 }],
+  ['firstname',      { canonical: 'name',             maxLen: 255 }],
+  ['cliente',        { canonical: 'name',             maxLen: 255 }],
+  ['usuario',        { canonical: 'name',             maxLen: 255 }],
+
+  // Email
+  ['email',          { canonical: 'email',            maxLen: 255, normalize: 'email' }],
+  ['e-mail',         { canonical: 'email',            maxLen: 255, normalize: 'email' }],
+  ['mail',           { canonical: 'email',            maxLen: 255, normalize: 'email' }],
+  ['email_address',  { canonical: 'email',            maxLen: 255, normalize: 'email' }],
+  ['user_email',     { canonical: 'email',            maxLen: 255, normalize: 'email' }],
+
+  // Telefone
+  ['phone',          { canonical: 'phone',            maxLen: 30 }],
+  ['telefone',       { canonical: 'phone',            maxLen: 30 }],
+  ['tel',            { canonical: 'phone',            maxLen: 30 }],
+  ['celular',        { canonical: 'phone',            maxLen: 30 }],
+  ['whatsapp',       { canonical: 'phone',            maxLen: 30 }],
+  ['mobile',         { canonical: 'phone',            maxLen: 30 }],
+  ['contact',        { canonical: 'phone',            maxLen: 30 }],
+
+  // Interesse / assunto
+  ['interest',       { canonical: 'interest',         maxLen: 500 }],
+  ['interesse',      { canonical: 'interest',         maxLen: 500 }],
+  ['subject',        { canonical: 'interest',         maxLen: 500 }],
+  ['assunto',        { canonical: 'interest',         maxLen: 500 }],
+  ['message',        { canonical: 'interest',         maxLen: 500 }],
+  ['mensagem',       { canonical: 'interest',         maxLen: 500 }],
+  ['produto',        { canonical: 'interest',         maxLen: 500 }],
+  ['servico',        { canonical: 'interest',         maxLen: 500 }],
+
+  // Empresa do lead
+  ['company',             { canonical: 'company_name',  maxLen: 255 }],
+  ['empresa',             { canonical: 'company_name',  maxLen: 255 }],
+  ['company_name',        { canonical: 'company_name',  maxLen: 255 }],
+  ['nome_empresa',        { canonical: 'company_name',  maxLen: 255 }],
+  ['cnpj',                { canonical: 'company_cnpj',  maxLen: 20  }],
+  ['company_cnpj',        { canonical: 'company_cnpj',  maxLen: 20  }],
+  ['documento',           { canonical: 'company_cnpj',  maxLen: 20  }],
+  ['company_email',       { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
+  ['email_empresa',       { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
+  ['corporate_email',     { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
+
+  // Visitor / session
+  ['visitor_id',     { canonical: 'visitor_id',       maxLen: 128 }],
+  ['session_id',     { canonical: 'visitor_id',       maxLen: 128 }],
+
+  // UTM / marketing
+  ['campanha',         { canonical: 'campanha',          maxLen: 255 }],
+  ['utm_campaign',     { canonical: 'campanha',          maxLen: 255 }],
+  ['campaign',         { canonical: 'campanha',          maxLen: 255 }],
+  ['campaign_name',    { canonical: 'campanha',          maxLen: 255 }],
+  ['nome_campanha',    { canonical: 'campanha',          maxLen: 255 }],
+  ['conjunto_anuncio', { canonical: 'conjunto_anuncio',  maxLen: 255 }],
+  ['adset',            { canonical: 'conjunto_anuncio',  maxLen: 255 }],
+  ['ad_set',           { canonical: 'conjunto_anuncio',  maxLen: 255 }],
+  ['utm_content',      { canonical: 'conjunto_anuncio',  maxLen: 255 }],
+  ['conjunto',         { canonical: 'conjunto_anuncio',  maxLen: 255 }],
+  ['anuncio',          { canonical: 'anuncio',           maxLen: 255 }],
+  ['ad',               { canonical: 'anuncio',           maxLen: 255 }],
+  ['ad_name',          { canonical: 'anuncio',           maxLen: 255 }],
+  ['utm_term',         { canonical: 'anuncio',           maxLen: 255 }],
+  ['nome_anuncio',     { canonical: 'anuncio',           maxLen: 255 }],
+  ['utm_medium',       { canonical: 'utm_medium',        maxLen: 100 }],
+  ['medium',           { canonical: 'utm_medium',        maxLen: 100 }],
+  ['midia',            { canonical: 'utm_medium',        maxLen: 100 }],
+  ['mídia',            { canonical: 'utm_medium',        maxLen: 100 }],
+  ['canal_midia',      { canonical: 'utm_medium',        maxLen: 100 }],
+  ['utm_source',       { canonical: 'utm_source',        maxLen: 255 }],
+  ['origin',           { canonical: 'utm_source',        maxLen: 255 }],
+  ['origem',           { canonical: 'utm_source',        maxLen: 255 }],
+  ['source',           { canonical: 'utm_source',        maxLen: 255 }],
+  ['fonte',            { canonical: 'utm_source',        maxLen: 255 }],
+
+  // Tags — tratamento especial (string ou array)
+  ['tags',       { canonical: 'tags',   maxLen: null }],
+  ['tag',        { canonical: 'tags',   maxLen: null }],
+  ['etiquetas',  { canonical: 'tags',   maxLen: null }],
+  ['etiqueta',   { canonical: 'tags',   maxLen: null }],
+
+  // Referência externa
+  ['ref',          { canonical: 'ref',        maxLen: 255 }],
+  ['reference',    { canonical: 'ref',        maxLen: 255 }],
+  ['id_externo',   { canonical: 'ref',        maxLen: 255 }],
+  ['external_id',  { canonical: 'ref',        maxLen: 255 }],
+  ['external_ref', { canonical: 'ref',        maxLen: 255 }],
+
+  // Webhook / event id
+  ['webhook_id',   { canonical: 'webhook_id', maxLen: 128 }],
+  ['event_id',     { canonical: 'webhook_id', maxLen: 128 }],
+]);
+
+const MAX_FIELDS     = 50;
+const MAX_CUSTOM_IDS = 20;
+const MAX_CUSTOM_ID  = 99_999;
+const MAX_CUSTOM_VAL = 500;
+const MAX_TAGS       = 20;
+const MAX_TAG_LEN    = 100;
+const EMAIL_RE       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ---------------------------------------------------------------------------
+// sanitizePayload — sanitiza e normaliza req.body contra a whitelist
+//
+// Retorna:
+//   isValid       : boolean
+//   errors        : string[]   (mensagens de erro quando isValid=false)
+//   canonical     : object     (campos em nome canônico, prontos para uso)
+//   customFieldIds: object     (IDs numéricos → valor, ex: { "1": "texto" })
+//   ignoredFields : { count, names }  (campos descartados, sem valores)
+// ---------------------------------------------------------------------------
+function sanitizePayload(rawBody) {
+  const EMPTY = { isValid: false, errors: [], canonical: {}, customFieldIds: {}, ignoredFields: { count: 0, names: [] } };
+
+  if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+    return { ...EMPTY, errors: ['Payload deve ser um objeto JSON'] };
+  }
+
+  const allKeys = Object.keys(rawBody);
+
+  if (allKeys.length > MAX_FIELDS) {
+    return { ...EMPTY, errors: [`Payload excede o limite de ${MAX_FIELDS} campos`] };
+  }
+
+  const errors        = [];
+  const canonical     = {};
+  const customFieldIds = {};
+  const ignoredNames  = [];
+  let customIdCount   = 0;
+
+  for (const key of allKeys) {
+    const keyLower = key.toLowerCase();
+    const value    = rawBody[key];
+
+    // 1. Campos bloqueados — rejeitar
+    if (BLOCKED_FIELDS.has(keyLower)) {
+      errors.push(`Campo não permitido no payload: ${key}`);
+      continue;
+    }
+
+    // 2. Objetos aninhados — rejeitar (arrays tratados abaixo por caso)
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      errors.push(`Campo ${key} não pode ser um objeto aninhado`);
+      continue;
+    }
+
+    // 3. Campo numérico → custom field por ID
+    if (/^\d+$/.test(key)) {
+      const numId = parseInt(key, 10);
+      if (numId < 1 || numId > MAX_CUSTOM_ID) {
+        ignoredNames.push(key);
+        continue;
+      }
+      if (Array.isArray(value) || (value !== null && typeof value === 'object')) {
+        errors.push(`Campo ${key} não pode ser array ou objeto`);
+        continue;
+      }
+      if (value !== null && value !== undefined && String(value).trim() !== '') {
+        if (customIdCount < MAX_CUSTOM_IDS) {
+          customFieldIds[key] = String(value).substring(0, MAX_CUSTOM_VAL).trim();
+          customIdCount++;
+        }
+        // customIds extras silenciosamente descartados
+      }
+      continue;
+    }
+
+    // 4. Verificar whitelist
+    const spec = FIELD_WHITELIST.get(keyLower);
+    if (!spec) {
+      ignoredNames.push(key);
+      continue;
+    }
+
+    // 5. Tags — aceita string ou string[]
+    if (spec.canonical === 'tags') {
+      let tagArray = [];
+      if (Array.isArray(value)) {
+        tagArray = value;
+      } else if (typeof value === 'string' && value.trim()) {
+        tagArray = value.split(',');
+      }
+      const validTags = tagArray
+        .filter(t => typeof t === 'string')
+        .map(t => t.substring(0, MAX_TAG_LEN).trim())
+        .filter(Boolean)
+        .slice(0, MAX_TAGS);
+      if (validTags.length > 0 && !canonical.tags) {
+        canonical.tags = validTags;
+      }
+      continue;
+    }
+
+    // 6. Arrays onde não esperado — rejeitar
+    if (Array.isArray(value)) {
+      errors.push(`Campo ${key} não pode ser um array`);
+      continue;
+    }
+
+    // 7. Valor vazio → drop silencioso
+    const strRaw = (value === null || value === undefined) ? '' : String(value);
+    const strVal = strRaw.trim();
+    if (!strVal) continue;
+
+    // 8. Truncar ao limite do campo
+    const truncated = spec.maxLen ? strVal.substring(0, spec.maxLen) : strVal;
+
+    // 9. Normalização específica
+    const normalized = spec.normalize === 'email'
+      ? truncated.toLowerCase()
+      : truncated;
+
+    // 10. Primeiro alias vence (não sobrescrever)
+    if (!canonical[spec.canonical]) {
+      canonical[spec.canonical] = normalized;
+    }
+  }
+
+  // Campos bloqueados ou tipos inválidos → retornar inválido imediatamente
+  if (errors.length > 0) {
+    return {
+      isValid:       false,
+      errors,
+      canonical:     {},
+      customFieldIds: {},
+      ignoredFields: { count: ignoredNames.length, names: ignoredNames },
+    };
+  }
+
+  // Validar email se presente
+  if (canonical.email) {
+    if (!EMAIL_RE.test(canonical.email)) {
+      if (canonical.phone) {
+        // Email inválido mas há telefone → descartar email, continuar
+        delete canonical.email;
+      } else {
+        return {
+          isValid:       false,
+          errors:        ['Email inválido e nenhum telefone fornecido'],
+          canonical:     {},
+          customFieldIds: {},
+          ignoredFields: { count: ignoredNames.length, names: ignoredNames },
+        };
+      }
+    }
+  }
+
+  // Exigir ao menos um identificador
+  if (!canonical.name && !canonical.email && !canonical.phone) {
+    return {
+      isValid:       false,
+      errors:        ['Pelo menos nome, email ou telefone é obrigatório'],
+      canonical:     {},
+      customFieldIds: {},
+      ignoredFields: { count: ignoredNames.length, names: ignoredNames },
+    };
+  }
+
+  return {
+    isValid:       true,
+    errors:        [],
+    canonical,
+    customFieldIds,
+    ignoredFields: { count: ignoredNames.length, names: ignoredNames },
+  };
+}
+
 // Função para disparar webhooks avançados automaticamente
 // supabase: client passado pelo caller (svcClient) — sem criação interna de credenciais
 async function triggerAdvancedWebhooks(leadData, companyId, supabase) {
@@ -380,32 +668,49 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'rate_limited', message: 'Limite de importações atingido. Tente novamente em instantes.' });
     }
 
-    // ── 9. Normalização do payload ────────────────────────────────────────────
-    const { api_key: _discarded, ...form_data } = req.body;
-    // TODO Fase 5: substituir detectFormFields por sanitizePayload(form_data, FIELD_WHITELIST)
-    const detectedFields = detectFormFields(form_data);
-    if (!detectedFields.name && !detectedFields.email) {
-      return res.status(400).json({ error: 'validation_error', message: 'Pelo menos nome ou email é obrigatório' });
+    // ── 9. Sanitização — whitelist + validação + normalização ────────────────
+    // Após este ponto, req.body nunca é usado — apenas canonical e customFieldIds
+    const sanitized = sanitizePayload(req.body);
+    if (!sanitized.isValid) {
+      const errorMsg = sanitized.errors[0] || 'validation_error';
+      // Log técnico (company_id já resolvido neste ponto)
+      anonClient.rpc('update_webhook_log_result', {
+        p_request_id: requestId,
+        p_result:     'validation_error',
+        p_error_code: String(errorMsg).substring(0, 100),
+      }).catch(() => {});
+      // Log funcional — permite visualização no histórico de importações
+      svcClient.rpc('log_lead_import_event', {
+        p_company_id:         companyId,
+        p_status:             'error',
+        p_error_code:         'validation_error',
+        p_error_message:      errorMsg,
+        p_lead_id:            null,
+        p_payload_summary:    null,
+        p_external_reference: null,
+      }).catch(err => console.error('[webhook-lead] Failed to log validation_error event', { message: err?.message }));
+      return res.status(400).json({ error: 'validation_error', message: errorMsg });
     }
+    const { canonical, customFieldIds, ignoredFields } = sanitized;
 
     // ── 10. Criação atômica do lead via RPC restrita a service_role ───────────
-    // company_id vem do step 7 — nunca de req.body
+    // company_id vem do step 7 — nunca de req.body nem de canonical
     // A RPC valida empresa ativa + max_leads + deduplica + insere em uma transação
     const { data: lead, error: leadError } = await svcClient.rpc('create_lead_from_company', {
       p_company_id: companyId,
       lead_data: {
-        name:             detectedFields.name            || 'Lead sem nome',
-        email:            detectedFields.email           || null,
-        phone:            detectedFields.phone           || null,
-        interest:         detectedFields.interest        || null,
-        company_name:     detectedFields.company_name    || null,
-        company_cnpj:     detectedFields.company_cnpj    || null,
-        company_email:    detectedFields.company_email   || null,
-        visitor_id:       form_data.visitor_id           || null,
-        campanha:         detectedFields.campanha        || null,
-        conjunto_anuncio: detectedFields.conjunto_anuncio || null,
-        anuncio:          detectedFields.anuncio         || null,
-        utm_medium:       detectedFields.utm_medium      || null,
+        name:             canonical.name             || 'Lead sem nome',
+        email:            canonical.email            || null,
+        phone:            canonical.phone            || null,
+        interest:         canonical.interest         || null,
+        company_name:     canonical.company_name     || null,
+        company_cnpj:     canonical.company_cnpj     || null,
+        company_email:    canonical.company_email    || null,
+        visitor_id:       canonical.visitor_id       || null,
+        campanha:         canonical.campanha         || null,
+        conjunto_anuncio: canonical.conjunto_anuncio || null,
+        anuncio:          canonical.anuncio          || null,
+        utm_medium:       canonical.utm_medium       || null,
       },
     });
 
@@ -422,9 +727,9 @@ export default async function handler(req, res) {
 
       if (errCode === 'plan_limit_exceeded') {
         const payloadSummary = {
-          name:  detectedFields.name  || null,
-          email: detectedFields.email || null,
-          phone: detectedFields.phone || null,
+          name:  canonical.name  || null,
+          email: canonical.email || null,
+          phone: canonical.phone || null,
         };
         svcClient.rpc('log_lead_import_event', {
           p_company_id:      companyId,
@@ -464,7 +769,7 @@ export default async function handler(req, res) {
     }
 
     // ── 11. Pipeline pós-criação ──────────────────────────────────────────────
-    await executeLeadPipeline(lead, detectedFields, form_data, { svcClient, anonClient, requestId });
+    await executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields });
 
     return res.status(200).json({ success: true, lead_id: lead.lead_id });
 
@@ -508,19 +813,19 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
 // ---------------------------------------------------------------------------
 // executeLeadPipeline — processa tudo após a criação do lead
 //
-// Recebe o resultado da RPC create_lead_from_company + dados normalizados.
-// Nunca cria clientes Supabase próprios — usa svcClient + anonClient do handler.
+// Usa canonical (dados sanitizados) e customFieldIds (mapa ID→valor).
+// Nenhuma referência a req.body ou form_data após este ponto.
 // Erros em cada etapa são capturados individualmente para não interromper o fluxo.
 // ---------------------------------------------------------------------------
-async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient, anonClient, requestId }) {
+async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields }) {
   const companyId = lead.company_id;
 
   // 1. Visitor connection
   try {
-    if (form_data.visitor_id) {
-      await processVisitorConnection(svcClient, lead.lead_id, companyId, form_data.visitor_id, detectedFields);
+    if (canonical.visitor_id) {
+      await processVisitorConnection(svcClient, lead.lead_id, companyId, canonical.visitor_id, canonical);
     } else {
-      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, detectedFields);
+      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, canonical);
     }
   } catch (err) {
     console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
@@ -529,7 +834,7 @@ async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient,
   // 2. Campos personalizados — processar + inserir
   let customFieldsProcessed = [];
   try {
-    customFieldsProcessed = await processCustomFields(svcClient, companyId, form_data, detectedFields);
+    customFieldsProcessed = await processCustomFieldsFromIds(svcClient, companyId, customFieldIds);
     if (customFieldsProcessed.length > 0) {
       const customValues = customFieldsProcessed.map(field => ({
         lead_id:  lead.lead_id,
@@ -551,22 +856,22 @@ async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient,
     console.error('[webhook-lead] Custom fields pipeline error', { message: err?.message });
   }
 
-  // 3. Tags
+  // 3. Tags — array já normalizado pelo sanitizePayload
   try {
-    if (form_data.tags) {
-      await processTagsForLead(svcClient, companyId, lead.lead_id, form_data.tags);
+    if (canonical.tags?.length > 0) {
+      await processTagsForLead(svcClient, companyId, lead.lead_id, canonical.tags);
     }
   } catch (err) {
     console.error('[webhook-lead] Tags pipeline error', { message: err?.message });
   }
 
-  // 4. Webhooks avançados — svcClient passado diretamente (sem criação interna)
+  // 4. Webhooks avançados — svcClient passado diretamente
   try {
     await triggerAdvancedWebhooks({
       lead_id:                 lead.lead_id,
-      name:                    detectedFields.name  || 'Lead sem nome',
-      email:                   detectedFields.email || null,
-      phone:                   detectedFields.phone || null,
+      name:                    canonical.name  || 'Lead sem nome',
+      email:                   canonical.email || null,
+      phone:                   canonical.phone || null,
       custom_fields_processed: customFieldsProcessed,
     }, companyId, svcClient);
   } catch (err) {
@@ -584,17 +889,16 @@ async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient,
 
   // 6. Reentrada — somente duplicados
   if (lead.is_duplicate && lead.duplicate_of_lead_id) {
-    const supabaseAdmin  = getSupabaseAdmin();
-    const originChannel  = form_data?.utm_source || form_data?.origin || null;
-    const payloadRef     = { name: detectedFields.name, phone: detectedFields.phone, email: detectedFields.email };
+    const supabaseAdmin = getSupabaseAdmin();
+    const payloadRef    = { name: canonical.name, phone: canonical.phone, email: canonical.email };
     try {
       await handleLeadReentry({
         newLeadId:       lead.lead_id,
         existingLeadId:  lead.duplicate_of_lead_id,
         companyId,
         source:          'webhook',
-        externalEventId: form_data?.webhook_id || null,
-        originChannel,
+        externalEventId: canonical.webhook_id  || null,
+        originChannel:   canonical.utm_source  || null,
         metadata:        { payload_hash: hashPayload(payloadRef) },
         supabase:        supabaseAdmin,
       });
@@ -604,142 +908,46 @@ async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient,
   }
 
   // 7. Log funcional (lead_import_events)
-  const payloadSummary = {
-    name:  detectedFields.name  || null,
-    email: detectedFields.email || null,
-    phone: detectedFields.phone || null,
-  };
-  const externalRef = form_data?.ref
-    || form_data?.reference
-    || form_data?.id_externo
-    || form_data?.external_id
-    || null;
   await logImportEvent(svcClient, companyId, lead.is_duplicate ? 'duplicate' : 'success', {
     leadId:  lead.is_duplicate ? (lead.duplicate_of_lead_id || lead.lead_id) : lead.lead_id,
-    summary: payloadSummary,
-    ref:     externalRef,
+    summary: { name: canonical.name || null, email: canonical.email || null, phone: canonical.phone || null },
+    ref:     canonical.ref || null,
   });
 
-  // 8. Log técnico (webhook_api_logs) — fire-and-forget
+  // 8. Log técnico (webhook_api_logs) — inclui metadados de campos ignorados
+  const logMetadata = ignoredFields?.count > 0
+    ? { ignored_fields_count: ignoredFields.count, ignored_fields_names: ignoredFields.names }
+    : null;
   anonClient.rpc('update_webhook_log_result', {
     p_request_id: requestId,
     p_result:     lead.is_duplicate ? 'duplicate' : 'success',
     p_lead_id:    lead.lead_id,
+    p_metadata:   logMetadata,
   }).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
 }
 
-function detectFormFields(formData) {
-  const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
-  const detected = {};
-  
-  // Mapear campos comuns para nomes padronizados
-  const fieldMappings = {
-    // Campos básicos do lead:
-    name: ['name', 'nome', 'full_name', 'fullname', 'first_name', 'firstname', 'cliente', 'usuario'],
-    email: ['email', 'e-mail', 'mail', 'email_address', 'user_email'],
-    phone: ['phone', 'telefone', 'tel', 'celular', 'whatsapp', 'mobile', 'contact'],
-    interest: ['interest', 'interesse', 'subject', 'assunto', 'message', 'mensagem', 'produto', 'servico'],
-    origin: ['origin', 'origem', 'source', 'fonte'], // ← ADICIONADO
-    status: ['status', 'situacao', 'estado'], // ← ADICIONADO
-    
-    // Campos da empresa:
-    company_name: ['company', 'empresa', 'company_name', 'nome_empresa'],
-    company_cnpj: ['cnpj', 'company_cnpj', 'documento'],
-    company_email: ['company_email', 'email_empresa', 'corporate_email'],
-    company_phone: ['company_phone', 'telefone_empresa', 'corporate_phone'],
-    company_razao_social: ['company_razao_social', 'razao_social', 'razao'], // ← ADICIONADO
-    company_nome_fantasia: ['company_nome_fantasia', 'nome_fantasia', 'fantasia'], // ← ADICIONADO
-    company_cep: ['company_cep', 'cep', 'codigo_postal'], // ← ADICIONADO
-    company_cidade: ['company_cidade', 'cidade', 'city'], // ← ADICIONADO
-    company_estado: ['company_estado', 'estado', 'uf', 'state'], // ← ADICIONADO
-    company_endereco: ['company_endereco', 'endereco', 'address'], // ← ADICIONADO
-    company_site: ['company_site', 'site', 'website', 'url'], // ← ADICIONADO
+// detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST
 
-    // Campos de marketing / UTM:
-    campanha:         ['campanha', 'utm_campaign', 'campaign', 'campaign_name', 'nome_campanha'],
-    conjunto_anuncio: ['conjunto_anuncio', 'adset', 'ad_set', 'utm_content', 'conjunto'],
-    anuncio:          ['anuncio', 'ad', 'ad_name', 'utm_term', 'nome_anuncio'],
-    utm_medium:       ['utm_medium', 'medium', 'midia', 'mídia', 'canal_midia']
-  };
-  
-  // Detectar campos automaticamente
-  for (const [standardField, variations] of Object.entries(fieldMappings)) {
-    for (const [key, value] of Object.entries(data)) {
-      if (variations.includes(key.toLowerCase()) && value) {
-        detected[standardField] = value;
-        break;
-      }
-    }
-  }
-  return detected;
-}
-
-async function processCustomFields(supabase, companyId, formData, detectedFields) {
+// ---------------------------------------------------------------------------
+// processCustomFieldsFromIds — processa campos personalizados a partir do mapa
+// de IDs numéricos extraído pelo sanitizePayload (ex: { "1": "valor", "42": "outro" }).
+//
+// Substitui processCustomFields + lógica de extração de IDs do formData bruto.
+// ---------------------------------------------------------------------------
+async function processCustomFieldsFromIds(supabase, companyId, customFieldIds) {
+  const customFields = [];
   try {
-    const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
-    
-    // Obter campos padrão que já foram detectados
-    const standardFields = new Set([
-      // Campos básicos do lead:
-      'name', 'nome', 'full_name', 'fullname', 'first_name', 'firstname', 'cliente', 'usuario',
-      'email', 'e-mail', 'mail', 'email_address', 'user_email',
-      'phone', 'telefone', 'tel', 'celular', 'whatsapp', 'mobile', 'contact',
-      'interest', 'interesse', 'subject', 'assunto', 'message', 'mensagem', 'produto', 'servico',
-      'origin', 'origem', 'source', 'fonte', // ← ADICIONADO
-      'status', 'situacao', 'estado', // ← ADICIONADO
-      
-      // Campos da empresa:
-      'company', 'empresa', 'company_name', 'nome_empresa',
-      'cnpj', 'company_cnpj', 'documento',
-      'company_email', 'email_empresa', 'corporate_email',
-      'company_phone', 'telefone_empresa', 'corporate_phone',
-      'company_razao_social', 'razao_social', 'razao', // ← ADICIONADO
-      'company_nome_fantasia', 'nome_fantasia', 'fantasia', // ← ADICIONADO
-      'company_cep', 'cep', 'codigo_postal', // ← ADICIONADO
-      'company_cidade', 'cidade', 'city', // ← ADICIONADO
-      'company_estado', 'estado', 'uf', 'state', // ← ADICIONADO
-      'company_endereco', 'endereco', 'address', // ← ADICIONADO
-      'company_site', 'site', 'website', 'url', // ← ADICIONADO
-      
-      // Campos de marketing / UTM (mapeados para colunas da tabela leads):
-      'campanha', 'utm_campaign', 'campaign', 'campaign_name', 'nome_campanha',
-      'conjunto_anuncio', 'adset', 'ad_set', 'utm_content', 'conjunto',
-      'anuncio', 'ad', 'ad_name', 'utm_term', 'nome_anuncio',
-      'utm_medium', 'medium', 'midia', 'mídia', 'canal_midia',
-      'utm_source', // utm_source é mapeado para origin/originChannel
-
-      // Campos técnicos:
-      'responsible_user_id', 'responsavel', 'usuario_responsavel',
-      'tags', 'tag', 'etiquetas', 'etiqueta', // Tags do lead
-      'api_key', // Excluir api_key dos campos personalizados
-      'visitor_id', 'session_id',
-      'referrer', 'user_agent', 'ip_address', 'device_type'
-    ]);
-    
-    // Identificar campos personalizados (que não são padrão)
-    const customFields = [];
-    
-    for (const [fieldName, fieldValue] of Object.entries(data)) {
-      const isStandardField = standardFields.has(fieldName.toLowerCase());
-      const isNumericId = /^\d+$/.test(fieldName);
-      
-      if (isStandardField || !fieldValue) continue;
-      
-      if (isNumericId) {
-        const customField = await processCustomFieldById(supabase, companyId, parseInt(fieldName), fieldValue);
-        if (customField) {
-          customFields.push(customField);
-        }
+    for (const [fieldId, fieldValue] of Object.entries(customFieldIds)) {
+      if (!fieldValue) continue;
+      const customField = await processCustomFieldById(supabase, companyId, parseInt(fieldId, 10), fieldValue);
+      if (customField) {
+        customFields.push(customField);
       }
-      // Campos por nome sem criação automática: ignorados silenciosamente
     }
-    
-    return customFields;
-    
   } catch (error) {
-    console.error('Erro ao processar campos personalizados:', error);
-    return [];
+    console.error('[webhook-lead] processCustomFieldsFromIds error', { message: error?.message });
   }
+  return customFields;
 }
 
 async function processCustomField(supabase, companyId, fieldName, fieldValue) {
