@@ -268,11 +268,6 @@ async function callRateLimit(anonClient, params) {
 }
 
 export default async function handler(req, res) {
-  console.log('🚀 WEBHOOK LEAD INICIADO - VERSÃO HÍBRIDA COM IDs - V6 + WEBHOOKS AVANÇADOS');
-  console.log('Timestamp:', new Date().toISOString());
-  console.log('Deploy Version: 2025-11-11-10:12 - Correção Sistema Logs');
-  console.log('Method:', req.method);
-  console.log('Headers:', req.headers);
 
   // Set CORS headers (mesmo padrão do webhook-visitor)
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -281,7 +276,6 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   
   if (req.method === 'OPTIONS') {
-    console.log('OPTIONS request - retornando 200');
     res.status(200).end();
     return;
   }
@@ -452,6 +446,13 @@ export default async function handler(req, res) {
           p_request_id: requestId, p_result: 'error', p_error_code: 'company_not_found',
         }).catch(() => {});
         return res.status(401).json({ error: 'invalid_key', message: 'Empresa não encontrada.' });
+      }
+
+      if (errCode === 'company_inactive') {
+        anonClient.rpc('update_webhook_log_result', {
+          p_request_id: requestId, p_result: 'error', p_error_code: 'company_inactive',
+        }).catch(() => {});
+        return res.status(403).json({ error: 'company_inactive', message: 'Empresa suspensa ou cancelada.' });
       }
 
       console.error('[webhook-lead] RPC returned failure', { error: errCode });
@@ -628,8 +629,6 @@ async function executeLeadPipeline(lead, detectedFields, form_data, { svcClient,
 }
 
 function detectFormFields(formData) {
-  console.log('Detectando campos no formulário...');
-  
   const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
   const detected = {};
   
@@ -668,30 +667,16 @@ function detectFormFields(formData) {
     for (const [key, value] of Object.entries(data)) {
       if (variations.includes(key.toLowerCase()) && value) {
         detected[standardField] = value;
-        console.log(`Campo detectado: ${key} → ${standardField} = ${value}`);
         break;
       }
     }
   }
-  
-  console.log('Campos detectados:', detected);
   return detected;
 }
 
 async function processCustomFields(supabase, companyId, formData, detectedFields) {
   try {
-    console.log('=== INICIANDO PROCESSAMENTO DE CAMPOS PERSONALIZADOS ===');
-    console.log('🔧 SISTEMA HÍBRIDO ATIVO:');
-    console.log('  - Campos padrão: Processados por nome (nome, email, telefone, etc.)');
-    console.log('  - Campos personalizados por ID: Processados automaticamente (1, 2, 3, etc.)');
-    console.log('  - Campos personalizados por nome: Modo manual (criar na interface)');
-    console.log('Company ID:', companyId);
-    console.log('Form Data recebido:', formData);
-    console.log('Detected Fields:', detectedFields);
-    
-    // Converter para objeto se necessário
     const data = typeof formData === 'string' ? JSON.parse(formData) : formData;
-    console.log('Dados convertidos:', data);
     
     // Obter campos padrão que já foram detectados
     const standardFields = new Set([
@@ -731,48 +716,24 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       'referrer', 'user_agent', 'ip_address', 'device_type'
     ]);
     
-    console.log('Campos padrão definidos:', Array.from(standardFields));
-    
     // Identificar campos personalizados (que não são padrão)
     const customFields = [];
     
-    console.log('=== ANALISANDO CADA CAMPO DO FORMULÁRIO ===');
     for (const [fieldName, fieldValue] of Object.entries(data)) {
-      console.log(`Analisando campo: "${fieldName}" = "${fieldValue}"`);
-      
-      // Verificar se é campo padrão
       const isStandardField = standardFields.has(fieldName.toLowerCase());
-      // Verificar se é ID numérico (campo personalizado por ID)
       const isNumericId = /^\d+$/.test(fieldName);
       
-      console.log(`  - É campo padrão? ${isStandardField}`);
-      console.log(`  - É ID numérico? ${isNumericId}`);
-      console.log(`  - Tem valor? ${!!fieldValue}`);
+      if (isStandardField || !fieldValue) continue;
       
-      // Pular campos padrão e campos vazios
-      if (isStandardField || !fieldValue) {
-        console.log(`  - PULANDO campo: ${isStandardField ? 'é padrão' : 'está vazio'}`);
-        continue;
-      }
-      
-      // Processar campo personalizado (por nome ou ID)
       if (isNumericId) {
-        console.log(`  - 📋 CAMPO PERSONALIZADO POR ID DETECTADO: ${fieldName} = ${fieldValue}`);
-        // Processar campo por ID numérico
         const customField = await processCustomFieldById(supabase, companyId, parseInt(fieldName), fieldValue);
         if (customField) {
           customFields.push(customField);
         }
-      } else {
-        console.log(`  - 📋 CAMPO PERSONALIZADO POR NOME DETECTADO (MODO MANUAL): ${fieldName} = ${fieldValue}`);
-        console.log(`  - 🚨 CRIAÇÃO AUTOMÁTICA DESABILITADA - Campo não será criado`);
-        console.log(`  - 📋 Para usar este campo, crie-o manualmente na interface de Campos Personalizados`);
-        console.log(`  - 📋 Nome sugerido: "${fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_')}"`);
       }
+      // Campos por nome sem criação automática: ignorados silenciosamente
     }
     
-    console.log(`=== RESULTADO FINAL: ${customFields.length} campos personalizados processados ===`);
-    console.log('Campos processados:', customFields);
     return customFields;
     
   } catch (error) {
@@ -783,19 +744,11 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
 
 async function processCustomField(supabase, companyId, fieldName, fieldValue) {
   try {
-    console.log(`    === PROCESSANDO CAMPO INDIVIDUAL: ${fieldName} ===`);
-    
     // 1. Normalizar nome do campo
     const normalizedFieldName = normalizeFieldName(fieldName);
     const fieldLabel = generateFieldLabel(fieldName);
-    
-    console.log(`    - Campo original: "${fieldName}"`);
-    console.log(`    - Campo normalizado: "${normalizedFieldName}"`);
-    console.log(`    - Label gerado: "${fieldLabel}"`);
-    console.log(`    - Valor: "${fieldValue}"`);
-    
+
     // 2. Verificar se campo já existe
-    console.log(`    - Verificando se campo já existe na empresa ${companyId}...`);
     const { data: existingField, error: searchError } = await supabase
       .from('lead_custom_fields')
       .select('id, field_name, field_type')
@@ -1151,10 +1104,6 @@ function generateUUID() {
 // Nova função para processar campos personalizados por ID numérico
 async function processCustomFieldById(supabase, companyId, numericId, value) {
   try {
-    console.log(`=== PROCESSANDO CAMPO POR ID: ${numericId} ===`);
-    console.log(`- Company ID: ${companyId}`);
-    console.log(`- Numeric ID: ${numericId}`);
-    console.log(`- Valor: ${value}`);
     
     // Buscar campo personalizado pelo ID numérico usando RPC (contorna RLS)
     const { data: fieldData, error: fieldError } = await supabase
