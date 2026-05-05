@@ -637,6 +637,9 @@ export default async function handler(req, res) {
                      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
                      || process.env.VITE_SUPABASE_ANON_KEY;
     const svcKey      = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // #region agent log
+    console.error('[DBG-56e383][H-ENV] env check:', JSON.stringify({ hasUrl: !!supabaseUrl, hasAnon: !!anonKey, hasSvc: !!svcKey }));
+    // #endregion
     if (!supabaseUrl) throw new Error('[webhook-lead] Missing SUPABASE_URL env var');
     if (!anonKey)     throw new Error('[webhook-lead] Missing Supabase anon key env var');
     if (!svcKey)      throw new Error('[webhook-lead] Missing SUPABASE_SERVICE_ROLE_KEY env var');
@@ -693,7 +696,7 @@ export default async function handler(req, res) {
     // Após este ponto, req.body nunca é usado — apenas canonical e customFieldIds
     const sanitized = sanitizePayload(req.body);
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'webhook-lead.js:sanitize',message:'sanitizePayload result',data:{isValid:sanitized.isValid,errors:sanitized.errors,customFieldIds:sanitized.customFieldIds,ignoredFields:sanitized.ignoredFields},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+    console.error('[DBG-56e383][H-C] sanitize:', JSON.stringify({ isValid: sanitized.isValid, errors: sanitized.errors, customFieldIds: sanitized.customFieldIds, ignoredCount: sanitized.ignoredFields?.count }));
     // #endregion
     if (!sanitized.isValid) {
       const errorMsg = sanitized.errors[0] || 'validation_error';
@@ -742,7 +745,7 @@ export default async function handler(req, res) {
     });
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'webhook-lead.js:after-rpc',message:'create_lead_from_company result',data:{hasLeadError:!!leadError,leadErrorMsg:leadError?.message,leadSuccess:lead?.success,leadError:lead?.error,leadId:lead?.lead_id,isDuplicate:lead?.is_duplicate},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    console.error('[DBG-56e383][H-A] rpc result:', JSON.stringify({ hasLeadError: !!leadError, leadErrorMsg: leadError?.message, leadSuccess: lead?.success, leadRpcError: lead?.error, leadId: lead?.lead_id, isDuplicate: lead?.is_duplicate }));
     // #endregion
     if (leadError) {
       console.error('[webhook-lead] RPC create_lead_from_company error', { message: leadError.message });
@@ -804,7 +807,7 @@ export default async function handler(req, res) {
     // res.send() — estes logs NÃO podem depender do pipeline para rodar.
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'webhook-lead.js:before-log-block',message:'reached log block — lead created ok',data:{leadId:lead?.lead_id,isDuplicate:lead?.is_duplicate,companyId:lead?.company_id},timestamp:Date.now(),hypothesisId:'H-B'})}).catch(()=>{});
+    console.error('[DBG-56e383][H-B] log-block:', JSON.stringify({ leadId: lead?.lead_id, isDuplicate: lead?.is_duplicate, companyId: lead?.company_id }));
     // #endregion
 
     // Log funcional (lead_import_events) — visível na tela de Logs de Importação
@@ -840,6 +843,9 @@ export default async function handler(req, res) {
   } catch (error) {
     // Apenas erros no bloco crítico (autenticação, rate limit, criação do lead)
     // chegam aqui e retornam 500.
+    // #region agent log
+    console.error('[DBG-56e383][500] outer catch:', error?.message, error?.stack?.split('\n')[1]);
+    // #endregion
     console.error('[webhook-lead] Unhandled exception', { message: error?.message });
     return res.status(500).json({ success: false, error: 'internal_error' });
   }
@@ -899,7 +905,7 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
 
   // 2. Campos personalizados — processar + inserir
   // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'webhook-lead.js:pipeline-custom-fields-start',message:'pipeline custom fields entry',data:{customFieldIds,companyId,leadId:lead?.lead_id},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
+  console.error('[DBG-56e383][H-D] pipeline customFields:', JSON.stringify({ customFieldIds, companyId, leadId: lead?.lead_id }));
   // #endregion
   let customFieldsProcessed = [];
   try {
@@ -916,7 +922,7 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
           field_values:  customValues,
         });
       // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'webhook-lead.js:pipeline-custom-fields-insert',message:'insert_custom_field_values_webhook result',data:{hasError:!!customError,errorMsg:customError?.message,insertSuccess:insertResult?.success,customValuesCount:customValues.length},timestamp:Date.now(),hypothesisId:'H-E'})}).catch(()=>{});
+      console.error('[DBG-56e383][H-E] insert custom fields:', JSON.stringify({ hasError: !!customError, errorMsg: customError?.message, insertSuccess: insertResult?.success, count: customValues.length }));
       // #endregion
       if (customError) {
         console.error('[webhook-lead] Custom fields insert error', { message: customError.message });
