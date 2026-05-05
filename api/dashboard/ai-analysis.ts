@@ -132,6 +132,7 @@ async function executeLLMAndDebit(
   systemPromptHash: string,
   customPromptUsed = false,
   customPromptId: string | null = null,
+  skipDebit = false,
 ): Promise<void> {
   const openai = getOpenAIClient()
   if (!openai) throw new Error('OpenAI não configurado')
@@ -175,7 +176,33 @@ async function executeLLMAndDebit(
 
   const creditsToDebit = calculateCredits(usage.total_tokens)
 
-  // Debitar créditos
+  // Empresa pai — sem débito de créditos: marca completed com credits_used = 0
+  if (skipDebit) {
+    await svc.from('dashboard_ai_analyses').update({
+      status:       'completed',
+      output:       validatedOutput,
+      credits_used: 0,
+      model:        AI_MODEL,
+      completed_at: new Date().toISOString(),
+      metadata: {
+        total_tokens:       usage.total_tokens,
+        prompt_tokens:      usage.prompt_tokens,
+        completion_tokens:  usage.completion_tokens,
+        credits_to_charge:  0,
+        model:              AI_MODEL,
+        source:             'dashboard_ai_analysis',
+        analysis_id:        analysisId,
+        prompt_version:     PROMPT_VERSION,
+        system_prompt_hash: systemPromptHash,
+        custom_prompt_used: customPromptUsed,
+        custom_prompt_id:   customPromptId,
+        parent_company_no_debit: true,
+      },
+    }).eq('id', analysisId)
+    return
+  }
+
+  // Debitar créditos (demais empresas)
   // p_execution_log_id = analysisId (dashboard_ai_analyses.id — UUID)
   // Seguro: credit_transactions.execution_log_id não tem FK.
   // O UPDATE em ai_agent_execution_logs afetará 0 linhas — sem erro.
@@ -293,6 +320,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     const membership = await assertMembership(svc, user.id, companyId)
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
+    // 4.1. Verificar se é empresa pai — isenta de controle de créditos
+    const { data: companyRow } = await svc
+      .from('companies')
+      .select('company_type')
+      .eq('id', companyId)
+      .maybeSingle()
+    const isParentCompany = companyRow?.company_type === 'parent'
+
     // 5. Feature flag
     const allowed = await canAiAnalysis(svc, companyId)
     if (!allowed) { jsonError(res, 403, 'Recurso de IA analítica não habilitado'); return }
@@ -407,11 +442,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       })
     }
 
-    // 11. Verificar saldo com margem de 30%
-    const balance         = await getCompanyBalance(svc, companyId)
+    // 11. Verificar saldo com margem de 30% — ignorado para empresa pai
+    const balance         = isParentCompany ? Infinity : await getCompanyBalance(svc, companyId)
     const requiredBalance = Math.ceil(ctx.estimated_credits * MARGIN_FACTOR)
 
-    if (balance < requiredBalance) {
+    if (!isParentCompany && balance < requiredBalance) {
       const { data: awaitingRow } = await svc
         .from('dashboard_ai_analyses')
         .insert({
@@ -483,13 +518,14 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     const analysisId = inserted.id
 
-    // 13–17. LLM + debit
+    // 13–17. LLM + debit (empresa pai: skipDebit=true → sem débito)
     try {
       await executeLLMAndDebit(
         svc, analysisId, companyId,
         ctx.system_prompt, ctx.user_prompt,
         ctx.max_tokens, ctx.system_prompt_hash,
         !!customPromptText, customPromptId,
+        isParentCompany,
       )
     } catch (execErr: any) {
       const msg = execErr?.message ?? String(execErr)
@@ -553,8 +589,16 @@ async function handleResume(
     })
   }
 
-  // Verificar saldo novamente
-  const balance = await getCompanyBalance(svc, analysis.company_id)
+  // Verificar se empresa pai — isenta de controle de créditos no resume
+  const { data: resumeCompanyRow } = await svc
+    .from('companies')
+    .select('company_type')
+    .eq('id', analysis.company_id)
+    .maybeSingle()
+  const isParentResume = resumeCompanyRow?.company_type === 'parent'
+
+  // Verificar saldo — ignorado para empresa pai
+  const balance = isParentResume ? Infinity : await getCompanyBalance(svc, analysis.company_id)
 
   // Para credit_failed: usar credits_used exato (ou credits_to_charge do metadata)
   // Para awaiting_credits: usar estimated_credits
@@ -564,7 +608,7 @@ async function handleResume(
 
   const requiredBalance = Math.ceil(creditsNeeded * MARGIN_FACTOR)
 
-  if (balance < requiredBalance) {
+  if (!isParentResume && balance < requiredBalance) {
     return res.status(402).json({
       ok:                false,
       status:            analysis.status,
@@ -578,6 +622,22 @@ async function handleResume(
 
   // ── credit_failed: reutiliza output salvo, NÃO chama LLM novamente ────────
   if (analysis.status === 'credit_failed') {
+    // Empresa pai — sem débito: marca completed diretamente
+    if (isParentResume) {
+      await svc.from('dashboard_ai_analyses').update({
+        status:       'completed',
+        completed_at: new Date().toISOString(),
+      }).eq('id', analysisId)
+
+      const { data: result } = await svc
+        .from('dashboard_ai_analyses')
+        .select('id, analysis_type, status, output, credits_used, model, completed_at, created_at')
+        .eq('id', analysisId)
+        .single()
+
+      return res.status(200).json({ ok: true, analysis_id: analysisId, data: result })
+    }
+
     // Débito com o valor exato original (idempotente via execution_log_id = analysisId)
     const creditsToDebit = analysis.credits_used
       ?? analysis.metadata?.credits_to_charge
@@ -651,6 +711,7 @@ async function handleResume(
       finalSystemPrompt, user_prompt,
       max_tokens, finalSystemPromptHash,
       !!customTextResume, customIdResume,
+      isParentResume,
     )
   } catch (execErr: any) {
     const msg = execErr?.message ?? String(execErr)
