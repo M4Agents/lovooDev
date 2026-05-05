@@ -27,31 +27,31 @@ const FIELD_WHITELIST = new Map([
   // Autenticação (extraído antes de chegar ao lead)
   ['api_key',        { canonical: 'api_key',         maxLen: 128 }],
 
-  // Nome
-  ['name',           { canonical: 'name',             maxLen: 255 }],
-  ['nome',           { canonical: 'name',             maxLen: 255 }],
-  ['full_name',      { canonical: 'name',             maxLen: 255 }],
-  ['fullname',       { canonical: 'name',             maxLen: 255 }],
-  ['first_name',     { canonical: 'name',             maxLen: 255 }],
-  ['firstname',      { canonical: 'name',             maxLen: 255 }],
-  ['cliente',        { canonical: 'name',             maxLen: 255 }],
-  ['usuario',        { canonical: 'name',             maxLen: 255 }],
+  // Nome — normalização: colapsa espaços
+  ['name',           { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['nome',           { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['full_name',      { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['fullname',       { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['first_name',     { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['firstname',      { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['cliente',        { canonical: 'name',             maxLen: 255, normalize: 'name' }],
+  ['usuario',        { canonical: 'name',             maxLen: 255, normalize: 'name' }],
 
-  // Email
+  // Email — normalização: lowercase + trim
   ['email',          { canonical: 'email',            maxLen: 255, normalize: 'email' }],
   ['e-mail',         { canonical: 'email',            maxLen: 255, normalize: 'email' }],
   ['mail',           { canonical: 'email',            maxLen: 255, normalize: 'email' }],
   ['email_address',  { canonical: 'email',            maxLen: 255, normalize: 'email' }],
   ['user_email',     { canonical: 'email',            maxLen: 255, normalize: 'email' }],
 
-  // Telefone
-  ['phone',          { canonical: 'phone',            maxLen: 30 }],
-  ['telefone',       { canonical: 'phone',            maxLen: 30 }],
-  ['tel',            { canonical: 'phone',            maxLen: 30 }],
-  ['celular',        { canonical: 'phone',            maxLen: 30 }],
-  ['whatsapp',       { canonical: 'phone',            maxLen: 30 }],
-  ['mobile',         { canonical: 'phone',            maxLen: 30 }],
-  ['contact',        { canonical: 'phone',            maxLen: 30 }],
+  // Telefone — normalização: trim
+  ['phone',          { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['telefone',       { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['tel',            { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['celular',        { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['whatsapp',       { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['mobile',         { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
+  ['contact',        { canonical: 'phone',            maxLen: 30,  normalize: 'phone' }],
 
   // Interesse / assunto
   ['interest',       { canonical: 'interest',         maxLen: 500 }],
@@ -64,10 +64,11 @@ const FIELD_WHITELIST = new Map([
   ['servico',        { canonical: 'interest',         maxLen: 500 }],
 
   // Empresa do lead
-  ['company',             { canonical: 'company_name',  maxLen: 255 }],
-  ['empresa',             { canonical: 'company_name',  maxLen: 255 }],
-  ['company_name',        { canonical: 'company_name',  maxLen: 255 }],
-  ['nome_empresa',        { canonical: 'company_name',  maxLen: 255 }],
+  // company_name: normalize: 'name' (opcional — colapsa espaços)
+  ['company',             { canonical: 'company_name',  maxLen: 255, normalize: 'name' }],
+  ['empresa',             { canonical: 'company_name',  maxLen: 255, normalize: 'name' }],
+  ['company_name',        { canonical: 'company_name',  maxLen: 255, normalize: 'name' }],
+  ['nome_empresa',        { canonical: 'company_name',  maxLen: 255, normalize: 'name' }],
   ['cnpj',                { canonical: 'company_cnpj',  maxLen: 20  }],
   ['company_cnpj',        { canonical: 'company_cnpj',  maxLen: 20  }],
   ['documento',           { canonical: 'company_cnpj',  maxLen: 20  }],
@@ -131,6 +132,25 @@ const MAX_CUSTOM_VAL = 500;
 const MAX_TAGS       = 20;
 const MAX_TAG_LEN    = 100;
 const EMAIL_RE       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ---------------------------------------------------------------------------
+// Funções de normalização por tipo de campo
+// ---------------------------------------------------------------------------
+
+// Nome: colapsa espaços internos múltiplos e remove espaços nas bordas
+function normalizeName(str) {
+  return str.trim().replace(/\s+/g, ' ');
+}
+
+// Email: lowercase + trim
+function normalizeEmail(str) {
+  return str.trim().toLowerCase();
+}
+
+// Telefone: remove apenas espaços nas bordas (preserva formatação original)
+function normalizePhone(str) {
+  return str.trim();
+}
 
 // ---------------------------------------------------------------------------
 // sanitizePayload — sanitiza e normaliza req.body contra a whitelist
@@ -238,10 +258,11 @@ function sanitizePayload(rawBody) {
     // 8. Truncar ao limite do campo
     const truncated = spec.maxLen ? strVal.substring(0, spec.maxLen) : strVal;
 
-    // 9. Normalização específica
-    const normalized = spec.normalize === 'email'
-      ? truncated.toLowerCase()
-      : truncated;
+    // 9. Normalização por tipo de campo (apenas nos campos marcados)
+    let normalized = truncated;
+    if (spec.normalize === 'name')  normalized = normalizeName(truncated);
+    else if (spec.normalize === 'email') normalized = normalizeEmail(truncated);
+    else if (spec.normalize === 'phone') normalized = normalizePhone(truncated);
 
     // 10. Primeiro alias vence (não sobrescrever)
     if (!canonical[spec.canonical]) {
