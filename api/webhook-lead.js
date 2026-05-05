@@ -667,13 +667,13 @@ export default async function handler(req, res) {
       .from('companies').select('id').eq('api_key', api_key).single();
     const companyId = companyRow?.id || null;
     if (!companyId) {
-      anonClient.rpc('log_webhook_invalid_key', {
+      Promise.resolve(anonClient.rpc('log_webhook_invalid_key', {
         p_request_id:   requestId,
         p_api_key_hash: apiKeyHash,
         p_ip_address:   ip,
         p_method:       'POST',
         p_path:         '/api/webhook-lead',
-      }).catch(err => console.error('[webhook-lead] Failed to log invalid key', { message: err?.message }));
+      })).catch(err => console.error('[webhook-lead] Failed to log invalid key', { message: err?.message }));
       return res.status(401).json({ error: 'invalid_key', message: 'API key inválida' });
     }
 
@@ -701,13 +701,13 @@ export default async function handler(req, res) {
     if (!sanitized.isValid) {
       const errorMsg = sanitized.errors[0] || 'validation_error';
       // Log técnico (company_id já resolvido neste ponto)
-      anonClient.rpc('update_webhook_log_result', {
+      Promise.resolve(anonClient.rpc('update_webhook_log_result', {
         p_request_id: requestId,
         p_result:     'validation_error',
         p_error_code: String(errorMsg).substring(0, 100),
-      }).catch(() => {});
+      })).catch(() => {});
       // Log funcional — permite visualização no histórico de importações
-      svcClient.rpc('log_lead_import_event', {
+      Promise.resolve(svcClient.rpc('log_lead_import_event', {
         p_company_id:         companyId,
         p_status:             'error',
         p_error_code:         'validation_error',
@@ -715,7 +715,7 @@ export default async function handler(req, res) {
         p_lead_id:            null,
         p_payload_summary:    null,
         p_external_reference: null,
-      }).catch(err => console.error('[webhook-lead] Failed to log validation_error event', { message: err?.message }));
+      })).catch(err => console.error('[webhook-lead] Failed to log validation_error event', { message: err?.message }));
       return res.status(400).json({ error: 'validation_error', message: errorMsg });
     }
     const { canonical, customFieldIds, ignoredFields } = sanitized;
@@ -749,9 +749,9 @@ export default async function handler(req, res) {
     // #endregion
     if (leadError) {
       console.error('[webhook-lead] RPC create_lead_from_company error', { message: leadError.message });
-      anonClient.rpc('update_webhook_log_result', {
+      Promise.resolve(anonClient.rpc('update_webhook_log_result', {
         p_request_id: requestId, p_result: 'error', p_error_code: 'rpc_error',
-      }).catch(() => {});
+      })).catch(() => {});
       return res.status(500).json({ success: false, error: 'internal_error' });
     }
 
@@ -764,7 +764,7 @@ export default async function handler(req, res) {
           email: canonical.email || null,
           phone: canonical.phone || null,
         };
-        svcClient.rpc('log_lead_import_event', {
+        Promise.resolve(svcClient.rpc('log_lead_import_event', {
           p_company_id:      companyId,
           p_status:          'plan_limit',
           p_error_code:      'plan_limit_exceeded',
@@ -772,32 +772,32 @@ export default async function handler(req, res) {
           p_lead_id:         null,
           p_payload_summary: payloadSummary,
           p_external_reference: null,
-        }).catch(err => console.error('[webhook-lead] Failed to log plan_limit event', { message: err?.message }));
-        anonClient.rpc('update_webhook_log_result', {
+        })).catch(err => console.error('[webhook-lead] Failed to log plan_limit event', { message: err?.message }));
+        Promise.resolve(anonClient.rpc('update_webhook_log_result', {
           p_request_id: requestId, p_result: 'plan_limit',
-        }).catch(() => {});
+        })).catch(() => {});
         return res.status(403).json({ error: 'plan_limit', message: 'Limite de leads do plano atingido.' });
       }
 
       if (errCode === 'company_not_found') {
-        anonClient.rpc('update_webhook_log_result', {
+        Promise.resolve(anonClient.rpc('update_webhook_log_result', {
           p_request_id: requestId, p_result: 'error', p_error_code: 'company_not_found',
-        }).catch(() => {});
+        })).catch(() => {});
         return res.status(401).json({ error: 'invalid_key', message: 'Empresa não encontrada.' });
       }
 
       if (errCode === 'company_inactive') {
-        anonClient.rpc('update_webhook_log_result', {
+        Promise.resolve(anonClient.rpc('update_webhook_log_result', {
           p_request_id: requestId, p_result: 'error', p_error_code: 'company_inactive',
-        }).catch(() => {});
+        })).catch(() => {});
         return res.status(403).json({ error: 'company_inactive', message: 'Empresa suspensa ou cancelada.' });
       }
 
       console.error('[webhook-lead] RPC returned failure', { error: errCode });
-      anonClient.rpc('update_webhook_log_result', {
+      Promise.resolve(anonClient.rpc('update_webhook_log_result', {
         p_request_id: requestId, p_result: 'error',
         p_error_code: String(errCode).substring(0, 100),
-      }).catch(() => {});
+      })).catch(() => {});
       return res.status(500).json({ success: false, error: 'internal_error' });
     }
 
@@ -825,12 +825,12 @@ export default async function handler(req, res) {
     const logMetadata = ignoredFields?.count > 0
       ? { ignored_fields_count: ignoredFields.count, ignored_fields_names: ignoredFields.names }
       : null;
-    anonClient.rpc('update_webhook_log_result', {
+    Promise.resolve(anonClient.rpc('update_webhook_log_result', {
       p_request_id: requestId,
       p_result:     lead.is_duplicate ? 'duplicate' : 'success',
       p_lead_id:    lead.lead_id,
       p_metadata:   logMetadata,
-    }).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
+    })).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
 
     // ── 12. Pipeline pós-criação (não bloqueante) ─────────────────────────────
     // Custom fields, tags, webhooks, automações e reentrada rodam em background.
