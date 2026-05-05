@@ -312,6 +312,14 @@ export const Settings: React.FC = () => {
 
   // O histórico de importações foi extraído para ApiImportHistory.tsx
 
+  // Garante que usuários sem canViewImportHistory aterrissem em 'documentacao'
+  useEffect(() => {
+    if (!canViewImportHistory && apiSubTab !== 'documentacao') {
+      setApiSubTab('documentacao');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canViewImportHistory]);
+
   // ===== NOVO useEffect ISOLADO PARA LOGS AVANÇADOS =====
   // Carrega logs avançados apenas quando necessário
   useEffect(() => {
