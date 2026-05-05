@@ -53,6 +53,11 @@ export interface ChatMessage {
   timestamp: Date
   created_at: Date
   updated_at: Date
+  // Campos de reply
+  reply_to_message_id?: string
+  reply_to_content?: string
+  reply_to_direction?: 'inbound' | 'outbound'
+  reply_to_message_type?: 'text' | 'image' | 'document' | 'audio' | 'video'
 }
 
 export interface ChatContact {
@@ -130,6 +135,7 @@ export interface SendMessageForm {
   message_type: 'text' | 'image' | 'document' | 'audio' | 'video'
   media_file?: File
   media_url?: string
+  reply_to_message_id?: string
 }
 
 export interface ScheduleMessageForm {

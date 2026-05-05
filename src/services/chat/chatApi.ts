@@ -308,13 +308,14 @@ export class ChatApi {
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
       const { data, error } = await supabase.rpc('chat_create_message', {
-        p_conversation_id: conversationId,
-        p_company_id: companyId,
-        p_content: truncatedContent,        // Content truncado para evitar erro SQL
-        p_message_type: message.message_type,
-        p_direction: 'outbound',
-        p_sent_by: userId,                 // userId validado
-        p_media_url: message.media_url || null
+        p_conversation_id:    conversationId,
+        p_company_id:         companyId,
+        p_content:            truncatedContent,
+        p_message_type:       message.message_type,
+        p_direction:          'outbound',
+        p_sent_by:            userId,
+        p_media_url:          message.media_url || null,
+        p_reply_to_message_id: message.reply_to_message_id || null,
       })
 
       if (error) {
@@ -385,7 +386,8 @@ export class ChatApi {
               message_type,
               media_url,
               conversation_id,
-              instance_id
+              instance_id,
+              reply_to_message_id
             `)
             .eq('id', messageId)
             .eq('company_id', companyId)
@@ -466,6 +468,27 @@ export class ChatApi {
           throw new Error('Token da instância não encontrado');
         }
 
+        // Buscar uazapi_message_id da mensagem original para reply (se existir)
+        // Filtra por company_id — isolamento multi-tenant obrigatório
+        let replyUazapiId: string | null = null;
+        if ((messageData as any).reply_to_message_id) {
+          try {
+            const { data: replyMsg, error: replyErr } = await supabase
+              .from('chat_messages')
+              .select('uazapi_message_id')
+              .eq('id', (messageData as any).reply_to_message_id)
+              .eq('company_id', companyId)  // isolamento multi-tenant
+              .maybeSingle();               // não lança erro se não encontrar
+            if (replyErr) {
+              console.warn('[chatApi] Erro ao buscar uazapi_message_id para reply (non-fatal):', replyErr.message);
+            } else {
+              replyUazapiId = replyMsg?.uazapi_message_id || null;
+            }
+          } catch (replyLookupErr: any) {
+            console.warn('[chatApi] Exceção ao buscar reply uazapi_message_id (non-fatal):', replyLookupErr?.message);
+          }
+        }
+
         // 2. Preparar payload para Uazapi
         const endpoint = messageData.message_type === 'text'
           ? 'https://lovoo.uazapi.com/send/text'
@@ -476,14 +499,16 @@ export class ChatApi {
               number: phone,
               text: messageData.content,
               delay: 1000,
-              linkPreview: true
+              linkPreview: true,
+              ...(replyUazapiId ? { replyid: replyUazapiId } : {})
             }
           : {
               number: phone,
               type: messageData.message_type,
               file: messageData.media_url,
               text: messageData.content || '',
-              delay: 1000
+              delay: 1000,
+              ...(replyUazapiId ? { replyid: replyUazapiId } : {})
             };
 
         const response = await fetch(endpoint, {
@@ -877,7 +902,12 @@ export class ChatApi {
       uazapi_message_id: raw.uazapi_message_id,
       timestamp: new Date(raw.timestamp),
       created_at: new Date(raw.created_at),
-      updated_at: new Date(raw.updated_at)
+      updated_at: new Date(raw.updated_at),
+      // Campos de reply
+      reply_to_message_id:   raw.reply_to_message_id   || undefined,
+      reply_to_content:      raw.reply_to_content       || undefined,
+      reply_to_direction:    raw.reply_to_direction     || undefined,
+      reply_to_message_type: raw.reply_to_message_type  || undefined,
     }
   }
 
