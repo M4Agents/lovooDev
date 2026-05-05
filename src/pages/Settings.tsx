@@ -26,6 +26,8 @@ import { AdminConsultingPackagesEditor } from '../components/Settings/AdminConsu
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
+import { ApiImportHistory } from '../components/Settings/ApiImportHistory';
+import { ApiFullDocumentation } from '../components/Settings/ApiFullDocumentation';
 import { CompanyUser } from '../types/user';
 import { useAccessControl } from '../hooks/useAccessControl';
 import Automations from './Automations';
@@ -127,25 +129,13 @@ export const Settings: React.FC = () => {
   const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia' | 'comprar-creditos' | 'consultoria'>('plano-atual');
 
   const [integracoesTab, setIntegracoesTab] = useState<
-    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'historico-importacao'
+    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api'
   >('whatsapp');
 
-  // Estado para a sub-aba de histórico de importações
-  const [importHistory, setImportHistory] = useState<{
-    data: any[];
-    loading: boolean;
-    error: string | null;
-    page: number;
-    hasMore: boolean;
-    filters: { status: string; search: string; dateFrom: string; dateTo: string };
-  }>({
-    data: [],
-    loading: false,
-    error: null,
-    page: 1,
-    hasMore: false,
-    filters: { status: '', search: '', dateFrom: '', dateTo: '' },
-  });
+  // Sub-navegação interna da área de API
+  const [apiSubTab, setApiSubTab] = useState<
+    'visao-geral' | 'credenciais' | 'logs' | 'documentacao'
+  >('visao-geral');
 
   const [globalIntegracoesTab, setGlobalIntegracoesTab] = useState<'openai' | 'elevenlabs'>('openai');
 
@@ -320,45 +310,7 @@ export const Settings: React.FC = () => {
     } 
   }, [company]);
 
-  // ===== useEffect E FUNÇÃO PARA HISTÓRICO DE IMPORTAÇÕES =====
-  const fetchImportHistory = React.useCallback(async (page = 1, filters = importHistory.filters) => {
-    if (!company?.id) return;
-    setImportHistory(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('Sessão expirada');
-
-      const params = new URLSearchParams({ company_id: company.id, page: String(page), per_page: '20' });
-      if (filters.status)   params.set('status', filters.status);
-      if (filters.dateFrom) params.set('date_from', filters.dateFrom);
-      if (filters.dateTo)   params.set('date_to', filters.dateTo);
-      if (filters.search)   params.set('search', filters.search.trim().slice(0, 100));
-
-      const res = await fetch(`/api/leads/import-events?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
-      const json = await res.json();
-      setImportHistory(prev => ({
-        ...prev,
-        loading: false,
-        data: json.data ?? [],
-        page: json.pagination?.page ?? page,
-        hasMore: json.pagination?.has_more ?? false,
-        filters,
-      }));
-    } catch (err: any) {
-      setImportHistory(prev => ({ ...prev, loading: false, error: err.message ?? 'Erro ao carregar histórico' }));
-    }
-  }, [company?.id, importHistory.filters]);
-
-  useEffect(() => {
-    if (company && activeTab === 'integracoes' && integracoesTab === 'historico-importacao' && canViewImportHistory) {
-      fetchImportHistory(1, importHistory.filters);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company, activeTab, integracoesTab]);
+  // O histórico de importações foi extraído para ApiImportHistory.tsx
 
   // ===== NOVO useEffect ISOLADO PARA LOGS AVANÇADOS =====
   // Carrega logs avançados apenas quando necessário
@@ -1363,34 +1315,7 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
-            {/* Histórico de Importações Card — visível apenas para admin+ */}
-            {canViewImportHistory && (
-              <div
-                onClick={() => setIntegracoesTab('historico-importacao')}
-                className="group cursor-pointer"
-              >
-                <div className={`bg-gradient-to-br from-teal-50 to-cyan-100 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
-                  integracoesTab === 'historico-importacao'
-                    ? 'border-teal-400 shadow-md scale-[1.02]'
-                    : 'border-transparent hover:border-teal-400'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
-                      integracoesTab === 'historico-importacao' ? 'bg-teal-600' : 'bg-teal-500'
-                    }`}>
-                      <History className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-base font-semibold text-slate-900">Histórico de Importações</h3>
-                        <span className="px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-medium">Novo</span>
-                      </div>
-                      <p className="text-xs text-slate-600">Visualize tentativas de importação via API: sucesso, erros e duplicatas</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Logs de Importação movidos para Configurações → API → Logs */}
 
           </div>
           
@@ -1522,10 +1447,10 @@ export const Settings: React.FC = () => {
           
           {/* Sub-aba: API */}
           {integracoesTab === 'webhook-simples' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2 space-y-8">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
 
               {/* Cabeçalho */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 mb-5">
                 <div className="p-2 bg-emerald-100 rounded-lg">
                   <Webhook className="w-5 h-5 text-emerald-600" />
                 </div>
@@ -1535,8 +1460,58 @@ export const Settings: React.FC = () => {
                 </div>
               </div>
 
-              {/* Credenciais */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Sub-navegação interna */}
+              <div className="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
+                {canViewImportHistory && (
+                  <>
+                    <button
+                      onClick={() => setApiSubTab('visao-geral')}
+                      className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                        apiSubTab === 'visao-geral'
+                          ? 'border-emerald-500 text-emerald-700'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Visão Geral
+                    </button>
+                    <button
+                      onClick={() => setApiSubTab('credenciais')}
+                      className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                        apiSubTab === 'credenciais'
+                          ? 'border-emerald-500 text-emerald-700'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Credenciais
+                    </button>
+                    <button
+                      onClick={() => setApiSubTab('logs')}
+                      className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                        apiSubTab === 'logs'
+                          ? 'border-teal-500 text-teal-700'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Logs de Importação
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setApiSubTab('documentacao')}
+                  className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                    apiSubTab === 'documentacao'
+                      ? 'border-indigo-500 text-indigo-700'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Documentação Completa
+                </button>
+              </div>
+
+              {/* ── Sub-aba: Credenciais ──────────────────────────────── */}
+              {apiSubTab === 'credenciais' && canViewImportHistory && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">🔗 URL do Endpoint</label>
                   <div className="flex gap-2">
@@ -1567,8 +1542,12 @@ export const Settings: React.FC = () => {
                   <p className="text-xs text-slate-500 mt-1">A API Key identifica sua empresa. Nunca compartilhe publicamente.</p>
                 </div>
               </div>
+                </div>
+              )}
 
-              <hr className="border-slate-100" />
+              {/* ── Sub-aba: Visão Geral ──────────────────────────────── */}
+              {(apiSubTab === 'visao-geral' || (!canViewImportHistory && apiSubTab !== 'documentacao')) && canViewImportHistory && (
+                <div className="space-y-8">
 
               {/* Como funciona */}
               <div>
@@ -1860,6 +1839,19 @@ export const Settings: React.FC = () => {
                   </div>
                 </div>
               </div>
+                </div>
+              )}
+
+              {/* ── Sub-aba: Logs de Importação ───────────────────────── */}
+              {apiSubTab === 'logs' && canViewImportHistory && company?.id && (
+                <ApiImportHistory companyId={company.id} />
+              )}
+
+              {/* ── Sub-aba: Documentação Completa ────────────────────── */}
+              {(apiSubTab === 'documentacao' || !canViewImportHistory) && (
+                <ApiFullDocumentation />
+              )}
+
             </div>
           )}
           
@@ -2662,175 +2654,7 @@ export const Settings: React.FC = () => {
             </div>
           )}
 
-          {/* Sub-aba: Histórico de Importações */}
-          {integracoesTab === 'historico-importacao' && canViewImportHistory && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
-              {/* Cabeçalho */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-teal-100 rounded-lg">
-                    <History className="w-5 h-5 text-teal-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Histórico de Importações</h2>
-                    <p className="text-sm text-slate-500">Tentativas de importação via API — sucesso, duplicatas e erros</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => fetchImportHistory(1, importHistory.filters)}
-                  className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                  title="Atualizar"
-                >
-                  <RefreshCw className={`w-4 h-4 ${importHistory.loading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
 
-              {/* Filtros */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Nome, email ou telefone"
-                    value={importHistory.filters.search}
-                    onChange={e => setImportHistory(prev => ({ ...prev, filters: { ...prev.filters, search: e.target.value } }))}
-                    onKeyDown={e => e.key === 'Enter' && fetchImportHistory(1, { ...importHistory.filters })}
-                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-300"
-                  />
-                </div>
-                <select
-                  value={importHistory.filters.status}
-                  onChange={e => {
-                    const f = { ...importHistory.filters, status: e.target.value };
-                    setImportHistory(prev => ({ ...prev, filters: f }));
-                    fetchImportHistory(1, f);
-                  }}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                >
-                  <option value="">Todos os status</option>
-                  <option value="success">Sucesso</option>
-                  <option value="duplicate">Duplicata</option>
-                  <option value="error">Erro</option>
-                  <option value="rate_limited">Rate limited</option>
-                  <option value="plan_limit">Limite do plano</option>
-                  <option value="validation_error">Validação</option>
-                </select>
-                <input
-                  type="date"
-                  value={importHistory.filters.dateFrom}
-                  onChange={e => {
-                    const f = { ...importHistory.filters, dateFrom: e.target.value };
-                    setImportHistory(prev => ({ ...prev, filters: f }));
-                    fetchImportHistory(1, f);
-                  }}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                />
-                <input
-                  type="date"
-                  value={importHistory.filters.dateTo}
-                  onChange={e => {
-                    const f = { ...importHistory.filters, dateTo: e.target.value };
-                    setImportHistory(prev => ({ ...prev, filters: f }));
-                    fetchImportHistory(1, f);
-                  }}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-300"
-                />
-              </div>
-
-              {/* Estado de erro */}
-              {importHistory.error && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg mb-4 text-sm text-red-700">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  {importHistory.error}
-                </div>
-              )}
-
-              {/* Tabela */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Lead</th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Referência</th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Mensagem de erro</th>
-                      <th className="text-left py-2 px-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Data/hora</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {importHistory.loading && (
-                      <tr>
-                        <td colSpan={5} className="py-10 text-center text-slate-400 text-sm">
-                          <RefreshCw className="w-4 h-4 animate-spin inline mr-2" />Carregando...
-                        </td>
-                      </tr>
-                    )}
-                    {!importHistory.loading && importHistory.data.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="py-10 text-center text-slate-400 text-sm">
-                          Nenhum registro encontrado para os filtros selecionados.
-                        </td>
-                      </tr>
-                    )}
-                    {!importHistory.loading && importHistory.data.map((row: any) => {
-                      const statusConfig: Record<string, { label: string; className: string }> = {
-                        success:          { label: 'Sucesso',       className: 'bg-green-100 text-green-700' },
-                        duplicate:        { label: 'Duplicata',     className: 'bg-yellow-100 text-yellow-700' },
-                        error:            { label: 'Erro',          className: 'bg-red-100 text-red-700' },
-                        rate_limited:     { label: 'Rate limited',  className: 'bg-orange-100 text-orange-700' },
-                        plan_limit:       { label: 'Limite plano',  className: 'bg-purple-100 text-purple-700' },
-                        validation_error: { label: 'Validação',     className: 'bg-slate-100 text-slate-700' },
-                      };
-                      const sc = statusConfig[row.status] ?? { label: row.status, className: 'bg-slate-100 text-slate-600' };
-                      const summary = row.payload_summary ?? {};
-                      const leadLabel = [summary.name, summary.email, summary.phone].filter(Boolean).join(' · ') || '—';
-                      return (
-                        <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 px-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sc.className}`}>
-                              {row.status === 'success' || row.status === 'duplicate'
-                                ? <CheckCircle2 className="w-3 h-3" />
-                                : <AlertCircle className="w-3 h-3" />}
-                              {sc.label}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-700 max-w-[200px] truncate" title={leadLabel}>{leadLabel}</td>
-                          <td className="py-2.5 px-3 text-slate-500 text-xs">{row.external_reference ?? '—'}</td>
-                          <td className="py-2.5 px-3 text-slate-500 text-xs max-w-[200px] truncate" title={row.error_message ?? ''}>
-                            {row.error_message ?? '—'}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-400 text-xs whitespace-nowrap">
-                            {new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Paginação */}
-              {(importHistory.page > 1 || importHistory.hasMore) && (
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                  <button
-                    disabled={importHistory.page <= 1 || importHistory.loading}
-                    onClick={() => fetchImportHistory(importHistory.page - 1, importHistory.filters)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4" /> Anterior
-                  </button>
-                  <span className="text-sm text-slate-500">Página {importHistory.page}</span>
-                  <button
-                    disabled={!importHistory.hasMore || importHistory.loading}
-                    onClick={() => fetchImportHistory(importHistory.page + 1, importHistory.filters)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Próxima <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
         </div>
       )}
