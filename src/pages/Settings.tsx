@@ -1436,171 +1436,299 @@ export const Settings: React.FC = () => {
           
           {/* Sub-aba: API */}
           {integracoesTab === 'webhook-simples' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <Webhook className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">{t('integrations.apiLeads.title')}</h2>
-                <p className="text-sm text-slate-600">{t('integrations.apiLeads.subtitle')}</p>
-              </div>
-            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:col-span-2 space-y-8">
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* URL do Webhook */}
-              <div className="space-y-4">
+              {/* Cabeçalho */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <Webhook className="w-5 h-5 text-emerald-600" />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    {t('integrations.apiLeads.urlLabel')}
-                  </label>
+                  <h2 className="text-lg font-semibold text-slate-900">API de Importação de Leads</h2>
+                  <p className="text-sm text-slate-500">Envie leads de qualquer sistema externo diretamente para o Lovoo CRM via HTTP POST</p>
+                </div>
+              </div>
+
+              {/* Credenciais */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">🔗 URL do Endpoint</label>
                   <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value="https://app.lovoocrm.com/api/webhook-lead"
-                      readOnly
-                      className="flex-1 px-4 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-slate-900 font-mono text-sm"
-                    />
-                    <button
-                      onClick={() => copyToClipboard('https://app.lovoocrm.com/api/webhook-lead')}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                      {t('integrations.actions.copy')}
+                    <input type="text" value="https://app.lovoocrm.com/api/webhook-lead" readOnly
+                      className="flex-1 px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-slate-900 font-mono text-xs" />
+                    <button onClick={() => copyToClipboard('https://app.lovoocrm.com/api/webhook-lead')}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors">
+                      Copiar
                     </button>
                   </div>
-                  <p className="text-xs text-emerald-600 mt-2 font-medium">
-                    ✨ {t('integrations.apiLeads.urlHint')}
-                  </p>
+                  <p className="text-xs text-emerald-700 mt-1">✔ Aceita POST com JSON. Sem necessidade de cabeçalho de autenticação.</p>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    {t('integrations.apiLeads.apiKeyLabel')}
-                  </label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">🔑 Sua API Key</label>
                   <div className="flex gap-2">
-                    <input
-                      type={showApiKey ? "text" : "password"}
-                      value={company?.api_key || t('integrations.actions.loading')}
-                      readOnly
-                      className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-sm"
-                    />
-                    <button
-                      onClick={() => setShowApiKey(!showApiKey)}
+                    <input type={showApiKey ? 'text' : 'password'} value={company?.api_key || 'Carregando...'}
+                      readOnly className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-mono text-xs" />
+                    <button onClick={() => setShowApiKey(!showApiKey)}
                       className="px-3 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors"
-                      title={showApiKey ? t('integrations.apiLeads.tooltips.hideApiKey') : t('integrations.apiLeads.tooltips.showApiKey')}
-                    >
+                      title={showApiKey ? 'Ocultar' : 'Mostrar'}>
                       {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
-                    <button
-                      onClick={() => copyToClipboard(company?.api_key || '')}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                      {t('integrations.actions.copy')}
+                    <button onClick={() => copyToClipboard(company?.api_key || '')}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors">
+                      Copiar
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    {t('integrations.apiLeads.apiKeyHelp')}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">A API Key identifica sua empresa. Nunca compartilhe publicamente.</p>
                 </div>
+              </div>
 
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <h4 className="font-medium text-emerald-900 mb-2">📋 {t('integrations.apiLeads.howToTitle')}</h4>
-                  <div className="space-y-2 text-sm text-emerald-800">
-                    <p><strong>1.</strong> {t('integrations.apiLeads.howToStep1')}</p>
-                    <p><strong>2.</strong> {t('integrations.apiLeads.howToStep2')}</p>
-                    <p><strong>3.</strong> {t('integrations.apiLeads.howToStep3')}</p>
+              <hr className="border-slate-100" />
+
+              {/* Como funciona */}
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 mb-4">📖 Como funciona</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    { step: '1', color: 'bg-blue-50 border-blue-200', title: 'Monte o JSON', desc: 'Crie um objeto JSON com os dados do lead e sua api_key. Não precisa de header de autenticação.' },
+                    { step: '2', color: 'bg-purple-50 border-purple-200', title: 'Envie via POST', desc: 'Faça uma requisição HTTP POST para a URL do endpoint com Content-Type: application/json.' },
+                    { step: '3', color: 'bg-emerald-50 border-emerald-200', title: 'Lead criado!', desc: 'O sistema identifica o lead, processa campos e tags automaticamente e retorna o ID.' },
+                  ].map(item => (
+                    <div key={item.step} className={`border rounded-lg p-4 ${item.color}`}>
+                      <div className="w-7 h-7 rounded-full bg-white border-2 border-current flex items-center justify-center text-sm font-bold mb-2">{item.step}</div>
+                      <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                      <p className="text-xs text-slate-600 mt-1">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <hr className="border-slate-100" />
+
+              {/* Campos disponíveis */}
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 mb-1">📋 Campos disponíveis no JSON</h3>
+                <p className="text-sm text-slate-500 mb-4">O sistema reconhece automaticamente os nomes abaixo. Você pode usar qualquer variação listada.</p>
+
+                <div className="space-y-4">
+                  {/* Campos básicos */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="bg-blue-50 px-4 py-2 border-b border-slate-200">
+                      <p className="text-sm font-semibold text-blue-800">👤 Dados do Lead (campos padrão)</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Campo</th>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Nomes aceitos no JSON</th>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Obs.</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            ['Nome', 'name, nome, full_name, fullname, cliente', 'Obrigatório (ou email)'],
+                            ['Email', 'email, e-mail, mail', 'Obrigatório (ou nome)'],
+                            ['Telefone', 'phone, telefone, tel, celular, whatsapp', ''],
+                            ['Interesse', 'interest, interesse, subject, assunto, message', ''],
+                            ['Origem', 'origin, origem, source, fonte', 'Ex: landing_page, whatsapp, api'],
+                            ['Status', 'status, situacao', 'Ex: novo, em_qualificacao, convertido'],
+                          ].map(([campo, nomes, obs]) => (
+                            <tr key={campo} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
+                              <td className="px-4 py-2 font-mono text-slate-600">{nomes}</td>
+                              <td className="px-4 py-2 text-slate-500">{obs}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">🔧 {t('integrations.apiLeads.hybridTitle')}</h4>
-                  <div className="space-y-2 text-sm text-blue-800">
-                    <p><strong>{t('integrations.apiLeads.hybridMethod')}</strong> {t('integrations.apiLeads.hybridPost')}</p>
-                    <p><strong>{t('integrations.apiLeads.hybridContentType')}</strong> {t('integrations.apiLeads.hybridJson')}</p>
-                    <p><strong>{t('integrations.apiLeads.hybridStandardTitle')}</strong></p>
-                    <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
-                      <li>Nome: name, nome, full_name, cliente</li>
-                      <li>Email: email, e-mail, mail</li>
-                      <li>Telefone: phone, telefone, celular, whatsapp</li>
-                      <li>Origem: origin, origem, source, fonte</li>
-                    </ul>
-                    <p><strong>{t('integrations.apiLeads.hybridCustomTitle')}</strong></p>
-                    <ul className="list-disc list-inside ml-4 space-y-1 text-xs">
-                      <li>Use o ID numérico: "1": "valor", "2": "valor"</li>
-                      <li>Crie campos em: Configurações → Campos Personalizados</li>
-                      <li>Copie o ID mostrado na interface</li>
-                    </ul>
+                  {/* Empresa */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="bg-indigo-50 px-4 py-2 border-b border-slate-200">
+                      <p className="text-sm font-semibold text-indigo-800">🏢 Dados da Empresa do Lead (campos padrão)</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Campo</th>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Nomes aceitos no JSON</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            ['Nome da empresa', 'company_name, company, empresa, nome_empresa'],
+                            ['CNPJ', 'company_cnpj, cnpj, documento'],
+                            ['Razão Social', 'company_razao_social, razao_social, razao'],
+                            ['Nome Fantasia', 'company_nome_fantasia, nome_fantasia, fantasia'],
+                            ['Email da empresa', 'company_email, email_empresa'],
+                            ['Telefone da empresa', 'company_phone, company_telefone, telefone_empresa'],
+                            ['Site', 'company_site, site, website, url'],
+                            ['Cidade', 'company_cidade, cidade, city'],
+                            ['Estado', 'company_estado, estado, uf, state'],
+                            ['CEP', 'company_cep, cep'],
+                            ['Endereço', 'company_endereco, endereco, address'],
+                          ].map(([campo, nomes]) => (
+                            <tr key={campo} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
+                              <td className="px-4 py-2 font-mono text-slate-600">{nomes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Campos personalizados */}
+                  <div className="border border-purple-200 rounded-lg overflow-hidden">
+                    <div className="bg-purple-50 px-4 py-2 border-b border-purple-200">
+                      <p className="text-sm font-semibold text-purple-800">🔧 Campos Personalizados</p>
+                    </div>
+                    <div className="p-4 space-y-2 text-sm text-slate-700">
+                      <p>Use o <strong>ID numérico</strong> do campo como chave no JSON. Você encontra o ID em <strong>Configurações → Campos Personalizados</strong>.</p>
+                      <div className="bg-white border border-purple-100 rounded p-3 font-mono text-xs">
+                        <span className="text-slate-500">// Se o campo "Faturamento Mensal" tem ID 13:</span><br />
+                        <span className="text-purple-700">"13": "R$ 30 mil a R$ 50 mil"</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Campos não encontrados pelo ID são ignorados. O campo deve existir na interface antes de ser usado.</p>
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="border border-orange-200 rounded-lg overflow-hidden">
+                    <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
+                      <p className="text-sm font-semibold text-orange-800">🏷️ Tags</p>
+                    </div>
+                    <div className="p-4 space-y-3 text-sm text-slate-700">
+                      <p>Use a chave <strong className="font-mono">"tags"</strong> com um ou mais nomes de tags. O sistema busca a tag pelo nome e a cria automaticamente se não existir.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-600 mb-1">Uma tag (string simples):</p>
+                          <div className="bg-white border border-orange-100 rounded p-2 font-mono text-xs">
+                            <span className="text-orange-700">"tags": "Lead Quente"</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-600 mb-1">Múltiplas tags (separadas por vírgula):</p>
+                          <div className="bg-white border border-orange-100 rounded p-2 font-mono text-xs">
+                            <span className="text-orange-700">"tags": "Lead Quente, Importação, Segmento A"</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500">⚡ Novas tags são criadas automaticamente na sua empresa com cor padrão. Você pode ajustar cor e descrição depois em <strong>Configurações → Tags</strong>.</p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Exemplo e Teste */}
-              <div className="space-y-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">📝 {t('integrations.apiLeads.exampleTitle')}</h4>
-                  <div className="bg-white border rounded p-3 font-mono text-xs overflow-x-auto">
-                    <div className="text-gray-600">{`// Sistema Híbrido V5 - Exemplo de JSON:`}</div>
-                    <div className="text-green-600 mt-2">{`{`}</div>
-                    <div className="ml-2 text-red-600">{`"api_key": "(sua apikey aqui...)",`}</div>
-                    <div className="ml-2 text-blue-600">{`"nome": "João Silva",`}</div>
-                    <div className="ml-2 text-blue-600">{`"email": "joao@email.com",`}</div>
-                    <div className="ml-2 text-blue-600">{`"telefone": "(11) 99999-9999",`}</div>
-                    <div className="ml-2 text-blue-600">{`"origem": "landing_page",`}</div>
-                    <div className="ml-2 text-purple-600">{`"1": "R$ 50.000",        // Campo ID: 1`}</div>
-                    <div className="ml-2 text-purple-600">{`"2": "3 meses",          // Campo ID: 2`}</div>
-                    <div className="ml-2 text-purple-600">{`"3": "Google Ads"        // Campo ID: 3`}</div>
-                    <div className="text-green-600">{`}`}</div>
+              <hr className="border-slate-100" />
+
+              {/* Exemplo completo + Teste */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800 mb-3">📝 Exemplo completo</h3>
+                  <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs overflow-x-auto text-left">
+                    <div className="text-slate-400 mb-2">{'// POST https://app.lovoocrm.com/api/webhook-lead'}</div>
+                    <div className="text-slate-400 mb-2">{'// Content-Type: application/json'}</div>
+                    <div className="text-yellow-300">{'{'}</div>
+                    <div className="ml-4"><span className="text-red-400">"api_key"</span><span className="text-white">: </span><span className="text-green-300">"sua_api_key_aqui"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// Dados básicos'}</div>
+                    <div className="ml-4"><span className="text-red-400">"nome"</span><span className="text-white">: </span><span className="text-green-300">"João Silva"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"email"</span><span className="text-white">: </span><span className="text-green-300">"joao@empresa.com"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"telefone"</span><span className="text-white">: </span><span className="text-green-300">"11999999999"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"origem"</span><span className="text-white">: </span><span className="text-green-300">"landing_page"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// Dados da empresa'}</div>
+                    <div className="ml-4"><span className="text-red-400">"empresa"</span><span className="text-white">: </span><span className="text-green-300">"Empresa ABC"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"cnpj"</span><span className="text-white">: </span><span className="text-green-300">"12.345.678/0001-99"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// Campos personalizados (use o ID numérico)'}</div>
+                    <div className="ml-4"><span className="text-red-400">"13"</span><span className="text-white">: </span><span className="text-green-300">"R$ 30 mil a R$ 50 mil"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"14"</span><span className="text-white">: </span><span className="text-green-300">"Falta de follow-up"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// Tags (criadas automaticamente)'}</div>
+                    <div className="ml-4"><span className="text-red-400">"tags"</span><span className="text-white">: </span><span className="text-green-300">"Lead Quente, Importação"</span></div>
+                    <div className="text-yellow-300">{'}'}</div>
                   </div>
-                  <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
-                    <p className="text-xs text-purple-800">
-                      <strong>🎯</strong> {t('integrations.apiLeads.hybridFooter')}
-                    </p>
+                  <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                    <p className="text-xs text-emerald-800"><strong>✅ Resposta de sucesso:</strong></p>
+                    <div className="font-mono text-xs text-emerald-700 mt-1">{'{ "success": true, "lead_id": 1234 }'}</div>
+                    <p className="text-xs text-emerald-800 mt-2"><strong>❌ Resposta de erro:</strong></p>
+                    <div className="font-mono text-xs text-red-600 mt-1">{'{ "success": false, "error": "mensagem do erro" }'}</div>
                   </div>
                 </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h4 className="font-medium text-yellow-900 mb-2">⚡ {t('integrations.apiLeads.quickTestTitle')}</h4>
-                  <p className="text-sm text-yellow-800 mb-3">
-                    {t('integrations.apiLeads.quickTestHint')}
-                  </p>
-                  <button
-                    onClick={() => testWebhookLead()}
-                    disabled={!company?.api_key || testingWebhook}
-                    className="w-full flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                  >
-                    {testingWebhook ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        {t('integrations.apiLeads.testing')}
-                      </>
-                    ) : (
-                      <>
-                        <Webhook className="w-4 h-4" />
-                        {t('integrations.apiLeads.testWebhook')}
-                      </>
-                    )}
-                  </button>
-                  {webhookTestResult && (
-                    <div className={`mt-3 p-3 rounded-lg text-sm ${
-                      webhookTestResult.success 
-                        ? 'bg-green-100 text-green-800 border border-green-200' 
-                        : 'bg-red-100 text-red-800 border border-red-200'
-                    }`}>
-                      {webhookTestResult.success ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-800 mb-3">💻 Exemplo em Python</h3>
+                    <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs overflow-x-auto text-left">
+                      <div className="text-blue-400">import</div>
+                      <div className="text-white">{`requests`}</div>
+                      <div className="text-white mt-2">{`payload = {`}</div>
+                      <div className="ml-4 text-green-300">{`"api_key": "sua_api_key",`}</div>
+                      <div className="ml-4 text-green-300">{`"nome": "Maria Santos",`}</div>
+                      <div className="ml-4 text-green-300">{`"email": "maria@email.com",`}</div>
+                      <div className="ml-4 text-green-300">{`"tags": "Lead Quente"`}</div>
+                      <div className="text-white">{`}`}</div>
+                      <div className="text-white mt-2">{`r = requests.post(`}</div>
+                      <div className="ml-4 text-green-300">{`"https://app.lovoocrm.com/api/webhook-lead",`}</div>
+                      <div className="ml-4 text-green-300">{`json=payload`}</div>
+                      <div className="text-white">{`)`}</div>
+                      <div className="text-white">{`print(r.json())`}</div>
+                    </div>
+                  </div>
+
+                  {/* Teste rápido */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 className="font-medium text-yellow-900 mb-1">⚡ Teste rápido</h4>
+                    <p className="text-xs text-yellow-800 mb-3">
+                      Clique para criar um lead de teste usando sua API Key e verificar se a integração está funcionando.
+                    </p>
+                    <button
+                      onClick={() => testWebhookLead()}
+                      disabled={!company?.api_key || testingWebhookLead}
+                      className="w-full flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
+                    >
+                      {testingWebhookLead ? (
                         <>
-                          ✅ {t('integrations.apiLeads.testSuccess', { leadId: String(webhookTestResult.lead_id ?? '') })}
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Testando...
                         </>
                       ) : (
                         <>
-                          ❌ <strong>{t('integrations.apiLeads.testErrorLabel')}</strong> {webhookTestResult.error}
+                          <Webhook className="w-4 h-4" />
+                          Enviar Lead de Teste
                         </>
                       )}
-                    </div>
-                  )}
+                    </button>
+                    {webhookTestResult && (
+                      <div className={`mt-3 p-3 rounded-lg text-sm ${
+                        webhookTestResult.success
+                          ? 'bg-green-100 text-green-800 border border-green-200'
+                          : 'bg-red-100 text-red-800 border border-red-200'
+                      }`}>
+                        {webhookTestResult.success ? (
+                          <>✅ Lead criado com sucesso! ID: <strong>{webhookTestResult.lead_id}</strong></>
+                        ) : (
+                          <>❌ <strong>Erro:</strong> {webhookTestResult.error}</>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dicas */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-semibold text-slate-700">💡 Dicas importantes</p>
+                    <ul className="text-xs text-slate-600 space-y-1.5">
+                      <li>• <strong>Duplicatas:</strong> Se o mesmo email ou telefone já existir, o sistema registra uma reentrada ao invés de criar duplicata.</li>
+                      <li>• <strong>Campos obrigatórios:</strong> Pelo menos <strong>nome</strong> ou <strong>email</strong> devem estar presentes.</li>
+                      <li>• <strong>Campos extras:</strong> Qualquer campo desconhecido é ignorado silenciosamente (não gera erro).</li>
+                      <li>• <strong>Tags:</strong> Novas tags são criadas automaticamente. Edite cor e descrição em Configurações → Tags.</li>
+                      <li>• <strong>Campos personalizados:</strong> O ID numérico está visível em Configurações → Campos Personalizados.</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           )}
           
           {/* Sub-aba: Webhook Avançado */}

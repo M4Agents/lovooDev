@@ -379,6 +379,11 @@ async function createLeadDirectSQL(params) {
     
     // 4. Processar campos personalizados (mapeamento inteligente)
     const customFieldsProcessed = await processCustomFields(supabase, lead.company_id, params.form_data, detectedFields);
+
+    // 4.5 Processar e atribuir tags
+    if (params.form_data.tags) {
+      await processTagsForLead(supabase, lead.company_id, lead.lead_id, params.form_data.tags);
+    }
     if (customFieldsProcessed.length > 0) {
       console.log(`🔧 ${customFieldsProcessed.length} campos personalizados processados`);
     }
@@ -572,7 +577,8 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       'company_site', 'site', 'website', 'url', // ← ADICIONADO
       
       // Campos técnicos:
-      'responsible_user_id', 'responsavel', 'usuario_responsavel', // ← ADICIONADO
+      'responsible_user_id', 'responsavel', 'usuario_responsavel',
+      'tags', 'tag', 'etiquetas', 'etiqueta', // Tags do lead
       'api_key', // Excluir api_key dos campos personalizados
       'visitor_id', 'session_id',
       'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
@@ -1035,6 +1041,87 @@ async function processCustomFieldById(supabase, companyId, numericId, value) {
   } catch (error) {
     console.error(`❌ ERRO ao processar campo por ID ${numericId}:`, error);
     return null;
+  }
+}
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+async function processTagsForLead(supabase, companyId, leadId, rawTags) {
+  try {
+    // Normalizar para array de nomes
+    let tagNames = [];
+    if (Array.isArray(rawTags)) {
+      tagNames = rawTags.map(t => String(t).trim()).filter(Boolean);
+    } else {
+      tagNames = String(rawTags).split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    if (tagNames.length === 0) return;
+
+    console.log(`🏷️ Processando ${tagNames.length} tag(s):`, tagNames);
+
+    // Buscar tags existentes da empresa (case-insensitive)
+    const { data: existingTags, error: fetchError } = await supabase
+      .from('lead_tags')
+      .select('id, name')
+      .eq('company_id', companyId)
+      .eq('is_active', true);
+
+    if (fetchError) {
+      console.error('❌ Erro ao buscar tags:', fetchError);
+      return;
+    }
+
+    const resolvedTagIds = [];
+
+    for (const tagName of tagNames) {
+      const normalized = tagName.toLowerCase();
+
+      // Verificar se já existe (case-insensitive)
+      const found = (existingTags || []).find(t => t.name.toLowerCase() === normalized);
+
+      if (found) {
+        console.log(`✅ Tag encontrada: "${tagName}" → ${found.id}`);
+        resolvedTagIds.push(found.id);
+      } else {
+        // Criar tag automaticamente
+        console.log(`🆕 Criando tag: "${tagName}"`);
+        const { data: created, error: createError } = await supabase
+          .rpc('lead_tags_operations_safe', {
+            p_company_id: companyId,
+            p_action: 'create',
+            p_tag_data: { name: tagName, color: '#6B7280' }
+          });
+
+        if (createError || !created?.success) {
+          console.error(`❌ Erro ao criar tag "${tagName}":`, createError || created?.error);
+          continue;
+        }
+
+        console.log(`✅ Tag criada: "${tagName}" → ${created.tag_id}`);
+        resolvedTagIds.push(created.tag_id);
+      }
+    }
+
+    if (resolvedTagIds.length === 0) return;
+
+    // Atribuir todas as tags ao lead
+    const { data: assignResult, error: assignError } = await supabase
+      .rpc('manage_lead_tag_assignments_safe', {
+        p_company_id: companyId,
+        p_lead_id: leadId,
+        p_tag_ids: resolvedTagIds,
+        p_action: 'add'
+      });
+
+    if (assignError || !assignResult?.success) {
+      console.error('❌ Erro ao atribuir tags:', assignError || assignResult?.error);
+    } else {
+      console.log(`✅ ${assignResult.processed_tags} tag(s) atribuída(s) ao lead ${leadId}`);
+    }
+  } catch (error) {
+    console.error('❌ Erro geral ao processar tags:', error);
+    // Não falhar o lead por causa das tags
   }
 }
 
