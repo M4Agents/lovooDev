@@ -692,6 +692,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'validation_error', message: errorMsg });
     }
     const { canonical, customFieldIds, ignoredFields } = sanitized;
+    // api_key está na whitelist para não ser contado como campo ignorado,
+    // mas não deve seguir para o pipeline — removido explicitamente aqui.
+    delete canonical.api_key;
 
     // ── 10. Criação atômica do lead via RPC restrita a service_role ───────────
     // company_id vem do step 7 — nunca de req.body nem de canonical
