@@ -876,7 +876,9 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
 // executeLeadCriticalPostCreate — etapas essenciais para visualização imediata
 //
 // Executada com await no handler, ANTES do HTTP 200.
-// Garante que custom fields e tags estejam salvos quando o lead for aberto.
+// Garante que custom fields, tags e reentrada estejam gravados quando o lead
+// for aberto. A reentrada é crítica pois o Vercel encerra a Lambda após
+// res.json(), impedindo execução fire-and-forget confiável.
 // Retorna customFieldsProcessed para reuso no pipeline assíncrono.
 // ---------------------------------------------------------------------------
 async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, svcClient) {
@@ -914,6 +916,48 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
     }
   } catch (err) {
     console.error('[webhook-lead] Tags pipeline error', { message: err?.message });
+  }
+
+  // 3. Reentrada — somente duplicados (movida para cá pois Vercel encerra
+  //    a Lambda após res.json(), impedindo execução fire-and-forget confiável)
+  // #region agent log
+  console.error('[DBG-56e383][REENTRY-A] condition check', {
+    is_duplicate:         lead.is_duplicate,
+    duplicate_of_lead_id: lead.duplicate_of_lead_id,
+    lead_id:              lead.lead_id,
+    conditionResult:      !!(lead.is_duplicate && lead.duplicate_of_lead_id),
+  });
+  // #endregion
+  if (lead.is_duplicate && lead.duplicate_of_lead_id) {
+    const supabaseAdmin = getSupabaseAdmin();
+    const payloadRef    = { name: canonical.name, phone: canonical.phone, email: canonical.email };
+    try {
+      // #region agent log
+      console.error('[DBG-56e383][REENTRY-B] calling handleLeadReentry', {
+        newLeadId:      lead.lead_id,
+        existingLeadId: lead.duplicate_of_lead_id,
+        source:         'webhook',
+      });
+      // #endregion
+      await handleLeadReentry({
+        newLeadId:       lead.lead_id,
+        existingLeadId:  lead.duplicate_of_lead_id,
+        companyId,
+        source:          'webhook',
+        externalEventId: canonical.webhook_id || null,
+        originChannel:   canonical.utm_source  || null,
+        metadata:        { payload_hash: hashPayload(payloadRef) },
+        supabase:        supabaseAdmin,
+      });
+      // #region agent log
+      console.error('[DBG-56e383][REENTRY-C] handleLeadReentry completed OK');
+      // #endregion
+    } catch (err) {
+      // #region agent log
+      console.error('[DBG-56e383][REENTRY-D] handleLeadReentry THREW', { message: err?.message, stack: err?.stack?.split('\n')[1] });
+      // #endregion
+      console.error('[webhook-lead] Lead reentry failed', { message: err?.message });
+    }
   }
 
   return customFieldsProcessed;
@@ -961,46 +1005,8 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
     }
   }
 
-  // 4. Reentrada — somente duplicados
-  // #region agent log
-  console.error('[DBG-56e383][REENTRY-A] condition check', {
-    is_duplicate:         lead.is_duplicate,
-    duplicate_of_lead_id: lead.duplicate_of_lead_id,
-    lead_id:              lead.lead_id,
-    conditionResult:      !!(lead.is_duplicate && lead.duplicate_of_lead_id),
-  });
-  // #endregion
-  if (lead.is_duplicate && lead.duplicate_of_lead_id) {
-    const supabaseAdmin = getSupabaseAdmin();
-    const payloadRef    = { name: canonical.name, phone: canonical.phone, email: canonical.email };
-    try {
-      // #region agent log
-      console.error('[DBG-56e383][REENTRY-B] calling handleLeadReentry', {
-        newLeadId:      lead.lead_id,
-        existingLeadId: lead.duplicate_of_lead_id,
-        source:         'webhook',
-      });
-      // #endregion
-      await handleLeadReentry({
-        newLeadId:       lead.lead_id,
-        existingLeadId:  lead.duplicate_of_lead_id,
-        companyId,
-        source:          'webhook',
-        externalEventId: canonical.webhook_id  || null,
-        originChannel:   canonical.utm_source  || null,
-        metadata:        { payload_hash: hashPayload(payloadRef) },
-        supabase:        supabaseAdmin,
-      });
-      // #region agent log
-      console.error('[DBG-56e383][REENTRY-C] handleLeadReentry completed OK');
-      // #endregion
-    } catch (err) {
-      // #region agent log
-      console.error('[DBG-56e383][REENTRY-D] handleLeadReentry THREW', { message: err?.message, stack: err?.stack?.split('\n')[1] });
-      // #endregion
-      console.error('[webhook-lead] Lead reentry failed', { message: err?.message });
-    }
-  }
+  // Reentrada movida para executeLeadCriticalPostCreate (bloco síncrono antes
+  // do HTTP 200) pois o Vercel encerra a Lambda após res.json().
 }
 
 // detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST
