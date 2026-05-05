@@ -792,10 +792,36 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'internal_error' });
     }
 
-    // ── 11. Pipeline pós-criação (não bloqueante) ─────────────────────────────
-    // Lead criado com sucesso: resposta 200 é enviada imediatamente.
-    // Custom fields, tags, webhooks, automações e logs rodam em background.
-    // Falhas no pipeline NUNCA influenciam a resposta HTTP.
+    // ── 11. Logs garantidos — executam antes da resposta HTTP ─────────────────
+    // Devem ser executados com await para garantir gravação independente do
+    // pipeline ser fire-and-forget. O runtime serverless pode encerrar após
+    // res.send() — estes logs NÃO podem depender do pipeline para rodar.
+
+    // Log funcional (lead_import_events) — visível na tela de Logs de Importação
+    try {
+      await logImportEvent(svcClient, lead.company_id, lead.is_duplicate ? 'duplicate' : 'success', {
+        leadId:  lead.is_duplicate ? (lead.duplicate_of_lead_id || lead.lead_id) : lead.lead_id,
+        summary: { name: canonical.name || null, email: canonical.email || null, phone: canonical.phone || null },
+        ref:     canonical.ref || null,
+      });
+    } catch (err) {
+      console.error('[webhook-lead] logImportEvent error:', err?.message);
+    }
+
+    // Log técnico (webhook_api_logs) — inclui metadados de campos ignorados
+    const logMetadata = ignoredFields?.count > 0
+      ? { ignored_fields_count: ignoredFields.count, ignored_fields_names: ignoredFields.names }
+      : null;
+    anonClient.rpc('update_webhook_log_result', {
+      p_request_id: requestId,
+      p_result:     lead.is_duplicate ? 'duplicate' : 'success',
+      p_lead_id:    lead.lead_id,
+      p_metadata:   logMetadata,
+    }).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
+
+    // ── 12. Pipeline pós-criação (não bloqueante) ─────────────────────────────
+    // Custom fields, tags, webhooks, automações e reentrada rodam em background.
+    // Falhas no pipeline NUNCA influenciam a resposta HTTP nem os logs.
     executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields })
       .catch(err => console.error('[webhook-lead] pipeline error (non-blocking):', err?.message));
 
@@ -937,23 +963,9 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
     }
   }
 
-  // 7. Log funcional (lead_import_events)
-  await logImportEvent(svcClient, companyId, lead.is_duplicate ? 'duplicate' : 'success', {
-    leadId:  lead.is_duplicate ? (lead.duplicate_of_lead_id || lead.lead_id) : lead.lead_id,
-    summary: { name: canonical.name || null, email: canonical.email || null, phone: canonical.phone || null },
-    ref:     canonical.ref || null,
-  });
-
-  // 8. Log técnico (webhook_api_logs) — inclui metadados de campos ignorados
-  const logMetadata = ignoredFields?.count > 0
-    ? { ignored_fields_count: ignoredFields.count, ignored_fields_names: ignoredFields.names }
-    : null;
-  anonClient.rpc('update_webhook_log_result', {
-    p_request_id: requestId,
-    p_result:     lead.is_duplicate ? 'duplicate' : 'success',
-    p_lead_id:    lead.lead_id,
-    p_metadata:   logMetadata,
-  }).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
+  // Logs (lead_import_events e webhook_api_logs) movidos para o handler principal.
+  // Executam com await antes do HTTP 200 para garantir gravação independente
+  // do ciclo de vida serverless.
 }
 
 // detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST
