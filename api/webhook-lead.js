@@ -352,7 +352,12 @@ async function createLeadDirectSQL(params) {
           company_name: detectedFields.company_name || null,
           company_cnpj: detectedFields.company_cnpj || null,
           company_email: detectedFields.company_email || null,
-          visitor_id: params.form_data.visitor_id || null  // CRÍTICO: Passar visitor_id para RPC
+          visitor_id: params.form_data.visitor_id || null,
+          // Campos de marketing / UTM
+          campanha:         detectedFields.campanha || null,
+          conjunto_anuncio: detectedFields.conjunto_anuncio || null,
+          anuncio:          detectedFields.anuncio || null,
+          utm_medium:       detectedFields.utm_medium || null,
         }
       });
     
@@ -520,7 +525,13 @@ function detectFormFields(formData) {
     company_cidade: ['company_cidade', 'cidade', 'city'], // ← ADICIONADO
     company_estado: ['company_estado', 'estado', 'uf', 'state'], // ← ADICIONADO
     company_endereco: ['company_endereco', 'endereco', 'address'], // ← ADICIONADO
-    company_site: ['company_site', 'site', 'website', 'url'] // ← ADICIONADO
+    company_site: ['company_site', 'site', 'website', 'url'], // ← ADICIONADO
+
+    // Campos de marketing / UTM:
+    campanha:         ['campanha', 'utm_campaign', 'campaign', 'campaign_name', 'nome_campanha'],
+    conjunto_anuncio: ['conjunto_anuncio', 'adset', 'ad_set', 'utm_content', 'conjunto'],
+    anuncio:          ['anuncio', 'ad', 'ad_name', 'utm_term', 'nome_anuncio'],
+    utm_medium:       ['utm_medium', 'medium', 'midia', 'mídia', 'canal_midia']
   };
   
   // Detectar campos automaticamente
@@ -576,12 +587,18 @@ async function processCustomFields(supabase, companyId, formData, detectedFields
       'company_endereco', 'endereco', 'address', // ← ADICIONADO
       'company_site', 'site', 'website', 'url', // ← ADICIONADO
       
+      // Campos de marketing / UTM (mapeados para colunas da tabela leads):
+      'campanha', 'utm_campaign', 'campaign', 'campaign_name', 'nome_campanha',
+      'conjunto_anuncio', 'adset', 'ad_set', 'utm_content', 'conjunto',
+      'anuncio', 'ad', 'ad_name', 'utm_term', 'nome_anuncio',
+      'utm_medium', 'medium', 'midia', 'mídia', 'canal_midia',
+      'utm_source', // utm_source é mapeado para origin/originChannel
+
       // Campos técnicos:
       'responsible_user_id', 'responsavel', 'usuario_responsavel',
       'tags', 'tag', 'etiquetas', 'etiqueta', // Tags do lead
       'api_key', // Excluir api_key dos campos personalizados
       'visitor_id', 'session_id',
-      'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
       'referrer', 'user_agent', 'ip_address', 'device_type'
     ]);
     

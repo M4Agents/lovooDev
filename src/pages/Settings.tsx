@@ -1596,6 +1596,44 @@ export const Settings: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* UTMs */}
+                  <div className="border border-rose-200 rounded-lg overflow-hidden">
+                    <div className="bg-rose-50 px-4 py-2 border-b border-rose-200">
+                      <p className="text-sm font-semibold text-rose-800">📊 UTMs e Dados de Marketing</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Campo salvo</th>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Nomes aceitos no JSON</th>
+                            <th className="px-4 py-2 text-left text-slate-600 font-semibold">Equivalente UTM</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            ['Campanha', 'campanha, utm_campaign, campaign, campaign_name', 'utm_campaign'],
+                            ['Conjunto de Anúncio', 'conjunto_anuncio, adset, ad_set, utm_content', 'utm_content'],
+                            ['Anúncio', 'anuncio, ad, ad_name, utm_term', 'utm_term'],
+                            ['Mídia / Canal', 'utm_medium, medium, midia', 'utm_medium'],
+                            ['Origem', 'origem, utm_source, source, fonte', 'utm_source → campo origin'],
+                          ].map(([campo, nomes, equiv]) => (
+                            <tr key={campo} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
+                              <td className="px-4 py-2 font-mono text-slate-600">{nomes}</td>
+                              <td className="px-4 py-2 text-slate-500">{equiv}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="px-4 py-3 bg-rose-50 border-t border-rose-100">
+                      <p className="text-xs text-rose-700">
+                        💡 Os dados de UTM são salvos diretamente no lead e aparecem na seção <strong>Marketing</strong> ao visualizar o lead. Você pode usar tanto os nomes padrão do Google Analytics (<code className="bg-rose-100 px-1 rounded">utm_campaign</code>) quanto os nomes em português (<code className="bg-rose-100 px-1 rounded">campanha</code>).
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Tags */}
                   <div className="border border-orange-200 rounded-lg overflow-hidden">
                     <div className="bg-orange-50 px-4 py-2 border-b border-orange-200">
@@ -1645,6 +1683,11 @@ export const Settings: React.FC = () => {
                     <div className="ml-4 mt-1 text-slate-400">{'// Campos personalizados (use o ID numérico)'}</div>
                     <div className="ml-4"><span className="text-red-400">"13"</span><span className="text-white">: </span><span className="text-green-300">"R$ 30 mil a R$ 50 mil"</span><span className="text-white">,</span></div>
                     <div className="ml-4"><span className="text-red-400">"14"</span><span className="text-white">: </span><span className="text-green-300">"Falta de follow-up"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// UTMs / Marketing'}</div>
+                    <div className="ml-4"><span className="text-red-400">"utm_campaign"</span><span className="text-white">: </span><span className="text-green-300">"Black Friday 2026"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"utm_medium"</span><span className="text-white">: </span><span className="text-green-300">"cpc"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"utm_content"</span><span className="text-white">: </span><span className="text-green-300">"Grupo PME"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"utm_term"</span><span className="text-white">: </span><span className="text-green-300">"Banner Principal"</span><span className="text-white">,</span></div>
                     <div className="ml-4 mt-1 text-slate-400">{'// Tags (criadas automaticamente)'}</div>
                     <div className="ml-4"><span className="text-red-400">"tags"</span><span className="text-white">: </span><span className="text-green-300">"Lead Quente, Importação"</span></div>
                     <div className="text-yellow-300">{'}'}</div>
@@ -1667,6 +1710,8 @@ export const Settings: React.FC = () => {
                       <div className="ml-4 text-green-300">{`"api_key": "sua_api_key",`}</div>
                       <div className="ml-4 text-green-300">{`"nome": "Maria Santos",`}</div>
                       <div className="ml-4 text-green-300">{`"email": "maria@email.com",`}</div>
+                      <div className="ml-4 text-green-300">{`"utm_campaign": "Black Friday",`}</div>
+                      <div className="ml-4 text-green-300">{`"utm_medium": "cpc",`}</div>
                       <div className="ml-4 text-green-300">{`"tags": "Lead Quente"`}</div>
                       <div className="text-white">{`}`}</div>
                       <div className="text-white mt-2">{`r = requests.post(`}</div>
@@ -1723,6 +1768,7 @@ export const Settings: React.FC = () => {
                       <li>• <strong>Campos obrigatórios:</strong> Pelo menos <strong>nome</strong> ou <strong>email</strong> devem estar presentes.</li>
                       <li>• <strong>Campos extras:</strong> Qualquer campo desconhecido é ignorado silenciosamente (não gera erro).</li>
                       <li>• <strong>Tags:</strong> Novas tags são criadas automaticamente. Edite cor e descrição em Configurações → Tags.</li>
+                      <li>• <strong>UTMs:</strong> Use <code className="bg-slate-100 px-1 rounded text-xs">utm_campaign</code>, <code className="bg-slate-100 px-1 rounded text-xs">utm_medium</code>, <code className="bg-slate-100 px-1 rounded text-xs">utm_content</code> e <code className="bg-slate-100 px-1 rounded text-xs">utm_term</code>. Aparecem na seção Marketing do lead.</li>
                       <li>• <strong>Campos personalizados:</strong> O ID numérico está visível em Configurações → Campos Personalizados.</li>
                     </ul>
                   </div>
