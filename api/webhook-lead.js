@@ -637,9 +637,6 @@ export default async function handler(req, res) {
                      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
                      || process.env.VITE_SUPABASE_ANON_KEY;
     const svcKey      = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    // #region agent log
-    console.error('[DBG-56e383][H-ENV] env check:', JSON.stringify({ hasUrl: !!supabaseUrl, hasAnon: !!anonKey, hasSvc: !!svcKey }));
-    // #endregion
     if (!supabaseUrl) throw new Error('[webhook-lead] Missing SUPABASE_URL env var');
     if (!anonKey)     throw new Error('[webhook-lead] Missing Supabase anon key env var');
     if (!svcKey)      throw new Error('[webhook-lead] Missing SUPABASE_SERVICE_ROLE_KEY env var');
@@ -695,9 +692,6 @@ export default async function handler(req, res) {
     // ── 9. Sanitização — whitelist + validação + normalização ────────────────
     // Após este ponto, req.body nunca é usado — apenas canonical e customFieldIds
     const sanitized = sanitizePayload(req.body);
-    // #region agent log
-    console.error('[DBG-56e383][H-C] sanitize:', JSON.stringify({ isValid: sanitized.isValid, errors: sanitized.errors, customFieldIds: sanitized.customFieldIds, ignoredCount: sanitized.ignoredFields?.count }));
-    // #endregion
     if (!sanitized.isValid) {
       const errorMsg = sanitized.errors[0] || 'validation_error';
       // Log técnico (company_id já resolvido neste ponto)
@@ -744,9 +738,6 @@ export default async function handler(req, res) {
       },
     });
 
-    // #region agent log
-    console.error('[DBG-56e383][H-A] rpc result:', JSON.stringify({ hasLeadError: !!leadError, leadErrorMsg: leadError?.message, leadSuccess: lead?.success, leadRpcError: lead?.error, leadId: lead?.lead_id, isDuplicate: lead?.is_duplicate }));
-    // #endregion
     if (leadError) {
       console.error('[webhook-lead] RPC create_lead_from_company error', { message: leadError.message });
       Promise.resolve(anonClient.rpc('update_webhook_log_result', {
@@ -801,15 +792,17 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'internal_error' });
     }
 
-    // ── 11. Logs garantidos — executam antes da resposta HTTP ─────────────────
-    // Devem ser executados com await para garantir gravação independente do
-    // pipeline ser fire-and-forget. O runtime serverless pode encerrar após
-    // res.send() — estes logs NÃO podem depender do pipeline para rodar.
+    // ── 11. Bloco crítico síncrono — custom fields + tags (antes do HTTP 200) ──
+    // Garante que o lead esteja completo para visualização imediata no CRM.
+    // Falhas são capturadas internamente — nunca causam 500.
+    let customFieldsProcessed = [];
+    try {
+      customFieldsProcessed = await executeLeadCriticalPostCreate(lead, canonical, customFieldIds, svcClient);
+    } catch (err) {
+      console.error('[webhook-lead] critical post-create error:', err?.message);
+    }
 
-    // #region agent log
-    console.error('[DBG-56e383][H-B] log-block:', JSON.stringify({ leadId: lead?.lead_id, isDuplicate: lead?.is_duplicate, companyId: lead?.company_id }));
-    // #endregion
-
+    // ── 12. Logs garantidos — executam antes da resposta HTTP ─────────────────
     // Log funcional (lead_import_events) — visível na tela de Logs de Importação
     try {
       await logImportEvent(svcClient, lead.company_id, lead.is_duplicate ? 'duplicate' : 'success', {
@@ -821,7 +814,7 @@ export default async function handler(req, res) {
       console.error('[webhook-lead] logImportEvent error:', err?.message);
     }
 
-    // Log técnico (webhook_api_logs) — inclui metadados de campos ignorados
+    // Log técnico (webhook_api_logs)
     const logMetadata = ignoredFields?.count > 0
       ? { ignored_fields_count: ignoredFields.count, ignored_fields_names: ignoredFields.names }
       : null;
@@ -832,20 +825,17 @@ export default async function handler(req, res) {
       p_metadata:   logMetadata,
     })).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
 
-    // ── 12. Pipeline pós-criação (não bloqueante) ─────────────────────────────
-    // Custom fields, tags, webhooks, automações e reentrada rodam em background.
-    // Falhas no pipeline NUNCA influenciam a resposta HTTP nem os logs.
-    executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields })
-      .catch(err => console.error('[webhook-lead] pipeline error (non-blocking):', err?.message));
+    // ── 13. Pipeline assíncrono (fire-and-forget) ─────────────────────────────
+    // Visitor connection, webhooks externos, automações e reentrada rodam em
+    // background. Falhas NUNCA influenciam a resposta HTTP nem os logs.
+    executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields })
+      .catch(err => console.error('[webhook-lead] async pipeline error (non-blocking):', err?.message));
 
     return res.status(200).json({ success: true, lead_id: lead.lead_id });
 
   } catch (error) {
     // Apenas erros no bloco crítico (autenticação, rate limit, criação do lead)
     // chegam aqui e retornam 500.
-    // #region agent log
-    console.error('[DBG-56e383][500] outer catch:', error?.message, error?.stack?.split('\n')[1]);
-    // #endregion
     console.error('[webhook-lead] Unhandled exception', { message: error?.message });
     return res.status(500).json({ success: false, error: 'internal_error' });
   }
@@ -883,31 +873,17 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// executeLeadPipeline — processa tudo após a criação do lead
+// executeLeadCriticalPostCreate — etapas essenciais para visualização imediata
 //
-// Usa canonical (dados sanitizados) e customFieldIds (mapa ID→valor).
-// Nenhuma referência a req.body ou form_data após este ponto.
-// Erros em cada etapa são capturados individualmente para não interromper o fluxo.
+// Executada com await no handler, ANTES do HTTP 200.
+// Garante que custom fields e tags estejam salvos quando o lead for aberto.
+// Retorna customFieldsProcessed para reuso no pipeline assíncrono.
 // ---------------------------------------------------------------------------
-async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient, anonClient, requestId, ignoredFields }) {
+async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, svcClient) {
   const companyId = lead.company_id;
-
-  // 1. Visitor connection
-  try {
-    if (canonical.visitor_id) {
-      await processVisitorConnection(svcClient, lead.lead_id, companyId, canonical.visitor_id, canonical);
-    } else {
-      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, canonical);
-    }
-  } catch (err) {
-    console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
-  }
-
-  // 2. Campos personalizados — processar + inserir
-  // #region agent log
-  console.error('[DBG-56e383][H-D] pipeline customFields:', JSON.stringify({ customFieldIds, companyId, leadId: lead?.lead_id }));
-  // #endregion
   let customFieldsProcessed = [];
+
+  // 1. Campos personalizados — processar + inserir
   try {
     customFieldsProcessed = await processCustomFieldsFromIds(svcClient, companyId, customFieldIds);
     if (customFieldsProcessed.length > 0) {
@@ -921,9 +897,6 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
           lead_id_param: lead.lead_id,
           field_values:  customValues,
         });
-      // #region agent log
-      console.error('[DBG-56e383][H-E] insert custom fields:', JSON.stringify({ hasError: !!customError, errorMsg: customError?.message, insertSuccess: insertResult?.success, count: customValues.length }));
-      // #endregion
       if (customError) {
         console.error('[webhook-lead] Custom fields insert error', { message: customError.message });
       } else if (!insertResult?.success) {
@@ -934,7 +907,7 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
     console.error('[webhook-lead] Custom fields pipeline error', { message: err?.message });
   }
 
-  // 3. Tags — array já normalizado pelo sanitizePayload
+  // 2. Tags — array já normalizado pelo sanitizePayload
   try {
     if (canonical.tags?.length > 0) {
       await processTagsForLead(svcClient, companyId, lead.lead_id, canonical.tags);
@@ -943,7 +916,30 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
     console.error('[webhook-lead] Tags pipeline error', { message: err?.message });
   }
 
-  // 4. Webhooks avançados — svcClient passado diretamente
+  return customFieldsProcessed;
+}
+
+// ---------------------------------------------------------------------------
+// executeLeadAsyncPipeline — tarefas não essenciais para visualização imediata
+//
+// Executada fire-and-forget após o HTTP 200. Falhas nunca influenciam a resposta.
+// Recebe customFieldsProcessed já processado pelo bloco crítico.
+// ---------------------------------------------------------------------------
+async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields }) {
+  const companyId = lead.company_id;
+
+  // 1. Visitor connection
+  try {
+    if (canonical.visitor_id) {
+      await processVisitorConnection(svcClient, lead.lead_id, companyId, canonical.visitor_id, canonical);
+    } else {
+      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, canonical);
+    }
+  } catch (err) {
+    console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
+  }
+
+  // 2. Webhooks avançados — usa customFieldsProcessed já disponível
   try {
     await triggerAdvancedWebhooks({
       lead_id:                 lead.lead_id,
@@ -956,7 +952,7 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
     console.error('[webhook-lead] Advanced webhooks error', { message: err?.message });
   }
 
-  // 5. Automação — somente leads novos
+  // 3. Automação — somente leads novos
   if (!lead.is_duplicate) {
     try {
       await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
@@ -965,7 +961,7 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
     }
   }
 
-  // 6. Reentrada — somente duplicados
+  // 4. Reentrada — somente duplicados
   if (lead.is_duplicate && lead.duplicate_of_lead_id) {
     const supabaseAdmin = getSupabaseAdmin();
     const payloadRef    = { name: canonical.name, phone: canonical.phone, email: canonical.email };
@@ -984,10 +980,6 @@ async function executeLeadPipeline(lead, canonical, customFieldIds, { svcClient,
       console.error('[webhook-lead] Lead reentry failed', { message: err?.message });
     }
   }
-
-  // Logs (lead_import_events e webhook_api_logs) movidos para o handler principal.
-  // Executam com await antes do HTTP 200 para garantir gravação independente
-  // do ciclo de vida serverless.
 }
 
 // detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST
