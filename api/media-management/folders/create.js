@@ -70,7 +70,6 @@ export default async function handler(req, res) {
         parent_path: parent_id ? null : null, // Simplificado por enquanto
         icon: icon || '📁',
         description: description?.trim() || null,
-        file_count: 0
       })
       .select()
       .single()
