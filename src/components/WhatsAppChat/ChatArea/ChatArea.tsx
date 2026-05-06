@@ -5,7 +5,7 @@
 // NÃO MODIFICA componentes existentes
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronDown, Bot } from 'lucide-react'
+import { ChevronDown, Bot, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
@@ -1510,23 +1510,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           />
         )}
 
-        {/* Botão Sugerir resposta */}
-        {!showSuggestionPanel && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowSuggestionPanel(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors"
-              title="Gerar sugestões de resposta com IA"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
-              Sugerir resposta
-            </button>
-          </div>
-        )}
-
         <MessageInput
           onSendMessage={handleSendMessage}
           onPreviewFile={openPreviewModal}
@@ -1536,6 +1519,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           conversationId={conversationId}
           prefillValue={pendingSuggestion ?? undefined}
           onPrefillConsumed={() => setPendingSuggestion(null)}
+          onToggleSuggestion={() => setShowSuggestionPanel(p => !p)}
+          isSuggestionActive={showSuggestionPanel}
         />
       </div>
 
@@ -2167,6 +2152,10 @@ interface MessageInputProps {
   prefillValue?: string
   /** Chamado após o prefillValue ser aplicado, para que o pai resete o estado. */
   onPrefillConsumed?: () => void
+  /** Abre/fecha o painel de sugestões de resposta com IA. */
+  onToggleSuggestion: () => void
+  /** Indica se o painel de sugestões está visível — controla o visual ativo do botão. */
+  isSuggestionActive: boolean
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -2178,6 +2167,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   conversationId,
   prefillValue,
   onPrefillConsumed,
+  onToggleSuggestion,
+  isSuggestionActive,
 }) => {
   const { t } = useTranslation('chat')
   const resolvedPlaceholder = useMemo(
@@ -2521,6 +2512,22 @@ const MessageInput: React.FC<MessageInputProps> = ({
         className="hidden"
         onChange={handleFileChange}
       />
+
+      <button
+        type="button"
+        onClick={onToggleSuggestion}
+        disabled={disabled}
+        aria-label="Sugerir resposta com IA"
+        title="Sugerir resposta"
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-colors ${
+          isSuggestionActive
+            ? 'bg-purple-100 text-purple-800 border-purple-200'
+            : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'
+        }`}
+      >
+        <Sparkles className="w-3.5 h-3.5" />
+        IA
+      </button>
 
       <button
         type="submit"
