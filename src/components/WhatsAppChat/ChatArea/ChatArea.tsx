@@ -508,16 +508,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // =====================================================
 
   const handleReact = async (messageId: string, emoji: string | null) => {
-    if (reactingMessageId === messageId) return  // trava ativa
+    if (reactingMessageId === messageId) return  // trava ativa (Ajuste 3)
     setReactingMessageId(messageId)
-    try {
-      await chatApi.reactToMessage(messageId, conversationId, companyId, emoji)
-      // Atualizar a reação localmente para UX imediato
-      setMessages(prev => prev.map(msg => {
+
+    // Captura o estado anterior da mensagem para reverter em caso de erro
+    let previousMessages: typeof messages | null = null
+
+    // Aplica update otimista imediato — será revertido se a API falhar
+    setMessages(prev => {
+      previousMessages = prev
+      return prev.map(msg => {
         if (msg.id !== messageId) return msg
         const currentReactions = msg.reactions ?? []
         if (emoji === null) {
-          // Remover reação do usuário
           const updated = currentReactions
             .map(r => r.reacted_by_me ? { ...r, count: r.count - 1, reacted_by_me: false } : r)
             .filter(r => r.count > 0)
@@ -539,9 +542,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           }
           return { ...msg, reactions: updated, my_reaction: emoji }
         }
-      }))
+      })
+    })
+
+    try {
+      await chatApi.reactToMessage(messageId, conversationId, companyId, emoji)
     } catch (err: any) {
-      toast.error(err?.message || 'Erro ao enviar reação')
+      // Reverter update otimista — Uazapi rejeitou ou houve erro de rede
+      if (previousMessages !== null) {
+        setMessages(previousMessages)
+      }
+      toast.error(err?.message || 'Não foi possível enviar a reação')
     } finally {
       setReactingMessageId(null)
     }

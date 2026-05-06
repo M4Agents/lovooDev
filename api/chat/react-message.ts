@@ -15,6 +15,18 @@
 //   - Mensagem deve ter uazapi_message_id (necessário para a API externa)
 //   - Uma reação ativa por usuário por mensagem (upsert — troca ou remove)
 //
+// Persistência condicional:
+//   A reação SÓ é salva no banco após confirmação da Uazapi (uazapiRes.ok).
+//   Falhas da Uazapi bloqueiam a persistência e retornam erro ao frontend
+//   para que o update otimista seja revertido.
+//
+// Mapeamento de erros Uazapi → HTTP:
+//   400  → 422  (payload inválido — ex: emoji não suportado)
+//   401  → 502  (token inválido — problema de configuração da instância)
+//   404  → 404  (mensagem não encontrada na Uazapi)
+//   5xx  → 502  (erro interno da Uazapi — bad gateway)
+//   rede → 502  (timeout / DNS fail)
+//
 // Segurança multi-tenant:
 //   - Token JWT validado via Supabase auth.getUser
 //   - Membership validado em company_users (is_active = true)
@@ -38,6 +50,15 @@ import {
 const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
 const REACTION_TTL_DAYS = 7
 
+/** Traduz o status HTTP da Uazapi para o status HTTP que devolvemos ao frontend. */
+function uazapiStatusToHttp(uazapiStatus: number): number {
+  if (uazapiStatus === 400) return 422  // payload inválido → unprocessable
+  if (uazapiStatus === 401) return 502  // token inválido → bad gateway
+  if (uazapiStatus === 404) return 404  // mensagem não encontrada
+  if (uazapiStatus >= 500)  return 502  // erro interno da Uazapi → bad gateway
+  return 502                            // qualquer outro não-ok → bad gateway
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
   if (req.method === 'OPTIONS') { res.status(204).end(); return }
@@ -59,7 +80,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!conversation_id) { jsonError(res, 400, 'conversation_id é obrigatório'); return }
     if (!message_id)      { jsonError(res, 400, 'message_id é obrigatório'); return }
 
-    // emoji null/undefined = remover reação; string = definir/trocar
+    // emoji null/undefined/'' = remover reação; string = definir/trocar
     const isRemoval = emoji === null || emoji === undefined || emoji === ''
     const emojiValue: string | null = isRemoval ? null : String(emoji).trim()
 
@@ -129,13 +150,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     const jid = `${conv.contact_phone}@s.whatsapp.net`
 
     // ─── 8. Chamar Uazapi /message/react ─────────────────────────────────
-    let uazapiOk    = false
+    // A persistência no banco SÓ ocorre após sucesso (uazapiRes.ok).
+    // Qualquer falha bloqueia a persistência e retorna erro ao frontend.
     let uazapiData: any = null
+    let uazapiStatus = 0
 
     try {
       const reactPayload = {
         number: jid,
-        text:   emojiValue ?? '',         // string vazia = remove reação na Uazapi
+        text:   emojiValue ?? '',    // string vazia = remover reação na Uazapi
         id:     msg.uazapi_message_id,
       }
 
@@ -156,22 +179,30 @@ export default async function handler(req: any, res: any): Promise<void> {
         signal: AbortSignal.timeout(15000),
       })
 
-      uazapiData = await uazapiRes.json().catch(() => null)
-      uazapiOk   = uazapiRes.ok
+      uazapiStatus = uazapiRes.status
+      uazapiData   = await uazapiRes.json().catch(() => null)
 
-      if (!uazapiOk) {
-        console.warn('[react-message] Uazapi retornou erro:', {
-          status: uazapiRes.status,
-          body:   uazapiData,
+      if (!uazapiRes.ok) {
+        const httpCode = uazapiStatusToHttp(uazapiStatus)
+        console.warn('[react-message] Uazapi rejeitou reação:', {
+          uazapiStatus,
+          httpCode,
+          body: uazapiData,
         })
+        jsonError(res, httpCode,
+          `Uazapi recusou a reação (HTTP ${uazapiStatus})` +
+          (uazapiData?.message ? `: ${uazapiData.message}` : '')
+        )
+        return
       }
     } catch (fetchErr: any) {
-      console.warn('[react-message] Erro na chamada Uazapi (não-fatal):', fetchErr?.message)
+      // Timeout, DNS fail, rede indisponível
+      console.error('[react-message] Falha de rede ao chamar Uazapi:', fetchErr?.message)
+      jsonError(res, 502, 'Não foi possível comunicar com o serviço de mensagens')
+      return
     }
 
-    // ─── 9. Persistir reação no banco ─────────────────────────────────────
-    // A persistência ocorre independentemente do resultado da Uazapi,
-    // para manter o estado do frontend sincronizado mesmo em falhas transitórias.
+    // ─── 9. Persistir reação no banco (somente após sucesso da Uazapi) ────
     let dbResult: any = null
     let dbError: any  = null
 
@@ -196,18 +227,17 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     if (dbError || dbResult?.success === false) {
-      console.error('[react-message] Erro ao persistir reação:', dbError ?? dbResult)
-      jsonError(res, 500, dbResult?.error ?? 'Erro ao persistir reação'); return
+      console.error('[react-message] Erro ao persistir reação (Uazapi OK, banco falhou):', dbError ?? dbResult)
+      jsonError(res, 500, dbResult?.error ?? 'Reação enviada mas não foi possível persistir'); return
     }
 
     // ─── 10. Resposta ─────────────────────────────────────────────────────
     res.status(200).json({
-      success:      true,
-      reaction_id:  dbResult?.reaction_id ?? null,
+      success:     true,
+      reaction_id: dbResult?.reaction_id ?? null,
       message_id,
-      emoji:        emojiValue,
-      removed:      isRemoval,
-      uazapi_sent:  uazapiOk,
+      emoji:       emojiValue,
+      removed:     isRemoval,
     })
 
   } catch (err: any) {
