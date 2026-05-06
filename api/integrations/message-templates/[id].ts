@@ -109,6 +109,24 @@ async function updateTemplate(res: any, svc: any, id: string, companyId: string,
   if (updates.name    === '') return jsonError(res, 400, 'name não pode ser vazio')
   if (updates.content === '') return jsonError(res, 400, 'content não pode ser vazio')
 
+  // category_id sendo alterado: validar que pertence à empresa — não confiar apenas no trigger
+  if (updates.category_id !== undefined) {
+    if (updates.category_id === null) {
+      return jsonError(res, 400, 'category_id obrigatório. O modelo precisa ter uma categoria.')
+    }
+    const { data: cat } = await svc
+      .from('message_template_categories')
+      .select('id')
+      .eq('id', updates.category_id as string)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (!cat) {
+      return jsonError(res, 400, 'category_id inválido ou não pertence a esta empresa.')
+    }
+  }
+
   const { data, error } = await svc
     .from('message_templates')
     .update(updates)

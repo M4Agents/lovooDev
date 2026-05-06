@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle } from 'lucide-react'
 import {
   listSettingsTemplates,
   createTemplate,
@@ -48,8 +47,6 @@ const EMPTY_TEMPLATE_FORM: TemplateForm = {
 // ---------------------------------------------------------------------------
 
 export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps) {
-  const { t } = useTranslation('settings')
-
   const [categories,   setCategories]   = useState<MessageTemplateCategory[]>([])
   const [templates,    setTemplates]    = useState<MessageTemplate[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -100,9 +97,6 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   // Helpers
   // ---------------------------------------------------------------------------
 
-  const categoryById = (id: string | null) =>
-    id ? categories.find(c => c.id === id) : null
-
   const toggleCollapse = (catId: string) => {
     setCollapsedCats(prev => {
       const next = new Set(prev)
@@ -116,6 +110,9 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   // ---------------------------------------------------------------------------
 
   const openCreateTemplate = () => {
+    // Bloquear criação de modelo sem categoria
+    if (categories.length === 0) return
+
     setEditingTemplate(null)
     setTemplateForm(EMPTY_TEMPLATE_FORM)
     setTemplateError(null)
@@ -149,6 +146,7 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   const handleSaveTemplate = async () => {
     if (!templateForm.name.trim())    { setTemplateError('Nome obrigatório'); return }
     if (!templateForm.content.trim()) { setTemplateError('Conteúdo obrigatório'); return }
+    if (!templateForm.category_id)    { setTemplateError('Categoria obrigatória. Selecione uma categoria.'); return }
 
     setSavingTemplate(true)
     setTemplateError(null)
@@ -159,7 +157,7 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           name:        templateForm.name.trim(),
           content:     templateForm.content.trim(),
           channel:     templateForm.channel,
-          category_id: templateForm.category_id || null,
+          category_id: templateForm.category_id,
           is_active:   templateForm.is_active,
         })
       } else {
@@ -168,7 +166,7 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           name:        templateForm.name.trim(),
           content:     templateForm.content.trim(),
           channel:     templateForm.channel,
-          category_id: templateForm.category_id || null,
+          category_id: templateForm.category_id,
         })
       }
       closeTemplateForm()
@@ -203,6 +201,8 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
     setCategoryName('')
     setCategoryError(null)
     setShowCategoryForm(true)
+    // Fechar form de template ao abrir form de categoria
+    setShowTemplateForm(false)
   }
 
   const openEditCategory = (cat: MessageTemplateCategory) => {
@@ -257,18 +257,15 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   }
 
   // ---------------------------------------------------------------------------
-  // Render helpers
+  // Helpers de agrupamento
   // ---------------------------------------------------------------------------
 
-  const customCategories = categories.filter(c => !c.is_system)
-  const systemCategories = categories.filter(c => c.is_system)
-
-  // Templates sem categoria
-  const uncategorizedTemplates = templates.filter(t => !t.category_id)
-
-  // Templates agrupados por categoria
   const templatesByCategory = (catId: string) =>
     templates.filter(t => t.category_id === catId)
+
+  const uncategorizedTemplates = templates.filter(t => !t.category_id)
+
+  const hasCategories = categories.length > 0
 
   // ---------------------------------------------------------------------------
   // Loading / error global
@@ -308,31 +305,97 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
         </div>
       </div>
 
-      {/* ── Cabeçalho — ações principais ──────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900">Modelos de Mensagem</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Digite "/" no chat para usar um modelo
+      {/* ── CTA: sem categorias ───────────────────────────────────────────── */}
+      {!hasCategories && !showCategoryForm && (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+          <div className="flex justify-center mb-3">
+            <div className="p-3 bg-green-100 rounded-full">
+              <FolderPlus className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          <h4 className="text-sm font-semibold text-slate-800 mb-1">
+            Crie sua primeira categoria
+          </h4>
+          <p className="text-xs text-slate-500 mb-4 max-w-xs mx-auto">
+            As categorias organizam seus modelos de mensagem. Toda empresa cria e gerencia as próprias categorias.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
           <button
             onClick={openCreateCategory}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
           >
-            <Tag className="w-3.5 h-3.5" />
-            Nova categoria
-          </button>
-          <button
-            onClick={openCreateTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Novo modelo
+            <Plus className="w-4 h-4" />
+            Criar categoria
           </button>
         </div>
-      </div>
+      )}
+
+      {/* ── Cabeçalho — ações (visível com categorias) ────────────────────── */}
+      {hasCategories && (
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Modelos de Mensagem</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Digite "/" no chat para usar um modelo
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openCreateCategory}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <Tag className="w-3.5 h-3.5" />
+              Nova categoria
+            </button>
+            <button
+              onClick={openCreateTemplate}
+              disabled={!hasCategories}
+              title={!hasCategories ? 'Crie uma categoria primeiro' : undefined}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo modelo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Form: categoria ───────────────────────────────────────────────── */}
+      {showCategoryForm && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {editingCategory ? 'Editar categoria' : 'Nova categoria'}
+            </h4>
+            <button onClick={closeCategoryForm} className="p-1 text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder="Nome da categoria *"
+            value={categoryName}
+            onChange={e => setCategoryName(e.target.value)}
+            autoFocus
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+          />
+          {categoryError && <p className="text-xs text-red-600">{categoryError}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={closeCategoryForm}
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSaveCategory}
+              disabled={savingCategory}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {savingCategory ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Form: template ────────────────────────────────────────────────── */}
       {showTemplateForm && (
@@ -355,19 +418,27 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
             />
 
-            <select
-              value={templateForm.category_id}
-              onChange={e => setTemplateForm(f => ({ ...f, category_id: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
-            >
-              <option value="">Sem categoria</option>
-              {systemCategories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name} (padrão)</option>
-              ))}
-              {customCategories.filter(c => c.is_active).map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
+            {/* Categoria — obrigatória */}
+            <div>
+              <select
+                value={templateForm.category_id}
+                onChange={e => setTemplateForm(f => ({ ...f, category_id: e.target.value }))}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white ${
+                  !templateForm.category_id ? 'border-amber-300 text-slate-400' : 'border-slate-200 text-slate-800'
+                }`}
+              >
+                <option value="">Selecione uma categoria *</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+              {!templateForm.category_id && (
+                <p className="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Categoria é obrigatória
+                </p>
+              )}
+            </div>
 
             {/* Canal: WhatsApp Life fixo, API Oficial disabled */}
             <div className="flex items-center gap-2">
@@ -403,7 +474,10 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           </div>
 
           {templateError && (
-            <p className="text-xs text-red-600">{templateError}</p>
+            <p className="text-xs text-red-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              {templateError}
+            </p>
           )}
 
           <div className="flex justify-end gap-2">
@@ -424,125 +498,71 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
         </div>
       )}
 
-      {/* ── Form: categoria ───────────────────────────────────────────────── */}
-      {showCategoryForm && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-800">
-              {editingCategory ? 'Editar categoria' : 'Nova categoria'}
-            </h4>
-            <button onClick={closeCategoryForm} className="p-1 text-slate-400 hover:text-slate-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <input
-            type="text"
-            placeholder="Nome da categoria *"
-            value={categoryName}
-            onChange={e => setCategoryName(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
-          />
-          {categoryError && <p className="text-xs text-red-600">{categoryError}</p>}
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={closeCategoryForm}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSaveCategory}
-              disabled={savingCategory}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {savingCategory ? 'Salvando...' : 'Salvar'}
-            </button>
-          </div>
+      {/* ── Lista de categorias + templates ───────────────────────────────── */}
+      {hasCategories && (
+        <div className="space-y-4">
+
+          {categories.map(cat => {
+            const catTemplates = templatesByCategory(cat.id)
+            const collapsed    = collapsedCats.has(cat.id)
+            return (
+              <CategorySection
+                key={cat.id}
+                category={cat}
+                templates={catTemplates}
+                collapsed={collapsed}
+                onToggleCollapse={() => toggleCollapse(cat.id)}
+                onEditCategory={() => openEditCategory(cat)}
+                onDeleteCategory={id => setConfirmDeleteCategory(id)}
+                confirmDeleteCategoryId={confirmDeleteCategory}
+                onConfirmDeleteCategory={handleDeleteCategory}
+                onCancelDeleteCategory={() => setConfirmDeleteCategory(null)}
+                onEditTemplate={openEditTemplate}
+                onDeleteTemplate={id => setConfirmDeleteTemplate(id)}
+                confirmDeleteId={confirmDeleteTemplate}
+                onConfirmDelete={handleDeleteTemplate}
+                onCancelDelete={() => setConfirmDeleteTemplate(null)}
+              />
+            )
+          })}
+
+          {/* Templates sem categoria (edge case: categoria foi desativada) */}
+          {uncategorizedTemplates.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-amber-100 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-xs font-medium text-amber-700">
+                  Modelos sem categoria ({uncategorizedTemplates.length})
+                </span>
+                <span className="text-xs text-amber-500">— edite-os para atribuir uma categoria</span>
+              </div>
+              <div className="divide-y divide-amber-100">
+                {uncategorizedTemplates.map(tpl => (
+                  <TemplateRow
+                    key={tpl.id}
+                    template={tpl}
+                    onEdit={() => openEditTemplate(tpl)}
+                    onDelete={() => setConfirmDeleteTemplate(tpl.id)}
+                    confirmDeleteId={confirmDeleteTemplate}
+                    onConfirmDelete={handleDeleteTemplate}
+                    onCancelDelete={() => setConfirmDeleteTemplate(null)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Estado vazio de modelos (mas tem categorias) */}
+          {templates.length === 0 && !showTemplateForm && (
+            <div className="text-center py-8 text-slate-400 text-sm">
+              Nenhum modelo cadastrado ainda.{' '}
+              <button onClick={openCreateTemplate} className="text-green-600 underline">
+                Criar o primeiro modelo
+              </button>
+            </div>
+          )}
         </div>
       )}
-
-      {/* ── Lista de categorias + templates ───────────────────────────────── */}
-      <div className="space-y-4">
-
-        {/* Categorias system (padrão — read-only) */}
-        {systemCategories.map(cat => {
-          const catTemplates = templatesByCategory(cat.id)
-          const collapsed    = collapsedCats.has(cat.id)
-          return (
-            <CategorySection
-              key={cat.id}
-              category={cat}
-              templates={catTemplates}
-              collapsed={collapsed}
-              onToggleCollapse={() => toggleCollapse(cat.id)}
-              onEditTemplate={openEditTemplate}
-              onDeleteTemplate={id => setConfirmDeleteTemplate(id)}
-              confirmDeleteId={confirmDeleteTemplate}
-              onConfirmDelete={handleDeleteTemplate}
-              onCancelDelete={() => setConfirmDeleteTemplate(null)}
-              readOnly
-            />
-          )
-        })}
-
-        {/* Categorias custom (editáveis) */}
-        {customCategories.map(cat => {
-          const catTemplates = templatesByCategory(cat.id)
-          const collapsed    = collapsedCats.has(cat.id)
-          return (
-            <CategorySection
-              key={cat.id}
-              category={cat}
-              templates={catTemplates}
-              collapsed={collapsed}
-              onToggleCollapse={() => toggleCollapse(cat.id)}
-              onEditCategory={() => openEditCategory(cat)}
-              onDeleteCategory={id => setConfirmDeleteCategory(id)}
-              confirmDeleteCategoryId={confirmDeleteCategory}
-              onConfirmDeleteCategory={handleDeleteCategory}
-              onCancelDeleteCategory={() => setConfirmDeleteCategory(null)}
-              onEditTemplate={openEditTemplate}
-              onDeleteTemplate={id => setConfirmDeleteTemplate(id)}
-              confirmDeleteId={confirmDeleteTemplate}
-              onConfirmDelete={handleDeleteTemplate}
-              onCancelDelete={() => setConfirmDeleteTemplate(null)}
-            />
-          )
-        })}
-
-        {/* Templates sem categoria */}
-        {uncategorizedTemplates.length > 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">Sem categoria</span>
-              <span className="text-xs text-slate-400">({uncategorizedTemplates.length})</span>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {uncategorizedTemplates.map(tpl => (
-                <TemplateRow
-                  key={tpl.id}
-                  template={tpl}
-                  onEdit={() => openEditTemplate(tpl)}
-                  onDelete={() => setConfirmDeleteTemplate(tpl.id)}
-                  confirmDeleteId={confirmDeleteTemplate}
-                  onConfirmDelete={handleDeleteTemplate}
-                  onCancelDelete={() => setConfirmDeleteTemplate(null)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Estado vazio */}
-        {templates.length === 0 && !showTemplateForm && (
-          <div className="text-center py-10 text-slate-400 text-sm">
-            Nenhum modelo cadastrado ainda.{' '}
-            <button onClick={openCreateTemplate} className="text-green-600 underline">
-              Criar o primeiro modelo
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -556,17 +576,16 @@ interface CategorySectionProps {
   templates: MessageTemplate[]
   collapsed: boolean
   onToggleCollapse: () => void
-  onEditCategory?: () => void
-  onDeleteCategory?: (id: string) => void
-  confirmDeleteCategoryId?: string | null
-  onConfirmDeleteCategory?: (id: string) => void
-  onCancelDeleteCategory?: () => void
+  onEditCategory: () => void
+  onDeleteCategory: (id: string) => void
+  confirmDeleteCategoryId: string | null
+  onConfirmDeleteCategory: (id: string) => void
+  onCancelDeleteCategory: () => void
   onEditTemplate: (tpl: MessageTemplate) => void
   onDeleteTemplate: (id: string) => void
   confirmDeleteId: string | null
   onConfirmDelete: (id: string) => void
   onCancelDelete: () => void
-  readOnly?: boolean
 }
 
 function CategorySection({
@@ -574,7 +593,6 @@ function CategorySection({
   onEditCategory, onDeleteCategory,
   confirmDeleteCategoryId, onConfirmDeleteCategory, onCancelDeleteCategory,
   onEditTemplate, onDeleteTemplate, confirmDeleteId, onConfirmDelete, onCancelDelete,
-  readOnly,
 }: CategorySectionProps) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -584,35 +602,30 @@ function CategorySection({
       >
         <Tag className="w-3.5 h-3.5 text-slate-400" />
         <span className="text-xs font-semibold text-slate-700 flex-1">{category.name}</span>
-        {category.is_system && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded-full">padrão</span>
-        )}
         {!category.is_active && (
           <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full">inativo</span>
         )}
         <span className="text-xs text-slate-400">{templates.length}</span>
 
-        {/* Ações da categoria (somente custom) */}
-        {!readOnly && (
-          <div className="flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
-            {confirmDeleteCategoryId === category.id ? (
-              <>
-                <span className="text-xs text-slate-500 mr-1">Desativar?</span>
-                <button onClick={() => onConfirmDeleteCategory?.(category.id)} className="text-xs text-red-600 font-medium hover:underline">Sim</button>
-                <button onClick={onCancelDeleteCategory} className="text-xs text-slate-500 ml-1 hover:underline">Não</button>
-              </>
-            ) : (
-              <>
-                <button onClick={onEditCategory} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-                  <Edit2 className="w-3 h-3" />
-                </button>
-                <button onClick={() => onDeleteCategory?.(category.id)} className="p-1 text-slate-400 hover:text-red-500 rounded">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        {/* Ações da categoria */}
+        <div className="flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
+          {confirmDeleteCategoryId === category.id ? (
+            <>
+              <span className="text-xs text-slate-500 mr-1">Desativar?</span>
+              <button onClick={() => onConfirmDeleteCategory(category.id)} className="text-xs text-red-600 font-medium hover:underline">Sim</button>
+              <button onClick={onCancelDeleteCategory} className="text-xs text-slate-500 ml-1 hover:underline">Não</button>
+            </>
+          ) : (
+            <>
+              <button onClick={onEditCategory} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <Edit2 className="w-3 h-3" />
+              </button>
+              <button onClick={() => onDeleteCategory(category.id)} className="p-1 text-slate-400 hover:text-red-500 rounded">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
 
         <button className="p-1 text-slate-400" onClick={e => { e.stopPropagation(); onToggleCollapse() }}>
           {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}

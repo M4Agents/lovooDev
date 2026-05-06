@@ -55,14 +55,14 @@ export default async function handler(
   const membership = await assertMembership(svc, user.id, companyId)
   if (!membership) return jsonError(res, 403, 'Acesso negado à empresa')
 
-  // Categorias: system (globais) + custom ativas da empresa
+  // Categorias da empresa (apenas custom — não há mais categorias system)
   const { data: categories, error: catErr } = await svc
     .from('message_template_categories')
     .select('id, company_id, name, is_system, sort_order')
-    .or(`is_system.eq.true,company_id.eq.${companyId}`)
+    .eq('company_id', companyId)
     .eq('is_active', true)
-    .order('is_system', { ascending: false })
     .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
 
   if (catErr) {
     console.error('[chat/message-templates GET] categories error:', catErr)

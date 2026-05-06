@@ -57,14 +57,14 @@ async function handleGet(req: any, res: any): Promise<void> {
   const membership = await assertMembership(svc, user.id, companyId)
   if (!membership) return jsonError(res, 403, 'Acesso negado à empresa')
 
-  // Categorias: system (globais) + custom da empresa
+  // Categorias da empresa (apenas custom — não há mais categorias system)
   const { data: categories, error: catErr } = await svc
     .from('message_template_categories')
     .select('id, company_id, name, is_system, sort_order, is_active')
-    .or(`is_system.eq.true,company_id.eq.${companyId}`)
+    .eq('company_id', companyId)
     .eq('is_active', true)
-    .order('is_system', { ascending: false })
     .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
 
   if (catErr) {
     console.error('[message-templates GET] categories error:', catErr)
@@ -127,13 +127,14 @@ async function handlePost(req: any, res: any): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function createTemplate(res: any, svc: any, companyId: string, userId: string, body: any): Promise<void> {
-  const name      = (body?.name as string | undefined)?.trim()
-  const content   = (body?.content as string | undefined)?.trim()
-  const channel   = (body?.channel as string | undefined)?.trim() ?? 'whatsapp_life'
-  const categoryId = body?.category_id as string | null | undefined
+  const name       = (body?.name as string | undefined)?.trim()
+  const content    = (body?.content as string | undefined)?.trim()
+  const channel    = (body?.channel as string | undefined)?.trim() ?? 'whatsapp_life'
+  const categoryId = body?.category_id as string | undefined
 
-  if (!name)    return jsonError(res, 400, 'name obrigatório')
-  if (!content) return jsonError(res, 400, 'content obrigatório')
+  if (!name)       return jsonError(res, 400, 'name obrigatório')
+  if (!content)    return jsonError(res, 400, 'content obrigatório')
+  if (!categoryId) return jsonError(res, 400, 'category_id obrigatório. Crie uma categoria antes de criar um modelo.')
 
   if (BLOCKED_CHANNELS.includes(channel)) {
     return jsonError(res, 422, 'Canal ainda não disponível.')
@@ -143,11 +144,24 @@ async function createTemplate(res: any, svc: any, companyId: string, userId: str
     return jsonError(res, 422, 'Canal inválido. Utilize whatsapp_life.')
   }
 
+  // Validar que a categoria pertence à empresa — não confiar apenas no trigger
+  const { data: cat } = await svc
+    .from('message_template_categories')
+    .select('id, company_id, is_active')
+    .eq('id', categoryId)
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (!cat) {
+    return jsonError(res, 400, 'category_id inválido ou não pertence a esta empresa.')
+  }
+
   const { data, error } = await svc
     .from('message_templates')
     .insert({
       company_id:  companyId,
-      category_id: categoryId ?? null,
+      category_id: categoryId,
       name,
       content,
       channel,
