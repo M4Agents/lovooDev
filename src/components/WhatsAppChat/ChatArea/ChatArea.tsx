@@ -2196,13 +2196,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
 
-  // Preenche o textarea com sugestão selecionada — sem enviar automaticamente
+  // Preenche o textarea com sugestão selecionada e ajusta altura — sem enviar automaticamente
   useEffect(() => {
     if (!prefillValue) return
     setMessage(prefillValue)
     onPrefillConsumed?.()
     requestAnimationFrame(() => {
-      textareaRef.current?.focus()
+      const el = textareaRef.current
+      if (el) {
+        applyResize(el)
+        el.focus()
+      }
     })
   }, [prefillValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2352,27 +2356,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   // Função para auto-resize do textarea
+  const applyResize = (el: HTMLTextAreaElement) => {
+    const minH = 40
+    const maxH = 120
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, minH), maxH)}px`
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+  }
+
   const handleAutoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const textarea = e.target
-    setMessage(textarea.value)
-    
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto'
-    
-    // Calculate new height based on content
-    const minHeight = 40 // 1 linha
-    const maxHeight = 120 // ~6 linhas (como WhatsApp)
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight)
-    
-    // Apply new height
-    textarea.style.height = `${newHeight}px`
-    
-    // Show/hide scrollbar based on content
-    if (textarea.scrollHeight > maxHeight) {
-      textarea.style.overflowY = 'auto'
-    } else {
-      textarea.style.overflowY = 'hidden'
-    }
+    setMessage(e.target.value)
+    applyResize(e.target)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -2454,8 +2448,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
           disabled={disabled}
           rows={1}
           ref={textareaRef}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50 overflow-hidden"
-          style={{ minHeight: '40px', maxHeight: '120px', height: '40px' }}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50"
+          style={{ minHeight: '40px', maxHeight: '120px', height: '40px', overflowY: 'hidden' }}
         />
 
         {isEmojiOpen && !disabled && (
