@@ -32,12 +32,14 @@ import {
 } from '../lib/dashboard/auth.js'
 import { runAgent } from '../lib/agents/runner.js'
 
-const USE_ID          = 'chat:summary:conversation'
-const CREDIT_RATE     = 100    // créditos por 1000 tokens
-const MARGIN_FACTOR   = 1.3    // saldo mínimo = estimado * 1.3
-const MIN_CREDITS     = 10     // mínimo por resumo
-const IDEMPOTENCY_MIN = 2      // janela de idempotência em minutos
-const MAX_MESSAGES    = 100    // limite de mensagens para o LLM
+const USE_ID               = 'chat:summary:conversation'
+const CREDIT_RATE          = 100    // créditos por 1000 tokens
+const MARGIN_FACTOR        = 1.3    // saldo mínimo = estimado * 1.3
+const MIN_CREDITS          = 10     // mínimo por resumo
+const IDEMPOTENCY_MIN      = 2      // janela de idempotência em minutos
+const DEFAULT_MSG_LIMIT    = 100    // padrão de mensagens para o LLM
+const MAX_MSG_LIMIT        = 500    // teto máximo — protege contra abuso
+const MIN_MSG_LIMIT        = 10     // mínimo aceitável
 
 // Formata data/hora no padrão BR: DD/MM/YYYY HH:mm
 function formatDatetimeBR(date: Date): string {
@@ -85,7 +87,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     const meta     = (user.user_metadata ?? {}) as Record<string, string>
     const userName = meta.display_name?.trim() || meta.full_name?.trim() || user.email || user.id
 
-    // ─── 2. Validação do body — apenas conversation_id ────────────────────
+    // ─── 2. Validação do body ─────────────────────────────────────────────
     const body = req.body ?? {}
     const conversationId = typeof body.conversation_id === 'string'
       ? body.conversation_id.trim()
@@ -94,6 +96,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!conversationId) {
       jsonError(res, 400, 'conversation_id é obrigatório'); return
     }
+
+    // message_limit: opcional — validado e limitado pelo backend (nunca confiar no frontend)
+    const rawLimit    = body.message_limit
+    const parsedLimit = typeof rawLimit === 'number' ? Math.round(rawLimit) : parseInt(rawLimit, 10)
+    const messageLimit = isNaN(parsedLimit)
+      ? DEFAULT_MSG_LIMIT
+      : Math.min(MAX_MSG_LIMIT, Math.max(MIN_MSG_LIMIT, parsedLimit))
 
     // ─── 3. Buscar conversa e derivar company_id ──────────────────────────
     // company_id NUNCA vem do body — extraído do registro de conversa
@@ -134,6 +143,8 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ─── 7. Idempotência: retornar nota existente se criada recentemente ──
+    // message_limit faz parte da chave de idempotência: resumos com limites
+    // diferentes são considerados distintos e geram novas notas.
     const idempotencyWindow = new Date(Date.now() - IDEMPOTENCY_MIN * 60 * 1000).toISOString()
     const { data: existingNote } = await svc
       .from('internal_notes')
@@ -142,6 +153,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       .eq('lead_id', leadId)
       .eq('source', 'ai:chat_summary')
       .filter('metadata->conversation_id', 'eq', conversationId)
+      .filter('metadata->message_limit_requested', 'eq', messageLimit)
       .gte('created_at', idempotencyWindow)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -168,7 +180,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       .neq('content', '')
       .order('timestamp', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
-      .limit(MAX_MESSAGES)
+      .limit(messageLimit)
 
     if (msgErr) {
       jsonError(res, 500, 'Erro ao buscar mensagens da conversa'); return
@@ -290,11 +302,12 @@ export default async function handler(req: any, res: any): Promise<void> {
     ].join('\n')
 
     const noteMetadata: Record<string, unknown> = {
-      conversation_id:      conversationId,
-      generated_at:         now.toISOString(),
-      message_count:        orderedMessages.length,
-      requested_by_user_id: user.id,
-      requested_by_name:    userName,
+      conversation_id:         conversationId,
+      generated_at:            now.toISOString(),
+      message_limit_requested: messageLimit,
+      message_count:           orderedMessages.length,
+      requested_by_user_id:    user.id,
+      requested_by_name:       userName,
     }
     if (billingFailed) noteMetadata.billing_failed = true
 

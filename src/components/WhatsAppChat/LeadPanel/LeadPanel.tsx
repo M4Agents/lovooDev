@@ -174,6 +174,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [summarizing, setSummarizing] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [summarySuccess, setSummarySuccess] = useState(false)
+  const [messageLimit, setMessageLimit] = useState<number>(100)
 
   // =====================================================
   // BUSCAR DADOS
@@ -315,7 +316,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           'Authorization': `Bearer ${session.access_token}`,
         },
         // company_id NÃO é enviado — derivado no backend
-        body: JSON.stringify({ conversation_id: conversationId }),
+        body: JSON.stringify({ conversation_id: conversationId, message_limit: messageLimit }),
       })
 
       const result = await response.json().catch(() => ({}))
@@ -334,7 +335,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
     } finally {
       setSummarizing(false)
     }
-  }, [summarizing, conversationId, fetchData])
+  }, [summarizing, conversationId, messageLimit, fetchData])
 
   // =====================================================
   // LOADING STATE
@@ -452,7 +453,24 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             <div className="flex flex-col h-full">
               {/* Botão Resumir com IA — só aparece quando conversation.lead_id existe */}
               {conversation?.lead_id && (
-                <div className="px-4 pt-3 pb-0 flex flex-col gap-1">
+                <div className="px-4 pt-3 pb-0 flex flex-col gap-2">
+                  {/* Seletor de quantidade de mensagens */}
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs text-gray-500 flex-shrink-0">
+                      Mensagens para resumir
+                    </label>
+                    <select
+                      value={messageLimit}
+                      onChange={e => setMessageLimit(Number(e.target.value))}
+                      disabled={summarizing}
+                      className="text-xs text-gray-700 border border-gray-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-purple-400 disabled:opacity-50"
+                    >
+                      <option value={50}>50 mensagens</option>
+                      <option value={100}>100 mensagens (padrão)</option>
+                      <option value={200}>200 mensagens</option>
+                      <option value={300}>300 mensagens</option>
+                    </select>
+                  </div>
                   <button
                     onClick={handleSummarize}
                     disabled={summarizing}
