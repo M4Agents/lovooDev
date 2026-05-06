@@ -11,6 +11,7 @@ import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../../config/chatFeatures'
 import { useConversationRealtime } from '../../../hooks/chat/useChatRealtime'
+import { SuggestionPanel } from './SuggestionPanel'
 import type { ChatMessage, SendMessageForm, ChatAreaProps, ChatConversation } from '../../../types/whatsapp-chat'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
@@ -52,6 +53,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Estado de reply — mensagem sendo respondida
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null)
+
+  // Estados do painel de sugestão de resposta por IA
+  const [showSuggestionPanel, setShowSuggestionPanel] = useState(false)
+  const [pendingSuggestion, setPendingSuggestion]     = useState<string | null>(null)
 
   // Trava de reação — evita múltiplos requests simultâneos na mesma mensagem (Ajuste 3)
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null)
@@ -1491,7 +1496,37 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Input */}
-      <div className="border-t border-gray-200 bg-white p-4">
+      <div className="border-t border-gray-200 bg-white p-4 flex flex-col gap-2">
+
+        {/* Painel de sugestão de resposta — exibido acima do textarea */}
+        {showSuggestionPanel && (
+          <SuggestionPanel
+            conversationId={conversationId}
+            onSelect={(text) => {
+              setPendingSuggestion(text)
+              setShowSuggestionPanel(false)
+            }}
+            onClose={() => setShowSuggestionPanel(false)}
+          />
+        )}
+
+        {/* Botão Sugerir resposta */}
+        {!showSuggestionPanel && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowSuggestionPanel(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors"
+              title="Gerar sugestões de resposta com IA"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              Sugerir resposta
+            </button>
+          </div>
+        )}
+
         <MessageInput
           onSendMessage={handleSendMessage}
           onPreviewFile={openPreviewModal}
@@ -1499,6 +1534,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           placeholder={t('input.placeholder')}
           companyId={companyId}
           conversationId={conversationId}
+          prefillValue={pendingSuggestion ?? undefined}
+          onPrefillConsumed={() => setPendingSuggestion(null)}
         />
       </div>
 
@@ -2126,6 +2163,10 @@ interface MessageInputProps {
   placeholder?: string
   companyId: string
   conversationId: string
+  /** Texto a ser inserido no textarea via sugestão de IA. */
+  prefillValue?: string
+  /** Chamado após o prefillValue ser aplicado, para que o pai resete o estado. */
+  onPrefillConsumed?: () => void
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -2134,7 +2175,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
   disabled,
   placeholder,
   companyId,
-  conversationId
+  conversationId,
+  prefillValue,
+  onPrefillConsumed,
 }) => {
   const { t } = useTranslation('chat')
   const resolvedPlaceholder = useMemo(
@@ -2152,6 +2195,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const shouldSendRef = useRef(true)
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
+
+  // Preenche o textarea com sugestão selecionada — sem enviar automaticamente
+  useEffect(() => {
+    if (!prefillValue) return
+    setMessage(prefillValue)
+    onPrefillConsumed?.()
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
+  }, [prefillValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
