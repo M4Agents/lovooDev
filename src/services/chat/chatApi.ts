@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import type {
   ChatConversation,
   ChatMessage,
+  MessageReaction,
   ChatContact,
   ChatScheduledMessage,
   ConversationFilter,
@@ -167,7 +168,8 @@ export class ChatApi {
     companyId: string,
     limit: number = 0, // 0 = sem limite por padrão
     offset: number = 0,
-    reverseOrder: boolean = false // NOVO: ordenação reversa
+    reverseOrder: boolean = false,
+    userId?: string
   ): Promise<ChatMessage[]> {
     try {
       // Se limit for 0, usar um número muito alto para "sem limite"
@@ -177,10 +179,11 @@ export class ChatApi {
 
       const { data, error } = await supabase.rpc('chat_get_messages', {
         p_conversation_id: conversationId,
-        p_company_id: companyId,
-        p_limit: effectiveLimit,
-        p_offset: offset,
-        p_reverse_order: reverseOrder
+        p_company_id:      companyId,
+        p_limit:           effectiveLimit,
+        p_offset:          offset,
+        p_reverse_order:   reverseOrder,
+        p_user_id:         userId ?? null,
       })
 
       // Processando resultado...
@@ -213,19 +216,13 @@ export class ChatApi {
   static async getRecentMessages(
     conversationId: string,
     companyId: string,
-    limit: number = 30
+    limit: number = 30,
+    userId?: string
   ): Promise<ChatMessage[]> {
-    // Carregando mensagens recentes...
-
     // Buscar mensagens mais recentes (ordenação reversa)
-    const messages = await this.getMessages(conversationId, companyId, limit, 0, true)
-    
-    // Reverter ordem para exibir cronologicamente (mais antigas no topo)
-    const sortedMessages = messages.reverse()
-    
-    // Mensagens recentes carregadas
-
-    return sortedMessages
+    const messages = await this.getMessages(conversationId, companyId, limit, 0, true, userId)
+    // Reverter para exibição cronológica (mais antigas no topo)
+    return messages.reverse()
   }
 
   static async getOlderMessages(
@@ -908,6 +905,9 @@ export class ChatApi {
       reply_to_content:      raw.reply_to_content       || undefined,
       reply_to_direction:    raw.reply_to_direction     || undefined,
       reply_to_message_type: raw.reply_to_message_type  || undefined,
+      // Campos de reação
+      reactions:    Array.isArray(raw.reactions) ? (raw.reactions as MessageReaction[]) : undefined,
+      my_reaction:  raw.my_reaction  || undefined,
     }
   }
 
@@ -1099,6 +1099,47 @@ export class ChatApi {
     } catch (error) {
       console.error('Erro ao buscar conversationId:', error)
       return null
+    }
+  }
+
+  // =====================================================
+  // REAÇÕES EM MENSAGENS
+  // =====================================================
+
+  /**
+   * Envia ou remove uma reação em uma mensagem inbound via backend.
+   * O backend valida multi-tenant (company_id + conversation_id),
+   * chama a Uazapi /message/react e persiste via RPC.
+   *
+   * @param emoji - emoji a reagir; null = remover reação existente
+   */
+  static async reactToMessage(
+    messageId: string,
+    conversationId: string,
+    companyId: string,
+    emoji: string | null
+  ): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Sessão inválida')
+
+    const response = await fetch('/api/chat/react-message', {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        company_id:      companyId,
+        conversation_id: conversationId,
+        message_id:      messageId,
+        emoji,
+      }),
+    })
+
+    const result = await response.json().catch(() => ({}))
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Erro ao enviar reação')
     }
   }
 }
