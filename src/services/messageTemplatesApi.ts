@@ -3,7 +3,6 @@
 // =============================================================================
 
 import { supabase } from '../lib/supabase'
-import { S3Storage } from './aws/s3Storage'
 import type {
   MessageTemplateListResponse,
   MessageTemplateChatResponse,
@@ -152,6 +151,9 @@ export async function uploadTemplateMedia(
   companyId: string,
   onProgress?: (percent: number) => void,
 ): Promise<{ media_path: string; preview_url: string; media_type: MessageTemplateMediaType }> {
+  // Dynamic import evita que supabase-webhook.js (Node.js) entre no bundle do browser
+  const { S3Storage } = await import('./aws/s3Storage')
+
   const buffer      = new Uint8Array(await file.arrayBuffer())
   const contentType = S3Storage.detectContentType(buffer as unknown as Buffer, file.name)
   const mediaType   = resolveMediaType(contentType)
@@ -170,7 +172,7 @@ export async function uploadTemplateMedia(
     throw new Error(uploadResult.error || 'Erro ao fazer upload de mídia')
   }
 
-  const s3Key    = uploadResult.data.s3Key
+  const s3Key     = uploadResult.data.s3Key
   const urlResult = await S3Storage.generateSignedUrl(companyId, s3Key, { expiresIn: 7200 })
 
   if (!urlResult.success || !urlResult.data) {
@@ -189,6 +191,8 @@ export async function generateTemplateMediaUrl(
   mediaPath: string,
   expiresIn = 3600,
 ): Promise<string | null> {
+  // Dynamic import evita que supabase-webhook.js (Node.js) entre no bundle do browser
+  const { S3Storage } = await import('./aws/s3Storage')
   const result = await S3Storage.generateSignedUrl(companyId, mediaPath, { expiresIn })
   return result.success && result.data ? result.data : null
 }
