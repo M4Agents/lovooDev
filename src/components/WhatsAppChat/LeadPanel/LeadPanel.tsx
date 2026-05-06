@@ -4,7 +4,7 @@
 // Painel com informações do lead e agendamento
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
@@ -170,6 +170,11 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [showLeadModal, setShowLeadModal] = useState(false)
   const [leadForEdit, setLeadForEdit] = useState<Lead | null>(null)
 
+  // Estado do resumo de IA
+  const [summarizing, setSummarizing] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [summarySuccess, setSummarySuccess] = useState(false)
+
   // =====================================================
   // BUSCAR DADOS
   // =====================================================
@@ -291,6 +296,47 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   }, [conversationId, companyId])
 
   // =====================================================
+  // RESUMO DE IA
+  // =====================================================
+
+  const handleSummarize = useCallback(async () => {
+    if (summarizing) return
+    setSummarizing(true)
+    setSummaryError(null)
+    setSummarySuccess(false)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Sessão inválida')
+
+      const response = await fetch('/api/chat/summarize-lead-note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        // company_id NÃO é enviado — derivado no backend
+        body: JSON.stringify({ conversation_id: conversationId }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Erro ao gerar resumo')
+      }
+
+      setSummarySuccess(true)
+      setTimeout(() => setSummarySuccess(false), 4000)
+      // Recarregar notas para exibir a nova nota de IA
+      fetchData()
+    } catch (err: any) {
+      setSummaryError(err?.message || 'Erro ao gerar resumo')
+      setTimeout(() => setSummaryError(null), 6000)
+    } finally {
+      setSummarizing(false)
+    }
+  }, [summarizing, conversationId, fetchData])
+
+  // =====================================================
   // LOADING STATE
   // =====================================================
 
@@ -403,7 +449,51 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           />
         ) : activeTab === 'notas' ? (
           associatedLead?.id ? (
-            <InternalNotes companyId={companyId} leadId={associatedLead.id} />
+            <div className="flex flex-col h-full">
+              {/* Botão Resumir com IA — só aparece quando conversation.lead_id existe */}
+              {conversation?.lead_id && (
+                <div className="px-4 pt-3 pb-0 flex flex-col gap-1">
+                  <button
+                    onClick={handleSummarize}
+                    disabled={summarizing}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Gerar resumo da conversa com IA e salvar como nota"
+                  >
+                    {summarizing ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Gerando resumo...
+                      </>
+                    ) : summarySuccess ? (
+                      <>
+                        <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-green-700">Resumo salvo!</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        Resumir com IA
+                      </>
+                    )}
+                  </button>
+                  {summaryError && (
+                    <p className="text-xs text-red-600 text-center">{summaryError}</p>
+                  )}
+                </div>
+              )}
+              <InternalNotes
+                key={`notes-${conversationId}-${summarySuccess}`}
+                companyId={companyId}
+                leadId={associatedLead.id}
+              />
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-gray-400">
               <p>Nenhum lead associado a esta conversa.</p>

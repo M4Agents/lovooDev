@@ -14,10 +14,15 @@ export interface InternalNote {
   updated_by: string | null
   created_at: string
   updated_at: string
+  // Campos de IA (adicionados em 20260507100000)
+  source?: string | null
+  ai_agent_id?: string | null
+  is_editable: boolean
+  metadata?: Record<string, unknown> | null
 }
 
 // Campos retornados nas queries (deleted_at excluído: RLS já filtra notas ativas)
-const NOTE_FIELDS = 'id, company_id, lead_id, opportunity_id, content, created_by, updated_by, created_at, updated_at'
+const NOTE_FIELDS = 'id, company_id, lead_id, opportunity_id, content, created_by, updated_by, created_at, updated_at, source, ai_agent_id, is_editable, metadata'
 
 // =====================================================
 // API

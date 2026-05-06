@@ -262,30 +262,45 @@ export function InternalNotes(props: InternalNotesProps) {
       ) : (
         <div className="flex flex-col gap-3">
           {notes.map(note => {
-            const isAuthor = note.created_by === currentUserId
-            const isEditing = editingId === note.id
+            const isAuthor    = note.created_by === currentUserId
+            const isAiNote    = note.is_editable === false
+            const isEditing   = editingId === note.id
             const isConfirmingDelete = deletingId === note.id
 
             return (
               <div
                 key={note.id}
-                className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex flex-col gap-2"
+                className={`border rounded-lg p-3 flex flex-col gap-2 ${
+                  isAiNote
+                    ? 'bg-purple-50 border-purple-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
               >
-                {/* Cabeçalho: autoria + ações */}
+                {/* Cabeçalho: autoria + badge IA + ações */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500">
-                    <span className="font-medium text-gray-700">
-                      {isAuthor ? 'Você' : 'Outro membro'}
-                    </span>
-                    {' · '}
-                    {formatDateTime(note.updated_at !== note.created_at ? note.updated_at : note.created_at)}
-                    {note.updated_at !== note.created_at && (
-                      <span className="text-gray-400"> (editado)</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {isAiNote && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 bg-purple-100 rounded-full flex-shrink-0">
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        IA
+                      </span>
                     )}
-                  </span>
+                    <span className="text-xs text-gray-500 truncate">
+                      <span className="font-medium text-gray-700">
+                        {isAiNote ? 'Agente de IA' : isAuthor ? 'Você' : 'Outro membro'}
+                      </span>
+                      {' · '}
+                      {formatDateTime(note.updated_at !== note.created_at ? note.updated_at : note.created_at)}
+                      {!isAiNote && note.updated_at !== note.created_at && (
+                        <span className="text-gray-400"> (editado)</span>
+                      )}
+                    </span>
+                  </div>
 
-                  {/* Ações — visíveis apenas para o autor */}
-                  {isAuthor && !isEditing && !isConfirmingDelete && (
+                  {/* Ações — ocultas para notas de IA; visíveis apenas para o autor em notas manuais */}
+                  {!isAiNote && isAuthor && !isEditing && !isConfirmingDelete && (
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={() => startEdit(note)}
@@ -305,8 +320,8 @@ export function InternalNotes(props: InternalNotesProps) {
                   )}
                 </div>
 
-                {/* Conteúdo ou editor de edição */}
-                {isEditing ? (
+                {/* Conteúdo ou editor de edição (notas de IA nunca entram em modo de edição) */}
+                {isEditing && !isAiNote ? (
                   <div className="flex flex-col gap-2">
                     <RichTextNoteEditor
                       value={editContent}
@@ -335,7 +350,7 @@ export function InternalNotes(props: InternalNotesProps) {
                       </button>
                     </div>
                   </div>
-                ) : isConfirmingDelete ? (
+                ) : isConfirmingDelete && !isAiNote ? (
                   <div className="flex flex-col gap-2">
                     <p className="text-xs text-red-600">Confirmar exclusão desta nota?</p>
                     <div className="flex items-center gap-2">
