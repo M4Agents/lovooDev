@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronDown, Bot, Sparkles } from 'lucide-react'
+import { MessageTemplatePicker } from './MessageTemplatePicker'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
@@ -2176,6 +2177,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
     [placeholder, t]
   )
   const [message, setMessage] = useState('')
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [templateQuery,      setTemplateQuery]      = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -2360,9 +2363,28 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }
 
   const handleAutoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value)
+    const val = e.target.value
+    setMessage(val)
     applyResize(e.target)
+
+    // Lógica do picker de templates:
+    // Abre quando o campo começa com "/" e atualiza a query de busca.
+    if (val.startsWith('/')) {
+      setShowTemplatePicker(true)
+      setTemplateQuery(val.slice(1)) // texto após o "/"
+    } else {
+      setShowTemplatePicker(false)
+      setTemplateQuery('')
+    }
   }
+
+  // Fechar picker ao limpar o campo
+  useEffect(() => {
+    if (message === '') {
+      setShowTemplatePicker(false)
+      setTemplateQuery('')
+    }
+  }, [message])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2435,6 +2457,32 @@ const MessageInput: React.FC<MessageInputProps> = ({
             </div>
           </div>
         )}
+        {showTemplatePicker && !disabled && (
+          <div className="mb-1">
+            <MessageTemplatePicker
+              conversationId={conversationId}
+              query={templateQuery}
+              onSelect={(content) => {
+                setMessage(content)
+                setShowTemplatePicker(false)
+                setTemplateQuery('')
+                requestAnimationFrame(() => {
+                  const el = textareaRef.current
+                  if (el) {
+                    el.value = content
+                    applyResize(el)
+                    el.focus()
+                  }
+                })
+              }}
+              onClose={() => {
+                setShowTemplatePicker(false)
+                setTemplateQuery('')
+              }}
+            />
+          </div>
+        )}
+
         <textarea
           value={message}
           onChange={handleAutoResize}

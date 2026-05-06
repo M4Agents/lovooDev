@@ -12,6 +12,7 @@ import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
+import { MessageTemplatesPanel } from '../components/Settings/MessageTemplatesPanel';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
 import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPanel';
@@ -1432,23 +1433,8 @@ export const Settings: React.FC = () => {
               )}
               
               {/* Modelos */}
-              {whatsappTab === 'modelos' && (
-                <div className="text-center py-12">
-                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-green-600 mx-auto mt-2" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    {t('integrations.placeholders.messageTemplates.title')}
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    {t('integrations.placeholders.messageTemplates.subtitle')}
-                  </p>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
-                    <p className="text-sm text-green-800">
-                      {t('integrations.placeholders.messageTemplates.body')}
-                    </p>
-                  </div>
-                </div>
+              {whatsappTab === 'modelos' && company?.id && (
+                <MessageTemplatesPanel companyId={company.id} />
               )}
             </div>
           )}
