@@ -81,6 +81,10 @@ export default async function handler(req: any, res: any): Promise<void> {
     const { data: { user }, error: authError } = await svc.auth.getUser(token)
     if (authError || !user) { jsonError(res, 401, 'Token inválido ou expirado'); return }
 
+    // Nome do usuário para auditoria na nota — extraído do token, sem query extra
+    const meta     = (user.user_metadata ?? {}) as Record<string, string>
+    const userName = meta.display_name?.trim() || meta.full_name?.trim() || user.email || user.id
+
     // ─── 2. Validação do body — apenas conversation_id ────────────────────
     const body = req.body ?? {}
     const conversationId = typeof body.conversation_id === 'string'
@@ -280,14 +284,17 @@ export default async function handler(req: any, res: any): Promise<void> {
     const noteContent = [
       `Resumo gerado por IA`,
       `Data: ${formattedNow}`,
+      `Solicitado por: ${userName}`,
       '',
       summaryText,
     ].join('\n')
 
     const noteMetadata: Record<string, unknown> = {
-      conversation_id: conversationId,
-      generated_at:    now.toISOString(),
-      message_count:   orderedMessages.length,
+      conversation_id:      conversationId,
+      generated_at:         now.toISOString(),
+      message_count:        orderedMessages.length,
+      requested_by_user_id: user.id,
+      requested_by_name:    userName,
     }
     if (billingFailed) noteMetadata.billing_failed = true
 
