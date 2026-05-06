@@ -2210,6 +2210,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
       console.log('[DBG-56e383] prefill-rAF', { elExists: !!el, domValue: el?.value?.slice(0, 40), scrollHeight: el?.scrollHeight, currentHeight: el?.style?.height, applyResizeType: typeof applyResize })
       // #endregion
       if (el) {
+        // Setar valor diretamente no DOM antes de medir scrollHeight
+        // React ainda não reconciliou — el.value está vazio neste ponto
+        el.value = prefillValue
         applyResize(el)
         // #region agent log
         console.log('[DBG-56e383] prefill-after-resize', { heightAfter: el.style.height, overflowYAfter: el.style.overflowY, scrollHeightAfter: el.scrollHeight, domValueAfter: el.value?.slice(0, 40) })
