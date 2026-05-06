@@ -298,16 +298,19 @@ export class ChatApi {
         userId = validUsers[0].user_id;
       }
 
-      // CORREÇÃO CRÍTICA: Truncar content para evitar erro "value too long for character varying(500)"
-      const truncatedContent = message.content.length > 450 
-        ? message.content.substring(0, 447) + '...' 
-        : message.content;
+      // Validação de segurança: conteúdo excessivo seria rejeitado pelo WhatsApp
+      // e poderia causar problemas de performance. 5000 chars é bem acima do
+      // limite prático do WhatsApp (~4096 chars para texto).
+      if (message.content && message.content.length > 5000) {
+        throw new Error('Mensagem muito longa. O conteúdo deve ter no máximo 5.000 caracteres.')
+      }
 
       // PASSO 1: Criar mensagem no banco (status: 'sending')
+      // chat_messages.content é TEXT (sem limite de chars) após migration 20260523000000.
       const { data, error } = await supabase.rpc('chat_create_message', {
         p_conversation_id:    conversationId,
         p_company_id:         companyId,
-        p_content:            truncatedContent,
+        p_content:            message.content,
         p_message_type:       message.message_type,
         p_direction:          'outbound',
         p_sent_by:            userId,
