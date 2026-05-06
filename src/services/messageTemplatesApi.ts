@@ -163,10 +163,6 @@ export async function uploadTemplateMedia(
 
   const contentType = file.type || 'application/octet-stream'
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'messageTemplatesApi.ts:uploadTemplateMedia',message:'upload-start',data:{filename:file.name,contentType,companyId,hasSession:!!session?.access_token},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   // Passo 1: backend gera presigned PUT URL + S3 key
   const prepRes = await fetch('/api/integrations/message-templates/upload-media', {
     method: 'POST',
@@ -178,9 +174,6 @@ export async function uploadTemplateMedia(
   })
 
   const prepData = await prepRes.json().catch(() => ({})) as Record<string, unknown>
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'messageTemplatesApi.ts:uploadTemplateMedia',message:'prep-response',data:{status:prepRes.status,ok:prepRes.ok,hasPresignedUrl:!!prepData.presignedUrl,error:prepData.error},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!prepRes.ok) {
     throw new Error((prepData?.error as string) || 'Erro ao preparar upload de mídia')
   }
@@ -206,9 +199,6 @@ export async function uploadTemplateMedia(
     headers: { 'Content-Type': putContentType },
   })
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'messageTemplatesApi.ts:uploadTemplateMedia',message:'s3-put-response',data:{status:uploadRes.status,ok:uploadRes.ok,s3Key},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!uploadRes.ok) {
     throw new Error(`Erro ao fazer upload para S3: HTTP ${uploadRes.status}`)
   }
