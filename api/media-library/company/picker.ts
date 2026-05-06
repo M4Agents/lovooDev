@@ -209,8 +209,18 @@ export default async function handler(
     ? fileTypeParam as ValidType
     : undefined
 
+  // #region agent log
+  console.log('[DBG-picker] handler-entry', { companyId, fileType: q?.file_type })
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'picker.ts:handler-entry',message:'handler reached after assertMembership',data:{companyId,fileTypeParam:q?.file_type},hypothesisId:'H-C',timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+
   try {
     const creds = await getCompanyCredentials(svc, companyId)
+
+    // #region agent log
+    console.log('[DBG-picker] credentials-resolved', { hasAccessKey: !!creds.access_key_id, hasSecret: !!creds.secret_access_key, region: creds.region, bucket: creds.bucket })
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'picker.ts:after-creds',message:'credentials resolved',data:{hasAccessKey:!!creds.access_key_id,hasSecret:!!creds.secret_access_key,region:creds.region,bucket:creds.bucket},hypothesisId:'H-B',timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
 
     if (!creds.access_key_id) {
       console.error('[picker] Credenciais AWS não configuradas para empresa:', companyId)
@@ -259,7 +269,11 @@ export default async function handler(
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro interno'
-    console.error('[picker] Erro ao listar arquivos:', message)
+    const stack   = err instanceof Error ? (err.stack ?? '').slice(0, 400) : ''
+    // #region agent log
+    console.error('[DBG-picker] catch-error', { errorMessage: message, errorStack: stack })
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'picker.ts:catch',message:'caught error',data:{errorMessage:message,errorStack:stack},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
     return jsonError(res, 500, 'Erro ao listar arquivos da biblioteca')
   }
 }
