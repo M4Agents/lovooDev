@@ -2519,10 +2519,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
         disabled={disabled}
         aria-label="Sugerir resposta com IA"
         title="Sugerir resposta"
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-colors ${
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
           isSuggestionActive
-            ? 'bg-purple-100 text-purple-800 border-purple-200'
-            : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'
+            ? 'text-purple-800 bg-purple-50'
+            : 'text-purple-600 hover:text-purple-800 hover:bg-gray-100'
         }`}
       >
         <Sparkles className="w-3.5 h-3.5" />
