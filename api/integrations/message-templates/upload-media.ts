@@ -66,25 +66,19 @@ function generateS3Key(companyId: string, filename: string): string {
   return `clientes/${companyId}/templates/${year}/${month}/${day}/${ts}_${safe}`
 }
 
-// Busca credenciais AWS da empresa; fallback para variáveis de ambiente globais.
+/**
+ * Resolve credenciais AWS usando o RPC webhook_resolve_aws_credentials.
+ * O RPC já implementa o fallback empresa filha → empresa mãe (SECURITY DEFINER),
+ * garantindo que empresas filhas sem credenciais próprias usem as da mãe.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getAwsCredentials(svc: any, companyId: string): Promise<AwsCreds> {
+async function getAwsCredentials(svc: any, companyId: string): Promise<AwsCreds | null> {
   const { data, error } = await svc
-    .from('aws_credentials')
-    .select('access_key_id, secret_access_key, region, bucket')
-    .eq('company_id', companyId)
-    .maybeSingle()
+    .rpc('webhook_resolve_aws_credentials', { p_company_id: companyId })
 
-  if (error || !data) {
-    return {
-      access_key_id:     process.env.AWS_ACCESS_KEY_ID     ?? '',
-      secret_access_key: process.env.AWS_SECRET_ACCESS_KEY ?? '',
-      region:            process.env.AWS_REGION            ?? 'sa-east-1',
-      bucket:            process.env.AWS_S3_BUCKET         ?? 'aws-lovoocrm-media',
-    }
-  }
+  if (error || !data || data.length === 0) return null
 
-  return data as AwsCreds
+  return data[0] as AwsCreds
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +125,8 @@ export default async function handler(
   try {
     const credentials = await getAwsCredentials(svc, companyId)
 
-    if (!credentials.access_key_id || !credentials.secret_access_key) {
-      return jsonError(res, 500, 'Credenciais AWS não configuradas para esta empresa')
+    if (!credentials) {
+      return jsonError(res, 422, 'Credenciais AWS não encontradas para esta empresa. Configure as credenciais em Configurações > Integrações > AWS.')
     }
 
     const s3Key     = generateS3Key(companyId, filename)

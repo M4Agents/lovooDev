@@ -26,22 +26,19 @@ import {
 // Helper
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve bucket e região usando o RPC webhook_resolve_aws_credentials.
+ * Garante fallback empresa filha → empresa mãe (SECURITY DEFINER).
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getAwsBucketInfo(svc: any, companyId: string): Promise<{ region: string; bucket: string }> {
+async function getAwsBucketInfo(svc: any, companyId: string): Promise<{ region: string; bucket: string } | null> {
   const { data, error } = await svc
-    .from('aws_credentials')
-    .select('region, bucket')
-    .eq('company_id', companyId)
-    .maybeSingle()
+    .rpc('webhook_resolve_aws_credentials', { p_company_id: companyId })
 
-  if (error || !data) {
-    return {
-      region: process.env.AWS_REGION    ?? 'sa-east-1',
-      bucket: process.env.AWS_S3_BUCKET ?? 'aws-lovoocrm-media',
-    }
-  }
+  if (error || !data || data.length === 0) return null
 
-  return { region: data.region ?? 'sa-east-1', bucket: data.bucket ?? 'aws-lovoocrm-media' }
+  const cred = data[0] as { region: string; bucket: string }
+  return { region: cred.region ?? 'sa-east-1', bucket: cred.bucket ?? 'aws-lovoocrm-media' }
 }
 
 // ---------------------------------------------------------------------------
@@ -75,8 +72,9 @@ export default async function handler(
   if (!membership) return jsonError(res, 403, 'Acesso negado à empresa')
 
   try {
-    const { bucket, region } = await getAwsBucketInfo(svc, companyId)
-    const url = `https://${bucket}.s3.${region}.amazonaws.com/${mediaPath}`
+    const info = await getAwsBucketInfo(svc, companyId)
+    if (!info) return jsonError(res, 422, 'Credenciais AWS não encontradas para esta empresa')
+    const url = `https://${info.bucket}.s3.${info.region}.amazonaws.com/${mediaPath}`
     return res.status(200).json({ url })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Erro interno'
