@@ -15,12 +15,12 @@
 // =============================================================================
 
 import type { IncomingMessage, ServerResponse } from 'http'
-import { getSupabaseAdmin }                     from '../../../lib/automation/supabaseAdmin.js'
+import { getSupabaseAdmin }                     from '../../lib/automation/supabaseAdmin.js'
 import {
   extractToken,
   assertMembership,
   jsonError,
-}                                               from '../../../lib/dashboard/auth.js'
+}                                               from '../../lib/dashboard/auth.js'
 
 // ---------------------------------------------------------------------------
 // Helper
