@@ -2199,12 +2199,21 @@ const MessageInput: React.FC<MessageInputProps> = ({
   // Preenche o textarea com sugestão selecionada e ajusta altura — sem enviar automaticamente
   useEffect(() => {
     if (!prefillValue) return
+    // #region agent log
+    console.log('[DBG-56e383] prefill-effect-start', { prefillValueLength: prefillValue?.length, prefillValuePreview: prefillValue?.slice(0, 40) })
+    // #endregion
     setMessage(prefillValue)
     onPrefillConsumed?.()
     requestAnimationFrame(() => {
       const el = textareaRef.current
+      // #region agent log
+      console.log('[DBG-56e383] prefill-rAF', { elExists: !!el, domValue: el?.value?.slice(0, 40), scrollHeight: el?.scrollHeight, currentHeight: el?.style?.height, applyResizeType: typeof applyResize })
+      // #endregion
       if (el) {
         applyResize(el)
+        // #region agent log
+        console.log('[DBG-56e383] prefill-after-resize', { heightAfter: el.style.height, overflowYAfter: el.style.overflowY, scrollHeightAfter: el.scrollHeight, domValueAfter: el.value?.slice(0, 40) })
+        // #endregion
         el.focus()
       }
     })
