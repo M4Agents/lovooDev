@@ -42,7 +42,7 @@ const generateDefaultFolders = (companyId) => {
       company_id: companyId,
       name: 'Marketing',
       path: '/marketing',
-      parent_id: null,
+      parent_path: null,
       icon: '📢',
       description: 'Materiais de marketing e campanhas'
     },
@@ -50,7 +50,7 @@ const generateDefaultFolders = (companyId) => {
       company_id: companyId,
       name: 'Produtos',
       path: '/produtos',
-      parent_id: null,
+      parent_path: null,
       icon: '📦',
       description: 'Imagens e documentos de produtos'
     },
@@ -58,7 +58,7 @@ const generateDefaultFolders = (companyId) => {
       company_id: companyId,
       name: 'Documentos',
       path: '/documentos',
-      parent_id: null,
+      parent_path: null,
       icon: '📄',
       description: 'Documentos gerais da empresa'
     },
@@ -66,7 +66,7 @@ const generateDefaultFolders = (companyId) => {
       company_id: companyId,
       name: 'Templates',
       path: '/templates',
-      parent_id: null,
+      parent_path: null,
       icon: '📋',
       description: 'Templates e modelos reutilizáveis'
     }
@@ -74,32 +74,36 @@ const generateDefaultFolders = (companyId) => {
 }
 
 // =====================================================
-// HELPER: CALCULAR PATH HIERÁRQUICO
+// HELPER: CALCULAR PATH A PARTIR DO PARENT_PATH
 // =====================================================
 
-const calculateFolderPath = async (parentId, folderName, companyId) => {
-  if (!parentId) {
-    // Pasta raiz
-    return `/${folderName.toLowerCase().replace(/\s+/g, '_')}`
+const buildFolderPath = (parentPath, folderName) => {
+  const slug = folderName.toLowerCase().replace(/\s+/g, '_')
+  if (!parentPath) {
+    return `/${slug}`
+  }
+  return `${parentPath}/${slug}`
+}
+
+// =====================================================
+// HELPER: BUSCAR PASTA PAI E RETORNAR PARENT_PATH
+// =====================================================
+
+const resolveParentPath = async (parentId, companyId) => {
+  if (!parentId) return null
+
+  const { data: parentFolder, error } = await supabase
+    .from('company_folders')
+    .select('path')
+    .eq('id', parentId)
+    .eq('company_id', companyId)
+    .single()
+
+  if (error || !parentFolder) {
+    throw new Error('Pasta pai não encontrada ou não pertence a esta empresa')
   }
 
-  try {
-    // Buscar pasta pai para construir path hierárquico
-    const { data: parentFolder, error } = await supabase
-      .from('company_folders')
-      .select('path')
-      .eq('id', parentId)
-      .eq('company_id', companyId)
-      .single()
-
-    if (error || !parentFolder) {
-      throw new Error('Pasta pai não encontrada')
-    }
-
-    return `${parentFolder.path}/${folderName.toLowerCase().replace(/\s+/g, '_')}`
-  } catch (error) {
-    throw new Error(`Erro ao calcular path: ${error.message}`)
-  }
+  return parentFolder.path
 }
 
 // =====================================================
@@ -202,17 +206,26 @@ export default async function handler(req, res) {
       console.log('📁 Criando nova pasta:', { name, parent_id, company_id })
 
       try {
-        // Calcular path hierárquico
-        const path = await calculateFolderPath(parent_id, name.trim(), company_id)
+        // Resolver parent_path a partir do parent_id (se informado)
+        const parentPath = await resolveParentPath(parent_id, company_id)
 
-        // Verificar se já existe pasta com mesmo nome no mesmo nível
-        const { data: existingFolder } = await supabase
+        // Calcular path da nova pasta
+        const path = buildFolderPath(parentPath, name.trim())
+
+        // Verificar se já existe pasta com mesmo nome no mesmo nível (mesmo parent_path)
+        const duplicateQuery = supabase
           .from('company_folders')
           .select('id')
           .eq('company_id', company_id)
           .eq('name', name.trim())
-          .eq('parent_id', parent_id || null)
-          .single()
+
+        if (parentPath === null) {
+          duplicateQuery.is('parent_path', null)
+        } else {
+          duplicateQuery.eq('parent_path', parentPath)
+        }
+
+        const { data: existingFolder } = await duplicateQuery.maybeSingle()
 
         if (existingFolder) {
           return res.status(400).json({
@@ -228,7 +241,7 @@ export default async function handler(req, res) {
             company_id,
             name: name.trim(),
             path,
-            parent_id: parent_id || null,
+            parent_path: parentPath,
             icon: icon || '📁',
             description: description || ''
           })
@@ -305,14 +318,20 @@ export default async function handler(req, res) {
         }
 
         // Verificar se já existe pasta com mesmo nome no mesmo nível (exceto a própria pasta)
-        const { data: duplicateFolder } = await supabase
+        const dupQuery = supabase
           .from('company_folders')
           .select('id')
           .eq('company_id', company_id)
           .eq('name', name.trim())
-          .eq('parent_id', existingFolder.parent_id || null)
           .neq('id', folder_id)
-          .single()
+
+        if (existingFolder.parent_path === null) {
+          dupQuery.is('parent_path', null)
+        } else {
+          dupQuery.eq('parent_path', existingFolder.parent_path)
+        }
+
+        const { data: duplicateFolder } = await dupQuery.maybeSingle()
 
         if (duplicateFolder) {
           return res.status(400).json({
@@ -324,7 +343,7 @@ export default async function handler(req, res) {
         // Recalcular path se nome mudou
         let newPath = existingFolder.path
         if (name.trim() !== existingFolder.name) {
-          newPath = await calculateFolderPath(existingFolder.parent_id, name.trim(), company_id)
+          newPath = buildFolderPath(existingFolder.parent_path, name.trim())
         }
 
         // Atualizar pasta
@@ -396,12 +415,12 @@ export default async function handler(req, res) {
           })
         }
 
-        // Verificar se pasta tem subpastas
+        // Verificar se pasta tem subpastas (usando parent_path = path da pasta atual)
         const { data: subfolders, error: subfoldersError } = await supabase
           .from('company_folders')
           .select('id, name')
           .eq('company_id', company_id)
-          .eq('parent_id', folder_id)
+          .eq('parent_path', existingFolder.path)
 
         if (subfoldersError) {
           throw subfoldersError
