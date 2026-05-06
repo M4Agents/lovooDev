@@ -501,6 +501,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
                       </>
                     )}
                   </button>
+                  <p className="text-[11px] text-gray-400 text-center leading-tight">
+                    Use com moderação, este recurso desconta créditos de IA do seu plano.
+                  </p>
                   {summaryError && (
                     <p className="text-xs text-red-600 text-center">{summaryError}</p>
                   )}
