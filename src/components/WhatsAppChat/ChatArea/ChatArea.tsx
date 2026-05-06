@@ -52,6 +52,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Estado de reply — mensagem sendo respondida
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null)
+
+  // Trava de reação — evita múltiplos requests simultâneos na mesma mensagem (Ajuste 3)
+  const [reactingMessageId, setReactingMessageId] = useState<string | null>(null)
   
   // Estado para Drag & Drop (movido para componente principal)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -146,7 +149,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       // Carregando mensagens...
       
       // NOVO: Carregar mensagens recentes (aumentado para 50 para garantir mídia recente)
-      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
+      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50, userId)
       
       // Logs removidos por segurança
       
@@ -459,7 +462,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           // Verificando status...
           
           // Buscar apenas a mensagem específica para verificar status (usando mensagens recentes)
-          const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50)
+          const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50, userId)
           const sentMessage = messagesData?.find(m => m.id === messageId)
           
           if (sentMessage) {
@@ -496,6 +499,51 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       throw error
     } finally {
       setSending(false)
+    }
+  }
+
+  // =====================================================
+  // REAÇÃO EM MENSAGEM
+  // Ajuste 3: reactingMessageId como trava para evitar requests simultâneos
+  // =====================================================
+
+  const handleReact = async (messageId: string, emoji: string | null) => {
+    if (reactingMessageId === messageId) return  // trava ativa
+    setReactingMessageId(messageId)
+    try {
+      await chatApi.reactToMessage(messageId, conversationId, companyId, emoji)
+      // Atualizar a reação localmente para UX imediato
+      setMessages(prev => prev.map(msg => {
+        if (msg.id !== messageId) return msg
+        const currentReactions = msg.reactions ?? []
+        if (emoji === null) {
+          // Remover reação do usuário
+          const updated = currentReactions
+            .map(r => r.reacted_by_me ? { ...r, count: r.count - 1, reacted_by_me: false } : r)
+            .filter(r => r.count > 0)
+          return { ...msg, reactions: updated.length ? updated : undefined, my_reaction: undefined }
+        } else {
+          const existing = currentReactions.find(r => r.emoji === emoji)
+          let updated: typeof currentReactions
+          if (existing) {
+            updated = currentReactions.map(r =>
+              r.emoji === emoji
+                ? { ...r, count: r.count + 1, reacted_by_me: true }
+                : { ...r, reacted_by_me: false }
+            )
+          } else {
+            updated = [
+              ...currentReactions.map(r => ({ ...r, reacted_by_me: false })),
+              { emoji, count: 1, reacted_by_me: true },
+            ]
+          }
+          return { ...msg, reactions: updated, my_reaction: emoji }
+        }
+      }))
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao enviar reação')
+    } finally {
+      setReactingMessageId(null)
     }
   }
 
@@ -538,7 +586,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const pollInterval = setInterval(async () => {
       try {
         // Usar nova API de mensagens recentes para detectar novas mensagens
-        const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 10)
+        const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 10, userId)
         
         setMessages(prev => {
           // Verificar se há mensagens novas
@@ -1380,6 +1428,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     onVideoError={handleVideoError}
                     onResetVideoError={resetVideoError}
                     onReply={setReplyingTo}
+                    onReact={handleReact}
+                    reactingMessageId={reactingMessageId}
                     showTimestamp={
                       index === 0 ||
                       (messages[index - 1] && (() => {
@@ -1472,6 +1522,8 @@ interface MessageBubbleProps {
   onVideoError: (messageId: string, error: any) => void
   onResetVideoError: (messageId: string) => void
   onReply?: (message: ChatMessage) => void
+  onReact?: (messageId: string, emoji: string | null) => void
+  reactingMessageId?: string | null
 }
 
 // Função para transformar URLs em links clicáveis
@@ -1682,9 +1734,27 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   getSafeVideoUrl,
   onVideoError,
   onResetVideoError,
-  onReply
+  onReply,
+  onReact,
+  reactingMessageId,
 }) => {
   const [hovered, setHovered] = React.useState(false)
+  const [showReactionPicker, setShowReactionPicker] = React.useState(false)
+  const reactionPickerRef = React.useRef<HTMLDivElement>(null)
+
+  // Fechar picker ao clicar fora
+  React.useEffect(() => {
+    if (!showReactionPicker) return
+    const handler = (e: MouseEvent) => {
+      if (reactionPickerRef.current && !reactionPickerRef.current.contains(e.target as Node)) {
+        setShowReactionPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showReactionPicker])
+
+  const isReacting = reactingMessageId === message.id
   const { t } = useTranslation('chat')
   const formatDateTime = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
@@ -1782,20 +1852,61 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Botão Responder para mensagens inbound — lado direito */}
-        {!isOwn && hovered && onReply && (
-          <div className="flex justify-end mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onClick={() => onReply(message)}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-              title="Responder"
-              aria-label="Responder mensagem"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-              </svg>
-            </button>
+        {/* Botões de ação para mensagens inbound — responder + reagir */}
+        {!isOwn && hovered && (onReply || onReact) && (
+          <div className="flex justify-end mb-0.5 gap-1 opacity-0 group-hover:opacity-100 transition-opacity relative">
+            {onReply && (
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                title="Responder"
+                aria-label="Responder mensagem"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </button>
+            )}
+            {onReact && message.uazapi_message_id && (
+              <div className="relative" ref={reactionPickerRef}>
+                <button
+                  type="button"
+                  onClick={() => !isReacting && setShowReactionPicker(v => !v)}
+                  disabled={isReacting}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-40"
+                  title="Reagir"
+                  aria-label="Reagir à mensagem"
+                >
+                  {isReacting
+                    ? <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    : <span className="text-sm leading-none">😊</span>
+                  }
+                </button>
+                {showReactionPicker && (
+                  <div className="absolute bottom-full right-0 mb-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-2 flex gap-1">
+                    {['👍','❤️','😂','😮','😢','🙏'].map(e => (
+                      <button
+                        key={e}
+                        type="button"
+                        onClick={() => {
+                          setShowReactionPicker(false)
+                          const isMine = message.my_reaction === e
+                          onReact(message.id, isMine ? null : e)
+                        }}
+                        className={`text-xl hover:scale-125 transition-transform rounded p-0.5 ${
+                          message.my_reaction === e ? 'bg-blue-100 ring-1 ring-blue-400' : ''
+                        }`}
+                        title={message.my_reaction === e ? 'Remover reação' : e}
+                        aria-label={e}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1962,6 +2073,30 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 : message.status
             )}
           </div>
+          </div>
+        )}
+
+        {/* Pills de reação — exibidas abaixo do bubble */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+            {message.reactions.map(r => (
+              <button
+                key={r.emoji}
+                type="button"
+                disabled={isOwn || isReacting}
+                onClick={() => onReact && !isOwn && onReact(message.id, r.reacted_by_me ? null : r.emoji)}
+                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                  r.reacted_by_me
+                    ? 'bg-blue-100 border-blue-400 text-blue-800'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                } ${(isOwn || isReacting) ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
+                title={r.reacted_by_me ? 'Remover reação' : `Reagir com ${r.emoji}`}
+                aria-label={`${r.emoji} ${r.count}`}
+              >
+                <span>{r.emoji}</span>
+                {r.count > 1 && <span>{r.count}</span>}
+              </button>
+            ))}
           </div>
         )}
       </div>

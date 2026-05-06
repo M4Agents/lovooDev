@@ -36,6 +36,12 @@ export interface ChatConversation {
   updated_at: Date
 }
 
+export interface MessageReaction {
+  emoji:          string
+  count:          number
+  reacted_by_me:  boolean
+}
+
 export interface ChatMessage {
   id: string
   conversation_id: string
@@ -58,6 +64,9 @@ export interface ChatMessage {
   reply_to_content?: string
   reply_to_direction?: 'inbound' | 'outbound'
   reply_to_message_type?: 'text' | 'image' | 'document' | 'audio' | 'video'
+  // Campos de reação
+  reactions?: MessageReaction[]
+  my_reaction?: string
 }
 
 export interface ChatContact {
