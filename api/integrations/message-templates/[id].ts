@@ -106,8 +106,26 @@ async function updateTemplate(res: any, svc: any, id: string, companyId: string,
   if (body?.category_id !== undefined) updates.category_id = body.category_id ?? null
   if (body?.is_active !== undefined)   updates.is_active   = Boolean(body.is_active)
 
+  // Mídia: aceitar null explícito para remover
+  if ('media_path' in (body ?? {})) updates.media_path = body.media_path ?? null
+  if ('media_type' in (body ?? {})) updates.media_type = body.media_type ?? null
+
   if (updates.name    === '') return jsonError(res, 400, 'name não pode ser vazio')
   if (updates.content === '') return jsonError(res, 400, 'content não pode ser vazio')
+
+  // Validar consistência de mídia após merge com existing
+  const newPath = 'media_path' in updates ? updates.media_path : undefined
+  const newType = 'media_type' in updates ? updates.media_type : undefined
+  if (newPath !== undefined || newType !== undefined) {
+    const resolvedPath = newPath !== undefined ? newPath : undefined // será checado contra o outro
+    const resolvedType = newType !== undefined ? newType : undefined
+    if (resolvedPath && !resolvedType) return jsonError(res, 400, 'media_type obrigatório quando media_path é informado')
+    if (resolvedType && !resolvedPath) return jsonError(res, 400, 'media_path obrigatório quando media_type é informado')
+    const VALID = ['image', 'video', 'document', 'audio']
+    if (resolvedType && !VALID.includes(resolvedType as string)) {
+      return jsonError(res, 400, `media_type inválido. Use: ${VALID.join(', ')}`)
+    }
+  }
 
   // category_id sendo alterado: validar que pertence à empresa — não confiar apenas no trigger
   if (updates.category_id !== undefined) {
@@ -132,7 +150,7 @@ async function updateTemplate(res: any, svc: any, id: string, companyId: string,
     .update(updates)
     .eq('id', id)
     .eq('company_id', companyId)
-    .select('id, company_id, category_id, name, content, channel, is_active, created_by, created_at, updated_at')
+    .select('id, company_id, category_id, name, content, channel, is_active, media_path, media_type, created_by, created_at, updated_at')
     .single()
 
   if (error) {

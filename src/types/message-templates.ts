@@ -3,6 +3,7 @@
 // =============================================================================
 
 export type MessageTemplateChannel = 'whatsapp_life' | 'whatsapp_official_api'
+export type MessageTemplateMediaType = 'image' | 'video' | 'document' | 'audio'
 
 export interface MessageTemplateCategory {
   id: string
@@ -21,6 +22,9 @@ export interface MessageTemplate {
   content: string
   channel: MessageTemplateChannel
   is_active: boolean
+  /** S3 key da mídia. Nunca contém URL assinada. */
+  media_path: string | null
+  media_type: MessageTemplateMediaType | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -33,6 +37,9 @@ export interface MessageTemplateChatItem {
   name: string
   content: string
   channel: MessageTemplateChannel
+  /** S3 key — signed URL gerada sob demanda no momento de uso. */
+  media_path: string | null
+  media_type: MessageTemplateMediaType | null
 }
 
 export interface MessageTemplateListResponse {
@@ -51,11 +58,15 @@ export type CreateTemplateInput = {
   content: string
   channel: 'whatsapp_life'
   category_id?: string | null
+  media_path?: string | null
+  media_type?: MessageTemplateMediaType | null
 }
 
 export type UpdateTemplateInput = Partial<Omit<CreateTemplateInput, 'company_id'>> & {
   company_id: string
   is_active?: boolean
+  media_path?: string | null
+  media_type?: MessageTemplateMediaType | null
 }
 
 export type CreateCategoryInput = {

@@ -72,7 +72,7 @@ export default async function handler(
   // Templates: apenas ativos, canal whatsapp_life, da empresa
   const { data: templates, error: tplErr } = await svc
     .from('message_templates')
-    .select('id, category_id, name, content, channel')
+    .select('id, category_id, name, content, channel, media_path, media_type')
     .eq('company_id', companyId)
     .eq('is_active', true)
     .eq('channel', 'whatsapp_life')

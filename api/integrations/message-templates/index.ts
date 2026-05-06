@@ -74,7 +74,7 @@ async function handleGet(req: any, res: any): Promise<void> {
   // Templates da empresa (todos os estados: ativos e inativos)
   const { data: templates, error: tplErr } = await svc
     .from('message_templates')
-    .select('id, company_id, category_id, name, content, channel, is_active, created_by, created_at, updated_at')
+    .select('id, company_id, category_id, name, content, channel, is_active, media_path, media_type, created_by, created_at, updated_at')
     .eq('company_id', companyId)
     .order('name', { ascending: true })
 
@@ -131,10 +131,21 @@ async function createTemplate(res: any, svc: any, companyId: string, userId: str
   const content    = (body?.content as string | undefined)?.trim()
   const channel    = (body?.channel as string | undefined)?.trim() ?? 'whatsapp_life'
   const categoryId = body?.category_id as string | undefined
+  const mediaPath  = (body?.media_path as string | undefined) ?? null
+  const mediaType  = (body?.media_type as string | undefined) ?? null
 
   if (!name)       return jsonError(res, 400, 'name obrigatório')
   if (!content)    return jsonError(res, 400, 'content obrigatório')
   if (!categoryId) return jsonError(res, 400, 'category_id obrigatório. Crie uma categoria antes de criar um modelo.')
+
+  // Validar consistência de mídia — ambos ou nenhum
+  if (mediaPath && !mediaType) return jsonError(res, 400, 'media_type obrigatório quando media_path é informado')
+  if (mediaType && !mediaPath) return jsonError(res, 400, 'media_path obrigatório quando media_type é informado')
+
+  const VALID_MEDIA_TYPES = ['image', 'video', 'document', 'audio']
+  if (mediaType && !VALID_MEDIA_TYPES.includes(mediaType)) {
+    return jsonError(res, 400, `media_type inválido. Use: ${VALID_MEDIA_TYPES.join(', ')}`)
+  }
 
   if (BLOCKED_CHANNELS.includes(channel)) {
     return jsonError(res, 422, 'Canal ainda não disponível.')
@@ -167,8 +178,10 @@ async function createTemplate(res: any, svc: any, companyId: string, userId: str
       channel,
       is_active:   true,
       created_by:  userId,
+      media_path:  mediaPath,
+      media_type:  mediaType,
     })
-    .select('id, company_id, category_id, name, content, channel, is_active, created_by, created_at, updated_at')
+    .select('id, company_id, category_id, name, content, channel, is_active, media_path, media_type, created_by, created_at, updated_at')
     .single()
 
   if (error) {

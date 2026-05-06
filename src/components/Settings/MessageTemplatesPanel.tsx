@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle } from 'lucide-react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle, Paperclip, Image, FileVideo, FileAudio, FileText, Loader2 } from 'lucide-react'
 import {
   listSettingsTemplates,
   createTemplate,
@@ -8,10 +8,12 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  uploadTemplateMedia,
 } from '../../services/messageTemplatesApi'
 import type {
   MessageTemplate,
   MessageTemplateCategory,
+  MessageTemplateMediaType,
 } from '../../types/message-templates'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +34,8 @@ interface TemplateForm {
   channel: 'whatsapp_life'
   category_id: string
   is_active: boolean
+  media_path: string | null
+  media_type: MessageTemplateMediaType | null
 }
 
 const EMPTY_TEMPLATE_FORM: TemplateForm = {
@@ -40,6 +44,8 @@ const EMPTY_TEMPLATE_FORM: TemplateForm = {
   channel: 'whatsapp_life',
   category_id: '',
   is_active: true,
+  media_path: null,
+  media_type: null,
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +75,13 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   // Confirmar exclusão
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<string | null>(null)
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<string | null>(null)
+
+  // Upload de mídia
+  const [mediaPreviewUrl,  setMediaPreviewUrl]  = useState<string | null>(null)
+  const [uploadingMedia,   setUploadingMedia]   = useState(false)
+  const [uploadProgress,   setUploadProgress]   = useState(0)
+  const [mediaError,       setMediaError]       = useState<string | null>(null)
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
 
   // Colapso de categorias
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
@@ -110,12 +123,12 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   // ---------------------------------------------------------------------------
 
   const openCreateTemplate = () => {
-    // Bloquear criação de modelo sem categoria
     if (categories.length === 0) return
-
     setEditingTemplate(null)
     setTemplateForm(EMPTY_TEMPLATE_FORM)
     setTemplateError(null)
+    setMediaPreviewUrl(null)
+    setMediaError(null)
     setShowTemplateForm(true)
   }
 
@@ -127,8 +140,12 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
       channel:     'whatsapp_life',
       category_id: tpl.category_id ?? '',
       is_active:   tpl.is_active,
+      media_path:  tpl.media_path,
+      media_type:  tpl.media_type,
     })
     setTemplateError(null)
+    setMediaPreviewUrl(null)
+    setMediaError(null)
     setShowTemplateForm(true)
   }
 
@@ -137,6 +154,39 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
     setEditingTemplate(null)
     setTemplateForm(EMPTY_TEMPLATE_FORM)
     setTemplateError(null)
+    setMediaPreviewUrl(null)
+    setMediaError(null)
+    setUploadProgress(0)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Upload de mídia
+  // ---------------------------------------------------------------------------
+
+  const handleMediaUpload = async (file: File) => {
+    setUploadingMedia(true)
+    setMediaError(null)
+    setUploadProgress(0)
+    try {
+      const { media_path, preview_url, media_type } = await uploadTemplateMedia(
+        file,
+        companyId,
+        (p) => setUploadProgress(p),
+      )
+      setTemplateForm(f => ({ ...f, media_path, media_type }))
+      setMediaPreviewUrl(preview_url)
+    } catch (e: unknown) {
+      setMediaError(e instanceof Error ? e.message : 'Erro ao fazer upload de mídia')
+    } finally {
+      setUploadingMedia(false)
+    }
+  }
+
+  const removeMedia = () => {
+    setTemplateForm(f => ({ ...f, media_path: null, media_type: null }))
+    setMediaPreviewUrl(null)
+    setMediaError(null)
+    if (mediaInputRef.current) mediaInputRef.current.value = ''
   }
 
   // ---------------------------------------------------------------------------
@@ -159,6 +209,8 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           channel:     templateForm.channel,
           category_id: templateForm.category_id,
           is_active:   templateForm.is_active,
+          media_path:  templateForm.media_path,
+          media_type:  templateForm.media_type,
         })
       } else {
         await createTemplate({
@@ -167,6 +219,8 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           content:     templateForm.content.trim(),
           channel:     templateForm.channel,
           category_id: templateForm.category_id,
+          media_path:  templateForm.media_path,
+          media_type:  templateForm.media_type,
         })
       }
       closeTemplateForm()
@@ -460,6 +514,75 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 resize-none bg-white"
             />
 
+            {/* Mídia opcional */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-600">Mídia (opcional)</p>
+
+              {/* Preview da mídia ou botão de upload */}
+              {templateForm.media_path && !uploadingMedia ? (
+                <div className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <MediaTypeIcon type={templateForm.media_type} />
+                  <div className="flex-1 min-w-0">
+                    {mediaPreviewUrl && templateForm.media_type === 'image' ? (
+                      <img
+                        src={mediaPreviewUrl}
+                        alt="Preview"
+                        className="h-16 object-contain rounded"
+                        onError={() => setMediaPreviewUrl(null)}
+                      />
+                    ) : (
+                      <p className="text-xs text-slate-600 truncate">
+                        {templateForm.media_type} • {templateForm.media_path.split('/').pop()}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeMedia}
+                    className="p-1 text-slate-400 hover:text-red-500 flex-shrink-0"
+                    title="Remover mídia"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : uploadingMedia ? (
+                <div className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <Loader2 className="w-4 h-4 text-green-600 animate-spin flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{uploadProgress}% enviado</p>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 px-3 py-2 text-xs text-slate-600 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                  Anexar imagem, vídeo, documento ou áudio
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                    className="sr-only"
+                    onChange={e => {
+                      const file = e.target.files?.[0]
+                      if (file) handleMediaUpload(file)
+                    }}
+                  />
+                </label>
+              )}
+
+              {mediaError && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  {mediaError}
+                </p>
+              )}
+            </div>
+
             {editingTemplate && (
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input
@@ -668,12 +791,30 @@ interface TemplateRowProps {
   onCancelDelete: () => void
 }
 
+// ---------------------------------------------------------------------------
+// Helper: ícone de tipo de mídia
+// ---------------------------------------------------------------------------
+
+function MediaTypeIcon({ type, size = 'sm' }: { type: MessageTemplateMediaType | null | undefined; size?: 'xs' | 'sm' }) {
+  const cls = size === 'xs' ? 'w-2.5 h-2.5' : 'w-4 h-4 text-slate-400'
+  if (type === 'image')    return <Image     className={cls} />
+  if (type === 'video')    return <FileVideo className={cls} />
+  if (type === 'audio')    return <FileAudio className={cls} />
+  return <FileText className={cls} />
+}
+
 function TemplateRow({ template, onEdit, onDelete, confirmDeleteId, onConfirmDelete, onCancelDelete }: TemplateRowProps) {
   return (
     <div className={`px-4 py-3 flex items-start gap-3 group ${!template.is_active ? 'opacity-50' : ''}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-slate-800 truncate">{template.name}</span>
+          {template.media_type && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full flex-shrink-0">
+              <MediaTypeIcon type={template.media_type} size="xs" />
+              {template.media_type}
+            </span>
+          )}
           {!template.is_active && (
             <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full flex-shrink-0">inativo</span>
           )}

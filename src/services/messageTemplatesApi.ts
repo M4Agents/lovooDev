@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { supabase } from '../lib/supabase'
+import { S3Storage } from './aws/s3Storage'
 import type {
   MessageTemplateListResponse,
   MessageTemplateChatResponse,
@@ -12,6 +13,7 @@ import type {
   UpdateTemplateInput,
   CreateCategoryInput,
   UpdateCategoryInput,
+  MessageTemplateMediaType,
 } from '../types/message-templates'
 
 // ---------------------------------------------------------------------------
@@ -134,6 +136,68 @@ export async function deleteCategory(id: string, companyId: string): Promise<voi
   })
   const data = await res.json().catch(() => ({})) as Record<string, unknown>
   if (!res.ok) throw new Error((data?.error as string) || 'Erro ao desativar categoria')
+}
+
+// ---------------------------------------------------------------------------
+// Mídia de template — upload (retorna S3 key + preview URL temporária)
+// ---------------------------------------------------------------------------
+
+/**
+ * Faz upload de mídia para S3 e retorna:
+ *   - media_path: S3 key a ser salvo no banco (nunca URL assinada)
+ *   - preview_url: URL assinada de curta duração apenas para preview local
+ */
+export async function uploadTemplateMedia(
+  file: File,
+  companyId: string,
+  onProgress?: (percent: number) => void,
+): Promise<{ media_path: string; preview_url: string; media_type: MessageTemplateMediaType }> {
+  const buffer      = new Uint8Array(await file.arrayBuffer())
+  const contentType = S3Storage.detectContentType(buffer as unknown as Buffer, file.name)
+  const mediaType   = resolveMediaType(contentType)
+
+  const uploadResult = await S3Storage.uploadToS3({
+    companyId,
+    messageId:        `template-${Date.now()}`,
+    originalFileName: file.name,
+    buffer:           buffer as unknown as Buffer,
+    contentType,
+    source:           'frontend',
+    onProgress,
+  })
+
+  if (!uploadResult.success || !uploadResult.data) {
+    throw new Error(uploadResult.error || 'Erro ao fazer upload de mídia')
+  }
+
+  const s3Key    = uploadResult.data.s3Key
+  const urlResult = await S3Storage.generateSignedUrl(companyId, s3Key, { expiresIn: 7200 })
+
+  if (!urlResult.success || !urlResult.data) {
+    throw new Error(urlResult.error || 'Erro ao gerar URL de preview')
+  }
+
+  return { media_path: s3Key, preview_url: urlResult.data, media_type: mediaType }
+}
+
+/**
+ * Gera URL assinada temporária para um media_path (S3 key) salvo no banco.
+ * Retorna null em caso de falha.
+ */
+export async function generateTemplateMediaUrl(
+  companyId: string,
+  mediaPath: string,
+  expiresIn = 3600,
+): Promise<string | null> {
+  const result = await S3Storage.generateSignedUrl(companyId, mediaPath, { expiresIn })
+  return result.success && result.data ? result.data : null
+}
+
+function resolveMediaType(contentType: string): MessageTemplateMediaType {
+  if (contentType.startsWith('image/'))  return 'image'
+  if (contentType.startsWith('video/'))  return 'video'
+  if (contentType.startsWith('audio/'))  return 'audio'
+  return 'document'
 }
 
 // ---------------------------------------------------------------------------

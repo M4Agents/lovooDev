@@ -7,6 +7,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronDown, Bot, Sparkles } from 'lucide-react'
 import { MessageTemplatePicker } from './MessageTemplatePicker'
+import type { TemplateSelectPayload } from './MessageTemplatePicker'
+import { resolveTemplateVariables } from '../../../utils/resolveTemplateVariables'
+import { generateTemplateMediaUrl } from '../../../services/messageTemplatesApi'
+import { useAuth } from '../../../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
@@ -35,6 +39,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   userId
 }) => {
   const { t } = useTranslation('chat')
+  const { user } = useAuth()
+  const attendantName = user?.user_metadata?.full_name || user?.email || ''
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -1522,6 +1528,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onPrefillConsumed={() => setPendingSuggestion(null)}
           onToggleSuggestion={() => setShowSuggestionPanel(p => !p)}
           isSuggestionActive={showSuggestionPanel}
+          leadName={conversation?.contact_name ?? ''}
+          attendantName={attendantName}
         />
       </div>
 
@@ -2157,6 +2165,10 @@ interface MessageInputProps {
   onToggleSuggestion: () => void
   /** Indica se o painel de sugestões está visível — controla o visual ativo do botão. */
   isSuggestionActive: boolean
+  /** Nome do lead (contact_name da conversa) — para resolução de {{nome_lead}}. */
+  leadName?: string
+  /** Nome do atendente logado — para resolução de {{nome_atendente}}. */
+  attendantName?: string
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -2170,6 +2182,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onPrefillConsumed,
   onToggleSuggestion,
   isSuggestionActive,
+  leadName = '',
+  attendantName = '',
 }) => {
   const { t } = useTranslation('chat')
   const resolvedPlaceholder = useMemo(
@@ -2179,6 +2193,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [message, setMessage] = useState('')
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [templateQuery,      setTemplateQuery]      = useState('')
+
+  // Mídia pendente: selecionada via template, aguardando envio manual do usuário.
+  // Armazena apenas path (S3 key) e type — URL gerada apenas no momento do envio (handleSubmit).
+  const [pendingMedia, setPendingMedia] = useState<{
+    path: string
+    type: 'image' | 'video' | 'document' | 'audio'
+  } | null>(null)
+  const [sendingWithMedia, setSendingWithMedia] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -2208,20 +2230,43 @@ const MessageInput: React.FC<MessageInputProps> = ({
     })
   }, [prefillValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!message.trim() || disabled) return
 
-    onSendMessage({
-      content: message.trim(),
-      message_type: 'text'
-    })
+    if (!message.trim() && !pendingMedia) return
+    if (disabled || sendingWithMedia) return
+
+    if (pendingMedia) {
+      setSendingWithMedia(true)
+      try {
+        // URL gerada apenas agora — garante que nunca expira antes do envio
+        const url = await generateTemplateMediaUrl(companyId, pendingMedia.path)
+        if (!url) {
+          toast.error('Não foi possível preparar a mídia para envio. Tente novamente.')
+          return
+        }
+        onSendMessage({
+          content:      message.trim() || '',
+          message_type: pendingMedia.type as any,
+          media_url:    url,
+        })
+      } catch {
+        toast.error('Erro ao processar mídia do template. Tente novamente.')
+        return
+      } finally {
+        setSendingWithMedia(false)
+      }
+    } else {
+      onSendMessage({
+        content:      message.trim(),
+        message_type: 'text',
+      })
+    }
 
     setMessage('')
+    setPendingMedia(null)
     setIsEmojiOpen(false)
-    
-    // Reset textarea height after sending message
+
     if (textareaRef.current) {
       textareaRef.current.style.height = '40px'
       textareaRef.current.style.overflowY = 'hidden'
@@ -2462,14 +2507,29 @@ const MessageInput: React.FC<MessageInputProps> = ({
             <MessageTemplatePicker
               conversationId={conversationId}
               query={templateQuery}
-              onSelect={(content) => {
-                setMessage(content)
+              onSelect={(payload: TemplateSelectPayload) => {
+                const resolved = resolveTemplateVariables(payload.content, {
+                  nome_lead:      leadName,
+                  nome_atendente: attendantName,
+                })
+                setMessage(resolved)
+
+                // Salvar apenas path + type — URL gerada no handleSubmit
+                if (payload.media_path && payload.media_type) {
+                  setPendingMedia({
+                    path: payload.media_path,
+                    type: payload.media_type as 'image' | 'video' | 'document' | 'audio',
+                  })
+                } else {
+                  setPendingMedia(null)
+                }
+
                 setShowTemplatePicker(false)
                 setTemplateQuery('')
                 requestAnimationFrame(() => {
                   const el = textareaRef.current
                   if (el) {
-                    el.value = content
+                    el.value = resolved
                     applyResize(el)
                     el.focus()
                   }
@@ -2480,6 +2540,23 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 setTemplateQuery('')
               }}
             />
+          </div>
+        )}
+
+        {/* Chip de mídia pendente (selecionada via template) */}
+        {pendingMedia && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+            <span className="capitalize font-medium">{pendingMedia.type}</span>
+            <span className="text-blue-400">•</span>
+            <span className="truncate flex-1 text-blue-500 text-[11px]">{pendingMedia.path.split('/').pop()}</span>
+            <button
+              type="button"
+              onClick={() => setPendingMedia(null)}
+              className="text-blue-400 hover:text-blue-600 flex-shrink-0"
+              title="Remover mídia"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -2578,7 +2655,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
       <button
         type="submit"
-        disabled={!message.trim() || disabled}
+        disabled={(!message.trim() && !pendingMedia) || disabled || sendingWithMedia}
         aria-label={t('input.actions.send')}
         title={t('input.actions.send')}
         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
