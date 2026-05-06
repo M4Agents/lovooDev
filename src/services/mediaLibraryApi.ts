@@ -482,6 +482,74 @@ class MediaLibraryApiService {
   }
 
   // =====================================================
+  // MÉTODOS PARA PICKER DE MODELOS DE MENSAGEM
+  // =====================================================
+
+  /**
+   * Lista arquivos de mídia da empresa para o picker de modelos de mensagem.
+   * Chama GET /api/media-library/company/picker com autenticação Bearer.
+   * O company_id é validado no backend via auth + assertMembership.
+   */
+  async getCompanyFiles(
+    companyId: string,
+    token: string,
+    options: {
+      fileType?: 'image' | 'video' | 'audio' | 'document'
+      page?: number
+      limit?: number
+      search?: string
+    } = {}
+  ): Promise<MediaFilesResponse> {
+    const { fileType, page = 1, limit = 50, search = '' } = options
+
+    const params = new URLSearchParams({
+      company_id: companyId,
+      page: page.toString(),
+      limit: limit.toString(),
+    })
+
+    if (fileType) params.append('file_type', fileType)
+    if (search.trim()) params.append('search', search.trim())
+
+    const response = await fetch(
+      `${this.baseUrl}/company/picker?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    return {
+      files: Array.isArray(data.files) ? (data.files as MediaFile[]) : [],
+      pagination: data.pagination ?? {
+        page: 1,
+        limit: 50,
+        total: 0,
+        totalCount: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+      filters: {
+        leadId: '',
+        file_type: options.fileType ?? 'all',
+        search: options.search ?? '',
+      },
+      lastUpdated: new Date().toISOString(),
+    }
+  }
+
+  // =====================================================
   // MÉTODOS UTILITÁRIOS
   // =====================================================
 

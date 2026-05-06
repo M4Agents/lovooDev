@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle, Paperclip, Image, FileVideo, FileAudio, FileText, Loader2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle, Paperclip, Image, FileVideo, FileAudio, FileText, Loader2, Library } from 'lucide-react'
 import {
   listSettingsTemplates,
   createTemplate,
@@ -9,12 +9,17 @@ import {
   updateCategory,
   deleteCategory,
   uploadTemplateMedia,
+  generateTemplateMediaUrl,
 } from '../../services/messageTemplatesApi'
 import type {
   MessageTemplate,
   MessageTemplateCategory,
   MessageTemplateMediaType,
 } from '../../types/message-templates'
+import {
+  MediaLibraryPickerModal,
+  type MediaLibraryPickerSelectPayload,
+} from './MediaLibraryPickerModal'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -77,10 +82,11 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<string | null>(null)
 
   // Upload de mídia
-  const [mediaPreviewUrl,  setMediaPreviewUrl]  = useState<string | null>(null)
-  const [uploadingMedia,   setUploadingMedia]   = useState(false)
-  const [uploadProgress,   setUploadProgress]   = useState(0)
-  const [mediaError,       setMediaError]       = useState<string | null>(null)
+  const [mediaPreviewUrl,       setMediaPreviewUrl]       = useState<string | null>(null)
+  const [uploadingMedia,        setUploadingMedia]        = useState(false)
+  const [uploadProgress,        setUploadProgress]        = useState(0)
+  const [mediaError,            setMediaError]            = useState<string | null>(null)
+  const [showMediaLibraryPicker, setShowMediaLibraryPicker] = useState(false)
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
 
   // Colapso de categorias
@@ -187,6 +193,17 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
     setMediaPreviewUrl(null)
     setMediaError(null)
     if (mediaInputRef.current) mediaInputRef.current.value = ''
+  }
+
+  const handleLibrarySelect = async (item: MediaLibraryPickerSelectPayload) => {
+    // Salvar apenas path + type — nunca URL assinada
+    setTemplateForm(f => ({ ...f, media_path: item.path, media_type: item.type }))
+    setMediaError(null)
+    setShowMediaLibraryPicker(false)
+
+    // Gerar URL fresca para preview local — nunca usar URL do banco
+    const previewUrl = await generateTemplateMediaUrl(companyId, item.path)
+    setMediaPreviewUrl(previewUrl)
   }
 
   // ---------------------------------------------------------------------------
@@ -559,20 +576,33 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
                   </div>
                 </div>
               ) : (
-                <label className="flex items-center gap-2 px-3 py-2 text-xs text-slate-600 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors">
-                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                  Anexar imagem, vídeo, documento ou áudio
-                  <input
-                    ref={mediaInputRef}
-                    type="file"
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                    className="sr-only"
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (file) handleMediaUpload(file)
-                    }}
-                  />
-                </label>
+                <div className="flex items-stretch gap-2">
+                  {/* Botão 1: Upload de arquivo */}
+                  <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs text-slate-600 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors">
+                    <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                    Fazer upload
+                    <input
+                      ref={mediaInputRef}
+                      type="file"
+                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                      className="sr-only"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) handleMediaUpload(file)
+                      }}
+                    />
+                  </label>
+
+                  {/* Botão 2: Selecionar da biblioteca */}
+                  <button
+                    type="button"
+                    onClick={() => setShowMediaLibraryPicker(true)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs text-slate-600 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors"
+                  >
+                    <Library className="w-3.5 h-3.5 text-slate-400" />
+                    Da biblioteca
+                  </button>
+                </div>
               )}
 
               {mediaError && (
@@ -620,6 +650,14 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
           </div>
         </div>
       )}
+
+      {/* ── Modal: seleção da biblioteca de mídias ────────────────────────── */}
+      <MediaLibraryPickerModal
+        companyId={companyId}
+        isOpen={showMediaLibraryPicker}
+        onClose={() => setShowMediaLibraryPicker(false)}
+        onSelect={handleLibrarySelect}
+      />
 
       {/* ── Lista de categorias + templates ───────────────────────────────── */}
       {hasCategories && (
