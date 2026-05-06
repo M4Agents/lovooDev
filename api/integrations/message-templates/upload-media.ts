@@ -48,6 +48,35 @@ function resolveMediaType(contentType: string): MediaType {
   return 'document'
 }
 
+/**
+ * Infere o MIME type pela extensão do arquivo.
+ * Usado como fallback quando o browser envia 'application/octet-stream' ou string vazia.
+ */
+function inferMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    pdf:  'application/pdf',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    png:  'image/png',
+    gif:  'image/gif',
+    webp: 'image/webp',
+    mp4:  'video/mp4',
+    mov:  'video/quicktime',
+    avi:  'video/x-msvideo',
+    mp3:  'audio/mpeg',
+    ogg:  'audio/ogg',
+    wav:  'audio/wav',
+    doc:  'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls:  'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt:  'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  }
+  return map[ext] || 'application/octet-stream'
+}
+
 function sanitizeFilename(name: string): string {
   return name
     .normalize('NFD')
@@ -129,8 +158,24 @@ export default async function handler(
       return jsonError(res, 422, 'Credenciais AWS não encontradas para esta empresa. Configure as credenciais em Configurações > Integrações > AWS.')
     }
 
-    const s3Key     = generateS3Key(companyId, filename)
-    const mediaType = resolveMediaType(contentType)
+    const s3Key = generateS3Key(companyId, filename)
+
+    // Prefer browser-provided content type; fallback to extension-based inference
+    // if browser sends generic 'application/octet-stream' (e.g. some mobile browsers).
+    const resolvedContentType =
+      contentType && contentType !== 'application/octet-stream'
+        ? contentType
+        : inferMimeType(filename)
+
+    const mediaType = resolveMediaType(resolvedContentType)
+
+    console.log('[upload-media] preparing presigned URL:', {
+      filename,
+      contentTypeFromBrowser: contentType,
+      resolvedContentType,
+      mediaType,
+      s3Key,
+    })
 
     const s3Client = new S3Client({
       region: credentials.region,
@@ -140,11 +185,12 @@ export default async function handler(
       },
     })
 
-    // Presigned PUT URL — expira em 5 minutos (tempo suficiente para o upload)
+    // Presigned PUT URL — expira em 5 minutos (tempo suficiente para o upload).
+    // ContentType na assinatura DEVE corresponder ao header Content-Type do PUT do browser.
     const command = new PutObjectCommand({
       Bucket:      credentials.bucket,
       Key:         s3Key,
-      ContentType: contentType,
+      ContentType: resolvedContentType,
     })
 
     const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 })
@@ -155,6 +201,10 @@ export default async function handler(
       s3Key,
       mediaType,
       directUrl,
+      // Retorna o contentType real usado na assinatura.
+      // O browser DEVE usar exatamente este valor no header Content-Type do PUT,
+      // pois a assinatura do presigned URL inclui o ContentType.
+      contentType: resolvedContentType,
     })
 
   } catch (err: unknown) {

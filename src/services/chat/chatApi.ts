@@ -508,6 +508,17 @@ export class ChatApi {
               ...(replyUazapiId ? { replyid: replyUazapiId } : {})
             };
 
+        // #region agent log
+        if (payload.type && (payload as any).file) {
+          console.log('[DBG-56e383][uazapi-media-send]', {
+            type:      payload.type,
+            fileUrl:   (payload as any).file,
+            isDirectS3: String((payload as any).file).includes('.amazonaws.com/') && !String((payload as any).file).includes('X-Amz-Signature'),
+            endpoint,
+          })
+        }
+        // #endregion
+
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {

@@ -185,12 +185,17 @@ export async function uploadTemplateMedia(
     throw new Error((prepData?.error as string) || 'Erro ao preparar upload de mídia')
   }
 
-  const { presignedUrl, s3Key, mediaType, directUrl } = prepData as {
-    presignedUrl: string
-    s3Key:        string
-    mediaType:    MessageTemplateMediaType
-    directUrl:    string
+  const { presignedUrl, s3Key, mediaType, directUrl, contentType: resolvedContentType } = prepData as {
+    presignedUrl:      string
+    s3Key:             string
+    mediaType:         MessageTemplateMediaType
+    directUrl:         string
+    contentType:       string
   }
+
+  // resolvedContentType é o mesmo valor usado para assinar o presigned URL no backend.
+  // O header Content-Type do PUT DEVE ser idêntico ao que está na assinatura.
+  const putContentType = resolvedContentType || contentType
 
   onProgress?.(20)
 
@@ -198,7 +203,7 @@ export async function uploadTemplateMedia(
   const uploadRes = await fetch(presignedUrl, {
     method:  'PUT',
     body:    file,
-    headers: { 'Content-Type': contentType },
+    headers: { 'Content-Type': putContentType },
   })
 
   // #region agent log
