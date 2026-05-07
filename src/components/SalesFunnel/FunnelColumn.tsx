@@ -131,9 +131,19 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             style={{ backgroundColor: stage.color }}
           />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 truncate">
-              {stage.name}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-gray-900 truncate">
+                {stage.name}
+              </h3>
+              {stage.is_over_plan && (
+                <span
+                  className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded font-medium flex-shrink-0"
+                  title="Esta etapa está acima do limite do plano. Faça upgrade ou remova etapas para habilitar."
+                >
+                  Acima do limite
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">
                 {displayCount === 1
@@ -180,8 +190,14 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                 <div className="absolute right-0 top-8 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
                   {onEditStage && (
                     <button
-                      onClick={() => { setMenuOpen(false); onEditStage(stage.id) }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        if (stage.is_over_plan) return
+                        setMenuOpen(false)
+                        onEditStage(stage.id)
+                      }}
+                      disabled={!!stage.is_over_plan}
+                      title={stage.is_over_plan ? 'Etapa acima do limite do plano. Faça upgrade para editar.' : undefined}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Pencil className="w-4 h-4 text-gray-400" />
                       {t('board.column.editStageTitle')}

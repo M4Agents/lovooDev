@@ -211,7 +211,11 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         const contentType = response.headers.get('content-type')
         if (contentType && contentType.includes('application/json')) {
           const data = await response.json()
-          throw new Error(data.error || 'Erro ao criar etapa')
+          // Erro de limite de plano (422): mensagem amigável
+          if (response.status === 422 && data.code === 'PLAN_LIMIT_EXCEEDED') {
+            throw new Error(data.message || 'Limite do plano atingido. Faça upgrade ou remova etapas existentes.')
+          }
+          throw new Error(data.message || data.error || 'Erro ao criar etapa')
         } else {
           throw new Error('Erro ao criar etapa. Aguarde o deploy completar.')
         }
@@ -522,14 +526,31 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                 </h3>
                 <button
                   type="button"
-                  onClick={() => setShowAddStage(true)}
-                  disabled={loading || showAddStage}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    if (funnel.is_over_plan) return
+                    setShowAddStage(true)
+                  }}
+                  disabled={loading || showAddStage || !!funnel.is_over_plan}
+                  title={funnel.is_over_plan ? 'Este funil está acima do limite do plano. Faça upgrade para adicionar etapas.' : undefined}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-4 h-4" />
                   Adicionar
                 </button>
               </div>
+
+              {/* Aviso de limite de plano */}
+              {funnel.is_over_plan && (
+                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-orange-800">Funil acima do limite do plano</p>
+                    <p className="text-xs text-orange-700 mt-0.5">
+                      Você atingiu o limite de funis do seu plano. Faça upgrade ou remova outros funis para editar este.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {loadingStages ? (
                 <div className="flex items-center justify-center py-8">
@@ -624,9 +645,19 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                         />
                       ) : (
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {stage.name}
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {stage.name}
+                            </p>
+                            {stage.is_over_plan && (
+                              <span
+                                className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded font-medium flex-shrink-0"
+                                title="Acima do limite do plano"
+                              >
+                                Acima do limite
+                              </span>
+                            )}
+                          </div>
                           {stage.is_system_stage && (
                             <p className="text-xs text-gray-500">Etapa do sistema</p>
                           )}
@@ -685,9 +716,9 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleEditStage(stage)}
-                            disabled={!!editingStageId || !!deletingStageId}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
-                            title="Editar"
+                            disabled={!!editingStageId || !!deletingStageId || !!stage.is_over_plan}
+                            title={stage.is_over_plan ? 'Etapa acima do limite do plano. Faça upgrade para editar.' : 'Editar'}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>

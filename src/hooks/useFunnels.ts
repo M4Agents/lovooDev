@@ -20,6 +20,7 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
   const [selectedFunnel, setSelectedFunnelState] = useState<SalesFunnel | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
+  const [planFunnelLimit, setPlanFunnelLimit] = useState<number | null>(null)
 
   // Buscar funis
   const fetchFunnels = useCallback(async () => {
@@ -42,6 +43,21 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
       setLoading(false)
     }
   }, [companyId, filter, selectedFunnel])
+
+  // Buscar limite de funis do plano
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from('companies')
+      .select('plans!plan_id(max_funnels)')
+      .eq('id', companyId)
+      .single()
+      .then(({ data }) => {
+        const plan = (data as { plans?: { max_funnels?: number | null } | null })?.plans
+        setPlanFunnelLimit(plan?.max_funnels ?? null)
+      })
+      .catch(() => setPlanFunnelLimit(null))
+  }, [companyId])
 
   // Carregar funis ao montar
   useEffect(() => {
@@ -160,6 +176,8 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
     await fetchFunnels()
   }, [fetchFunnels])
 
+  const isAtFunnelLimit = planFunnelLimit !== null && funnels.length >= planFunnelLimit
+
   return {
     funnels,
     loading,
@@ -170,6 +188,8 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
     updateFunnel,
     deleteFunnel,
     reorderFunnels,
-    refreshFunnels
+    refreshFunnels,
+    planFunnelLimit,
+    isAtFunnelLimit,
   }
 }

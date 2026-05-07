@@ -24,6 +24,8 @@ export interface SalesFunnel {
   stages?: FunnelStage[]
   lead_count?: number
   total_value?: number
+  /** TRUE quando o funil está acima do limite max_funnels do plano. */
+  is_over_plan?: boolean
 }
 
 export interface FunnelStage {
@@ -40,6 +42,8 @@ export interface FunnelStage {
   updated_at: Date
   lead_count?: number
   total_value?: number
+  /** TRUE quando a etapa está acima do limite max_funnel_stages do plano. */
+  is_over_plan?: boolean
 }
 
 // =====================================================
@@ -859,6 +863,10 @@ export interface UseFunnelsReturn {
   deleteFunnel: (id: string) => Promise<void>
   reorderFunnels: (funnels: Array<{id: string, display_order: number}>) => Promise<void>
   refreshFunnels: () => Promise<void>
+  /** Limite máximo de funis do plano. null = ilimitado. */
+  planFunnelLimit: number | null
+  /** TRUE quando funnels.length >= planFunnelLimit (e planFunnelLimit não é null). */
+  isAtFunnelLimit: boolean
 }
 
 export interface UseFunnelStagesReturn {

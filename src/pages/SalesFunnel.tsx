@@ -40,7 +40,8 @@ export default function SalesFunnel() {
     createFunnel,
     deleteFunnel,
     reorderFunnels,
-    refreshFunnels
+    refreshFunnels,
+    isAtFunnelLimit,
   } = useFunnels(companyId || '')
 
   const [showFilters, setShowFilters] = useState(false)
@@ -101,6 +102,7 @@ export default function SalesFunnel() {
   }
 
   const handleCreateFunnel = () => {
+    if (isAtFunnelLimit) return
     setShowCreateFunnelModal(true)
   }
 
@@ -289,6 +291,7 @@ export default function SalesFunnel() {
               onSelectFunnel={setSelectedFunnel}
               onCreateFunnel={handleCreateFunnel}
               onReorderFunnels={reorderFunnels}
+              isAtFunnelLimit={isAtFunnelLimit}
             />
           </div>
 
@@ -461,8 +464,10 @@ export default function SalesFunnel() {
               </p>
               {funnels.length === 0 && (
                 <button
-                  onClick={handleCreateFunnel}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  onClick={isAtFunnelLimit ? undefined : handleCreateFunnel}
+                  disabled={isAtFunnelLimit}
+                  title={isAtFunnelLimit ? 'Limite do plano atingido. Faça upgrade ou remova funis existentes.' : undefined}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t('states.createFirstFunnel')}
                 </button>

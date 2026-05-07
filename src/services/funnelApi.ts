@@ -170,8 +170,15 @@ class FunnelApiService {
     } catch (error) {
       console.error('Error creating funnel:', error)
 
-      // Traduzir erros de constraint do Supabase (23505 = unique_violation)
       const supaErr = error as Record<string, unknown>
+
+      // Limite de plano excedido (trigger P0001)
+      const errMsg = String(supaErr?.message || '')
+      if (errMsg === 'plan_funnels_limit_exceeded' || errMsg.includes('plan_funnels_limit_exceeded')) {
+        throw new Error('Limite de funis do plano atingido. Faça upgrade ou remova funis existentes.')
+      }
+
+      // Unique constraint (23505)
       if (supaErr?.code === '23505') {
         const detail = String(supaErr?.details || supaErr?.message || '')
         if (detail.includes('unique_company_funnel_slug') || detail.includes('slug')) {
@@ -318,6 +325,14 @@ class FunnelApiService {
       return stage
     } catch (error) {
       console.error('Error creating stage:', error)
+
+      // Limite de plano excedido (trigger P0001)
+      const supaErr = error as Record<string, unknown>
+      const errMsg = String(supaErr?.message || '')
+      if (errMsg === 'plan_funnel_stages_limit_exceeded' || errMsg.includes('plan_funnel_stages_limit_exceeded')) {
+        throw new Error('Limite de etapas do plano atingido. Faça upgrade ou remova etapas existentes.')
+      }
+
       throw error
     }
   }

@@ -15,6 +15,7 @@ interface FunnelSelectorProps {
   onSelectFunnel: (funnelId: string) => void
   onCreateFunnel?: () => void
   onReorderFunnels?: (funnels: Array<{id: string, display_order: number}>) => Promise<void>
+  isAtFunnelLimit?: boolean
 }
 
 export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
@@ -22,7 +23,8 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
   selectedFunnel,
   onSelectFunnel,
   onCreateFunnel,
-  onReorderFunnels
+  onReorderFunnels,
+  isAtFunnelLimit = false,
 }) => {
   const { t } = useTranslation('funnel')
   const [isOpen, setIsOpen] = useState(false)
@@ -134,10 +136,13 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                 {onCreateFunnel && (
                   <button
                     onClick={() => {
+                      if (isAtFunnelLimit) return
                       onCreateFunnel()
                       setIsOpen(false)
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    disabled={isAtFunnelLimit}
+                    title={isAtFunnelLimit ? 'Limite do plano atingido' : undefined}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('selector.createFirstFunnel')}
                   </button>
@@ -167,7 +172,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                     {onReorderFunnels && (
                       <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     )}
-                    <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${funnel.is_over_plan ? 'bg-orange-400' : 'bg-blue-500'}`} />
                     <div className="flex-1 min-w-0 text-left">
                       <p className="font-medium text-gray-900 truncate">
                         {funnel.name}
@@ -177,10 +182,15 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                           {funnel.description}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {funnel.is_default && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
                             {t('selector.defaultBadge')}
+                          </span>
+                        )}
+                        {funnel.is_over_plan && (
+                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+                            Acima do limite
                           </span>
                         )}
                         <span className="text-xs text-gray-400">
@@ -201,13 +211,23 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
             <div className="p-2 border-t border-gray-100">
               <button
                 onClick={() => {
+                  if (isAtFunnelLimit) return
                   onCreateFunnel()
                   setIsOpen(false)
                 }}
-                className="w-full flex items-center gap-2 p-3 rounded-lg hover:bg-gray-50 transition-colors text-blue-600"
+                disabled={isAtFunnelLimit}
+                title={isAtFunnelLimit ? 'Limite do plano atingido. Faça upgrade ou remova funis existentes.' : undefined}
+                className={`w-full flex items-center gap-2 p-3 rounded-lg transition-colors ${
+                  isAtFunnelLimit
+                    ? 'text-gray-400 cursor-not-allowed opacity-60'
+                    : 'hover:bg-gray-50 text-blue-600'
+                }`}
               >
                 <Plus className="w-4 h-4" />
                 <span className="font-medium text-sm">{t('selector.createNew')}</span>
+                {isAtFunnelLimit && (
+                  <span className="ml-auto text-xs text-orange-600 font-medium">Limite atingido</span>
+                )}
               </button>
             </div>
           )}
