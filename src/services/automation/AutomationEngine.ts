@@ -3,6 +3,12 @@
 // Data: 13/03/2026
 // Objetivo: Motor de execução de fluxos de automação
 // IMPORTANTE: Implementação incremental e não-destrutiva
+//
+// @deprecated NÃO USAR. Motor legado substituído por
+// api/lib/automation/executor.js + api/automation/trigger-event.ts.
+// Este arquivo usa SUPABASE_SERVICE_ROLE_KEY via process.env —
+// incompatível com contexto browser. Nenhum componente ativo o importa.
+// Manter apenas para referência histórica.
 // =====================================================
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { AutomationFlow, AutomationExecution, AutomationLog, Node, Edge } from '../../types/automation'

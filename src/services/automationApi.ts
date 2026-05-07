@@ -172,26 +172,6 @@ export const automationApi = {
 // =====================================================
 
 export const executionApi = {
-  // Executar fluxo manualmente
-  async executeFlow(flowId: string, companyId: string, triggerData?: any): Promise<string> {
-    const response = await fetch('/api/automation/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        flowId,
-        companyId,
-        triggerData: triggerData || {}
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error('Erro ao executar fluxo')
-    }
-
-    const data = await response.json()
-    return data.executionId
-  },
-
   // Listar execuções de um fluxo
   async getExecutions(flowId: string, limit = 50): Promise<AutomationExecution[]> {
     const { data, error } = await supabase

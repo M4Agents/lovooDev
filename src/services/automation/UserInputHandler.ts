@@ -2,6 +2,10 @@
 // SERVICE: USER INPUT HANDLER
 // Data: 22/03/2026
 // Objetivo: Capturar respostas de usuários e retomar execuções pausadas
+//
+// @deprecated NÃO USAR. Handler legado que usa AutomationEngine (deprecated).
+// Substituído por POST /api/automation/user-input-response (backend).
+// Nenhum componente ativo importa este arquivo.
 // =====================================================
 
 import { supabase } from '../../lib/supabase'

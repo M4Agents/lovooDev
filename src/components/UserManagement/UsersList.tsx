@@ -4,12 +4,13 @@
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, Settings } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, UserX, Shield, Crown, UserCheck, Briefcase, User, Mail, Settings, AlertCircle } from 'lucide-react';
 import { Avatar } from '../Avatar';
 import { CompanyUser, UserRole } from '../../types/user';
 import { getCompanyUsers, getManagedUsers, deactivateUser, getAssignableRoles } from '../../services/userApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAccessControl } from '../../hooks/useAccessControl';
+import { usePlanUserLimit } from '../../hooks/usePlanUserLimit';
 import { InviteLink } from './InviteLink';
 import { DeleteUserModal } from './DeleteUserModal';
 import { supabase } from '../../lib/supabase';
@@ -29,6 +30,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
   const { t } = useTranslation('settings.app');
   const { company, currentRole, user: authUser } = useAuth();
   const { canCreateUsers, canEditUsers, canDeleteUsers } = useAccessControl();
+  const { planUserLimit, isAtUserLimit, refetch: refetchLimit } = usePlanUserLimit(company?.id);
 
   /**
    * Verifica se o caller pode gerenciar (editar/desativar/excluir) o targetUser.
@@ -67,6 +69,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
       }
 
       setUsers(userData);
+      refetchLimit();
     } catch (err) {
       console.error('UsersList: Error loading users:', err);
       setError(t('users.states.loadError'));
@@ -100,24 +103,30 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
     }
   };
 
-  // Reativar usuário
+  // Reativar usuário — passa por update_company_user_safe para enforcement de max_users
   const handleReactivateUser = async (user: CompanyUser) => {
     if (!confirm(`✅ REATIVAR USUÁRIO\n\nTem certeza que deseja reativar o usuário ${user.user_id}?\n\n• O usuário voltará a estar ativo no sistema\n• Poderá acessar normalmente\n• Todas as permissões serão restauradas`)) {
       return;
     }
 
     try {
-      // Usar função RPC para reativar (atualizar is_active = true)
-      const { error } = await supabase
-        .from('company_users')
-        .update({ is_active: true, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
+      const { data, error } = await supabase.rpc('update_company_user_safe', {
+        p_record_id: user.id,
+        p_is_active: true,
+      });
 
-      if (error) {
-        throw error;
+      if (error) throw error;
+
+      if (data?.success === false) {
+        if (data?.error_code === 'PLAN_LIMIT_EXCEEDED') {
+          setError(`Limite de usuários do plano atingido (${data.current}/${data.limit}). Faça upgrade ou remova usuários para reativar.`);
+        } else {
+          setError(data?.error || t('users.states.reactivateError'));
+        }
+        return;
       }
 
-      await loadUsers(); // Recarregar lista
+      await loadUsers();
     } catch (error) {
       console.error('Error reactivating user:', error);
       setError(t('users.states.reactivateError'));
@@ -254,14 +263,32 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
         
         {canCreateUsers && (
           <button
-            onClick={onCreateUser}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            onClick={isAtUserLimit ? undefined : onCreateUser}
+            disabled={isAtUserLimit}
+            title={isAtUserLimit
+              ? `Limite de ${planUserLimit} usuário(s) atingido. Faça upgrade ou remova usuários para convidar novos.`
+              : undefined
+            }
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             {t('users.actions.create')}
           </button>
         )}
       </div>
+
+      {/* Banner: limite de usuários atingido */}
+      {isAtUserLimit && (
+        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-orange-800">Limite de usuários atingido</p>
+            <p className="text-xs text-orange-700 mt-0.5">
+              Você atingiu o limite de {planUserLimit} usuário(s) do seu plano. Faça upgrade ou remova usuários para convidar novos.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Lista de usuários */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
@@ -322,7 +349,7 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                           />
                         </div>
                         <div className="ml-4">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <div className="text-sm font-medium text-slate-900">
                               {user.user_id.startsWith('mock_') ? 
                                 t('users.mockUser', { suffix: user.user_id.slice(-4) }) : 
@@ -337,6 +364,15 @@ export const UsersList = forwardRef<UsersListRef, UsersListProps>(({ onCreateUse
                             }`}>
                               {user.is_active ? `🟢 ${t('users.status.active')}` : `⚪ ${t('users.status.inactive')}`}
                             </span>
+                            {/* Badge: acima do limite do plano */}
+                            {user.is_over_plan && (
+                              <span
+                                className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-medium border border-orange-200"
+                                title="Este usuário excede o limite do plano. Faça upgrade ou remova usuários para normalizar."
+                              >
+                                Acima do limite
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-slate-500">
                             {user.email || user.user_id}

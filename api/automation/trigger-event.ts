@@ -375,10 +375,10 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // 5. Buscar fluxos ativos da empresa
+  // 5. Buscar fluxos ativos da empresa (inclui is_over_plan para enforcement de plano)
   const { data: flows, error: flowsErr } = await supabaseAdmin
     .from('automation_flows')
-    .select('id, name, nodes, edges, trigger_operator')
+    .select('id, name, nodes, edges, trigger_operator, is_over_plan')
     .eq('company_id', company_id)
     .eq('is_active', true)
 
@@ -396,6 +396,23 @@ export default async function handler(req: any, res: any) {
   const event = { type: event_type as AllowedEventType, data }
 
   for (const flow of allFlows) {
+    // Fluxo acima do limite do plano: não executa, não conta como matched
+    if (flow.is_over_plan === true) {
+      console.warn(`[trigger-event][plan_limit] flow ${flow.id} is_over_plan=true — ignorado`)
+      await logTriggerEvent(supabaseAdmin, {
+        companyId:   company_id,
+        flowId:      flow.id,
+        executionId: null,
+        eventType:   event_type,
+        status:      'not_matched',
+        matched:     false,
+        reason:      `flow "${flow.name}" está acima do limite do plano (is_over_plan=true)`,
+        dedupKey:    null,
+        payload:     auditPayload,
+      })
+      continue
+    }
+
     const matched = matchesTriggerConditions(flow, event)
 
     if (!matched) {

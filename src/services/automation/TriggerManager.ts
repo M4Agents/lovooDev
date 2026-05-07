@@ -3,6 +3,10 @@
 // Data: 13/03/2026
 // Objetivo: Gerenciar triggers e disparar fluxos automaticamente
 // IMPORTANTE: Não-destrutivo, apenas adiciona funcionalidade
+//
+// @deprecated NÃO USAR. Wrapper legado sobre AutomationEngine (também deprecated).
+// Substituído por POST /api/automation/trigger-event (backend).
+// Nenhum componente ativo importa este arquivo.
 // =====================================================
 
 import { supabase } from '../../lib/supabase'

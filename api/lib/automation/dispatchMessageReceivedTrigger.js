@@ -108,10 +108,10 @@ export async function dispatchMessageReceivedTrigger(
   const supabase = supabaseOverride ?? getSupabaseAdmin()
 
   try {
-    // 1. Buscar flows ativos da empresa
+    // 1. Buscar flows ativos da empresa (is_over_plan incluso para enforcement de plano)
     const { data: flows, error: flowsErr } = await supabase
       .from('automation_flows')
-      .select('id, name, nodes, edges, trigger_operator')
+      .select('id, name, nodes, edges, trigger_operator, is_over_plan')
       .eq('company_id', companyId)
       .eq('is_active', true)
 
@@ -156,6 +156,12 @@ export async function dispatchMessageReceivedTrigger(
 
     // 3. Para cada flow compatível: deduplicar, criar execução e processar
     for (const flow of matchedFlows) {
+      // Enforcement de plano: flow acima do limite não executa
+      if (flow.is_over_plan === true) {
+        console.warn(`${tag} flow=${flow.id} is_over_plan=true — ignorado (plano excedido)`)
+        continue
+      }
+
       try {
         // Deduplicação: checar execução recente para o mesmo lead + flow (quando leadId disponível)
         if (leadId) {

@@ -79,7 +79,11 @@ export default async function handler(req: any, res: any) {
         }
       } catch (err: any) {
         if (err instanceof PlanEnforcementError) {
-          return res.status(err.httpStatus).json(err.data)
+          return res.status(422).json({
+            code: 'PLAN_LIMIT_EXCEEDED',
+            message: 'Limite de usuários do plano atingido. Faça upgrade ou remova usuários.',
+            details: err.data,
+          })
         }
         // Erro inesperado no check de limite não deve bloquear o fluxo inteiro
         console.error('invite-user: erro inesperado no check de limite max_users:', err?.message)

@@ -130,6 +130,9 @@ export interface CompanyUser {
   display_name?: string;  // Nome real do usuário extraído do metadata
   email?: string;         // Email do usuário para exibição
   
+  /** TRUE quando este usuário excede o limite max_users do plano da empresa. */
+  is_over_plan?: boolean;
+
   // Propriedades auxiliares para compatibilidade
   _isRealUser?: boolean;
   _email?: string;

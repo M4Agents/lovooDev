@@ -73,6 +73,12 @@ async function dispatchStageChanged(svc, { companyId, opportunityId, fromStageId
     if (!matched.length) return
 
     for (const flow of matched) {
+      // Enforcement de plano: flow acima do limite não executa
+      if (flow.is_over_plan === true) {
+        console.warn(`[bulk-move][plan_limit] flow=${flow.id} is_over_plan=true — ignorado`)
+        continue
+      }
+
       try {
         const triggerData = {
           opportunity_id: opportunityId,
@@ -309,7 +315,7 @@ export default async function handler(req, res) {
     try {
       const { data: flows } = await svc
         .from('automation_flows')
-        .select('id, name, nodes, edges, trigger_operator')
+        .select('id, name, nodes, edges, trigger_operator, is_over_plan')
         .eq('company_id', company_id)
         .eq('is_active', true)
 

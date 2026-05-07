@@ -57,6 +57,9 @@ export interface AutomationFlow {
   error_count: number
   last_executed_at?: string
   
+  /** TRUE quando o fluxo excede o limite max_automation_flows do plano (contagem de flows ativos). */
+  is_over_plan?: boolean
+
   // Auditoria
   created_by?: string
   created_at: string

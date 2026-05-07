@@ -4,13 +4,14 @@
 // Objetivo: Página principal de automações (Flow Builder)
 // =====================================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { automationApi, statsApi } from '../services/automationApi'
 import type { AutomationFlow, CreateFlowForm } from '../types/automation'
 import { Plus, Zap, Activity, TrendingUp, AlertCircle } from 'lucide-react'
 import CreateFlowModal from '../components/Automation/CreateFlowModal'
+import { supabase } from '../lib/supabase'
 
 export default function Automations() {
   const { user, company } = useAuth()
@@ -20,6 +21,7 @@ export default function Automations() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [planFlowLimit, setPlanFlowLimit] = useState<number | null>(null)
   const [stats, setStats] = useState({
     totalFlows: 0,
     activeFlows: 0,
@@ -27,10 +29,28 @@ export default function Automations() {
     successRate: 0
   })
 
+  // Limite de flows ativos do plano (null = ilimitado)
+  const activeFlowCount = useMemo(() => flows.filter(f => f.is_active).length, [flows])
+  const isAtFlowLimit   = planFlowLimit !== null && activeFlowCount >= planFlowLimit
+
   useEffect(() => {
     loadFlows()
     loadStats()
   }, [user])
+
+  useEffect(() => {
+    if (!company?.id) return
+    supabase
+      .from('companies')
+      .select('plans!plan_id(max_automation_flows)')
+      .eq('id', company.id)
+      .single()
+      .then(({ data }) => {
+        const plan = (data as { plans?: { max_automation_flows?: number | null } | null })?.plans
+        setPlanFlowLimit(plan?.max_automation_flows ?? null)
+      })
+      .catch(() => setPlanFlowLimit(null))
+  }, [company?.id])
 
   const loadFlows = async () => {
     const companyId = company?.id
@@ -126,8 +146,13 @@ export default function Automations() {
               </p>
             </div>
             <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              onClick={isAtFlowLimit ? undefined : () => setIsCreateModalOpen(true)}
+              disabled={isAtFlowLimit}
+              title={isAtFlowLimit
+                ? `Limite de ${planFlowLimit} fluxo(s) ativo(s) atingido. Faça upgrade ou desative fluxos para criar novos.`
+                : undefined
+              }
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-5 h-5 mr-2" />
               Novo Fluxo
@@ -224,7 +249,7 @@ export default function Automations() {
                   <div className="px-4 py-4 sm:px-6 hover:bg-gray-50">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <h3 className="text-lg font-medium text-gray-900 truncate">
                             {flow.name}
                           </h3>
@@ -235,6 +260,14 @@ export default function Automations() {
                           ) : (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                               Inativo
+                            </span>
+                          )}
+                          {flow.is_over_plan && (
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200"
+                              title="Este fluxo está acima do limite de flows ativos do plano. Faça upgrade ou desative outros fluxos."
+                            >
+                              Acima do limite
                             </span>
                           )}
                         </div>
@@ -254,9 +287,19 @@ export default function Automations() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 ml-4">
+                        {/* Toggle ativação — bloqueado se is_over_plan e tentativa de ativar */}
                         <button
-                          onClick={() => handleToggleActive(flow.id, flow.is_active)}
-                          className={`px-3 py-1 rounded text-sm font-medium ${
+                          onClick={() => {
+                            // Bloquear reativação se flow está acima do limite
+                            if (!flow.is_active && flow.is_over_plan) return
+                            handleToggleActive(flow.id, flow.is_active)
+                          }}
+                          disabled={!flow.is_active && !!flow.is_over_plan}
+                          title={!flow.is_active && flow.is_over_plan
+                            ? 'Fluxo acima do limite do plano. Faça upgrade ou desative outros fluxos para reativar.'
+                            : undefined
+                          }
+                          className={`px-3 py-1 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                             flow.is_active
                               ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                               : 'bg-green-100 text-green-800 hover:bg-green-200'

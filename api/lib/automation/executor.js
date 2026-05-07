@@ -128,6 +128,18 @@ async function completeExecution(executionId, status, errorMessage, supabase) {
 // ---------------------------------------------------------------------------
 
 export async function createExecution(flow, triggerData, companyId, supabase) {
+  // ── ENFORCEMENT: is_over_plan ────────────────────────────────────────────────
+  // Flow marcado como excedente pelo plano não pode disparar execuções.
+  // O campo is_over_plan deve ser incluído no SELECT do caller (trigger-event.ts).
+  if (flow.is_over_plan === true) {
+    console.warn(
+      '[executor][plan_limit] flow is_over_plan=true — execução bloqueada.',
+      `company=${companyId} flow=${flow.id}`
+    )
+    return null
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── ENFORCEMENT: max_automation_executions_monthly ──────────────────────────
   // Verifica o limite mensal de execuções ANTES de criar a execution.
   //
