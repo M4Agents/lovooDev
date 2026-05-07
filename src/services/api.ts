@@ -339,10 +339,12 @@ export const api = {
   },
 
   async getAllCompanies() {
-    // Para super admin ver TODAS as empresas (pai + filhas)
+    // Retorna todas as empresas client não deletadas (deleted_at IS NULL)
+    // Empresa pai incluída apenas para contexto — CompaniesPanel filtra somente client
     const { data, error } = await supabase
       .from('companies')
       .select('*, plans!plan_id(name, slug)')
+      .is('deleted_at', null)
       .order('company_type', { ascending: true })
       .order('name', { ascending: true });
 
@@ -350,136 +352,80 @@ export const api = {
     return data;
   },
 
-  async createClientCompany(parentCompanyId: string, data: { 
-    name: string; 
-    domain?: string; 
-    plan: 'basic' | 'pro' | 'enterprise';
-    adminEmail: string;
-    adminPassword: string;
-    sendInviteEmail?: boolean;
+  // Cria empresa client via backend seguro (empresa + trial + admin opcional — tudo atômico)
+  async createClientCompany(data: {
+    name: string;
+    domain?: string;
+    createAdmin?: boolean;
+    adminEmail?: string;
   }) {
-    // Criação atômica via backend (POST /api/companies/create):
-    //   - valida permissões (super_admin/system_admin/partner)
-    //   - chama create_client_company_safe (empresa + company_users + trial)
-    //   - trial de 14 dias criado automaticamente
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('Sessão inválida');
 
-    const createRes = await fetch('/api/companies/create', {
+    const res = await fetch('/api/companies/create', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        name:            data.name,
-        domain:          data.domain ?? null,
-        parentCompanyId,
+        name:        data.name,
+        domain:      data.domain ?? null,
+        createAdmin: data.createAdmin ?? false,
+        adminEmail:  data.adminEmail ?? undefined,
       }),
     });
 
-    const createJson = await createRes.json();
-
-    if (!createRes.ok) {
-      throw new Error(
-        'Erro ao criar empresa: ' + (createJson?.error ?? 'unknown error')
-      );
-    }
-
-    const companyId: string     = createJson.company_id;
-    const rpcResult: Record<string, unknown> = {
-      auto_assigned: createJson.auto_assigned ?? false,
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error ?? 'Erro ao criar empresa');
+    return json as {
+      company_id:    string;
+      trial_started: boolean;
+      trial_end:     string | null;
+      admin_created: boolean;
+      admin_email:   string | null;
+      invite_link:   string | null;
     };
-
-    // Buscar empresa criada para compor o retorno
-    const { data: company, error: fetchError } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('id', companyId)
-      .single();
-
-    if (fetchError || !company) throw fetchError ?? new Error('Company not found after creation');
-
-    // Envio de convite (independente da criação)
-    let inviteResult = null;
-    if (data.sendInviteEmail) {
-      try {
-        const { createCompanyUser } = await import('./userApi');
-        inviteResult = await createCompanyUser({
-          companyId,
-          email: data.adminEmail,
-          role: 'admin',
-          sendInvite: true,
-          permissions: {
-            chat: true,
-            leads: true,
-            users: true,
-            settings: true,
-            analytics: true,
-            dashboard: true,
-            financial: false,
-            edit_users: true,
-            create_users: true,
-            delete_users: true,
-            edit_all_leads: true,
-            edit_financial: false,
-            view_all_leads: true,
-            view_financial: false
-          }
-        });
-      } catch (inviteError) {
-        // Não falhar a criação — convite é opcional
-      }
-    }
-
-    const result: Record<string, unknown> = {
-      ...company,
-      adminCredentials: { email: data.adminEmail, password: data.adminPassword, companyId },
-      inviteMode: data.sendInviteEmail ? 'automatic' : 'manual',
-      inviteResult,
-      auto_assigned: rpcResult.auto_assigned ?? false,
-    };
-
-    if (data.sendInviteEmail && inviteResult) {
-      result.inviteSuccess = true;
-      result.inviteUrl = (inviteResult as { app_metadata?: { invite_url?: string } })
-        ?.app_metadata?.invite_url;
-      result.inviteNote = 'Convite enviado automaticamente por email.';
-    } else if (data.sendInviteEmail) {
-      result.inviteSuccess = false;
-      result.inviteNote = 'Falha no envio automático. Use as credenciais abaixo para envio manual.';
-    } else {
-      result.inviteNote = 'Modo manual selecionado.';
-    }
-
-    return result;
   },
 
+  // Soft delete seguro — chama DELETE /api/companies/:id (backend com auth)
+  async deleteClientCompanySecure(companyId: string) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
+
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error ?? 'Erro ao excluir empresa');
+    return json;
+  },
+
+  // Atualizar empresa via backend seguro (name, domain, status)
   async updateClientCompany(companyId: string, updates: Partial<{
-    name: string;
+    name:   string;
     domain: string;
-    plan: 'basic' | 'pro' | 'enterprise';
-    status: 'active' | 'suspended' | 'cancelled';
+    status: 'active' | 'suspended';
   }>) {
-    const { data, error } = await supabase
-      .from('companies')
-      .update(updates)
-      .eq('id', companyId)
-      .select()
-      .single();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
 
-    if (error) throw error;
-    return data;
+    const res = await fetch('/api/companies/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ companyId, updates }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error ?? 'Erro ao atualizar empresa');
+    return json.company;
   },
 
+  // @deprecated — usar deleteClientCompanySecure
   async deleteClientCompany(companyId: string) {
-    const { error } = await supabase
-      .from('companies')
-      .delete()
-      .eq('id', companyId);
-
-    if (error) throw error;
+    return this.deleteClientCompanySecure(companyId);
   },
 
   async getCompanyStats(companyId: string) {

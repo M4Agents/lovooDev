@@ -32,7 +32,8 @@ import { ApiFullDocumentation } from '../components/Settings/ApiFullDocumentatio
 import { CompanyUser } from '../types/user';
 import { useAccessControl } from '../hooks/useAccessControl';
 import Automations from './Automations';
-import { Companies } from './Companies';
+// import { Companies } from './Companies'; // Legado — substituído por CompaniesPanel
+import { CompaniesPanel } from '../components/Settings/CompaniesPanel';
 import { PlansManagement } from './PlansManagement';
 
 // Ícone oficial do WhatsApp
@@ -3989,7 +3990,7 @@ export const Settings: React.FC = () => {
 
           {/* Governância Lovoo — Gestão de Empresas */}
           {activeTab === 'gestao-empresas' && canAccessCompanies && (
-            <Companies />
+            <CompaniesPanel />
           )}
 
           {/* Governância Lovoo — Gestão de Planos */}

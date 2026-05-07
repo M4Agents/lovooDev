@@ -11,6 +11,8 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Campos que o frontend pode enviar — qualquer outro é silenciosamente descartado.
 // Nomes alinhados com as colunas reais da tabela companies.
 const ALLOWED_FIELDS = new Set([
+  // Status operacional — alteração permitida apenas para parent_admin (validado abaixo)
+  'status',
   // Identificação
   'name',
   'nome_fantasia',
@@ -67,6 +69,8 @@ const BLOCKED_FIELDS = new Set([
   'user_id',
   'created_at',
   'is_active',
+  'deleted_at',
+  'deleted_by',
 ]);
 
 // Validações de formato para campos críticos (apenas quando presentes e não vazios).
@@ -206,6 +210,47 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Permissão insuficiente para atualizar esta empresa' });
   }
 
+  // 5b. Validações adicionais para campos sensíveis
+  // status: apenas parent_admin pode alterar; aceita somente 'active' ou 'suspended'
+  if ('status' in safe) {
+    if (!isParentAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores da empresa pai podem alterar o status' });
+    }
+    const allowedStatuses = ['active', 'suspended'];
+    if (!allowedStatuses.includes(safe.status)) {
+      return res.status(422).json({
+        error: 'Valor de status inválido',
+        details: [{ field: 'status', message: `status deve ser um de: ${allowedStatuses.join(', ')}` }],
+      });
+    }
+  }
+
+  // 5c. Verificar que a empresa não foi soft deleted (deleted_at IS NOT NULL)
+  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  const { data: targetCompany, error: targetError } = await supabaseAdmin
+    .from('companies')
+    .select('deleted_at, company_type')
+    .eq('id', companyId)
+    .single();
+
+  if (targetError || !targetCompany) {
+    return res.status(404).json({ error: 'Empresa não encontrada' });
+  }
+
+  if (targetCompany.deleted_at !== null) {
+    return res.status(409).json({ error: 'Empresa foi excluída e não pode ser editada' });
+  }
+
+  // Apenas empresas client podem ser editadas via este endpoint (quando chamado pelo painel)
+  // Empresas parent são editadas via aba "Dados da empresa" em Settings
+  if (isParentAdmin && targetCompany.company_type !== 'client') {
+    // Permite edição da própria empresa pai pelo admin dela (via isAdmin)
+    // Mas bloqueia se vier por trilha parent_admin em empresa que não é client
+    if (!isAdmin) {
+      return res.status(400).json({ error: 'Este endpoint edita apenas empresas do tipo client' });
+    }
+  }
+
   // 6. Normalizar campos de texto livre antes de persistir
   const TEXT_FREE_FIELDS = ['ponto_referencia', 'horario_atendimento'];
   for (const field of TEXT_FREE_FIELDS) {
@@ -215,7 +260,7 @@ export default async function handler(req, res) {
   }
 
   // 7. Operação final com service_role (sem RLS, pois autorização já foi validada acima)
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  const supabase = supabaseAdmin;
 
   const { data, error } = await supabase
     .from('companies')
