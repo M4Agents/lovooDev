@@ -33,6 +33,7 @@ interface FileGridProps {
   loading: boolean
   onFileSelect: (fileId: string, selected: boolean) => void
   onSelectAll: (selectAll: boolean) => void
+  onUploadClick?: () => void
 }
 
 interface FileItemProps {
@@ -300,7 +301,8 @@ export const FileGrid: React.FC<FileGridProps> = ({
   viewMode,
   loading,
   onFileSelect,
-  onSelectAll
+  onSelectAll,
+  onUploadClick
 }) => {
   const { t } = useTranslation('mediaLibrary')
   const [previewFile, setPreviewFile] = useState<MediaFileExtended | null>(null)
@@ -357,7 +359,11 @@ export const FileGrid: React.FC<FileGridProps> = ({
           <p className="text-gray-500 mb-4">
             {t('fileGrid.emptyDescription')}
           </p>
-          <button type="button" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button
+            type="button"
+            onClick={onUploadClick}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             {t('fileGrid.uploadCta')}
           </button>
         </div>

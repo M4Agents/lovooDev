@@ -536,6 +536,7 @@ export const MediaLibrary: React.FC = () => {
               loading={state.loading}
               onFileSelect={handleFileSelect}
               onSelectAll={handleSelectAll}
+              onUploadClick={() => setShowUploadModal(true)}
             />
           </div>
         </div>
