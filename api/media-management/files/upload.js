@@ -7,7 +7,7 @@ import formidable from 'formidable'
 import { uploadToTemporal } from '../../../services/aws/s3Storage.js'
 import { createClient } from '@supabase/supabase-js'
 import AWS from 'aws-sdk'
-import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
+import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE

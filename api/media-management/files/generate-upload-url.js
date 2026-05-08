@@ -7,7 +7,7 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
-import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
+import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
 
 const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co'
 const SUPABASE_SVC_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || ''

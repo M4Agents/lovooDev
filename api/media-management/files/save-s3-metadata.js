@@ -7,7 +7,7 @@
 
 import formidable from 'formidable'
 import { createClient } from '@supabase/supabase-js'
-import { assertStorageLimit, PlanEnforcementError } from '../../../lib/plans/limitChecker.js'
+import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
 
 // Usar configuração hardcoded do projeto (mesma do src/lib/supabase.ts)
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co'

@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import formidable from 'formidable'
 import fs from 'fs'
-import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
+import { assertStorageLimit, PlanEnforcementError } from '../lib/plans/limitChecker.js'
 
 // =====================================================
 // CONFIGURAÇÃO SUPABASE

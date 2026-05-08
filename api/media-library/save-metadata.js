@@ -7,7 +7,7 @@
 // Data: 2026-02-24 08:57
 
 import { createClient } from '@supabase/supabase-js'
-import { assertStorageLimit, PlanEnforcementError } from '../../lib/plans/limitChecker.js'
+import { assertStorageLimit, PlanEnforcementError } from '../lib/plans/limitChecker.js'
 
 export default async function handler(req, res) {
   // CORS headers
