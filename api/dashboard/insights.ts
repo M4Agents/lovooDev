@@ -24,6 +24,7 @@ import { canCustomizeInsights } from '../lib/dashboard/insightAccess.js'
 import { canAiAnalysis }        from '../lib/dashboard/aiAnalysisAccess.js'
 import {
   extractToken,
+  getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
   jsonError,
@@ -415,9 +416,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     const token = extractToken(req.headers.authorization)
     if (!token) { jsonError(res, 401, 'Não autenticado'); return }
 
-    const svc = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await svc.auth.getUser(token)
+    const { user, error: authError } = await getUserFromToken(token)
     if (authError || !user) { jsonError(res, 401, 'Token inválido ou expirado'); return }
+    const svc = getSupabaseAdmin()
 
     // 2. company_id + membership
     const companyId = typeof req.query.company_id === 'string' ? req.query.company_id.trim() : ''

@@ -1,4 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 // ---------------------------------------------------------------------------
 // assertMembership
@@ -62,6 +63,39 @@ export function extractToken(authHeader: string | undefined): string | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null
   const token = authHeader.slice(7).trim()
   return token.length > 0 ? token : null
+}
+
+// ---------------------------------------------------------------------------
+// getUserFromToken
+// ---------------------------------------------------------------------------
+
+/**
+ * Valida o JWT do usuário usando o padrão correto do projeto:
+ * cliente anon key + Authorization header global → auth.getUser() sem parâmetro.
+ *
+ * NÃO usar service_role para validar JWT de usuário — causa 401 no Supabase JS v2.
+ * O service_role é obtido separadamente via getSupabaseAdmin() para queries admin.
+ */
+export async function getUserFromToken(
+  token: string,
+): Promise<{ user: User | null; error: Error | null }> {
+  const url  = process.env.VITE_SUPABASE_URL ?? ''
+  const anon =
+    process.env.VITE_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    ''
+
+  if (!url || !anon) {
+    return { user: null, error: new Error('Configuração de servidor incompleta') }
+  }
+
+  const caller = createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth:   { persistSession: false, autoRefreshToken: false },
+  })
+
+  const { data: { user }, error } = await caller.auth.getUser()
+  return { user: user ?? null, error: error ?? null }
 }
 
 // ---------------------------------------------------------------------------

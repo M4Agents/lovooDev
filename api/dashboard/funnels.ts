@@ -14,6 +14,7 @@
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import {
   extractToken,
+  getUserFromToken,
   assertMembership,
   jsonError,
 } from '../lib/dashboard/auth.js'
@@ -31,9 +32,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     const token = extractToken(req.headers.authorization)
     if (!token) { jsonError(res, 401, 'Não autenticado'); return }
 
-    const svc = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await svc.auth.getUser(token)
+    const { user, error: authError } = await getUserFromToken(token)
     if (authError || !user) { jsonError(res, 401, 'Token inválido ou expirado'); return }
+    const svc = getSupabaseAdmin()
 
     // ------------------------------------------------------------------
     // 2. Validação de company_id + membership
