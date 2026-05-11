@@ -215,6 +215,7 @@ export const NewDashboard: React.FC = () => {
           data={priorityAlerts.data}
           loading={priorityAlerts.loading}
           error={priorityAlerts.error}
+          companyId={companyId}
         />
       </section>
 
@@ -279,6 +280,7 @@ export const NewDashboard: React.FC = () => {
           meta={slaAlerts.meta}
           loading={slaAlerts.loading}
           error={slaAlerts.error}
+          companyId={companyId}
           onRetry={slaAlerts.refetch}
           onLoadMore={slaAlerts.loadMore}
         />

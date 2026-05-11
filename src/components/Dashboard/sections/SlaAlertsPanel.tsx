@@ -2,26 +2,35 @@
 // SlaAlertsPanel — Leads sem resposta (SLA).
 // Lista acionável ordenada por urgência crescente.
 // Paginação incremental: "Carregar mais".
+//
+// Ação por linha: Chat (MessageCircle) → ChatModalSimple.
+// Sem botão de oportunidade — SLA representa conversa
+// sem resposta, não necessariamente oportunidade comercial.
+//
+// Padrão de referência: IntelligenceCentral + useDashboardEntityActions.
 // =====================================================
 
 import React from 'react'
-import { Clock, AlertTriangle, RefreshCw, ChevronDown } from 'lucide-react'
+import { Clock, AlertTriangle, RefreshCw, ChevronDown, MessageCircle } from 'lucide-react'
+import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
+import ChatModalSimple               from '../../SalesFunnel/ChatModalSimple'
 import type { SlaAlertItem, SlaAlertsMeta, SlaAlertSeverity } from '../../../types/dashboard'
 
 interface Props {
-  data:       SlaAlertItem[]
-  meta:       SlaAlertsMeta | null
-  loading:    boolean
-  error:      string | null
-  onRetry?:   () => void
+  data:        SlaAlertItem[]
+  meta:        SlaAlertsMeta | null
+  loading:     boolean
+  error:       string | null
+  companyId?:  string | null
+  onRetry?:    () => void
   onLoadMore?: () => void
 }
 
 const SEVERITY_CONFIG: Record<SlaAlertSeverity, { label: string; cls: string; bg: string }> = {
-  critical: { label: 'Crítico',  cls: 'text-red-700 bg-red-50 border-red-200',    bg: 'border-l-red-500' },
+  critical: { label: 'Crítico',  cls: 'text-red-700 bg-red-50 border-red-200',         bg: 'border-l-red-500' },
   high:     { label: 'Alto',     cls: 'text-orange-700 bg-orange-50 border-orange-200', bg: 'border-l-orange-400' },
   medium:   { label: 'Médio',    cls: 'text-amber-700 bg-amber-50 border-amber-200',    bg: 'border-l-amber-400' },
-  low:      { label: 'Baixo',    cls: 'text-blue-700 bg-blue-50 border-blue-200',  bg: 'border-l-blue-400' },
+  low:      { label: 'Baixo',    cls: 'text-blue-700 bg-blue-50 border-blue-200',       bg: 'border-l-blue-400' },
 }
 
 function fmtHours(h: number): string {
@@ -29,9 +38,17 @@ function fmtHours(h: number): string {
   return `${(h / 24).toFixed(1)}d`
 }
 
-export function SlaAlertsPanel({ data, meta, loading, error, onRetry, onLoadMore }: Props) {
+export function SlaAlertsPanel({ data, meta, loading, error, companyId, onRetry, onLoadMore }: Props) {
   const total   = meta?.total ?? 0
   const hasMore = meta?.has_more ?? false
+
+  const actions = useDashboardEntityActions({ companyId })
+
+  function handleOpenChat(leadId: string) {
+    const id = Number(leadId)
+    if (!Number.isFinite(id)) return
+    actions.openChat(id)
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -106,6 +123,18 @@ export function SlaAlertsPanel({ data, meta, loading, error, onRetry, onLoadMore
                   <span className="shrink-0 text-xs font-bold text-gray-500 whitespace-nowrap">
                     {fmtHours(item.hours_waiting)} sem resposta
                   </span>
+
+                  {/* Ações */}
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      title="Abrir chat"
+                      onClick={() => handleOpenChat(item.lead_id)}
+                      className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    >
+                      <MessageCircle size={14} />
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -128,6 +157,17 @@ export function SlaAlertsPanel({ data, meta, loading, error, onRetry, onLoadMore
           </div>
         )}
       </div>
+
+      {/* Modal de chat */}
+      {actions.chatLeadId != null && actions.companyId && actions.userId && (
+        <ChatModalSimple
+          isOpen={actions.chatOpen}
+          onClose={actions.closeChat}
+          leadId={actions.chatLeadId}
+          companyId={actions.companyId}
+          userId={actions.userId}
+        />
+      )}
     </div>
   )
 }

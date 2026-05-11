@@ -15,12 +15,10 @@ import { Flame, TrendingDown, AlertTriangle, Bot, Clock, ChevronDown, ChevronUp,
 import { InsightExpandableList }  from '../interactive/InsightExpandableList'
 import { InsightRulesModal }      from '../settings/InsightRulesModal'
 import { AiAnalysisModal }        from '../settings/AiAnalysisModal'
-import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
-import ChatModalSimple            from '../../SalesFunnel/ChatModalSimple'
-import { funnelApi }              from '../../../services/funnelApi'
-import { useAuth }                from '../../../contexts/AuthContext'
-import { useDashboardAiAnalysis } from '../../../hooks/dashboard/useDashboardAiAnalysis'
-import type { Opportunity }       from '../../../types/sales-funnel'
+import { OpportunityDetailModal }          from '../../SalesFunnel/OpportunityDetailModal'
+import ChatModalSimple                     from '../../SalesFunnel/ChatModalSimple'
+import { useDashboardEntityActions }       from '../../../hooks/dashboard/useDashboardEntityActions'
+import { useDashboardAiAnalysis }          from '../../../hooks/dashboard/useDashboardAiAnalysis'
 import type { InsightItem, InsightPriority, InsightType, DashboardFilters, OpportunityItem } from '../../../services/dashboardApi'
 
 // ---------------------------------------------------------------------------
@@ -226,22 +224,14 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
   resumeAnalysisId,
   onRefetchInsights,
 }) => {
-  const { user } = useAuth()
-
   // Expansão inline
   const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null)
 
-  // Modal de chat
-  const [chatLeadId, setChatLeadId] = useState<number | null>(null)
-  const [chatOpen,   setChatOpen]   = useState(false)
-
-  // Modal de oportunidade
-  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null)
-  const [oppModalOpen,        setOppModalOpen]        = useState(false)
-  const [loadingOpp,          setLoadingOpp]          = useState(false)
-
   // Modal de configuração
   const [rulesModalOpen, setRulesModalOpen] = useState(false)
+
+  // Ações de chat / oportunidade (hook compartilhado)
+  const actions = useDashboardEntityActions({ companyId })
 
   // IA Analítica
   const ai = useDashboardAiAnalysis(companyId)
@@ -257,24 +247,8 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
     setExpandedInsightId((prev) => (prev === insightId ? null : insightId))
   }
 
-  function handleOpenChat(leadId: number) {
-    setChatLeadId(leadId)
-    setChatOpen(true)
-  }
-
   async function handleOpenOpportunity(item: OpportunityItem) {
-    setLoadingOpp(true)
-    try {
-      const opp = await funnelApi.getOpportunityById(item.opportunity_id)
-      if (opp) {
-        setSelectedOpportunity(opp)
-        setOppModalOpen(true)
-      }
-    } catch {
-      // falha silenciosa — oportunidade não encontrada
-    } finally {
-      setLoadingOpp(false)
-    }
+    await actions.openOpportunity(item.opportunity_id)
   }
 
   function handleSaved() {
@@ -348,7 +322,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
               dashboardFilters={dashboardFilters}
               isExpanded={expandedInsightId === insight.id}
               onToggle={() => handleToggle(insight.id)}
-              onOpenChat={handleOpenChat}
+              onOpenChat={actions.openChat}
               onOpenOpportunity={handleOpenOpportunity}
             />
           ))}
@@ -356,7 +330,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
       )}
 
       {/* Indicador de carregamento de oportunidade */}
-      {loadingOpp && (
+      {actions.openingOppId && (
         <div className="fixed bottom-4 right-4 z-40 bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2">
           <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           Carregando oportunidade...
@@ -372,23 +346,23 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
       />
 
       {/* Modal de chat */}
-      {chatLeadId != null && companyId && user?.id && (
+      {actions.chatLeadId != null && actions.companyId && actions.userId && (
         <ChatModalSimple
-          isOpen={chatOpen}
-          onClose={() => { setChatOpen(false); setChatLeadId(null) }}
-          leadId={chatLeadId}
-          companyId={companyId}
-          userId={user.id}
+          isOpen={actions.chatOpen}
+          onClose={actions.closeChat}
+          leadId={actions.chatLeadId}
+          companyId={actions.companyId}
+          userId={actions.userId}
         />
       )}
 
       {/* Modal de oportunidade */}
-      {selectedOpportunity && companyId && (
+      {actions.selectedOpportunity && actions.companyId && (
         <OpportunityDetailModal
-          isOpen={oppModalOpen}
-          onClose={() => { setOppModalOpen(false); setSelectedOpportunity(null) }}
-          opportunity={selectedOpportunity}
-          companyId={companyId}
+          isOpen={actions.oppModalOpen}
+          onClose={actions.closeOpportunity}
+          opportunity={actions.selectedOpportunity}
+          companyId={actions.companyId}
         />
       )}
 
