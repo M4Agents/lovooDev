@@ -123,15 +123,15 @@ export const NewDashboard: React.FC = () => {
   const slaAlerts     = useSlaAlerts({ userId: userId ?? undefined })
   const leadOrigins   = useLeadOrigins(filters)
 
-  // Fase 3A — Inteligência Executiva
-  const forecast        = useDashboardForecast(filters)
-  const priorityAlerts  = usePriorityAlerts(userId)
-  const funnelExecutive = useFunnelExecutive(funnelId, funnelMode)
-
-  // Dados
+  // Dados base — summary precisa vir antes de funnelMode (que depende dele)
   const summary    = useDashboardSummary(filters)
   const insights   = useDashboardInsights(filters)
   const funnelMode = summary.data?.funnel_mode ?? 'single-funnel'
+
+  // Fase 3A — Inteligência Executiva (funnelExecutive depende de funnelMode)
+  const forecast        = useDashboardForecast(filters)
+  const priorityAlerts  = usePriorityAlerts(userId)
+  const funnelExecutive = useFunnelExecutive(funnelId, funnelMode)
 
   // Lê ?resume_analysis da URL (pós-checkout de créditos para retomada de análise de IA)
   const [resumeAnalysisId, setResumeAnalysisId] = useState<string | null>(null)
