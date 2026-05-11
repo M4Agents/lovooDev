@@ -3,319 +3,120 @@
 // Wrapper tipado para os endpoints /api/dashboard/*
 // Segue o padrão de autenticação do projeto:
 //   supabase.auth.getSession() → session.access_token → Authorization: Bearer
+//
+// Tipos de domínio da dashboard vivem em src/types/dashboard.ts.
+// AiAnalysis* permanecem aqui (domínio separado).
 // =====================================================
 
 import { supabase } from '../lib/supabase'
-import type { PeriodFilter } from '../types/analytics'
 
 // ---------------------------------------------------------------------------
-// Mapeamento: PeriodType frontend → period key do backend
+// Re-exports de src/types/dashboard.ts
+// Consumidores existentes que importam deste arquivo continuam funcionando.
 // ---------------------------------------------------------------------------
 
-const PERIOD_TYPE_MAP: Record<string, string> = {
-  today:         'today',
-  yesterday:     'yesterday',
-  '7days':       '7d',
-  '15days':      '15d',
-  '30days':      '30d',
-  this_month:    'month',
-  last_month:    'last_month',
-  '90days':      '90d',
-  this_quarter:  'quarter',
-  this_year:     'year',
-  custom:        'custom',
-}
+export type {
+  PeriodFilter,
+  PeriodType,
+  AgentMode,
+  FunnelMode,
+  TrendDirection,
+  DashboardFilters,
+  DashboardMeta,
+  EntityType,
+  EntityTypeExtended,
+  EntityItem,
+  EntityListFilters,
+  EntityListState,
+  ExecutiveData,
+  SummaryResponse,
+  StageSnapshot,
+  FunnelSnapshotData,
+  FunnelSnapshotMeta,
+  FunnelSnapshotResponse,
+  StageFlow,
+  StageConversion,
+  FunnelFlowData,
+  FunnelFlowResponse,
+  FunnelItem,
+  FunnelsResponse,
+  InsightType,
+  InsightPriority,
+  InsightPoliciesData,
+  InsightPoliciesResponse,
+  InsightItem,
+  InsightsResponse,
+  OpportunityItem,
+  LeadItem,
+  ConversationItem,
+  ListMeta,
+  ListResponse,
+  OpportunityFilters,
+  LeadFilters,
+  ConversationFilters,
+  TrendDay,
+  AttendanceDay,
+  TrendsData,
+  TrendsMeta,
+  TrendsResponse,
+  DashboardUser,
+  DashboardUsersResponse,
+  SellerRankingEntry,
+  SellerRankingMeta,
+  SellerRankingResponse,
+  SlaAlertSeverity,
+  SlaAlertItem,
+  SlaAlertsMeta,
+  SlaAlertsResponse,
+  LeadOriginItem,
+  LeadOriginsMeta,
+  LeadOriginsResponse,
+  // Fase 3A
+  ForecastData,
+  ForecastMeta,
+  ForecastResponse,
+  PriorityAlertSeverity,
+  PriorityAlertType,
+  PriorityAlertEntityType,
+  PriorityAlertItem,
+  PriorityAlertsData,
+  PriorityAlertsMeta,
+  PriorityAlertsResponse,
+  FunnelExecutiveStage,
+  FunnelExecutiveData,
+  FunnelExecutiveMeta,
+  FunnelExecutiveResponse,
+} from '../types/dashboard'
 
-function toPeriodKey(type: string): string {
-  return PERIOD_TYPE_MAP[type] ?? '30d'
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de retorno
-// ---------------------------------------------------------------------------
-
-export interface DashboardMeta {
-  period: string
-  start_date: string
-  end_date: string
-  funnel_id?: string | null
-}
-
-export interface ExecutiveData {
-  leads_count: number
-  conversations_count: number
-  hot_opportunities_count: number
-  alerts_count: number
-  agent_mode: 'single-agent' | 'multi-agent'
-  funnel_mode: 'single-funnel' | 'multi-funnel'
-}
-
-export interface SummaryResponse {
-  data: ExecutiveData
-  meta: Omit<DashboardMeta, 'funnel_id'>
-}
-
-export interface StageSnapshot {
-  stage_id: string
-  stage_name: string
-  position: number
-  count: number
-  total_value: number
-  avg_days_in_stage: number
-}
-
-export interface FunnelSnapshotData {
-  funnel_id: string
-  stages: StageSnapshot[]
-}
-
-export interface FunnelSnapshotMeta {
-  funnel_id: string | null
-  funnel_mode: 'single-funnel' | 'multi-funnel'
-}
-
-export interface FunnelSnapshotResponse {
-  data: FunnelSnapshotData
-  meta: FunnelSnapshotMeta
-}
-
-export interface StageFlow {
-  stage_id: string
-  stage_name: string
-  position: number
-  unique_count: number
-  total_count: number
-  by_trigger_source: { ai: number; human: number; automation: number; system: number }
-  avg_days_prev_stage: number
-}
-
-export interface StageConversion {
-  from_stage_id: string
-  from_stage_name: string
-  to_stage_id: string
-  to_stage_name: string
-  advanced: number
-  in_source: number
-  conversion_rate_pct: number
-}
-
-export interface FunnelFlowData {
-  flow: { funnel_id: string; stages: StageFlow[] }
-  conversions: { funnel_id: string; conversions: StageConversion[] }
-}
-
-export interface FunnelFlowResponse {
-  data: FunnelFlowData
-  meta: DashboardMeta
-}
-
-// ---------------------------------------------------------------------------
-// Parâmetros compartilhados
-// ---------------------------------------------------------------------------
-
-export interface DashboardFilters {
-  period: PeriodFilter
-  funnelId?: string | null
-}
+// Importação local dos tipos necessários para as assinaturas das funções
+import type {
+  DashboardFilters,
+  SummaryResponse,
+  FunnelSnapshotResponse,
+  FunnelFlowResponse,
+  FunnelsResponse,
+  InsightPoliciesData,
+  InsightPoliciesResponse,
+  InsightsResponse,
+  ListResponse,
+  OpportunityItem,
+  OpportunityFilters,
+  LeadItem,
+  LeadFilters,
+  ConversationItem,
+  ConversationFilters,
+  TrendsResponse,
+  DashboardUsersResponse,
+  SellerRankingResponse,
+  SlaAlertsResponse,
+  LeadOriginsResponse,
+  ForecastResponse,
+  PriorityAlertsResponse,
+  FunnelExecutiveResponse,
+} from '../types/dashboard'
 
 // ---------------------------------------------------------------------------
-// Helper interno: token + fetch tipado
-// ---------------------------------------------------------------------------
-
-async function getToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession()
-  return data.session?.access_token ?? null
-}
-
-async function apiFetch<T>(path: string, params: Record<string, string>): Promise<T> {
-  const token = await getToken()
-  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
-
-  const url = new URL(path, window.location.origin)
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') {
-      url.searchParams.set(k, v)
-    }
-  })
-
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body?.error ?? `Erro ${res.status} em ${path}`)
-  }
-
-  return res.json() as Promise<T>
-}
-
-async function apiPost<T>(path: string, queryParams: Record<string, string>, body: unknown): Promise<T> {
-  const token = await getToken()
-  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
-
-  const url = new URL(path, window.location.origin)
-  Object.entries(queryParams).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v)
-  })
-
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}))
-    throw new Error(json?.error ?? `Erro ${res.status} em ${path}`)
-  }
-
-  return res.json() as Promise<T>
-}
-
-// ---------------------------------------------------------------------------
-// buildParams: converte DashboardFilters nos query params do backend
-// ---------------------------------------------------------------------------
-
-function buildPeriodParams(filters: DashboardFilters): Record<string, string> {
-  const { period } = filters
-  const key = toPeriodKey(period.type)
-  const params: Record<string, string> = { period: key }
-
-  if (key === 'custom' && period.startDate && period.endDate) {
-    params.start_date = period.startDate.toISOString()
-    params.end_date   = period.endDate.toISOString()
-  }
-
-  if (filters.funnelId) {
-    params.funnel_id = filters.funnelId
-  }
-
-  return params
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de funis
-// ---------------------------------------------------------------------------
-
-export interface FunnelItem {
-  id: string
-  name: string
-  is_default: boolean
-}
-
-export interface FunnelsResponse {
-  data: FunnelItem[]
-  meta: Record<string, never>
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de insights
-// ---------------------------------------------------------------------------
-
-export type InsightType    = 'cooling_opportunity' | 'hot_opportunity' | 'funnel_bottleneck' | 'conversion_drop' | 'ai_tool_issue'
-export type InsightPriority = 'critical' | 'high' | 'medium' | 'low'
-
-export interface InsightPoliciesData {
-  cooling_threshold_days:    number
-  hot_probability_threshold: number
-  conversion_drop_threshold: number
-  bottleneck_min_days:       number
-  ai_error_rate_threshold:   number
-}
-
-export interface InsightPoliciesResponse {
-  ok:       boolean
-  data:     InsightPoliciesData
-  defaults: InsightPoliciesData
-}
-
-export interface InsightItem {
-  id:               string
-  type:             InsightType
-  priority:         InsightPriority
-  title:            string
-  description:      string
-  entityType:       'opportunities' | 'leads' | 'conversations' | 'funnel'
-  filters:          Record<string, unknown>
-  actionLabel:      string
-  supporting_data?: Record<string, unknown>
-}
-
-export interface InsightsResponse {
-  ok:   boolean
-  data: InsightItem[]
-  meta: DashboardMeta & { can_customize: boolean; can_ai_analysis: boolean }
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de itens das listas
-// ---------------------------------------------------------------------------
-
-export interface OpportunityItem {
-  opportunity_id:      string
-  title:               string
-  lead_name:           string
-  lead_id:             number
-  stage_name:          string
-  probability:         number
-  status:              string
-  updated_at:          string
-  last_interaction_at: string | null
-}
-
-export interface LeadItem {
-  lead_id: string
-  name: string
-  status: string
-  origin: string
-  created_at: string
-}
-
-export interface ConversationItem {
-  conversation_id: string
-  lead_name: string
-  ai_state: string
-  last_message_at: string | null
-  status: string
-  unread_count: number
-}
-
-export interface ListMeta {
-  page: number
-  limit: number
-  total: number
-  has_more: boolean
-  period: string
-  start_date: string
-  end_date: string
-  funnel_id?: string | null
-  ai_state?: string | null
-}
-
-export interface ListResponse<T> {
-  ok: boolean
-  data: T[]
-  meta: ListMeta
-}
-
-export interface OpportunityFilters extends DashboardFilters {
-  stage_id?: string | null
-  status?: string | null
-  probability_min?: number | null
-  page?: number
-  limit?: number
-  source?: string
-}
-
-// ---------------------------------------------------------------------------
-// Tipos para IA Analítica sob demanda
+// Tipos de IA Analítica (mantidos aqui — domínio separado do cockpit)
 // ---------------------------------------------------------------------------
 
 export type AiAnalysisType   = 'cooling_opportunities' | 'conversion_drop' | 'funnel_overview'
@@ -352,7 +153,6 @@ export interface AiAnalysisResult {
   completed_at:      string | null
   started_at:        string | null
   created_at:        string
-  // campos extras para awaiting_credits / credit_failed
   balance_available?: number
   required_balance?:  number
   missing_credits?:   number
@@ -396,10 +196,6 @@ export interface AiAnalysesListResponse {
   meta: { total: number; page: number; limit: number; total_pages: number; has_more: boolean }
 }
 
-// ---------------------------------------------------------------------------
-// Tipos para prompts complementares de IA (E2)
-// ---------------------------------------------------------------------------
-
 export interface AiPromptItem {
   id:            string | null
   analysis_type: AiAnalysisType
@@ -414,13 +210,117 @@ export interface AiPromptsResponse {
   data: AiPromptItem[]
 }
 
-export interface LeadFilters extends DashboardFilters {
-  page?: number
+// ---------------------------------------------------------------------------
+// Mapeamento: PeriodType frontend → period key do backend
+// ---------------------------------------------------------------------------
+
+const PERIOD_TYPE_MAP: Record<string, string> = {
+  today:         'today',
+  yesterday:     'yesterday',
+  '7days':       '7d',
+  '15days':      '15d',
+  '30days':      '30d',
+  this_month:    'month',
+  last_month:    'last_month',
+  '90days':      '90d',
+  this_quarter:  'quarter',
+  this_year:     'year',
+  custom:        'custom',
 }
 
-export interface ConversationFilters extends DashboardFilters {
-  ai_state?: string | null
-  page?: number
+function toPeriodKey(type: string): string {
+  return PERIOD_TYPE_MAP[type] ?? '30d'
+}
+
+// ---------------------------------------------------------------------------
+// Helper interno: token + fetch tipado
+// ---------------------------------------------------------------------------
+
+async function getToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? null
+}
+
+async function apiFetch<T>(
+  path: string,
+  params: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  const url = new URL(path, window.location.origin)
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') {
+      url.searchParams.set(k, v)
+    }
+  })
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    signal,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error ?? `Erro ${res.status} em ${path}`)
+  }
+
+  return res.json() as Promise<T>
+}
+
+async function apiPost<T>(path: string, queryParams: Record<string, string>, body: unknown): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  const url = new URL(path, window.location.origin)
+  Object.entries(queryParams).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v)
+  })
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error(json?.error ?? `Erro ${res.status} em ${path}`)
+  }
+
+  return res.json() as Promise<T>
+}
+
+// ---------------------------------------------------------------------------
+// buildPeriodParams: converte DashboardFilters nos query params do backend
+// ---------------------------------------------------------------------------
+
+function buildPeriodParams(filters: DashboardFilters): Record<string, string> {
+  const { period } = filters
+  const key = toPeriodKey(period.type)
+  const params: Record<string, string> = { period: key }
+
+  if (key === 'custom' && period.startDate && period.endDate) {
+    params.start_date = period.startDate.toISOString()
+    params.end_date   = period.endDate.toISOString()
+  }
+
+  if (filters.funnelId) {
+    params.funnel_id = filters.funnelId
+  }
+
+  if (filters.userId) {
+    params.user_id = filters.userId
+  }
+
+  return params
 }
 
 // ---------------------------------------------------------------------------
@@ -431,25 +331,25 @@ export const dashboardApi = {
   /**
    * Lista de funis ativos da empresa para alimentar o seletor de funil.
    */
-  async getFunnels(companyId: string): Promise<FunnelsResponse> {
-    return apiFetch<FunnelsResponse>('/api/dashboard/funnels', { company_id: companyId })
+  async getFunnels(companyId: string, signal?: AbortSignal): Promise<FunnelsResponse> {
+    return apiFetch<FunnelsResponse>('/api/dashboard/funnels', { company_id: companyId }, signal)
   },
 
   /**
    * Insights automáticos calculados por SQL/regras — sem LLM.
    */
-  async getInsights(companyId: string, filters: DashboardFilters): Promise<InsightsResponse> {
+  async getInsights(companyId: string, filters: DashboardFilters, signal?: AbortSignal): Promise<InsightsResponse> {
     return apiFetch<InsightsResponse>('/api/dashboard/insights', {
       company_id: companyId,
       ...buildPeriodParams(filters),
-    })
+    }, signal)
   },
 
   /**
    * Retorna policies de insights da empresa (mescladas com defaults).
    */
-  async getInsightPolicies(companyId: string): Promise<InsightPoliciesResponse> {
-    return apiFetch<InsightPoliciesResponse>('/api/dashboard/insight-policies', { company_id: companyId })
+  async getInsightPolicies(companyId: string, signal?: AbortSignal): Promise<InsightPoliciesResponse> {
+    return apiFetch<InsightPoliciesResponse>('/api/dashboard/insight-policies', { company_id: companyId }, signal)
   },
 
   /**
@@ -464,32 +364,32 @@ export const dashboardApi = {
    * KPIs executivos + agent_mode + funnel_mode.
    * Requer company_id e período.
    */
-  async getSummary(companyId: string, filters: DashboardFilters): Promise<SummaryResponse> {
+  async getSummary(companyId: string, filters: DashboardFilters, signal?: AbortSignal): Promise<SummaryResponse> {
     return apiFetch<SummaryResponse>('/api/dashboard/summary', {
       company_id: companyId,
       ...buildPeriodParams(filters),
-    })
+    }, signal)
   },
 
   /**
    * Pipeline atual: onde estão as oportunidades agora (sem período).
    */
-  async getFunnelSnapshot(companyId: string, funnelId?: string | null): Promise<FunnelSnapshotResponse> {
+  async getFunnelSnapshot(companyId: string, funnelId?: string | null, signal?: AbortSignal): Promise<FunnelSnapshotResponse> {
     const params: Record<string, string> = { company_id: companyId }
     if (funnelId) params.funnel_id = funnelId
-    return apiFetch<FunnelSnapshotResponse>('/api/dashboard/funnel-snapshot', params)
+    return apiFetch<FunnelSnapshotResponse>('/api/dashboard/funnel-snapshot', params, signal)
   },
 
   /**
    * Fluxo no período + conversão por etapa.
    * funnel_id obrigatório no backend — não chamar sem ele.
    */
-  async getFunnelFlow(companyId: string, funnelId: string, filters: DashboardFilters): Promise<FunnelFlowResponse> {
+  async getFunnelFlow(companyId: string, funnelId: string, filters: DashboardFilters, signal?: AbortSignal): Promise<FunnelFlowResponse> {
     return apiFetch<FunnelFlowResponse>('/api/dashboard/funnel-flow', {
       company_id: companyId,
       funnel_id:  funnelId,
       ...buildPeriodParams(filters),
-    })
+    }, signal)
   },
 
   /**
@@ -498,6 +398,7 @@ export const dashboardApi = {
   async getOpportunities(
     companyId: string,
     filters: OpportunityFilters,
+    signal?: AbortSignal,
   ): Promise<ListResponse<OpportunityItem>> {
     const params: Record<string, string> = {
       company_id: companyId,
@@ -509,7 +410,7 @@ export const dashboardApi = {
     if (filters.probability_min != null) params.probability_min  = String(filters.probability_min)
     if (filters.limit != null)           params.limit            = String(filters.limit)
     if (filters.source)                  params.source           = filters.source
-    return apiFetch<ListResponse<OpportunityItem>>('/api/dashboard/opportunities', params)
+    return apiFetch<ListResponse<OpportunityItem>>('/api/dashboard/opportunities', params, signal)
   },
 
   /**
@@ -518,12 +419,13 @@ export const dashboardApi = {
   async getLeads(
     companyId: string,
     filters: LeadFilters,
+    signal?: AbortSignal,
   ): Promise<ListResponse<LeadItem>> {
     return apiFetch<ListResponse<LeadItem>>('/api/dashboard/leads', {
       company_id: companyId,
       ...buildPeriodParams(filters),
       page: String(filters.page ?? 1),
-    })
+    }, signal)
   },
 
   /**
@@ -532,6 +434,7 @@ export const dashboardApi = {
   async getConversations(
     companyId: string,
     filters: ConversationFilters,
+    signal?: AbortSignal,
   ): Promise<ListResponse<ConversationItem>> {
     const params: Record<string, string> = {
       company_id: companyId,
@@ -539,7 +442,29 @@ export const dashboardApi = {
       page: String(filters.page ?? 1),
     }
     if (filters.ai_state) params.ai_state = filters.ai_state
-    return apiFetch<ListResponse<ConversationItem>>('/api/dashboard/conversations', params)
+    return apiFetch<ListResponse<ConversationItem>>('/api/dashboard/conversations', params, signal)
+  },
+
+  /**
+   * Série temporal de novos leads por dia e atendimentos com tempo médio de resposta.
+   * userId em filters é aplicado no backend com validação de RBAC:
+   *   seller   → backend ignora o userId e usa sempre o próprio ID do chamador
+   *   manager+ → userId filtrado apenas se for membro ativo da empresa
+   */
+  async getTrends(companyId: string, filters: DashboardFilters, signal?: AbortSignal): Promise<TrendsResponse> {
+    const params: Record<string, string> = {
+      company_id: companyId,
+      ...buildPeriodParams(filters),
+    }
+    return apiFetch<TrendsResponse>('/api/dashboard/trends', params, signal)
+  },
+
+  /**
+   * Lista de usuários que o chamador pode usar como filtro no UserSelector.
+   * Retorna apenas si mesmo para sellers; sellers + managers para admin+.
+   */
+  async getDashboardUsers(companyId: string, signal?: AbortSignal): Promise<DashboardUsersResponse> {
+    return apiFetch<DashboardUsersResponse>('/api/dashboard/dashboard-users', { company_id: companyId }, signal)
   },
 
   // ── IA Analítica ──────────────────────────────────────────────────────────
@@ -554,7 +479,7 @@ export const dashboardApi = {
       analysis_type?: AiAnalysisType
       period?: string
       funnel_id?: string | null
-      analysis_id?: string  // resume mode
+      analysis_id?: string
     },
   ): Promise<{ status: number; data: AiAnalysisPostResponse }> {
     const token = await getToken()
@@ -612,5 +537,106 @@ export const dashboardApi = {
     return apiPost<{ ok: boolean; data: AiPromptItem }>(
       '/api/dashboard/ai-prompts', { company_id: companyId }, params,
     )
+  },
+
+  // ── Fase 2 — Gestão Comercial ─────────────────────────────────────────────
+
+  /**
+   * Ranking Comercial com score composto por vendedor.
+   * seller/partner → sempre vê apenas si mesmo (is_individual_view = true).
+   * manager/admin  → ranking completo ou filtrado por user_id.
+   */
+  async getSellerPerformance(
+    companyId: string,
+    filters:   DashboardFilters,
+    signal?:   AbortSignal,
+  ): Promise<SellerRankingResponse> {
+    return apiFetch<SellerRankingResponse>(
+      '/api/dashboard/seller-performance',
+      { company_id: companyId, ...buildPeriodParams(filters) },
+      signal,
+    )
+  },
+
+  /**
+   * Leads sem resposta após sla_hours horas — paginado.
+   * seller/partner → vê apenas os seus próprios leads.
+   */
+  async getSlaAlerts(
+    companyId: string,
+    options:   { userId?: string | null; slaHours?: number; page?: number; limit?: number } = {},
+    signal?:   AbortSignal,
+  ): Promise<SlaAlertsResponse> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (options.userId)                params.user_id   = options.userId
+    if (options.slaHours !== undefined) params.sla_hours = String(options.slaHours)
+    if (options.page !== undefined)     params.page      = String(options.page)
+    if (options.limit !== undefined)    params.limit     = String(options.limit)
+    return apiFetch<SlaAlertsResponse>('/api/dashboard/sla-alerts', params, signal)
+  },
+
+  /**
+   * Volume, conversão e receita por canal de origem dos leads.
+   * Retorna até 20 origens ordenadas por volume.
+   */
+  async getLeadOrigins(
+    companyId: string,
+    filters:   DashboardFilters,
+    signal?:   AbortSignal,
+  ): Promise<LeadOriginsResponse> {
+    return apiFetch<LeadOriginsResponse>(
+      '/api/dashboard/lead-origins',
+      { company_id: companyId, ...buildPeriodParams(filters) },
+      signal,
+    )
+  },
+
+  // ---------------------------------------------------------------------------
+  // Fase 3A — Inteligência Executiva Confiável
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Forecast comercial: pipeline atual + fechamentos no período.
+   * pipeline_safe = pipeline_weighted - pipeline_risk (ambos ponderados).
+   */
+  async getForecast(
+    companyId: string,
+    filters:   DashboardFilters,
+    signal?:   AbortSignal,
+  ): Promise<ForecastResponse> {
+    const params: Record<string, string> = {
+      company_id: companyId,
+      ...buildPeriodParams(filters),
+    }
+    if (filters.funnelId) params.funnel_id = filters.funnelId
+    return apiFetch<ForecastResponse>('/api/dashboard/forecast', params, signal)
+  },
+
+  /**
+   * Alertas prioritários em tempo real (sem período).
+   * Tipos: sla_critical, sla_high, stalled_opportunity, seller_risk.
+   */
+  async getPriorityAlerts(
+    companyId: string,
+    userId:    string | null | undefined,
+    signal?:   AbortSignal,
+  ): Promise<PriorityAlertsResponse> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (userId) params.user_id = userId
+    return apiFetch<PriorityAlertsResponse>('/api/dashboard/priority-alerts', params, signal)
+  },
+
+  /**
+   * Visão executiva do funil: valor, weighted, avg_days, paradas por etapa.
+   * Complementa funnel-snapshot (não o substitui).
+   */
+  async getFunnelExecutive(
+    companyId: string,
+    funnelId:  string | null | undefined,
+    signal?:   AbortSignal,
+  ): Promise<FunnelExecutiveResponse> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (funnelId) params.funnel_id = funnelId
+    return apiFetch<FunnelExecutiveResponse>('/api/dashboard/funnel-executive', params, signal)
   },
 }

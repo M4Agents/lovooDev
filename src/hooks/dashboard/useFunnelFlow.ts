@@ -52,7 +52,7 @@ export function useFunnelFlow(
     setError(null)
 
     try {
-      const res = await dashboardApi.getFunnelFlow(companyId, funnelId, filters)
+      const res = await dashboardApi.getFunnelFlow(companyId, funnelId, filters, abortRef.current.signal)
       setData(res.data)
       setMeta(res.meta)
     } catch (e: unknown) {

@@ -210,37 +210,45 @@ export async function buildExecutiveMetrics(
   svc: SupabaseClient,
   companyId: string,
   resolvedRange: ResolvedRange,
+  userId?: string | null,
 ): Promise<ExecutiveMetrics> {
   if (!companyId) throw new Error('buildExecutiveMetrics: companyId é obrigatório')
   if (!resolvedRange?.start) throw new Error('buildExecutiveMetrics: resolvedRange é obrigatório')
 
   const [leadsResult, convsResult, alertsResult, hotResult] = await Promise.allSettled([
+    // BUG-01: filtrar deleted_at IS NULL para não contar leads removidos
     svc
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
       .gte('created_at', resolvedRange.start)
-      .lte('created_at', resolvedRange.end),
+      .lte('created_at', resolvedRange.end)
+      .is('deleted_at', null),
 
+    // BUG-02: intervalo fechado — gte + lte — consistente com o endpoint conversations
     svc
       .from('chat_conversations')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .gte('updated_at', resolvedRange.start),
+      .gte('updated_at', resolvedRange.start)
+      .lte('updated_at', resolvedRange.end),
 
+    // Fase 3A: alerts_count real via RPC get_dashboard_alerts_count
+    // SLA >= 4h + oportunidades abertas paradas > 14 dias com probability >= 60
+    svc.rpc('get_dashboard_alerts_count', {
+      p_company_id: companyId,
+      p_user_id:    userId ?? null,
+    }).then(({ data, error }) => ({ count: typeof data === 'number' ? data : null, error })),
+
+    // BUG-03: opportunity_funnel_positions não tem company_id; query direta em opportunities
     svc
-      .from('ai_insights')
+      .from('opportunities')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .eq('insight_type', 'critical')
-      .is('acknowledged_at', null)
-      .gt('expires_at', new Date().toISOString()),
-
-    svc
-      .from('opportunity_funnel_positions')
-      .select('opportunity_id', { count: 'exact', head: true })
-      .eq('company_id', companyId)
-      .gte('updated_at', resolvedRange.start),
+      .eq('status', 'open')
+      .gte('probability', 70)
+      .gte('updated_at', resolvedRange.start)
+      .lte('updated_at', resolvedRange.end),
   ])
 
   const safeCount = (r: PromiseSettledResult<{ count: number | null; error: unknown }>) =>
@@ -295,27 +303,44 @@ export async function buildFunnelSnapshotMetrics(
   // via assertFunnelBelongsToCompany antes de chegar aqui.
   const { data: positions, error: posErr } = await svc
     .from('opportunity_funnel_positions')
-    .select('stage_id, entered_stage_at, updated_at')
+    .select('stage_id, opportunity_id, entered_stage_at, updated_at')
     .eq('funnel_id', funnelId)
     .limit(10_000)
 
   if (posErr) throw new Error(`buildFunnelSnapshotMetrics/positions: ${posErr.message}`)
 
+  // BUG-05: buscar valor real das oportunidades para calcular total_value por etapa
+  const oppIds = (positions ?? [])
+    .map((p: { opportunity_id: string | null }) => p.opportunity_id)
+    .filter((id): id is string => !!id)
+
+  const valueMap = new Map<string, number>()
+  if (oppIds.length > 0) {
+    const { data: opps, error: oppsErr } = await svc
+      .from('opportunities')
+      .select('id, value')
+      .in('id', oppIds)
+    if (oppsErr) throw new Error(`buildFunnelSnapshotMetrics/opportunity_values: ${oppsErr.message}`)
+    ;(opps ?? []).forEach((o: { id: string; value: number | null }) => valueMap.set(o.id, o.value ?? 0))
+  }
+
   // 3. Agregar por stage_id em memória
-  type StageAgg = { count: number; totalDaysSum: number }
+  type StageAgg = { count: number; totalDaysSum: number; totalValue: number }
   const aggMap = new Map<string, StageAgg>()
   const nowMs  = Date.now()
 
   for (const pos of positions ?? []) {
-    const stageId  = pos.stage_id
+    const stageId = pos.stage_id
     if (!stageId) continue
 
-    const ref  = pos.entered_stage_at ?? pos.updated_at
-    const days = ref ? (nowMs - new Date(ref).getTime()) / 86_400_000 : 0
+    const ref   = pos.entered_stage_at ?? pos.updated_at
+    const days  = ref ? (nowMs - new Date(ref).getTime()) / 86_400_000 : 0
+    const value = pos.opportunity_id ? (valueMap.get(pos.opportunity_id) ?? 0) : 0
 
-    const agg = aggMap.get(stageId) ?? { count: 0, totalDaysSum: 0 }
+    const agg = aggMap.get(stageId) ?? { count: 0, totalDaysSum: 0, totalValue: 0 }
     agg.count++
     agg.totalDaysSum += Math.max(0, days)
+    agg.totalValue   += value
     aggMap.set(stageId, agg)
   }
 
@@ -328,7 +353,7 @@ export async function buildFunnelSnapshotMetrics(
         stage_name:        s.name,
         position:          s.position,
         count:             agg?.count ?? 0,
-        total_value:       0,
+        total_value:       agg?.totalValue ?? 0,
         avg_days_in_stage: agg && agg.count > 0
           ? Math.round((agg.totalDaysSum / agg.count) * 10) / 10
           : 0,

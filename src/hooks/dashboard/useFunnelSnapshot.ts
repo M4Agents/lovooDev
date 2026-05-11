@@ -50,7 +50,7 @@ export function useFunnelSnapshot(
     setError(null)
 
     try {
-      const res = await dashboardApi.getFunnelSnapshot(companyId, funnelId)
+      const res = await dashboardApi.getFunnelSnapshot(companyId, funnelId, abortRef.current.signal)
       setData(res.data)
       setMeta(res.meta)
     } catch (e: unknown) {

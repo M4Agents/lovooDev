@@ -26,6 +26,7 @@ interface PersistedFilters {
   startDateISO?: string
   endDateISO?: string
   funnelId: string | null
+  userId: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,7 @@ function buildPeriodFilter(type: string, startISO?: string, endISO?: string): Pe
   return base
 }
 
-function loadFromStorage(key: string): { period: PeriodFilter; funnelId: string | null } {
+function loadFromStorage(key: string): { period: PeriodFilter; funnelId: string | null; userId: string | null } {
   try {
     const raw = localStorage.getItem(key)
     if (!raw) throw new Error('empty')
@@ -54,21 +55,25 @@ function loadFromStorage(key: string): { period: PeriodFilter; funnelId: string 
     return {
       period:   buildPeriodFilter(parsed.periodType, parsed.startDateISO, parsed.endDateISO),
       funnelId: parsed.funnelId ?? null,
+      userId:   parsed.userId   ?? null,
     }
   } catch {
     return {
       period:   buildPeriodFilter(DEFAULT_PERIOD_TYPE),
       funnelId: null,
+      userId:   null,
     }
   }
 }
 
-function saveToStorage(key: string, period: PeriodFilter, funnelId: string | null): void {
+function saveToStorage(
+  key:      string,
+  period:   PeriodFilter,
+  funnelId: string | null,
+  userId:   string | null,
+): void {
   try {
-    const payload: PersistedFilters = {
-      periodType: period.type,
-      funnelId,
-    }
+    const payload: PersistedFilters = { periodType: period.type, funnelId, userId }
     if (period.type === 'custom') {
       if (period.startDate) payload.startDateISO = period.startDate.toISOString()
       if (period.endDate)   payload.endDateISO   = period.endDate.toISOString()
@@ -84,10 +89,12 @@ function saveToStorage(key: string, period: PeriodFilter, funnelId: string | nul
 // ---------------------------------------------------------------------------
 
 export interface DashboardFiltersState {
-  period: PeriodFilter
+  period:   PeriodFilter
   funnelId: string | null
-  setPeriod: (period: PeriodFilter) => void
+  userId:   string | null
+  setPeriod:   (period: PeriodFilter) => void
   setFunnelId: (id: string | null) => void
+  setUserId:   (id: string | null) => void
   clearFunnel: () => void
   /** Indica se o período customizado está completo (start + end) */
   isCustomPeriodReady: boolean
@@ -97,19 +104,20 @@ export function useDashboardFilters(): DashboardFiltersState {
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
-  // Chave isolada por empresa — evita conflito de funnelId entre empresas
+  // Chave isolada por empresa — evita conflito de filtros entre empresas
   const storageKey = companyId
     ? `${STORAGE_KEY_PREFIX}_${companyId}`
     : STORAGE_KEY_PREFIX
 
-  const [period, setPeriodState] = useState<PeriodFilter>(() => loadFromStorage(storageKey).period)
+  const [period,   setPeriodState]   = useState<PeriodFilter>(() => loadFromStorage(storageKey).period)
   const [funnelId, setFunnelIdState] = useState<string | null>(() => loadFromStorage(storageKey).funnelId)
+  const [userId,   setUserIdState]   = useState<string | null>(() => loadFromStorage(storageKey).userId)
 
   // Rastreia a chave anterior para detectar troca de empresa
   const prevKeyRef = useRef(storageKey)
 
   // Quando a empresa muda: carrega os filtros da nova empresa.
-  // Quando apenas period/funnelId mudam: persiste no storage.
+  // Quando filtros mudam: persiste no storage.
   useEffect(() => {
     const keyChanged = prevKeyRef.current !== storageKey
     prevKeyRef.current = storageKey
@@ -118,10 +126,11 @@ export function useDashboardFilters(): DashboardFiltersState {
       const saved = loadFromStorage(storageKey)
       setPeriodState(saved.period)
       setFunnelIdState(saved.funnelId)
+      setUserIdState(saved.userId)
     } else {
-      saveToStorage(storageKey, period, funnelId)
+      saveToStorage(storageKey, period, funnelId, userId)
     }
-  }, [storageKey, period, funnelId])
+  }, [storageKey, period, funnelId, userId])
 
   const setPeriod = useCallback((next: PeriodFilter) => {
     setPeriodState(() => {
@@ -132,13 +141,9 @@ export function useDashboardFilters(): DashboardFiltersState {
     })
   }, [])
 
-  const setFunnelId = useCallback((id: string | null) => {
-    setFunnelIdState(id)
-  }, [])
-
-  const clearFunnel = useCallback(() => {
-    setFunnelIdState(null)
-  }, [])
+  const setFunnelId = useCallback((id: string | null) => { setFunnelIdState(id) }, [])
+  const setUserId   = useCallback((id: string | null) => { setUserIdState(id)   }, [])
+  const clearFunnel = useCallback(() => { setFunnelIdState(null) }, [])
 
   const isCustomPeriodReady =
     period.type === 'custom' &&
@@ -150,8 +155,10 @@ export function useDashboardFilters(): DashboardFiltersState {
   return {
     period,
     funnelId,
+    userId,
     setPeriod,
     setFunnelId,
+    setUserId,
     clearFunnel,
     isCustomPeriodReady,
   }

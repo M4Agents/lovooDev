@@ -8,43 +8,17 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import {
-  dashboardApi,
-  type DashboardFilters,
-  type OpportunityItem,
-  type LeadItem,
-  type ConversationItem,
-  type ListMeta,
-} from '../../services/dashboardApi'
+import { dashboardApi } from '../../services/dashboardApi'
+import type {
+  EntityType,
+  EntityItem,
+  EntityListFilters,
+  EntityListState,
+  ListMeta,
+} from '../../types/dashboard'
 
-// ---------------------------------------------------------------------------
-// Tipos públicos
-// ---------------------------------------------------------------------------
-
-export type EntityType = 'opportunities' | 'leads' | 'conversations'
-
-export type EntityItem = OpportunityItem | LeadItem | ConversationItem
-
-export interface EntityListFilters extends DashboardFilters {
-  stage_id?:        string | null
-  status?:          string | null
-  probability_min?: number | null
-  ai_state?:        string | null
-  limit?:           number
-  source?:          string
-}
-
-export interface EntityListState {
-  data:       EntityItem[]
-  meta:       ListMeta | null
-  loading:    boolean
-  error:      string | null
-  page:       number
-  hasMore:    boolean
-  nextPage:   () => void
-  prevPage:   () => void
-  refetch:    () => void
-}
+// Re-exports para compatibilidade com consumidores que importam daqui
+export type { EntityType, EntityItem, EntityListFilters, EntityListState } from '../../types/dashboard'
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -85,15 +59,16 @@ export function useEntityList(
 
     try {
       const filtersWithPage = { ...filters, page: targetPage }
+      const signal = abortRef.current.signal
 
       let result: { ok: boolean; data: EntityItem[]; meta: ListMeta }
 
       if (entityType === 'opportunities') {
-        result = await dashboardApi.getOpportunities(companyId, filtersWithPage) as typeof result
+        result = await dashboardApi.getOpportunities(companyId, filtersWithPage, signal) as typeof result
       } else if (entityType === 'leads') {
-        result = await dashboardApi.getLeads(companyId, filtersWithPage) as typeof result
+        result = await dashboardApi.getLeads(companyId, filtersWithPage, signal) as typeof result
       } else {
-        result = await dashboardApi.getConversations(companyId, filtersWithPage) as typeof result
+        result = await dashboardApi.getConversations(companyId, filtersWithPage, signal) as typeof result
       }
 
       setData(result.data)

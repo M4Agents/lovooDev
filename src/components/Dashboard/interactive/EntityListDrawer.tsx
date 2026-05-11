@@ -15,23 +15,24 @@
 
 import React, { useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  useEntityList,
-  type EntityListFilters,
-  type EntityItem,
-} from '../../../hooks/dashboard/useEntityList'
+import { useEntityList } from '../../../hooks/dashboard/useEntityList'
 import type {
+  EntityTypeExtended,
+  EntityListFilters,
+  EntityItem,
   OpportunityItem,
   LeadItem,
   ConversationItem,
-} from '../../../services/dashboardApi'
+} from '../../../types/dashboard'
 import { trackEvent } from '../../../lib/analytics/trackEvent'
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
 // ---------------------------------------------------------------------------
 
-export type EntityType = 'opportunities' | 'leads' | 'conversations' | 'alerts'
+// EntityType local aponta para EntityTypeExtended (inclui 'alerts' para UI)
+// Consumidores internos do drawer usam esta re-export para não importar do drawer.
+export type { EntityTypeExtended as EntityType } from '../../../types/dashboard'
 
 export interface DrawerPrimaryAction {
   label: string
@@ -40,13 +41,13 @@ export interface DrawerPrimaryAction {
 }
 
 export interface EntityListDrawerProps {
-  open: boolean
-  onClose: () => void
-  title: string
-  description?: string
-  entityType: EntityType
+  open:          boolean
+  onClose:       () => void
+  title:         string
+  description?:  string
+  entityType:    EntityTypeExtended
   /** Filtros completos herdados do dashboard (period objeto, funnelId, extras) */
-  filters: EntityListFilters
+  filters:       EntityListFilters
   primaryAction?: DrawerPrimaryAction
 }
 
@@ -54,7 +55,7 @@ export interface EntityListDrawerProps {
 // Labels por entityType
 // ---------------------------------------------------------------------------
 
-const entityLabels: Record<EntityType, { singular: string; plural: string; icon: string }> = {
+const entityLabels: Record<EntityTypeExtended, { singular: string; plural: string; icon: string }> = {
   opportunities: { singular: 'oportunidade',  plural: 'oportunidades',  icon: '💡' },
   leads:         { singular: 'lead',           plural: 'leads',           icon: '👤' },
   conversations: { singular: 'conversa',       plural: 'conversas',       icon: '💬' },

@@ -8,14 +8,30 @@
 import React, { useMemo, useEffect, useState } from 'react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { FunnelSelector }         from '../components/Dashboard/filters/FunnelSelector'
+import { UserSelector }           from '../components/Dashboard/filters/UserSelector'
 import { ExecutiveSummary }       from '../components/Dashboard/sections/ExecutiveSummary'
 import { IntelligenceCentral }    from '../components/Dashboard/sections/IntelligenceCentral'
 import { ActionCenter }           from '../components/Dashboard/sections/ActionCenter'
+import { TrendsSection }          from '../components/Dashboard/sections/TrendsSection'
+import { SellerRankingSection }   from '../components/Dashboard/sections/SellerRankingSection'
+import { SlaAlertsPanel }         from '../components/Dashboard/sections/SlaAlertsPanel'
+import { LeadOriginsSection }     from '../components/Dashboard/sections/LeadOriginsSection'
 import { useDashboardFilters }    from '../hooks/dashboard/useDashboardFilters'
 import { useDashboardSummary }    from '../hooks/dashboard/useDashboardSummary'
 import { useDashboardInsights }   from '../hooks/dashboard/useDashboardInsights'
 import { useFunnelSnapshot }      from '../hooks/dashboard/useFunnelSnapshot'
 import { useFunnelFlow }          from '../hooks/dashboard/useFunnelFlow'
+import { useDashboardTrends }     from '../hooks/dashboard/useDashboardTrends'
+import { useDashboardUsers }      from '../hooks/dashboard/useDashboardUsers'
+import { useSellerPerformance }   from '../hooks/dashboard/useSellerPerformance'
+import { useSlaAlerts }           from '../hooks/dashboard/useSlaAlerts'
+import { useLeadOrigins }         from '../hooks/dashboard/useLeadOrigins'
+import { useDashboardForecast }   from '../hooks/dashboard/useDashboardForecast'
+import { usePriorityAlerts }      from '../hooks/dashboard/usePriorityAlerts'
+import { useFunnelExecutive }     from '../hooks/dashboard/useFunnelExecutive'
+import { ForecastSection }        from '../components/Dashboard/sections/ForecastSection'
+import { PriorityAlertsSection }  from '../components/Dashboard/sections/PriorityAlertsSection'
+import { FunnelExecutiveSection } from '../components/Dashboard/sections/FunnelExecutiveSection'
 import { useAuth }                from '../contexts/AuthContext'
 import type { DashboardFilters }  from '../services/dashboardApi'
 
@@ -88,13 +104,29 @@ export const NewDashboard: React.FC = () => {
   const companyId = company?.id ?? null
 
   // Filtros globais — fonte única de verdade
-  const { period, funnelId, setPeriod, setFunnelId } = useDashboardFilters()
+  const { period, funnelId, userId, setPeriod, setFunnelId, setUserId } = useDashboardFilters()
 
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
-    () => ({ period, funnelId }),
-    [period, funnelId],
+    () => ({ period, funnelId, userId }),
+    [period, funnelId, userId],
   )
+
+  // Usuários selecionáveis para o UserSelector
+  const { users: dashboardUsers, loading: usersLoading } = useDashboardUsers()
+
+  // Tendências (Fase 1)
+  const trends = useDashboardTrends(filters)
+
+  // Fase 2 — Gestão Comercial
+  const sellerRanking = useSellerPerformance(filters)
+  const slaAlerts     = useSlaAlerts({ userId: userId ?? undefined })
+  const leadOrigins   = useLeadOrigins(filters)
+
+  // Fase 3A — Inteligência Executiva
+  const forecast        = useDashboardForecast(filters)
+  const priorityAlerts  = usePriorityAlerts(userId)
+  const funnelExecutive = useFunnelExecutive(funnelId, funnelMode)
 
   // Dados
   const summary    = useDashboardSummary(filters)
@@ -141,7 +173,7 @@ export const NewDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Período — primeiro elemento de filtro (conforme plano) */}
+        {/* Filtros: Período + Funil + Vendedor */}
         <div className="flex items-center gap-3 flex-wrap">
           <PeriodFilter
             selectedPeriod={period}
@@ -155,6 +187,14 @@ export const NewDashboard: React.FC = () => {
               onSelect={setFunnelId}
             />
           )}
+
+          {/* Seletor de vendedor (Fase 1) — visível apenas para manager+ */}
+          <UserSelector
+            users={dashboardUsers}
+            userId={userId}
+            onSelect={setUserId}
+            loading={usersLoading}
+          />
         </div>
       </div>
 
@@ -166,6 +206,45 @@ export const NewDashboard: React.FC = () => {
           error={summary.error}
           dashboardFilters={filters}
           periodLabel={periodLabel}
+        />
+      </section>
+
+      {/* ── Alertas Prioritários (Fase 3A) — onde agir agora ───────────── */}
+      <section>
+        <PriorityAlertsSection
+          data={priorityAlerts.data}
+          loading={priorityAlerts.loading}
+          error={priorityAlerts.error}
+        />
+      </section>
+
+      {/* ── Gráficos de Tendência (Fase 1) ─────────────────────────────── */}
+      <section>
+        <TrendsSection
+          data={trends.data}
+          loading={trends.loading}
+          error={trends.error}
+          onRetry={trends.refetch}
+        />
+      </section>
+
+      {/* ── Ranking Comercial (Fase 2) ──────────────────────────────────── */}
+      <section>
+        <SellerRankingSection
+          data={sellerRanking.data}
+          meta={sellerRanking.meta}
+          loading={sellerRanking.loading}
+          error={sellerRanking.error}
+          onRetry={sellerRanking.refetch}
+        />
+      </section>
+
+      {/* ── Forecast Comercial (Fase 3A) ────────────────────────────────── */}
+      <section>
+        <ForecastSection
+          data={forecast.data}
+          loading={forecast.loading}
+          error={forecast.error}
         />
       </section>
 
@@ -192,6 +271,25 @@ export const NewDashboard: React.FC = () => {
           periodLabel={periodLabel}
         />
       </section>
+
+      {/* ── SLA + Origens (Fase 2) ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SlaAlertsPanel
+          data={slaAlerts.data}
+          meta={slaAlerts.meta}
+          loading={slaAlerts.loading}
+          error={slaAlerts.error}
+          onRetry={slaAlerts.refetch}
+          onLoadMore={slaAlerts.loadMore}
+        />
+        <LeadOriginsSection
+          data={leadOrigins.data}
+          meta={leadOrigins.meta}
+          loading={leadOrigins.loading}
+          error={leadOrigins.error}
+          onRetry={leadOrigins.refetch}
+        />
+      </div>
 
       {/* ── Funil ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -298,6 +396,16 @@ export const NewDashboard: React.FC = () => {
           )}
         </section>
       </div>
+
+      {/* ── Funil Executivo (Fase 3A) — complementa o snapshot acima ────── */}
+      <section>
+        <FunnelExecutiveSection
+          stages={funnelExecutive.data?.stages ?? null}
+          loading={funnelExecutive.loading}
+          error={funnelExecutive.error}
+          funnelRequired={funnelExecutive.funnelRequired}
+        />
+      </section>
 
       {/* ── Modo do sistema (debug — remover antes de produção) ─────────── */}
       {import.meta.env.DEV && summary.data && (

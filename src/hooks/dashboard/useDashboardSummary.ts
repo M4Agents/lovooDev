@@ -44,7 +44,7 @@ export function useDashboardSummary(filters: DashboardFilters): UseDashboardSumm
     setError(null)
 
     try {
-      const res = await dashboardApi.getSummary(companyId, filters)
+      const res = await dashboardApi.getSummary(companyId, filters, abortRef.current.signal)
       setData(res.data)
       setMeta(res.meta)
     } catch (e: unknown) {

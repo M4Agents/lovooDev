@@ -141,9 +141,6 @@ function InsightCard({
   const [listLoading, setListLoading] = useState(false)
 
   const handleLoadingChange = useCallback((loading: boolean) => {
-    // #region agent log
-    console.log('[DBG-254195][handleLoadingChange]', {loading})
-    // #endregion
     setListLoading(loading)
   }, [])
 
@@ -174,10 +171,6 @@ function InsightCard({
         </div>
 
         {/* Botão de expansão — mostra spinner enquanto os dados carregam */}
-        {/* #region agent log */}
-        {/* Log H-E: valores no render do botão */}
-        {(() => { if(isExpanded) console.log('[DBG-254195][button-render]', {isExpanded, listLoading, wasExpanded, showSpinner: isExpanded && listLoading}); return null })()}
-        {/* #endregion */}
         <button
           type="button"
           onClick={handleToggleWithLoading}

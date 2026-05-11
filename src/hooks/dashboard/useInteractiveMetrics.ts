@@ -5,15 +5,14 @@
 // =====================================================
 
 import { useCallback, useState } from 'react'
-import type { EntityType } from '../../components/Dashboard/interactive/EntityListDrawer'
-import type { EntityListFilters } from './useEntityList'
+import type { EntityTypeExtended, EntityListFilters } from '../../types/dashboard'
 
 export interface DrawerState {
-  open: boolean
-  entityType: EntityType | null
-  title: string
+  open:        boolean
+  entityType:  EntityTypeExtended | null
+  title:       string
   description: string
-  filters: EntityListFilters
+  filters:     EntityListFilters
 }
 
 const EMPTY_FILTERS: EntityListFilters = {
@@ -21,21 +20,16 @@ const EMPTY_FILTERS: EntityListFilters = {
 }
 
 const CLOSED: DrawerState = {
-  open: false,
-  entityType: null,
-  title: '',
+  open:        false,
+  entityType:  null,
+  title:       '',
   description: '',
-  filters: EMPTY_FILTERS,
+  filters:     EMPTY_FILTERS,
 }
 
 export interface UseInteractiveMetricsResult {
-  drawer: DrawerState
-  openDrawer: (
-    entityType: EntityType,
-    title: string,
-    description: string,
-    filters: EntityListFilters,
-  ) => void
+  drawer:      DrawerState
+  openDrawer:  (entityType: EntityTypeExtended, title: string, description: string, filters: EntityListFilters) => void
   closeDrawer: () => void
 }
 
@@ -44,10 +38,10 @@ export function useInteractiveMetrics(): UseInteractiveMetricsResult {
 
   const openDrawer = useCallback(
     (
-      entityType: EntityType,
-      title: string,
+      entityType:  EntityTypeExtended,
+      title:       string,
       description: string,
-      filters: EntityListFilters,
+      filters:     EntityListFilters,
     ) => {
       setDrawer({ open: true, entityType, title, description, filters })
     },

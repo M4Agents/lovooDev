@@ -125,6 +125,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       ok: true,
       data: convs.map(c => ({
         conversation_id:  c.id,
+        lead_id:          c.lead_id ?? null,
         lead_name:        c.contact_name || (c.lead_id ? leadMap.get(c.lead_id) : null) || '—',
         ai_state:         c.ai_state ?? 'unknown',
         last_message_at:  c.last_message_at ?? null,
