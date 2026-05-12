@@ -316,17 +316,18 @@ async function checkAiState(svc, { conversation_id, company_id }) {
  */
 async function persistBlock(svc, { block, run_id, conversation_id, company_id }) {
   const { data, error } = await svc.rpc('chat_create_message', {
-    p_conversation_id: conversation_id,
-    p_company_id:      company_id,
-    p_content:         block.content,
-    p_message_type:    'text',
-    p_direction:       'outbound',
-    p_sent_by:         null,          // null = mensagem de agente (sem usuário humano)
-    p_media_url:       null,
-    p_is_ai_generated: true,
-    p_ai_run_id:       run_id,
-    p_ai_block_index:  block.index,
-    p_ai_block_type:   block.type     // 'text' no MVP
+    p_conversation_id:     conversation_id,
+    p_company_id:          company_id,
+    p_content:             block.content,
+    p_message_type:        'text',
+    p_direction:           'outbound',
+    p_sent_by:             null,   // null = mensagem de agente (sem usuário humano)
+    p_media_url:           null,
+    p_is_ai_generated:     true,
+    p_ai_run_id:           run_id,
+    p_ai_block_index:      block.index,
+    p_ai_block_type:       block.type,  // 'text' no MVP
+    p_reply_to_message_id: null,        // explícito para resolver ambiguidade de overload (PGRST203)
   });
 
   if (error) {
