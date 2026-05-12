@@ -710,9 +710,11 @@ async function processMessage(payload) {
         // Não falhar o webhook por causa disso - apenas log
       }
 
-      // 🎯 DISPATCH message.received — aciona automações de mensagem recebida (fire-and-forget)
+      // 🎯 DISPATCH message.received — aciona automações de mensagem recebida
+      // Aguardado (await) para garantir que o processFlowAsync complete antes
+      // da função Vercel ser encerrada. fail-safe: nunca lança exceção.
       if (conversationId) {
-        dispatchMessageReceivedTrigger({
+        await dispatchMessageReceivedTrigger({
           companyId:      company.id,
           leadId:         leadId || null,
           conversationId,

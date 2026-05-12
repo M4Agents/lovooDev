@@ -1,9 +1,11 @@
 // =====================================================
 // API: POST /api/automation/process-timeouts
 //
-// Cron job:
+// Cron job (a cada 1 min):
 //  1. Finaliza execuções pausadas em user_input cujo timeout_at já passou.
-//  2. Limpa registros de automation_trigger_events com mais de 60 dias (retenção).
+//  2. Recupera execuções presas em 'running' há mais de 5 minutos sem lock
+//     (causadas por lambda Vercel encerrado antes do processFlowAsync completar).
+//  3. Limpa registros de automation_trigger_events com mais de 60 dias (retenção).
 //
 // Sem imports de src/ — usa apenas supabaseAdmin.js.
 //
@@ -35,6 +37,9 @@ export default async function handler(req: any, res: any) {
 
   // 0. Limpeza de retenção: apagar trigger_events com mais de 60 dias
   await purgeOldTriggerEvents(supabase)
+
+  // 0b. Recuperar execuções presas em 'running' (lambda Vercel encerrado prematuramente)
+  await recoverStuckRunningExecutions(supabase, now)
 
   // 1. Buscar execuções pausadas com timeout expirado e _awaiting_input presente
   //
@@ -85,6 +90,71 @@ export default async function handler(req: any, res: any) {
     ...results,
     total: expired.length,
   })
+}
+
+// ---------------------------------------------------------------------------
+// Recuperar execuções presas em 'running' sem lock ativo
+//
+// Causa: lambda Vercel encerrado após res.send() antes de processFlowAsync
+// completar — execution fica em 'running' com locked_at = null indefinidamente.
+//
+// Critério: status = 'running' AND locked_at IS NULL AND started_at < (now - 5 min)
+// Ação: marcar como 'failed' com error_message descritivo (sem re-processar).
+// Limite: 50 por execução do cron (evita timeout).
+// ---------------------------------------------------------------------------
+
+const STUCK_RUNNING_THRESHOLD_MS = 5 * 60 * 1000   // 5 minutos
+const STUCK_RUNNING_BATCH        = 50
+
+async function recoverStuckRunningExecutions(supabase: any, now: string): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STUCK_RUNNING_THRESHOLD_MS).toISOString()
+
+    const { data: stuck, error: fetchErr } = await supabase
+      .from('automation_executions')
+      .select('id, flow_id, company_id, started_at')
+      .eq('status', 'running')
+      .is('locked_at', null)
+      .lt('started_at', cutoff)
+      .limit(STUCK_RUNNING_BATCH)
+
+    if (fetchErr) {
+      console.warn('[process-timeouts][stuck-recovery] erro ao buscar execuções presas:', fetchErr.message)
+      return
+    }
+
+    if (!stuck || stuck.length === 0) {
+      console.log('[process-timeouts][stuck-recovery] nenhuma execução presa encontrada')
+      return
+    }
+
+    console.warn(`[process-timeouts][stuck-recovery] ${stuck.length} execução(ões) presa(s) encontrada(s) — marcando como failed`)
+
+    for (const exec of stuck) {
+      try {
+        const { error: updateErr } = await supabase
+          .from('automation_executions')
+          .update({
+            status:        'failed',
+            completed_at:  now,
+            error_message: 'stuck_running: execução não completou dentro do prazo esperado (possível encerramento prematuro da função serverless)',
+          })
+          .eq('id', exec.id)
+          .eq('status', 'running')   // condição atômica
+          .is('locked_at', null)
+
+        if (updateErr) {
+          console.warn(`[process-timeouts][stuck-recovery] falha ao atualizar execução ${exec.id}:`, updateErr.message)
+        } else {
+          console.log(`[process-timeouts][stuck-recovery] execução ${exec.id} marcada como failed (started_at: ${exec.started_at})`)
+        }
+      } catch (execErr: any) {
+        console.warn(`[process-timeouts][stuck-recovery] exceção para execução ${exec.id}:`, execErr?.message)
+      }
+    }
+  } catch (err: any) {
+    console.warn('[process-timeouts][stuck-recovery] exceção inesperada:', err?.message)
+  }
 }
 
 // ---------------------------------------------------------------------------
