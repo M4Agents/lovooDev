@@ -10,20 +10,25 @@
 // Padrão de referência: IntelligenceCentral + useDashboardEntityActions.
 // =====================================================
 
-import React from 'react'
-import { Clock, AlertTriangle, RefreshCw, ChevronDown, MessageCircle } from 'lucide-react'
+import React, { useState } from 'react'
+import { Clock, AlertTriangle, RefreshCw, ChevronDown, MessageCircle, TrendingDown } from 'lucide-react'
 import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
 import ChatModalSimple               from '../../SalesFunnel/ChatModalSimple'
-import type { SlaAlertItem, SlaAlertsMeta, SlaAlertSeverity } from '../../../types/dashboard'
+import { TrendChart }                from '../historical/TrendChart'
+import { SnapshotDataGuard }         from '../historical/SnapshotDataGuard'
+import type { SlaAlertItem, SlaAlertsMeta, SlaAlertSeverity, SnapshotTrendsData } from '../../../types/dashboard'
 
 interface Props {
-  data:        SlaAlertItem[]
-  meta:        SlaAlertsMeta | null
-  loading:     boolean
-  error:       string | null
-  companyId?:  string | null
-  onRetry?:    () => void
-  onLoadMore?: () => void
+  data:                SlaAlertItem[]
+  meta:                SlaAlertsMeta | null
+  loading:             boolean
+  error:               string | null
+  companyId?:          string | null
+  onRetry?:            () => void
+  onLoadMore?:         () => void
+  // FASE 4.1 — trendline histórica (opcional)
+  snapshotTrends?:     SnapshotTrendsData | null
+  snapshotTrendPoints?: number
 }
 
 const SEVERITY_CONFIG: Record<SlaAlertSeverity, { label: string; cls: string; bg: string }> = {
@@ -38,9 +43,21 @@ function fmtHours(h: number): string {
   return `${(h / 24).toFixed(1)}d`
 }
 
-export function SlaAlertsPanel({ data, meta, loading, error, companyId, onRetry, onLoadMore }: Props) {
+export function SlaAlertsPanel({
+  data,
+  meta,
+  loading,
+  error,
+  companyId,
+  onRetry,
+  onLoadMore,
+  snapshotTrends,
+  snapshotTrendPoints = 0,
+}: Props) {
   const total   = meta?.total ?? 0
   const hasMore = meta?.has_more ?? false
+
+  const [showTrend, setShowTrend] = useState(false)
 
   const actions = useDashboardEntityActions({ companyId })
 
@@ -63,11 +80,25 @@ export function SlaAlertsPanel({ data, meta, loading, error, companyId, onRetry,
             </span>
           )}
         </div>
-        {onRetry && (
-          <button onClick={onRetry} className="text-gray-400 hover:text-gray-600">
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Botão da trendline — só aparece se houver dados suficientes */}
+          <SnapshotDataGuard dataPoints={snapshotTrendPoints} enabled={!!snapshotTrends}>
+            <button
+              onClick={() => setShowTrend(v => !v)}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+              title="Tendência de SLA (últimos 7 dias)"
+            >
+              <TrendingDown className="w-3.5 h-3.5" />
+              {showTrend ? 'Ocultar' : 'Tendência'}
+            </button>
+          </SnapshotDataGuard>
+
+          {onRetry && (
+            <button onClick={onRetry} className="text-gray-400 hover:text-gray-600">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Body */}
@@ -157,6 +188,22 @@ export function SlaAlertsPanel({ data, meta, loading, error, companyId, onRetry,
           </div>
         )}
       </div>
+
+      {/* FASE 4.1 — Trendline de SLA (colapsável, rodapé discreto) */}
+      <SnapshotDataGuard dataPoints={snapshotTrendPoints} enabled={!!snapshotTrends && showTrend}>
+        <div className="px-4 pb-4 border-t border-gray-50">
+          <p className="text-[10px] text-gray-400 mt-3 mb-1.5 font-medium uppercase tracking-wide">
+            Leads com SLA violado — últimos 7 dias
+          </p>
+          <TrendChart
+            series={snapshotTrends!.series}
+            metricKey="sla_breached_count"
+            lowerIsBetter={true}
+            label="Violações"
+            height={72}
+          />
+        </div>
+      </SnapshotDataGuard>
 
       {/* Modal de chat */}
       {actions.chatLeadId != null && actions.companyId && actions.userId && (

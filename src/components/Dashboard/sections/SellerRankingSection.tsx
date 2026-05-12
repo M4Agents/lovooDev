@@ -7,15 +7,27 @@
 
 import React, { useState } from 'react'
 import { Trophy, TrendingUp, AlertTriangle, RefreshCw } from 'lucide-react'
-import { SellerPerformanceChart } from '../charts/SellerPerformanceChart'
-import type { SellerRankingEntry, SellerRankingMeta } from '../../../types/dashboard'
+import { SellerPerformanceChart }  from '../charts/SellerPerformanceChart'
+import { DeltaBadge }              from '../historical/DeltaBadge'
+import { TrendSparkline }          from '../historical/TrendSparkline'
+import { SnapshotDataGuard }       from '../historical/SnapshotDataGuard'
+import type {
+  SellerRankingEntry,
+  SellerRankingMeta,
+  SellerSnapshotDelta,
+}                                  from '../../../types/dashboard'
+import type { ComparisonMode }     from '../../../lib/snapshotPeriods'
+import { getComparisonLabel }      from '../../../lib/snapshotPeriods'
 
 interface Props {
-  data:      SellerRankingEntry[]
-  meta:      SellerRankingMeta | null
-  loading:   boolean
-  error:     string | null
-  onRetry?:  () => void
+  data:           SellerRankingEntry[]
+  meta:           SellerRankingMeta | null
+  loading:        boolean
+  error:          string | null
+  onRetry?:       () => void
+  // FASE 4.1 — deltas históricos (opcional)
+  sellerDeltas?:  Map<string, SellerSnapshotDelta>
+  comparisonMode?: ComparisonMode
 }
 
 function scoreBadge(score: number) {
@@ -34,12 +46,22 @@ function fmtBrl(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
 }
 
-export function SellerRankingSection({ data, meta, loading, error, onRetry }: Props) {
+export function SellerRankingSection({
+  data,
+  meta,
+  loading,
+  error,
+  onRetry,
+  sellerDeltas,
+  comparisonMode = 'wow',
+}: Props) {
   const [showChart, setShowChart] = useState(false)
 
-  const isIndividual = meta?.is_individual_view ?? false
-  const title        = isIndividual ? 'Suas Métricas' : 'Ranking Comercial'
-  const ranked       = isIndividual ? data : [...data].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+  const isIndividual  = meta?.is_individual_view ?? false
+  const title         = isIndividual ? 'Suas Métricas' : 'Ranking Comercial'
+  const ranked        = isIndividual ? data : [...data].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+  const hasDeltaData  = !!sellerDeltas && sellerDeltas.size > 0
+  const periodLabel2  = getComparisonLabel(comparisonMode)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -123,47 +145,83 @@ export function SellerRankingSection({ data, meta, loading, error, onRetry }: Pr
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {ranked.map(seller => (
-                    <tr key={seller.user_id} className="hover:bg-gray-50 transition-colors">
-                      {!isIndividual && (
-                        <td className="py-2.5 pl-2 font-semibold text-gray-400">
-                          {seller.rank ?? '—'}
-                        </td>
-                      )}
-                      <td className="py-2.5 font-medium text-gray-700 max-w-[140px] truncate">
-                        {seller.display_name}
-                      </td>
-                      {!isIndividual && (
-                        <td className="py-2.5 text-center">
-                          {seller.score !== null ? (
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold border ${scoreBadge(seller.score)}`}>
-                              {seller.score.toFixed(0)}
-                            </span>
-                          ) : '—'}
-                        </td>
-                      )}
-                      <td className="py-2.5 text-center text-gray-600">{seller.leads_received}</td>
-                      <td className="py-2.5 text-center text-gray-600">
-                        {fmtPct(seller.attendance_rate)}
-                      </td>
-                      <td className="py-2.5 text-center text-gray-600">
-                        {fmtMin(seller.avg_response_min)}
-                      </td>
-                      <td className="py-2.5 text-center text-gray-600">
-                        {fmtPct(seller.conversion_rate)}
-                      </td>
-                      <td className="py-2.5 text-center">
-                        {seller.sla_missed_count > 0 ? (
-                          <span className="text-rose-500 font-semibold">{seller.sla_missed_count}</span>
-                        ) : (
-                          <span className="text-emerald-500">0</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 text-right pr-2 text-gray-700 font-medium">
-                        {fmtBrl(seller.won_value)}
-                      </td>
-                    </tr>
-                  ))}
+                  {ranked.map(seller => {
+                    const delta = sellerDeltas?.get(seller.user_id)
+                    return (
+                      <React.Fragment key={seller.user_id}>
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          {!isIndividual && (
+                            <td className="py-2.5 pl-2 font-semibold text-gray-400">
+                              {seller.rank ?? '—'}
+                            </td>
+                          )}
+                          <td className="py-2.5 font-medium text-gray-700 max-w-[140px] truncate">
+                            {seller.display_name}
+                          </td>
+                          {!isIndividual && (
+                            <td className="py-2.5 text-center">
+                              {seller.score !== null ? (
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold border ${scoreBadge(seller.score)}`}>
+                                  {seller.score.toFixed(0)}
+                                </span>
+                              ) : '—'}
+                            </td>
+                          )}
+                          <td className="py-2.5 text-center text-gray-600">{seller.leads_received}</td>
+                          <td className="py-2.5 text-center text-gray-600">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span>{fmtPct(seller.attendance_rate)}</span>
+                              {hasDeltaData && delta && (
+                                <DeltaBadge
+                                  pct={delta.attendance_rate_pct}
+                                  higherIsBetter={true}
+                                  periodLabel={periodLabel2}
+                                />
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 text-center text-gray-600">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span>{fmtMin(seller.avg_response_min)}</span>
+                              {hasDeltaData && delta && (
+                                <DeltaBadge
+                                  pct={delta.avg_response_min_pct}
+                                  higherIsBetter={false}
+                                  periodLabel={periodLabel2}
+                                />
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 text-center text-gray-600">
+                            {fmtPct(seller.conversion_rate)}
+                          </td>
+                          <td className="py-2.5 text-center">
+                            {seller.sla_missed_count > 0 ? (
+                              <span className="text-rose-500 font-semibold">{seller.sla_missed_count}</span>
+                            ) : (
+                              <span className="text-emerald-500">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right pr-2 text-gray-700 font-medium">
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span>{fmtBrl(seller.won_value)}</span>
+                              {/* Sparkline de won_value — só se houver >= 5 pontos */}
+                              {hasDeltaData && delta && (
+                                <SnapshotDataGuard dataPoints={delta.won_value_series.length}>
+                                  <TrendSparkline
+                                    values={delta.won_value_series}
+                                    higherIsBetter={true}
+                                    width={56}
+                                    height={16}
+                                  />
+                                </SnapshotDataGuard>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      </React.Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

@@ -7,33 +7,38 @@
 
 import React, { useMemo, useEffect, useState } from 'react'
 import { PeriodFilter } from '../components/PeriodFilter'
-import { FunnelSelector }         from '../components/Dashboard/filters/FunnelSelector'
-import { UserSelector }           from '../components/Dashboard/filters/UserSelector'
-import { ExecutiveSummary }       from '../components/Dashboard/sections/ExecutiveSummary'
-import { IntelligenceCentral }    from '../components/Dashboard/sections/IntelligenceCentral'
-import { ActionCenter }           from '../components/Dashboard/sections/ActionCenter'
-import { TrendsSection }          from '../components/Dashboard/sections/TrendsSection'
-import { SellerRankingSection }   from '../components/Dashboard/sections/SellerRankingSection'
-import { SlaAlertsPanel }         from '../components/Dashboard/sections/SlaAlertsPanel'
-import { LeadOriginsSection }     from '../components/Dashboard/sections/LeadOriginsSection'
-import { useDashboardFilters }    from '../hooks/dashboard/useDashboardFilters'
-import { useDashboardSummary }    from '../hooks/dashboard/useDashboardSummary'
-import { useDashboardInsights }   from '../hooks/dashboard/useDashboardInsights'
-import { useFunnelSnapshot }      from '../hooks/dashboard/useFunnelSnapshot'
-import { useFunnelFlow }          from '../hooks/dashboard/useFunnelFlow'
-import { useDashboardTrends }     from '../hooks/dashboard/useDashboardTrends'
-import { useDashboardUsers }      from '../hooks/dashboard/useDashboardUsers'
-import { useSellerPerformance }   from '../hooks/dashboard/useSellerPerformance'
-import { useSlaAlerts }           from '../hooks/dashboard/useSlaAlerts'
-import { useLeadOrigins }         from '../hooks/dashboard/useLeadOrigins'
-import { useDashboardForecast }   from '../hooks/dashboard/useDashboardForecast'
-import { usePriorityAlerts }      from '../hooks/dashboard/usePriorityAlerts'
-import { useFunnelExecutive }     from '../hooks/dashboard/useFunnelExecutive'
-import { ForecastSection }        from '../components/Dashboard/sections/ForecastSection'
-import { PriorityAlertsSection }  from '../components/Dashboard/sections/PriorityAlertsSection'
-import { FunnelExecutiveSection } from '../components/Dashboard/sections/FunnelExecutiveSection'
-import { useAuth }                from '../contexts/AuthContext'
-import type { DashboardFilters }  from '../services/dashboardApi'
+import { FunnelSelector }             from '../components/Dashboard/filters/FunnelSelector'
+import { UserSelector }               from '../components/Dashboard/filters/UserSelector'
+import { ExecutiveSummary }           from '../components/Dashboard/sections/ExecutiveSummary'
+import { IntelligenceCentral }        from '../components/Dashboard/sections/IntelligenceCentral'
+import { ActionCenter }               from '../components/Dashboard/sections/ActionCenter'
+import { TrendsSection }              from '../components/Dashboard/sections/TrendsSection'
+import { SellerRankingSection }       from '../components/Dashboard/sections/SellerRankingSection'
+import { SlaAlertsPanel }             from '../components/Dashboard/sections/SlaAlertsPanel'
+import { LeadOriginsSection }         from '../components/Dashboard/sections/LeadOriginsSection'
+import { useDashboardFilters }        from '../hooks/dashboard/useDashboardFilters'
+import { useDashboardSummary }        from '../hooks/dashboard/useDashboardSummary'
+import { useDashboardInsights }       from '../hooks/dashboard/useDashboardInsights'
+import { useFunnelSnapshot }          from '../hooks/dashboard/useFunnelSnapshot'
+import { useFunnelFlow }              from '../hooks/dashboard/useFunnelFlow'
+import { useDashboardTrends }         from '../hooks/dashboard/useDashboardTrends'
+import { useDashboardUsers }          from '../hooks/dashboard/useDashboardUsers'
+import { useSellerPerformance }       from '../hooks/dashboard/useSellerPerformance'
+import { useSlaAlerts }               from '../hooks/dashboard/useSlaAlerts'
+import { useLeadOrigins }             from '../hooks/dashboard/useLeadOrigins'
+import { useDashboardForecast }       from '../hooks/dashboard/useDashboardForecast'
+import { usePriorityAlerts }          from '../hooks/dashboard/usePriorityAlerts'
+import { useFunnelExecutive }         from '../hooks/dashboard/useFunnelExecutive'
+import { ForecastSection }            from '../components/Dashboard/sections/ForecastSection'
+import { PriorityAlertsSection }      from '../components/Dashboard/sections/PriorityAlertsSection'
+import { FunnelExecutiveSection }     from '../components/Dashboard/sections/FunnelExecutiveSection'
+import { useAuth }                    from '../contexts/AuthContext'
+import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
+import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
+import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
+import { useSnapshotSellerDeltas }    from '../hooks/dashboard/useSnapshotSellerDeltas'
+import type { DashboardFilters }      from '../services/dashboardApi'
+import type { ComparisonMode }        from '../lib/snapshotPeriods'
 
 // ---------------------------------------------------------------------------
 // Sub-componentes auxiliares do layout de funil
@@ -106,6 +111,12 @@ export const NewDashboard: React.FC = () => {
   // Filtros globais — fonte única de verdade
   const { period, funnelId, userId, setPeriod, setFunnelId, setUserId } = useDashboardFilters()
 
+  // FASE 4.1 — Toggle WoW/MoM (padrão: WoW conforme D1)
+  const [comparisonMode, setComparisonMode] = useState<ComparisonMode>('wow')
+
+  // Feature flags — sem flags ativas o dashboard se comporta exatamente como antes
+  const flags = useFeatureFlags()
+
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
     () => ({ period, funnelId, userId }),
@@ -156,6 +167,26 @@ export const NewDashboard: React.FC = () => {
   // Label do período ativo para exibir no header
   const periodLabel = period.label ?? 'Período selecionado'
 
+  // FASE 4.1 — Dados históricos (snapshot) — todos gateados por feature flags
+  const snapshotComparison = useSnapshotComparison({
+    companyId,
+    funnelId,
+    mode:    comparisonMode,
+    enabled: flags.snapshotDelta,
+  })
+  const snapshotTrends = useSnapshotTrends({
+    companyId,
+    funnelId,
+    metrics: ['leads_created', 'conversations_attended', 'sla_breached_count', 'hot_count'],
+    days:    7,
+    enabled: flags.snapshotTrends || flags.snapshotDelta,
+  })
+  const sellerDeltas = useSnapshotSellerDeltas({
+    companyId,
+    mode:    comparisonMode,
+    enabled: flags.snapshotDelta,
+  })
+
   // Seções de funil só são exibidas se:
   //   - single-funnel (sempre), OU
   //   - multi-funnel com funnel selecionado
@@ -173,7 +204,7 @@ export const NewDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Filtros: Período + Funil + Vendedor */}
+        {/* Filtros: Período + Funil + Vendedor + Toggle histórico */}
         <div className="flex items-center gap-3 flex-wrap">
           <PeriodFilter
             selectedPeriod={period}
@@ -195,6 +226,34 @@ export const NewDashboard: React.FC = () => {
             onSelect={setUserId}
             loading={usersLoading}
           />
+
+          {/* Toggle WoW/MoM — só aparece se alguma flag histórica estiver ligada */}
+          {(flags.snapshotDelta || flags.snapshotTrends || flags.snapshotComparison) && (
+            <div className="flex items-center rounded-lg border border-gray-200 bg-white text-xs overflow-hidden">
+              <button
+                onClick={() => setComparisonMode('wow')}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  comparisonMode === 'wow'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Comparar com semana anterior"
+              >
+                WoW
+              </button>
+              <button
+                onClick={() => setComparisonMode('mom')}
+                className={`px-3 py-1.5 font-medium transition-colors ${
+                  comparisonMode === 'mom'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Comparar com mês anterior"
+              >
+                MoM
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -206,6 +265,10 @@ export const NewDashboard: React.FC = () => {
           error={summary.error}
           dashboardFilters={filters}
           periodLabel={periodLabel}
+          snapshotComparison={flags.snapshotDelta ? snapshotComparison.data : null}
+          snapshotTrends={flags.snapshotDelta ? snapshotTrends.data : null}
+          snapshotTrendPoints={snapshotTrends.dataPoints}
+          comparisonMode={comparisonMode}
         />
       </section>
 
@@ -237,6 +300,8 @@ export const NewDashboard: React.FC = () => {
           loading={sellerRanking.loading}
           error={sellerRanking.error}
           onRetry={sellerRanking.refetch}
+          sellerDeltas={flags.snapshotDelta ? sellerDeltas.byUserId : undefined}
+          comparisonMode={comparisonMode}
         />
       </section>
 
@@ -283,6 +348,8 @@ export const NewDashboard: React.FC = () => {
           companyId={companyId}
           onRetry={slaAlerts.refetch}
           onLoadMore={slaAlerts.loadMore}
+          snapshotTrends={flags.snapshotTrends ? snapshotTrends.data : null}
+          snapshotTrendPoints={snapshotTrends.dataPoints}
         />
         <LeadOriginsSection
           data={leadOrigins.data}

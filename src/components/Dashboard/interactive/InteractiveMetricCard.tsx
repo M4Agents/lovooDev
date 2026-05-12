@@ -21,6 +21,8 @@ export interface InteractiveMetricCardProps {
     value: string      // ex: "+12%" ou "−3 leads"
     direction: TrendDirection
   }
+  /** Conteúdo adicional renderizado abaixo do valor (ex: contexto histórico FASE 4.1) */
+  children?: React.ReactNode
   /** Texto exibido abaixo do valor quando loading=false e valor=0 */
   emptyLabel?: string
   disabled?: boolean
@@ -65,6 +67,7 @@ export const InteractiveMetricCard: React.FC<InteractiveMetricCardProps> = ({
   icon,
   accent = 'blue',
   trend,
+  children,
   emptyLabel,
   disabled = false,
   loading = false,
@@ -153,6 +156,9 @@ export const InteractiveMetricCard: React.FC<InteractiveMetricCardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Conteúdo adicional (ex: contexto histórico FASE 4.1) */}
+      {!loading && children}
 
       {/* Indicador de clicável no rodapé */}
       {isClickable && (

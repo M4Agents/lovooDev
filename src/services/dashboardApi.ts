@@ -62,6 +62,28 @@ export type {
   DashboardUser,
   DashboardUsersResponse,
   SellerRankingEntry,
+  // Fase 4.0
+  SnapshotFlowMetrics,
+  SnapshotStateMetrics,
+  SnapshotStageCacheItem,
+  SnapshotAggregationMeta,
+  SnapshotAggregateResult,
+  SnapshotDelta,
+  SnapshotComparisonData,
+  SnapshotTrendPoint,
+  SnapshotTrendsData,
+  SnapshotBackfillJob,
+  SnapshotDiffMetric,
+  SnapshotDiffResult,
+  // Fase 4.1
+  SellerSnapshotDelta,
+  SnapshotSellerDeltasData,
+  ComparisonMode,
+  // Fase 4.1.5
+  SnapshotHealthData,
+  SnapshotFreshnessStatus,
+  SnapshotSeverity,
+  SnapshotDriftStatus,
   SellerRankingMeta,
   SellerRankingResponse,
   SlaAlertSeverity,
@@ -296,6 +318,28 @@ async function apiPost<T>(path: string, queryParams: Record<string, string>, bod
   }
 
   return res.json() as Promise<T>
+}
+
+// ---------------------------------------------------------------------------
+// reportSnapshotFallback — fire-and-forget, nunca lança erro
+// ---------------------------------------------------------------------------
+
+type FallbackEndpoint = 'comparison' | 'trends' | 'seller-deltas'
+type FallbackReason   = 'missing_data' | 'api_error' | 'insufficient_points' | 'freshness_stale'
+
+function reportSnapshotFallback(
+  companyId: string,
+  endpoint:  FallbackEndpoint,
+  reason:    FallbackReason,
+  mode?:     string,
+): void {
+  // Fire-and-forget — nunca bloqueia, nunca lança
+  apiPost('/api/internal/snapshot-fallback-log', {}, {
+    company_id: companyId,
+    endpoint,
+    reason,
+    mode: mode ?? null,
+  }).catch(() => {/* silent — fallback tracking não pode quebrar UX */})
 }
 
 // ---------------------------------------------------------------------------
@@ -639,4 +683,90 @@ export const dashboardApi = {
     if (funnelId) params.funnel_id = funnelId
     return apiFetch<FunnelExecutiveResponse>('/api/dashboard/funnel-executive', params, signal)
   },
+
+  // ── FASE 4.0 — Snapshot histórico (shadow mode) ────────────────────────
+
+  /**
+   * Compara dois períodos históricos usando snapshots agregados.
+   * SHADOW MODE: não chamado pelo dashboard ainda (FASE 4.1).
+   */
+  async getSnapshotComparison(
+    companyId:    string,
+    currentFrom:  string,
+    currentTo:    string,
+    previousFrom: string,
+    previousTo:   string,
+    funnelId?:    string | null,
+    signal?:      AbortSignal,
+  ): Promise<SnapshotComparisonData> {
+    const params: Record<string, string> = {
+      company_id:    companyId,
+      current_from:  currentFrom,
+      current_to:    currentTo,
+      previous_from: previousFrom,
+      previous_to:   previousTo,
+    }
+    if (funnelId) params.funnel_id = funnelId
+    return apiFetch<SnapshotComparisonData>('/api/dashboard/snapshot-comparison', params, signal)
+  },
+
+  /**
+   * Série temporal de snapshots diários para gráficos de tendência.
+   * FASE 4.1: Integrado nos componentes históricos.
+   */
+  async getSnapshotTrends(
+    companyId: string,
+    fromDate:  string,
+    toDate:    string,
+    metrics?:  string[],
+    funnelId?: string | null,
+    signal?:   AbortSignal,
+  ): Promise<SnapshotTrendsData> {
+    const params: Record<string, string> = {
+      company_id: companyId,
+      from_date:  fromDate,
+      to_date:    toDate,
+    }
+    if (metrics && metrics.length > 0) params.metrics = metrics.join(',')
+    if (funnelId) params.funnel_id = funnelId
+    return apiFetch<SnapshotTrendsData>('/api/dashboard/snapshot-trends', params, signal)
+  },
+
+  /**
+   * Deltas WoW/MoM por vendedor usando dashboard_seller_snapshots.
+   * FASE 4.1: Usado no SellerRankingSection para deltas de attendance_rate,
+   * avg_response_min e sparkline de won_value.
+   */
+  async getSnapshotSellerDeltas(
+    companyId: string,
+    mode:      'wow' | 'mom',
+    signal?:   AbortSignal,
+  ): Promise<SnapshotSellerDeltasData> {
+    return apiFetch<SnapshotSellerDeltasData>(
+      '/api/dashboard/snapshot-seller-deltas',
+      { company_id: companyId, mode },
+      signal,
+    )
+  },
+
+  /**
+   * Health score consolidado da camada histórica para um tenant.
+   * FASE 4.1.5: usado por useSnapshotHealth e readiness checklist FASE 4.2.
+   */
+  async getSnapshotHealth(
+    companyId: string,
+    date?:     string,
+    signal?:   AbortSignal,
+  ): Promise<SnapshotHealthData> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (date) params.date = date
+    return apiFetch<SnapshotHealthData>('/api/dashboard/snapshot-health', params, signal)
+  },
+
+  /**
+   * Fire-and-forget de fallback silencioso.
+   * FASE 4.1.5: chamado pelos hooks quando ocorre fallback para null.
+   * Nunca lança erro — não bloqueia UX.
+   */
+  reportSnapshotFallback,
 }

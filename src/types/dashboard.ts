@@ -560,3 +560,211 @@ export interface LeadOriginsResponse {
   data: LeadOriginItem[]
   meta: LeadOriginsMeta
 }
+
+// ---------------------------------------------------------------------------
+// FASE 4.0 — Snapshot Executivo Histórico
+// ---------------------------------------------------------------------------
+
+/** Métricas FLOW (somadas) de um período de snapshot */
+export interface SnapshotFlowMetrics {
+  leads_created:          number
+  conversations_attended: number
+  won_count:              number
+  won_value:              number
+  lost_count:             number
+  lost_value:             number
+  sla_breached_count:     number
+}
+
+/** Métricas STATE (último valor do período) de um snapshot */
+export interface SnapshotStateMetrics {
+  pipeline_total:        number
+  pipeline_weighted:     number
+  pipeline_risk:         number
+  open_count:            number
+  stalled_count:         number
+  hot_count:             number
+  avg_response_minutes:  number
+  conversion_rate:       number
+  prob_0_20_value:       number
+  prob_21_40_value:      number
+  prob_41_60_value:      number
+  prob_61_80_value:      number
+  prob_81_100_value:     number
+  funnel_stages_cache?:  SnapshotStageCacheItem[] | null
+  snapshot_date?:        string
+}
+
+/** Item do cache de etapas embutido no snapshot */
+export interface SnapshotStageCacheItem {
+  stage_id:       string
+  stage_name:     string
+  position:       number
+  color:          string | null
+  opp_count:      number
+  total_value:    number
+  weighted_value: number
+  stalled_count:  number
+  avg_days:       number
+}
+
+/** Metadados de uma agregação de período */
+export interface SnapshotAggregationMeta {
+  from_date:             string
+  to_date:               string
+  funnel_id:             string | null
+  snapshot_days_found:   number
+  has_data:              boolean
+}
+
+/** Resultado de aggregate_snapshot_period — retornado pelas comparison/trends APIs */
+export interface SnapshotAggregateResult {
+  flow:  SnapshotFlowMetrics
+  state: SnapshotStateMetrics
+  meta:  SnapshotAggregationMeta
+}
+
+/** Delta entre dois períodos */
+export interface SnapshotDelta {
+  abs: number
+  pct: number
+}
+
+/** Resposta de /api/dashboard/snapshot-comparison */
+export interface SnapshotComparisonData {
+  ok:       boolean
+  current:  SnapshotAggregateResult
+  previous: SnapshotAggregateResult
+  deltas:   Record<string, SnapshotDelta>
+  params: {
+    company_id:    string
+    funnel_id:     string | null
+    current_from:  string
+    current_to:    string
+    previous_from: string
+    previous_to:   string
+  }
+}
+
+/** Um ponto de dado na série temporal */
+export interface SnapshotTrendPoint {
+  period_start:      string
+  snapshot_taken_at: string
+  [metric: string]:  number | string
+}
+
+/** Resposta de /api/dashboard/snapshot-trends */
+export interface SnapshotTrendsData {
+  ok:          boolean
+  company_id:  string
+  funnel_id:   string | null
+  from_date:   string
+  to_date:     string
+  metrics:     string[]
+  data_points: number
+  series:      SnapshotTrendPoint[]
+}
+
+/** Registro de um job de snapshot */
+export interface SnapshotBackfillJob {
+  id:                   string
+  status:               'running' | 'completed' | 'failed' | 'paused'
+  from_date:            string
+  to_date:              string
+  last_processed_date:  string | null
+  total_company_days:   number | null
+  processed_count:      number
+  failed_count:         number
+  error_last:           string | null
+  started_at:           string
+  updated_at:           string
+  finished_at:          string | null
+}
+
+/** Resposta de /api/dashboard/snapshot-diff */
+export interface SnapshotDiffMetric {
+  metric:          string
+  snapshot_value:  number
+  realtime_value:  number
+  delta_pct:       number
+  ok:              boolean
+}
+
+export interface SnapshotDiffResult {
+  ok:                boolean
+  company_id:        string
+  date:              string
+  max_drift_pct:     number
+  all_ok:            boolean
+  drift_count:       number
+  metrics:           SnapshotDiffMetric[]
+  snapshot_taken_at: string
+}
+
+// ── FASE 4.1 — Seller deltas históricos ─────────────────────────────────────
+
+/** Delta por vendedor para WoW/MoM — retornado por /api/dashboard/snapshot-seller-deltas */
+export interface SellerSnapshotDelta {
+  user_id:               string
+  display_name:          string | null
+  /** Δ% de attendance_rate (STATE) — null = dados insuficientes */
+  attendance_rate_pct:   number | null
+  /** Δ% de avg_response_min (STATE) — null = dados insuficientes */
+  avg_response_min_pct:  number | null
+  /** Série dos últimos N dias de won_value (FLOW) — para sparkline */
+  won_value_series:      number[]
+}
+
+/** Resposta de /api/dashboard/snapshot-seller-deltas */
+export interface SnapshotSellerDeltasData {
+  ok:      boolean
+  mode:    'wow' | 'mom'
+  sellers: SellerSnapshotDelta[]
+}
+
+/** Tipo de modo de comparação temporal */
+export type ComparisonMode = 'wow' | 'mom'
+
+// ── FASE 4.1.5 — Observabilidade e Health Score ──────────────────────────────
+
+export type SnapshotFreshnessStatus = 'fresh' | 'delayed' | 'stale' | 'missing'
+export type SnapshotSeverity        = 'healthy' | 'degraded' | 'warning' | 'critical'
+export type SnapshotDriftStatus     = 'ok' | 'warning' | 'critical' | 'no_data'
+
+/** Resposta de GET /api/dashboard/snapshot-health */
+export interface SnapshotHealthData {
+  ok:             boolean
+  company_id:     string
+  reference_date: string
+  health_score:   number
+  severity:       SnapshotSeverity
+  components: {
+    freshness: {
+      score:       number
+      status:      SnapshotFreshnessStatus
+      latest_date: string | null
+      days_since:  number | null
+    }
+    drift: {
+      score:         number
+      status:        SnapshotDriftStatus
+      max_drift_pct: number | null
+    }
+    coverage: {
+      score:        number
+      days_covered: number
+      total_days:   number
+      coverage_pct: number
+    }
+    cron: {
+      score:        number
+      jobs_ok:      number
+      jobs_total:   number
+      success_rate: number | null
+    }
+  }
+  readiness_4_2: {
+    ready:   boolean
+    blocker: string | null
+  }
+}

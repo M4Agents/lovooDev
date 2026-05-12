@@ -36,6 +36,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/generate-dashboard-snapshots",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/expire-trials",
       "schedule": "0 3 * * *"
     },
