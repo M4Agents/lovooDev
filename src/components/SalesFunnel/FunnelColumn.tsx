@@ -215,9 +215,23 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                     </button>
                   )}
 
+                  {/* Playbook — segunda opção, acima de Mover oportunidades */}
+                  {hasPlaybook && onViewPlaybook && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => { setMenuOpen(false); onViewPlaybook(stage.id) }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <BookOpen className="w-4 h-4 text-indigo-400" />
+                        Playbook da Etapa
+                      </button>
+                    </>
+                  )}
+
                   {onBulkMoveRequest && (
                     <>
-                      {onEditStage && <div className="border-t border-gray-100 my-1" />}
+                      <div className="border-t border-gray-100 my-1" />
                       <button
                         disabled={!count || count === 0}
                         onClick={() => {
@@ -236,20 +250,6 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                       >
                         <ArrowRightLeft className="w-4 h-4 text-gray-400" />
                         Mover oportunidades desta etapa
-                      </button>
-                    </>
-                  )}
-
-                  {/* Playbook — dentro do dropdown admin quando etapa não é sistêmica */}
-                  {hasPlaybook && onViewPlaybook && (
-                    <>
-                      <div className="border-t border-gray-100 my-1" />
-                      <button
-                        onClick={() => { setMenuOpen(false); onViewPlaybook(stage.id) }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <BookOpen className="w-4 h-4 text-indigo-400" />
-                        Playbook da Etapa
                       </button>
                     </>
                   )}
