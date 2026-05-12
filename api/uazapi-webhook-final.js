@@ -1300,8 +1300,8 @@ async function processMessage(payload) {
     // Regras:
     //   - SOMENTE mensagens inbound
     //   - SOMENTE quando conversationId confirmado pelo banco
-    //   - await com timeout de 8s (o endpoint retorna rápido;
-    //     execute-agent roda assincronamente lá dentro)
+    //   - fire-and-forget: process-conversation-event é função Vercel
+    //     independente (maxDuration: 60) e não precisa ser aguardada
     //   - try/catch interno: erro nunca quebra o 200
     // =====================================================
     if (direction === 'inbound' && conversationId) {
@@ -1323,16 +1323,19 @@ async function processMessage(payload) {
         const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
         const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
 
-        await fetch(agentEventUrl, {
+        // Fire-and-forget: process-conversation-event roda em função Vercel independente
+        // com maxDuration: 60. Não precisa de await — o agente executa normalmente
+        // mesmo após o webhook retornar 200. O await crítico já foi feito no passo 5
+        // (dispatchMessageReceivedTrigger), que garante ai_state atualizado.
+        fetch(agentEventUrl, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(agentEventPayload),
-          signal:  AbortSignal.timeout(8000)
         }).catch(emitError => {
           console.error('🤖 ❌ Falha ao emitir evento de conversação:', emitError.message);
         });
 
-        console.log('🤖 ✅ Evento de conversação emitido:', {
+        console.log('🤖 ✅ Evento de conversação disparado (fire-and-forget):', {
           conversation_id:   conversationId,
           uazapi_message_id: messageId,
           company_id:        company.id,
