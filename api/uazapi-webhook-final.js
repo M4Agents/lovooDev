@@ -1300,8 +1300,10 @@ async function processMessage(payload) {
     // Regras:
     //   - SOMENTE mensagens inbound
     //   - SOMENTE quando conversationId confirmado pelo banco
-    //   - fire-and-forget: process-conversation-event é função Vercel
-    //     independente (maxDuration: 60) e não precisa ser aguardada
+    //   - await com timeout 8s: garante entrega do request antes do webhook
+    //     encerrar (evita corte serverless do fire-and-forget)
+    //   - .catch(() => {}) silencia AbortError de timeout sem log de erro
+    //   - o endpoint continua executando por até 60s após o timeout do webhook
     //   - try/catch interno: erro nunca quebra o 200
     // =====================================================
     if (direction === 'inbound' && conversationId) {
@@ -1323,19 +1325,20 @@ async function processMessage(payload) {
         const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
         const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
 
-        // Fire-and-forget: process-conversation-event roda em função Vercel independente
-        // com maxDuration: 60. Não precisa de await — o agente executa normalmente
-        // mesmo após o webhook retornar 200. O await crítico já foi feito no passo 5
-        // (dispatchMessageReceivedTrigger), que garante ai_state atualizado.
-        fetch(agentEventUrl, {
+        // await com timeout de 8s — garante que o request HTTP seja entregue ao
+        // process-conversation-event antes do webhook retornar. Em serverless (Vercel),
+        // fire-and-forget pode ser cortado quando a função encerra, causando delay de
+        // minutos na resposta do agente. O timeout não cancela a execução do endpoint
+        // (que tem maxDuration: 60 próprio) — apenas limita quanto o webhook espera.
+        // O .catch(() => {}) silencia o AbortError de timeout sem poluir os logs.
+        await fetch(agentEventUrl, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(agentEventPayload),
-        }).catch(emitError => {
-          console.error('🤖 ❌ Falha ao emitir evento de conversação:', emitError.message);
-        });
+          signal:  AbortSignal.timeout(8000)
+        }).catch(() => {});
 
-        console.log('🤖 ✅ Evento de conversação disparado (fire-and-forget):', {
+        console.log('🤖 ✅ Evento de conversação emitido:', {
           conversation_id:   conversationId,
           uazapi_message_id: messageId,
           company_id:        company.id,
