@@ -44,6 +44,10 @@ export interface FunnelStage {
   total_value?: number
   /** TRUE quando a etapa está acima do limite max_funnel_stages do plano. */
   is_over_plan?: boolean
+  /** Roteiro/script de vendas para a etapa. Editável somente por admin, super_admin e system_admin. */
+  playbook_text?: string
+  /** URL do vídeo YouTube associado à etapa. Editável somente por admin, super_admin e system_admin. */
+  video_link?: string
 }
 
 // =====================================================
@@ -362,6 +366,8 @@ export interface UpdateStageForm {
   color?: string
   position?: number
   stage_type?: 'active' | 'won' | 'lost'
+  playbook_text?: string
+  video_link?: string
 }
 
 export interface MoveLeadForm {

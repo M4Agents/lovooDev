@@ -3,12 +3,17 @@
 // Data: 03/03/2026
 // Objetivo: Permitir edição de nome, cor, tipo e visibilidade da etapa
 // Atualizado: 06/03/2026 - Suporte para is_hidden
+// Atualizado: 2026-05-12 - Suporte para playbook_text e video_link
+//   com validação explícita de JWT + role para campos de playbook
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAnonKey    = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const PLAYBOOK_ALLOWED_ROLES = ['admin', 'super_admin', 'system_admin'];
 
 export default async function handler(req, res) {
   if (req.method !== 'PUT') {
@@ -16,9 +21,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { stage_id, name, color, stage_type, is_hidden } = req.body;
+    const { stage_id, name, color, stage_type, is_hidden, playbook_text, video_link } = req.body;
 
-    // Validações
+    // Validações básicas
     if (!stage_id) {
       return res.status(400).json({ 
         error: 'ID da etapa é obrigatório',
@@ -26,7 +31,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Name é obrigatório apenas se não estiver alterando apenas visibilidade
     if (name !== undefined) {
       if (name.trim() === '') {
         return res.status(400).json({ 
@@ -58,7 +62,54 @@ export default async function handler(req, res) {
       });
     }
 
-    // Verificar se nome duplicado no mesmo funil (apenas se name foi fornecido)
+    // ─── Validação de permissão para campos de playbook ──────────────────────
+    // Campos playbook_text e video_link exigem autenticação JWT + role explícito
+    // em company_users. NÃO confiar apenas no RLS — validação dupla obrigatória.
+    const isEditingPlaybook = playbook_text !== undefined || video_link !== undefined;
+
+    if (isEditingPlaybook) {
+      const authHeader = req.headers['authorization'] || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+      if (!token) {
+        return res.status(401).json({ error: 'Token de autenticação ausente' });
+      }
+
+      // Validar JWT via anon key (padrão do sistema)
+      const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
+      const { data: { user }, error: authError } = await supabaseAnon.auth.getUser(token);
+
+      if (authError || !user) {
+        return res.status(401).json({ error: 'Token inválido ou expirado' });
+      }
+
+      // Buscar company_id do funil (fonte de verdade para multi-tenant)
+      const { data: funnel, error: funnelError } = await supabase
+        .from('sales_funnels')
+        .select('company_id')
+        .eq('id', currentStage.funnel_id)
+        .single();
+
+      if (funnelError || !funnel) {
+        return res.status(404).json({ error: 'Funil não encontrado' });
+      }
+
+      // Verificar role em company_users — fonte de verdade de RBAC
+      const { data: membership } = await supabase
+        .from('company_users')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('company_id', funnel.company_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!membership || !PLAYBOOK_ALLOWED_ROLES.includes(membership.role)) {
+        return res.status(403).json({ error: 'Sem permissão para editar o playbook desta etapa' });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Verificar nome duplicado no mesmo funil
     if (name !== undefined) {
       const { data: duplicateStage } = await supabase
         .from('funnel_stages')
@@ -79,35 +130,19 @@ export default async function handler(req, res) {
     // Preparar dados para atualização
     const updateData = {};
 
-    if (name !== undefined) {
-      updateData.name = name.trim();
-    }
+    if (name         !== undefined) updateData.name         = name.trim();
+    if (color        !== undefined) updateData.color        = color;
+    if (stage_type   !== undefined) updateData.stage_type   = stage_type;
+    if (is_hidden    !== undefined) updateData.is_hidden    = is_hidden;
+    if (playbook_text !== undefined) updateData.playbook_text = playbook_text;
+    if (video_link   !== undefined) updateData.video_link   = video_link;
 
-    if (color !== undefined) {
-      updateData.color = color;
-    }
-
-    if (stage_type !== undefined) {
-      updateData.stage_type = stage_type;
-    }
-
-    if (is_hidden !== undefined) {
-      updateData.is_hidden = is_hidden;
-    }
-
-    // Log para debug
-    console.log('🔧 Update stage request:', { stage_id, updateData });
-    console.log('🔧 Current stage before update:', currentStage);
-
-    // Verificar se há dados para atualizar
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ 
-        error: 'Nenhum campo para atualizar foi fornecido',
-        received: { name, color, stage_type, is_hidden }
+        error: 'Nenhum campo para atualizar foi fornecido'
       });
     }
 
-    // Atualizar etapa
     const { data: updatedStage, error: updateError } = await supabase
       .from('funnel_stages')
       .update(updateData)
@@ -115,14 +150,10 @@ export default async function handler(req, res) {
       .select()
       .single();
 
-    console.log('🔧 Update result:', { updatedStage, updateError });
-
     if (updateError) {
-      console.error('🔧 Update error:', updateError);
+      console.error('Error updating stage:', updateError);
       throw updateError;
     }
-
-    console.log('✅ Stage updated successfully:', updatedStage);
 
     return res.status(200).json({
       success: true,

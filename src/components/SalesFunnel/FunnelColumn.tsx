@@ -7,12 +7,13 @@
 import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft } from 'lucide-react'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
 import { formatMoney } from '../../lib/formatMoney'
+import { extractYouTubeVideoId } from './PlaybookModal'
 
 function formatColumnTotals(leads: LeadFunnelPosition[]): string | null {
   const byCurrency = new Map<string, number>()
@@ -44,6 +45,8 @@ interface FunnelColumnProps {
   onLeadClick?: (leadId: number) => void
   onAddLead?: (stageId: string) => void
   onEditStage?: (stageId: string) => void
+  /** Abre o modal de Playbook somente-leitura da etapa. */
+  onViewPlaybook?: (stageId: string) => void
   /** Callback para iniciar o bulk move a partir desta coluna. */
   onBulkMoveRequest?: (request: BulkMoveRequest) => void
   /** Nome do funil ao qual esta coluna pertence (para o modal de bulk move). */
@@ -77,6 +80,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onLeadClick,
   onAddLead,
   onEditStage,
+  onViewPlaybook,
   onBulkMoveRequest,
   funnelName = '',
   count,
@@ -93,6 +97,12 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // hasPlaybook usa a mesma lógica do PlaybookModal (trim + videoId válido)
+  // para não exibir a ação quando não há conteúdo real
+  const hasPlaybook =
+    !!stage.playbook_text?.trim() ||
+    !!extractYouTubeVideoId(stage.video_link)
   const localTotalValue = leads.reduce((sum, pos) => {
     return sum + (pos.opportunity?.value || 0)
   }, 0)
@@ -175,6 +185,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </button>
           )}
           
+          {/* Bloco 1: ações administrativas — bloqueadas em system stages */}
           {(onEditStage || onBulkMoveRequest) && !stage.is_system_stage && (
             <div className="relative" ref={menuRef}>
               <button
@@ -228,9 +239,34 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                       </button>
                     </>
                   )}
+
+                  {/* Playbook — dentro do dropdown admin quando etapa não é sistêmica */}
+                  {hasPlaybook && onViewPlaybook && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => { setMenuOpen(false); onViewPlaybook(stage.id) }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <BookOpen className="w-4 h-4 text-indigo-400" />
+                        Playbook da Etapa
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
+          )}
+
+          {/* Bloco 2: botão Playbook standalone — visível mesmo em system stages */}
+          {hasPlaybook && onViewPlaybook && stage.is_system_stage && (
+            <button
+              onClick={() => onViewPlaybook(stage.id)}
+              className="p-1.5 hover:bg-white rounded-md transition-colors"
+              title="Ver Playbook da Etapa"
+            >
+              <BookOpen className="w-4 h-4 text-indigo-500" />
+            </button>
           )}
         </div>
       </div>

@@ -15,6 +15,7 @@ import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
 import { BulkMoveOpportunitiesModal } from './BulkMoveOpportunitiesModal'
 import { EditStageModal } from './EditStageModal'
+import { PlaybookModal } from './PlaybookModal'
 import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
 import { CloseOpportunityModal } from './CloseOpportunityModal'
 import { ReopenOpportunityModal } from './ReopenOpportunityModal'
@@ -180,6 +181,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [showAddLeadModal, setShowAddLeadModal]      = useState(false)
   const [selectedStage, setSelectedStage]            = useState<FunnelStage | undefined>()
   const [selectedStageId, setSelectedStageId]        = useState<string>('')
+  const [playbookStage, setPlaybookStage]            = useState<FunnelStage | undefined>()
 
   // Modal de detalhes / jornada da oportunidade
   const [detailOpportunityId, setDetailOpportunityId] = useState<string | null>(null)
@@ -285,6 +287,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     setSelectedStage(stage)
     setShowEditStageModal(true)
   }
+
+  const handleViewPlaybook = useCallback((stageId: string) => {
+    const stage = stages.find(s => s.id === stageId)
+    if (stage) setPlaybookStage(stage)
+  }, [stages])
 
   const handleAddLead = (stageId: string) => {
     setSelectedStageId(stageId)
@@ -760,6 +767,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onLeadClick={onLeadClick}
                 onAddLead={handleAddLead}
                 onEditStage={handleEditStage}
+                onViewPlaybook={handleViewPlaybook}
                 onBulkMoveRequest={handleBulkMoveRequest}
                 funnelName={funnelName}
                 count={counts[stage.id]?.count}
@@ -795,6 +803,15 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         funnelId={funnelId}
         existingStages={stages}
       />
+
+      {/* Modal de Playbook — render condicional seguro, sem non-null assertion */}
+      {playbookStage && (
+        <PlaybookModal
+          isOpen
+          onClose={() => setPlaybookStage(undefined)}
+          stage={playbookStage}
+        />
+      )}
 
       <AddLeadToFunnelModal
         isOpen={showAddLeadModal}

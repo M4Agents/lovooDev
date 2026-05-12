@@ -8,8 +8,11 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Loader2, AlertCircle, Trash2 } from 'lucide-react'
 import { HexColorPicker } from 'react-colorful'
+import { useAuth } from '../../contexts/AuthContext'
 import type { FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 import { validateStageName, validateStageColor, FUNNEL_CONSTANTS } from '../../types/sales-funnel'
+
+const PLAYBOOK_ALLOWED_ROLES = ['admin', 'super_admin', 'system_admin']
 
 interface EditStageModalProps {
   isOpen: boolean
@@ -31,7 +34,9 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
   existingStages
 }) => {
   const { t } = useTranslation('funnel')
+  const { currentRole } = useAuth()
   const isEditing = !!stage
+  const canEditPlaybook = PLAYBOOK_ALLOWED_ROLES.includes(currentRole ?? '')
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
@@ -42,7 +47,9 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
     description: stage?.description || '',
     color: stage?.color || FUNNEL_CONSTANTS.DEFAULT_COLORS.leadNovo,
     stage_type: stage?.stage_type || 'active' as 'active' | 'won' | 'lost',
-    position: stage?.position ?? existingStages.length
+    position: stage?.position ?? existingStages.length,
+    playbook_text: stage?.playbook_text || '',
+    video_link: stage?.video_link || '',
   })
 
   useEffect(() => {
@@ -52,7 +59,9 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
         description: stage.description || '',
         color: stage.color,
         stage_type: stage.stage_type,
-        position: stage.position
+        position: stage.position,
+        playbook_text: stage.playbook_text || '',
+        video_link: stage.video_link || '',
       })
     }
   }, [stage])
@@ -79,12 +88,17 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
       setError(undefined)
 
       if (isEditing) {
-        await onSubmit({
+        const updatePayload: UpdateStageForm = {
           name: formData.name,
           description: formData.description,
           color: formData.color,
-          stage_type: formData.stage_type
-        } as UpdateStageForm)
+          stage_type: formData.stage_type,
+        }
+        if (canEditPlaybook) {
+          updatePayload.playbook_text = formData.playbook_text
+          updatePayload.video_link    = formData.video_link
+        }
+        await onSubmit(updatePayload)
       } else {
         await onSubmit({
           funnel_id: funnelId,
@@ -127,7 +141,9 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
         description: '',
         color: FUNNEL_CONSTANTS.DEFAULT_COLORS.leadNovo,
         stage_type: 'active',
-        position: existingStages.length
+        position: existingStages.length,
+        playbook_text: '',
+        video_link: '',
       })
       setError(undefined)
       setShowDeleteConfirm(false)
@@ -260,6 +276,45 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
               {formData.stage_type === 'lost' && t('editStage.hintLost')}
             </p>
           </div>
+
+          {/* Playbook de Vendas — somente admins em modo edição */}
+          {isEditing && canEditPlaybook && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Playbook de Vendas
+                </label>
+                <textarea
+                  value={formData.playbook_text}
+                  onChange={(e) => setFormData({ ...formData, playbook_text: e.target.value })}
+                  placeholder="Descreva o roteiro de vendas, objeções comuns, perguntas-chave e dicas para esta etapa..."
+                  rows={6}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y text-sm"
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Visível a todos os usuários no menu da etapa.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Link do Vídeo (YouTube)
+                </label>
+                <input
+                  type="url"
+                  value={formData.video_link}
+                  onChange={(e) => setFormData({ ...formData, video_link: e.target.value })}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Vídeo exibido no modal de Playbook da etapa.
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Error */}
           {error && (
