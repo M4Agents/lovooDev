@@ -714,6 +714,9 @@ async function processMessage(payload) {
       // Aguardado (await) para garantir que o processFlowAsync complete antes
       // da função Vercel ser encerrada. fail-safe: nunca lança exceção.
       if (conversationId) {
+        // #region agent log
+        console.log(`[DEBUG-275bca][webhook] dispatch instanceId=${instance.id} leadId=${leadId} conversationId=${conversationId} direction=${direction}`)
+        // #endregion
         await dispatchMessageReceivedTrigger({
           companyId:      company.id,
           leadId:         leadId || null,

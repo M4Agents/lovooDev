@@ -145,7 +145,19 @@ export async function dispatchMessageReceivedTrigger(
       },
     }
 
+    // #region agent log
+    console.log(`[DEBUG-275bca][dispatch] event_instance_id=${event.data.instance_id} total_flows=${flows.length} company=${companyId}`)
+    flows.forEach(f => {
+      const trig = (f.nodes || []).find(n => n.type === 'start')?.data?.triggers?.[0] || {}
+      console.log(`[DEBUG-275bca][dispatch] flow=${f.id} name="${f.name}" trigger_instanceId=${trig?.config?.instanceId || 'none'} is_over_plan=${f.is_over_plan}`)
+    })
+    // #endregion
+
     const matchedFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
+
+    // #region agent log
+    console.log(`[DEBUG-275bca][dispatch] matched=${matchedFlows.length} total=${flows.length}`)
+    // #endregion
 
     if (matchedFlows.length === 0) {
       console.log(`${tag} nenhum flow corresponde ao evento — total avaliados: ${flows.length}`)
@@ -181,6 +193,10 @@ export async function dispatchMessageReceivedTrigger(
             continue
           }
         }
+
+        // #region agent log
+        console.log(`[DEBUG-275bca][dispatch] criando execução flow=${flow.id} leadId=${leadId} conversationId=${conversationId}`)
+        // #endregion
 
         // Criar execução real
         const triggerData = {
