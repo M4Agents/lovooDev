@@ -723,6 +723,45 @@ async function processMessage(payload) {
           text:           messageText,
         }).catch(err => console.error('[webhook/uazapi/company_id] message.received trigger failed:', err));
       }
+
+      // 🤖 AGENTE DE IA — pipeline de processamento (apenas inbound)
+      // Chamado APÓS a automação para que attach_agent já tenha atualizado
+      // ai_state antes do ConversationRouter verificar. Isso garante que o agente
+      // responda à mesma mensagem que ativou a automação (sem precisar de nova mensagem).
+      // fail-safe: nunca quebra o webhook.
+      if (direction === 'inbound' && conversationId && savedMessageId) {
+        try {
+          const appBase      = process.env.APP_URL || 'https://app.lovoocrm.com';
+          const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
+
+          await fetch(agentEventUrl, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              event_type:        'conversation.message_received',
+              channel:           'whatsapp',
+              company_id:        company.id,
+              instance_id:       instance.id,
+              conversation_id:   conversationId,
+              uazapi_message_id: messageId,
+              source_type:       'whatsapp_message',
+              source_identifier: instanceName,
+              message_text:      messageText,
+              saved_message_id:  savedMessageId,
+              timestamp:         new Date().toISOString(),
+            }),
+            signal: AbortSignal.timeout(8000),
+          }).catch(err => console.error('🤖 [webhook] falha ao emitir evento de conversação:', err.message));
+
+          console.log('🤖 [webhook] evento de conversação emitido:', {
+            conversation_id:   conversationId,
+            uazapi_message_id: messageId,
+            company_id:        company.id,
+          });
+        } catch (agentEmitError) {
+          console.error('🤖 [webhook] EXCEPTION no emitter de conversação:', agentEmitError.message);
+        }
+      }
     }
     
     return { 
