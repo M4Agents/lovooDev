@@ -196,7 +196,7 @@ export function SlaAlertsPanel({
             Leads com SLA violado — últimos 7 dias
           </p>
           <TrendChart
-            series={snapshotTrends!.series}
+            series={snapshotTrends?.series ?? []}
             metricKey="sla_breached_count"
             lowerIsBetter={true}
             label="Violações"
