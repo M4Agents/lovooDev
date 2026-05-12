@@ -5,7 +5,8 @@
     "api/agents/execute-agent.js": { "maxDuration": 60 },
     "api/agents/process-conversation-event.js": { "maxDuration": 60 },
     "api/leads/import-file.js": { "maxDuration": 60 },
-    "api/webhook/uazapi/[company_id].js": { "maxDuration": 60 }
+    "api/webhook/uazapi/[company_id].js": { "maxDuration": 60 },
+    "api/uazapi-webhook-final.js": { "maxDuration": 60 }
   },
   "crons": [
     {

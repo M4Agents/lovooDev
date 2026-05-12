@@ -1,6 +1,34 @@
-// Webhook Uazapi - CONVERTIDO PARA USAR FUNÇÃO SECURITY DEFINER
-// Endpoint: /pages/api/uazapi-webhook-final
-// CORREÇÃO RLS: Agora usa process_webhook_message_safe para bypass do RLS
+// =====================================================
+// WEBHOOK OFICIAL — Uazapi WhatsApp
+// =====================================================
+//
+// ATENÇÃO: Este é o webhook ATIVO em produção.
+// Qualquer correção ou nova funcionalidade deve ser
+// aplicada NESTE arquivo (api/uazapi-webhook-final.js).
+//
+// O arquivo api/webhook/uazapi/[company_id].js NÃO está
+// em uso — não editar por engano.
+//
+// Endpoint registrado no Uazapi:
+//   https://app.lovoocrm.com/api/uazapi-webhook-final
+//
+// Fluxo principal (inbound):
+//   1. Salva mensagem via RPC process_webhook_message_safe (SECURITY DEFINER)
+//   2. Cria/atualiza lead via create_lead_from_whatsapp_safe
+//   3. Cancela mensagens agendadas (auto_cancel_scheduled_messages_on_reply)
+//   4. Retoma automações pausadas aguardando user_input
+//   5. AWAIT dispatchMessageReceivedTrigger → executa automações, incluindo
+//      attach_agent que seta ai_state = 'ai_active' na conversa
+//   6. AWAIT fetch process-conversation-event → ConversationRouter verifica
+//      ai_state (já atualizado pelo passo 5) e aciona o agente de IA
+//
+// REGRA CRÍTICA de ordenação (passos 5 e 6):
+//   dispatchMessageReceivedTrigger DEVE ser aguardado (await) ANTES de
+//   process-conversation-event. Se a ordem for invertida ou o dispatch
+//   rodar como fire-and-forget, o ConversationRouter encontrará ai_state
+//   = 'ai_inactive' e o agente NÃO responderá à primeira mensagem.
+//
+// =====================================================
 
 import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCreatedTrigger.js';
 import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
@@ -1225,19 +1253,56 @@ async function processMessage(payload) {
     }
 
     // =====================================================
-    // 🤖 CONVERSATION EVENT EMITTER — Etapa 3 MVP Agentes
+    // 🎯 PASSO 5 — DISPATCH message.received (AGUARDADO)
+    //
+    // REGRA CRÍTICA: este bloco DEVE rodar com await e ANTES
+    // do process-conversation-event (passo 6).
+    //
+    // Motivo: a automação pode incluir um nó attach_agent que
+    // seta chat_conversations.ai_state = 'ai_active'. O
+    // ConversationRouter (passo 6) lê esse campo para decidir
+    // se aciona o agente. Se o dispatch rodar depois ou como
+    // fire-and-forget, o router encontrará ai_inactive e o
+    // agente não responderá à primeira mensagem do lead.
+    //
+    // Independente do user_input: resume retoma execução pausada;
+    // message.received inicia nova execução de automação.
+    // =====================================================
+    if (direction === 'inbound' && conversationId) {
+      // #region agent log
+      console.log(`[DEBUG-275bca][webhook] dispatch instanceId=${instance.id} leadId=${inboundLeadId} conversationId=${conversationId} direction=${direction}`)
+      // #endregion
+      await dispatchMessageReceivedTrigger({
+        companyId:      company.id,
+        leadId:         inboundLeadId,
+        conversationId,
+        instanceId:     instance.id,
+        messageId:      savedMessageId,
+        text:           messageText,
+        direction,
+        from_agent:     false,
+        sender_type:    'lead',
+        origin:         'whatsapp',
+        is_from_me:     false,
+      }).catch(err => console.error('[uazapi-webhook-final] message.received trigger failed:', err));
+    }
+
+    // =====================================================
+    // 🤖 PASSO 6 — CONVERSATION EVENT EMITTER (agente de IA)
     //
     // Dispara evento 'conversation.message_received' para o
-    // endpoint de processamento de IA de forma fire-and-forget.
+    // endpoint de processamento de IA.
     //
-    // Regras críticas:
-    //   - SOMENTE mensagens inbound (guard duplo)
+    // DEVE rodar APÓS dispatchMessageReceivedTrigger (passo 5)
+    // para garantir que ai_state já foi atualizado pelo
+    // attach_agent antes do ConversationRouter verificar.
+    //
+    // Regras:
+    //   - SOMENTE mensagens inbound
     //   - SOMENTE quando conversationId confirmado pelo banco
-    //   - SEM await — webhook retorna 200 antes de processar
-    //   - try/catch interno: erro no emitter nunca quebra o 200
-    //
-    // Processamento real (Router, Orchestrator, LLM) ocorre no
-    // endpoint /api/agents/process-conversation-event (Etapa 4+).
+    //   - await com timeout de 8s (o endpoint retorna rápido;
+    //     execute-agent roda assincronamente lá dentro)
+    //   - try/catch interno: erro nunca quebra o 200
     // =====================================================
     if (direction === 'inbound' && conversationId) {
       try {
@@ -1255,15 +1320,9 @@ async function processMessage(payload) {
           timestamp:           new Date().toISOString()
         };
 
-        // Resolução da URL:
-        //   - process.env.APP_URL: variável de ambiente configurada por deployment
-        //   - Fallback fixo: domínio oficial de produção
         const appBase = process.env.APP_URL || 'https://app.lovoocrm.com';
         const agentEventUrl = `${appBase}/api/agents/process-conversation-event`;
 
-        // await com timeout — garante que process-conversation-event receba o request
-        // antes da função Vercel terminar. O endpoint retorna 200 rapidamente (~500ms)
-        // após o router executar; execute-agent roda de forma assíncrona lá dentro.
         await fetch(agentEventUrl, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1273,40 +1332,15 @@ async function processMessage(payload) {
           console.error('🤖 ❌ Falha ao emitir evento de conversação:', emitError.message);
         });
 
-        console.log('🤖 ✅ Evento de conversação emitido (await):', {
+        console.log('🤖 ✅ Evento de conversação emitido:', {
           conversation_id:   conversationId,
           uazapi_message_id: messageId,
           company_id:        company.id,
-          target_url:        agentEventUrl
         });
 
       } catch (emitterError) {
-        // Emitter nunca pode quebrar o fluxo do webhook
         console.error('🤖 ❌ EXCEPTION no emitter de conversação:', emitterError.message);
       }
-    }
-
-    // 🎯 DISPATCH message.received — aciona automações de mensagem recebida (fire-and-forget)
-    // Executado após resume/user_input e após emitter de IA.
-    // Independente do user_input: resume retoma execução pausada; message.received inicia nova.
-    // Guard duplo de direção: o filtro `direction === 'inbound'` aqui já garante que apenas
-    // mensagens do lead chegam ao dispatcher. Os campos extras (direction, from_agent, etc.)
-    // são passados para que triggerEvaluator possa filtrar de forma independente no futuro,
-    // caso o dispatcher seja invocado de outros contextos.
-    if (direction === 'inbound' && conversationId) {
-      dispatchMessageReceivedTrigger({
-        companyId:      company.id,
-        leadId:         inboundLeadId,
-        conversationId,
-        instanceId:     instance.id,
-        messageId:      savedMessageId,
-        text:           messageText,
-        direction,
-        from_agent:     false,
-        sender_type:    'lead',
-        origin:         'whatsapp',
-        is_from_me:     false,
-      }).catch(err => console.error('[uazapi-webhook-final] message.received trigger failed:', err));
     }
 
     return { 
