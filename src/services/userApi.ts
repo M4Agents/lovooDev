@@ -137,17 +137,20 @@ export const canCreateUser = async (companyId: string): Promise<boolean> => {
 };
 
 /**
- * Valida se o role é válido para o tipo de empresa
+ * Valida se o role é válido para o tipo de empresa.
+ * Alinhado com a constraint do banco: apenas empresas 'client' restringem roles
+ * (não podem ter 'super_admin', 'system_admin' ou 'partner').
+ * Empresas 'parent' aceitam qualquer role — consistente com getAssignableRoles e create_company_user_safe.
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
-  const parentRoles: UserRole[] = ['super_admin', 'system_admin', 'admin', 'partner'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
-  if (companyType === 'parent') {
-    return parentRoles.includes(role);
-  } else {
+  if (companyType === 'client') {
     return clientRoles.includes(role);
   }
+
+  // Empresas pai: qualquer role é válido
+  return true;
 };
 
 // =====================================================

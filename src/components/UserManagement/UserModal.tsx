@@ -338,7 +338,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
       // Validar role para tipo de empresa
       // #region agent log
-      console.error('[DEBUG-64a034] validateRoleForCompany check', {
+      console.error('[DEBUG-64a034][post-fix] validateRoleForCompany check', {
         role: formData.role,
         companyType: company.company_type,
         companyId: company.id,

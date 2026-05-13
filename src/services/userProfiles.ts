@@ -185,10 +185,11 @@ export const validateProfileForCompany = (
   companyType: 'parent' | 'client'
 ): boolean => {
   const role = getProfileRole(profile);
-  
-  if (companyType === 'parent') {
-    return ['super_admin', 'system_admin', 'admin', 'partner'].includes(role);
-  } else {
-    return ['admin', 'manager', 'seller'].includes(role);
+
+  if (companyType === 'client') {
+    return (['admin', 'manager', 'seller'] as UserRole[]).includes(role);
   }
+
+  // Empresas pai: qualquer role é válido (alinhado com validateRoleForCompany e o banco)
+  return true;
 };
