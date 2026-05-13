@@ -554,6 +554,21 @@ async function tryLinkItemToOpportunity(svc, opportunityId, ctx) {
 
     if (!insertError) {
       console.log('[TOOL:update_opportunity] item vinculado à oportunidade', { item_type, item_id, opportunity_id: opportunityId })
+
+      // Mudar value_mode para 'items' para que opportunity.value reflita automaticamente
+      // o somatório das linhas — mesmo comportamento do frontend ao adicionar um item via UI.
+      const { error: modeError } = await svc
+        .from('opportunities')
+        .update({ value_mode: 'items', updated_at: new Date().toISOString() })
+        .eq('id', opportunityId)
+        .eq('company_id', ctx.company_id)
+        .eq('value_mode', 'manual') // só atualiza se ainda estiver em manual (evita sobrescrever escolha explícita)
+
+      if (modeError) {
+        console.warn('[TOOL:update_opportunity] falha ao mudar value_mode (ignorado):', modeError.message)
+      } else {
+        console.log('[TOOL:update_opportunity] value_mode → items', { opportunity_id: opportunityId })
+      }
     }
   } catch (err) {
     // Silencioso — nunca propagar erro para não quebrar o fluxo principal
