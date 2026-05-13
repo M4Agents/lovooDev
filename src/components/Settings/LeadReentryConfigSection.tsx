@@ -11,6 +11,7 @@ interface DuplicateLeadConfig {
   won: string
   lost: string
   open: string
+  update_on_reentry: boolean
 }
 
 interface LeadConfig {
@@ -90,7 +91,7 @@ export const LeadReentryConfigSection: React.FC = () => {
   const { company } = useAuth()
   const [config, setConfig] = useState<LeadConfig>({
     enabled: true,
-    duplicate_lead_config: { won: 'NEW_OPPORTUNITY', lost: 'REOPEN', open: 'EVENT_ONLY' },
+    duplicate_lead_config: { won: 'NEW_OPPORTUNITY', lost: 'REOPEN', open: 'EVENT_ONLY', update_on_reentry: false },
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -110,7 +111,17 @@ export const LeadReentryConfigSection: React.FC = () => {
         })
         if (res.ok) {
           const json = await res.json()
-          if (json.config) setConfig(json.config)
+          if (json.config) {
+            setConfig({
+              enabled: json.config.enabled ?? true,
+              duplicate_lead_config: {
+                won:               json.config.duplicate_lead_config?.won               ?? 'NEW_OPPORTUNITY',
+                lost:              json.config.duplicate_lead_config?.lost              ?? 'REOPEN',
+                open:              json.config.duplicate_lead_config?.open              ?? 'EVENT_ONLY',
+                update_on_reentry: json.config.duplicate_lead_config?.update_on_reentry ?? false,
+              },
+            })
+          }
         }
       } catch {
         // Silencioso — usa default
@@ -154,6 +165,16 @@ export const LeadReentryConfigSection: React.FC = () => {
     setConfig(prev => ({
       ...prev,
       duplicate_lead_config: { ...prev.duplicate_lead_config, [key]: value },
+    }))
+  }
+
+  const toggleUpdateOnReentry = () => {
+    setConfig(prev => ({
+      ...prev,
+      duplicate_lead_config: {
+        ...prev.duplicate_lead_config,
+        update_on_reentry: !prev.duplicate_lead_config.update_on_reentry,
+      },
     }))
   }
 
@@ -203,6 +224,27 @@ export const LeadReentryConfigSection: React.FC = () => {
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
                   config.enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Toggle: atualizar dados do lead na reentrada */}
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Atualizar dados do lead na reentrada</p>
+              <p className="text-xs text-gray-500">Quando ativo, campos como nome, telefone e interesse do lead existente serão atualizados com os dados do novo payload</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleUpdateOnReentry}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                config.duplicate_lead_config.update_on_reentry ? 'bg-indigo-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  config.duplicate_lead_config.update_on_reentry ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
             </button>
@@ -306,6 +348,11 @@ export const LeadReentryConfigSection: React.FC = () => {
               <div>
                 <p className="font-medium text-blue-600 mb-1">Oportunidade ABERTA</p>
                 <p>O lead ainda está no processo. Você pode registrar a entrada, reiniciar no funil (sem criar nova oportunidade), criar uma nova, ou ignorar completamente.</p>
+              </div>
+
+              <div>
+                <p className="font-medium text-gray-900 mb-1">Atualizar dados do lead na reentrada</p>
+                <p>Quando ativado, campos como nome, telefone, e-mail, interesse e dados de campanha do lead existente serão atualizados com os valores do novo payload — mas somente se o valor recebido não estiver vazio. Campos não enviados ou em branco <strong>não</strong> apagam os dados anteriores.</p>
               </div>
 
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">

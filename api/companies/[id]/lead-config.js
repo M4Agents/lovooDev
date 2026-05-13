@@ -69,15 +69,23 @@ export default async function handler(req, res) {
     const VALID_OPEN = ['EVENT_ONLY', 'RESET_PIPELINE', 'NEW_OPPORTUNITY', 'IGNORE'];
 
     if (duplicate_lead_config) {
-      const { won, lost, open } = duplicate_lead_config;
+      const { won, lost, open, update_on_reentry } = duplicate_lead_config;
       if (won  && !VALID_WON.includes(won))  return res.status(400).json({ error: `Valor inválido para won: ${won}` });
       if (lost && !VALID_LOST.includes(lost)) return res.status(400).json({ error: `Valor inválido para lost: ${lost}` });
       if (open && !VALID_OPEN.includes(open)) return res.status(400).json({ error: `Valor inválido para open: ${open}` });
+      if (update_on_reentry !== undefined && typeof update_on_reentry !== 'boolean') {
+        return res.status(400).json({ error: 'update_on_reentry deve ser boolean' });
+      }
     }
 
     const updates = {};
     if (typeof enabled === 'boolean') updates.enabled = enabled;
-    if (duplicate_lead_config)        updates.duplicate_lead_config = duplicate_lead_config;
+    if (duplicate_lead_config) {
+      updates.duplicate_lead_config = {
+        ...duplicate_lead_config,
+        update_on_reentry: duplicate_lead_config.update_on_reentry ?? false,
+      };
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'Nenhum campo para atualizar' });
