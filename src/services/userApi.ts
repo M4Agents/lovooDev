@@ -383,13 +383,7 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
   try {
 
     // Validar permissão
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'userApi.ts:before_canCreate',message:'verificando permissao create_users',data:{companyId:request.companyId,role:request.role},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     const canCreate = await canCreateUser(request.companyId);
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'userApi.ts:after_canCreate',message:'resultado caller_has_permission create_users',data:{canCreate,companyId:request.companyId},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     if (!canCreate) {
       throw new Error('Sem permissão para criar usuários');
     }
@@ -440,9 +434,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           }
         });
 
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'userApi.ts:inviteResult',message:'resultado inviteUser',data:{success:inviteResult.success,hasUser:!!inviteResult.user,userId:inviteResult.user?.id??null,error:inviteResult.error??null},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-        // #endregion
         if (!inviteResult.success || !inviteResult.user) {
           throw new Error(inviteResult.error || 'Falha ao criar usuário no sistema de autenticação');
         }
@@ -469,10 +460,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     }
 
     // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
-
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'userApi.ts:before_rpc',message:'chamando create_company_user_safe',data:{companyId:request.companyId,role:request.role,finalUserId,createdBy:currentUser.id},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     let { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
       p_company_id: request.companyId,
       p_user_id: finalUserId,
@@ -480,10 +467,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       p_permissions: permissions,
       p_created_by: currentUser.id
     });
-
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'userApi.ts:after_rpc',message:'resultado create_company_user_safe',data:{functionResult,rpcError:error?.message??null,rpcCode:error?.code??null},timestamp:Date.now(),hypothesisId:'H3-H5'})}).catch(()=>{});
-    // #endregion
 
     if (error) {
       console.error('UserAPI: Error calling create_company_user_safe:', error);
@@ -517,9 +500,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     // Aplicar senha inicial se fornecida
     if (request.initialPassword && finalUserId) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'aplicando senha inicial ao usuário criado',data:{userId:finalUserId,companyId:request.companyId,force:request.forceInitialPasswordChange},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const { changePassword } = await import('./authAdmin');
         const pwResult = await changePassword(
           finalUserId,
@@ -527,9 +507,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           request.companyId,
           request.forceInitialPasswordChange ?? true
         );
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'resultado aplicação senha inicial',data:{success:pwResult.success,error:pwResult.error??null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!pwResult.success) {
           // Não bloqueia a criação — loga o erro e continua
           console.warn('UserAPI: Usuário criado, mas não foi possível definir a senha inicial:', pwResult.error);

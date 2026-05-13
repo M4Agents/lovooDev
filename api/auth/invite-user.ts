@@ -46,9 +46,6 @@ export default async function handler(req: any, res: any) {
     .limit(1)
     .maybeSingle();
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64a034'},body:JSON.stringify({sessionId:'64a034',location:'invite-user.ts:membership_check',message:'resultado verificacao membership no backend',data:{callerId:caller?.id??null,hasMembership:!!membership,membershipRole:membership?.role??null},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
   if (!membership) {
     return res.status(403).json({ error: 'Sem permissão' });
   }

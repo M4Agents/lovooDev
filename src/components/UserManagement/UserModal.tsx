@@ -337,17 +337,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
 
       // Validar role para tipo de empresa
-      // #region agent log
-      console.error('[DEBUG-64a034][post-fix] validateRoleForCompany check', {
-        role: formData.role,
-        companyType: company.company_type,
-        companyId: company.id,
-        isValid: validateRoleForCompany(formData.role, company.company_type),
-        selectedTemplate: selectedTemplate ? { id: selectedTemplate.id, baseRole: selectedTemplate.baseRole } : null,
-        selectedProfile: selectedProfile ? { id: selectedProfile.id, legacyRole: selectedProfile.legacyRole } : null,
-        currentRole,
-      });
-      // #endregion
       if (!validateRoleForCompany(formData.role, company.company_type)) {
         setError(t('users.userModal.messages.invalidRole', { role: formData.role }));
         return;
