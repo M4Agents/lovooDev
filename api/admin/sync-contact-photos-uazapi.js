@@ -198,7 +198,7 @@ export default async function handler(req, res) {
   if (batch.length > 0) {
     try {
       const probePhone = batch[0].phone_number
-      const probeUrl   = `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceRow.provider_instance_id}`
+      const probeUrl   = `https://lovoo.uazapi.com/chat/GetNameAndImageURL/${instanceRow.provider_instance_id}`
       const probeRes   = await fetch(probeUrl, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': companyRow.api_key },
