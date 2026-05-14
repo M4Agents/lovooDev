@@ -147,27 +147,17 @@ export default async function handler(req, res) {
   // A partir daqui apenas service_role
   const { data: instanceRow, error: instErr } = await svcClient
     .from('whatsapp_life_instances')
-    .select('id, provider_instance_id')
+    .select('id, provider_instance_id, provider_token')
     .eq('company_id', companyId)
     .eq('status', 'connected')
     .not('provider_instance_id', 'is', null)
+    .not('provider_token', 'is', null)
     .limit(1)
     .maybeSingle()
 
   if (instErr || !instanceRow) {
-    console.error('[uazapi-photos] nenhuma instância conectada encontrada para company:', companyId)
+    console.error('[uazapi-photos] nenhuma instância conectada com token encontrada para company:', companyId)
     return res.status(422).json({ error: 'Nenhuma instância WhatsApp conectada para esta empresa' })
-  }
-
-  const { data: companyRow, error: companyErr } = await svcClient
-    .from('companies')
-    .select('api_key')
-    .eq('id', companyId)
-    .single()
-
-  if (companyErr || !companyRow?.api_key) {
-    console.error('[uazapi-photos] api_key não encontrada para company:', companyId)
-    return res.status(422).json({ error: 'API key Uazapi não configurada para esta empresa' })
   }
 
   // ── 5. Buscar contatos sem foto permanente ───────────────────────────────
@@ -201,36 +191,22 @@ export default async function handler(req, res) {
       const probeUrl   = `https://lovoo.uazapi.com/chat/GetNameAndImageURL/${instanceRow.provider_instance_id}`
       const probeRes   = await fetch(probeUrl, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': companyRow.api_key },
+        headers: { 'Content-Type': 'application/json', 'token': instanceRow.provider_token },
         body:    JSON.stringify({ phone: probePhone }),
       })
       const probeBody = await probeRes.json().catch(() => null)
-        // Também tenta GET para detectar se o método correto muda o resultado
-        const probeGetRes  = await fetch(probeUrl + `?phone=${probePhone}`, {
-          method:  'GET',
-          headers: { 'apikey': companyRow.api_key },
-        })
-        const probeGetBody = await probeGetRes.json().catch(() => null)
 
-        _probe = {
-          post: {
-            http_status:  probeRes.status,
-            message:      probeBody?.message ?? null,
-            code:         probeBody?.code    ?? null,
-            data_keys:    probeBody?.data ? Object.keys(probeBody.data) : null,
-            profilePictureUrl_present: !!(probeBody?.data?.profilePictureUrl),
-          },
-          get: {
-            http_status:  probeGetRes.status,
-            message:      probeGetBody?.message ?? null,
-            code:         probeGetBody?.code    ?? null,
-            data_keys:    probeGetBody?.data ? Object.keys(probeGetBody.data) : null,
-            profilePictureUrl_present: !!(probeGetBody?.data?.profilePictureUrl),
-          },
-          phone_sent:     probePhone,
-          instance_used:  instanceRow.provider_instance_id,
-          api_key_prefix: companyRow.api_key ? companyRow.api_key.slice(0, 6) + '…' : null,
-        }
+      _probe = {
+        http_status:   probeRes.status,
+        message:       probeBody?.message ?? null,
+        code:          probeBody?.code    ?? null,
+        response_keys: probeBody ? Object.keys(probeBody) : null,
+        data_keys:     probeBody?.data ? Object.keys(probeBody.data) : null,
+        profilePictureUrl_present: !!(probeBody?.data?.profilePictureUrl),
+        phone_sent:    probePhone,
+        instance_used: instanceRow.provider_instance_id,
+        token_prefix:  instanceRow.provider_token ? instanceRow.provider_token.slice(0, 6) + '…' : null,
+      }
       console.log('[uazapi-photos] probe:', JSON.stringify(_probe))
     } catch (e) {
       _probe = { probe_error: e.message }
@@ -249,7 +225,7 @@ export default async function handler(req, res) {
       // Buscar foto atual via Uazapi
       const freshUrl = await fetchPhotoFromUazapi(
         instanceRow.provider_instance_id,
-        companyRow.api_key,
+        instanceRow.provider_token,
         contact.phone_number,
       )
 
