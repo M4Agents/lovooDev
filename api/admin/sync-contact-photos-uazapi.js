@@ -205,17 +205,32 @@ export default async function handler(req, res) {
         body:    JSON.stringify({ phone: probePhone }),
       })
       const probeBody = await probeRes.json().catch(() => null)
-      _probe = {
-        http_status:   probeRes.status,
-        phone_sent:    probePhone,
-        instance_used: instanceRow.provider_instance_id,
-        api_key_prefix: companyRow.api_key ? companyRow.api_key.slice(0, 6) + '…' : null,
-        response_keys:  probeBody ? Object.keys(probeBody) : null,
-        success_field:  probeBody?.success,
-        has_data:       !!probeBody?.data,
-        data_keys:      probeBody?.data ? Object.keys(probeBody.data) : null,
-        profilePictureUrl_present: !!(probeBody?.data?.profilePictureUrl),
-      }
+        // Também tenta GET para detectar se o método correto muda o resultado
+        const probeGetRes  = await fetch(probeUrl + `?phone=${probePhone}`, {
+          method:  'GET',
+          headers: { 'apikey': companyRow.api_key },
+        })
+        const probeGetBody = await probeGetRes.json().catch(() => null)
+
+        _probe = {
+          post: {
+            http_status:  probeRes.status,
+            message:      probeBody?.message ?? null,
+            code:         probeBody?.code    ?? null,
+            data_keys:    probeBody?.data ? Object.keys(probeBody.data) : null,
+            profilePictureUrl_present: !!(probeBody?.data?.profilePictureUrl),
+          },
+          get: {
+            http_status:  probeGetRes.status,
+            message:      probeGetBody?.message ?? null,
+            code:         probeGetBody?.code    ?? null,
+            data_keys:    probeGetBody?.data ? Object.keys(probeGetBody.data) : null,
+            profilePictureUrl_present: !!(probeGetBody?.data?.profilePictureUrl),
+          },
+          phone_sent:     probePhone,
+          instance_used:  instanceRow.provider_instance_id,
+          api_key_prefix: companyRow.api_key ? companyRow.api_key.slice(0, 6) + '…' : null,
+        }
       console.log('[uazapi-photos] probe:', JSON.stringify(_probe))
     } catch (e) {
       _probe = { probe_error: e.message }
