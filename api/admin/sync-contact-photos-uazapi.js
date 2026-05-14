@@ -191,6 +191,38 @@ export default async function handler(req, res) {
   const hasMore   = (contacts ?? []).length > limit
   const batch     = (contacts ?? []).slice(0, limit)
 
+  // #region agent log — diagnóstico Uazapi (remover após confirmar)
+  // Faz uma chamada direta à API Uazapi para o primeiro contato do lote
+  // e expõe o status HTTP + estrutura da resposta (sem apikey completa).
+  let _probe = null
+  if (batch.length > 0) {
+    try {
+      const probePhone = batch[0].phone_number
+      const probeUrl   = `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceRow.provider_instance_id}`
+      const probeRes   = await fetch(probeUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': companyRow.api_key },
+        body:    JSON.stringify({ phone: probePhone }),
+      })
+      const probeBody = await probeRes.json().catch(() => null)
+      _probe = {
+        http_status:   probeRes.status,
+        phone_sent:    probePhone,
+        instance_used: instanceRow.provider_instance_id,
+        api_key_prefix: companyRow.api_key ? companyRow.api_key.slice(0, 6) + '…' : null,
+        response_keys:  probeBody ? Object.keys(probeBody) : null,
+        success_field:  probeBody?.success,
+        has_data:       !!probeBody?.data,
+        data_keys:      probeBody?.data ? Object.keys(probeBody.data) : null,
+        profilePictureUrl_present: !!(probeBody?.data?.profilePictureUrl),
+      }
+      console.log('[uazapi-photos] probe:', JSON.stringify(_probe))
+    } catch (e) {
+      _probe = { probe_error: e.message }
+    }
+  }
+  // #endregion
+
   let processed = 0
   let updated   = 0
   let skipped   = 0
@@ -246,5 +278,5 @@ export default async function handler(req, res) {
     `[uazapi-photos] concluído — company:${companyId} processed:${processed} updated:${updated} skipped:${skipped} errors:${errors}`
   )
 
-  return res.status(200).json({ processed, updated, skipped, errors, has_more: hasMore })
+  return res.status(200).json({ processed, updated, skipped, errors, has_more: hasMore, _probe })
 }
