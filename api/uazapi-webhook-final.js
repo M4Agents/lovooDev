@@ -1099,42 +1099,75 @@ async function processMessage(payload) {
       console.log('ℹ️ Mensagem outbound - não cria lead automaticamente');
     }
 
-    // � SINCRONIZAÇÃO DE FOTO DE PERFIL (THROTTLE 24H)
-    // Atualiza foto do contato em cada interação, respeitando throttle de 24h
-    // URLs expiradas do WhatsApp são sempre atualizadas
+    // SINCRONIZAÇÃO DE FOTO DE PERFIL
+    // Estratégia em duas etapas:
+    //   1. Se imagePreview fresco chegou via payload e a foto atual é CDN/vazia:
+    //      baixar e salvar permanentemente no Storage imediatamente.
+    //   2. Fallback assíncrono: syncContactPhoto (Uazapi API + throttle 24h).
+    // Nunca sobrescreve URL permanente já salva no Storage.
     try {
-      console.log('📸 Iniciando sincronização de foto de perfil...');
-      
-      // Buscar dados do contato incluindo photo_updated_at
       const { data: contactData, error: contactError } = await supabase
         .from('chat_contacts')
         .select('id, phone_number, profile_picture_url, photo_updated_at, company_id')
         .eq('id', contactId)
         .single();
-      
+
       if (contactError || !contactData) {
-        console.log('📸 Contato não encontrado, pulando sincronização de foto');
+        console.log('[photoSync:webhook] contato não encontrado, pulando sync de foto');
       } else {
-        // Importar funções de sincronização
-        const { syncContactPhoto } = require('../lib/photoSync.cjs');
-        
-        // Executar sincronização de forma assíncrona (não bloqueia webhook)
-        syncContactPhoto(supabase, contactData, instance, company)
-          .then(result => {
-            if (result.updated) {
-              console.log(`📸 ✅ Foto sincronizada com sucesso: ${contactData.phone_number}`);
-            } else {
-              console.log(`📸 ℹ️ Foto não atualizada: ${result.reason}`);
-            }
-          })
-          .catch(error => {
-            console.error(`📸 ❌ Erro na sincronização de foto: ${error.message}`);
-            // Não falhar o webhook por causa disso
-          });
+        const {
+          isWhatsAppCdnPhoto,
+          downloadAndStorePhoto,
+          syncContactPhoto,
+        } = require('../lib/photoSync.cjs');
+
+        const imagePreview  = payload.chat?.imagePreview || null;
+        const currentUrl    = contactData.profile_picture_url;
+        const currentIsCdn  = !currentUrl || isWhatsAppCdnPhoto(currentUrl);
+        const previewIsCdn  = imagePreview && isWhatsAppCdnPhoto(imagePreview);
+
+        if (previewIsCdn && currentIsCdn) {
+          // Caminho direto: imagePreview é fresco (recém-chegado do WhatsApp) e a
+          // foto atual ainda é temporária ou está vazia → download imediato.
+          downloadAndStorePhoto(supabase, imagePreview, contactData.company_id, contactData.phone_number)
+            .then(async (permanentUrl) => {
+              const { error: updErr } = await supabase
+                .from('chat_contacts')
+                .update({
+                  profile_picture_url: permanentUrl,
+                  photo_updated_at:    new Date().toISOString(),
+                  updated_at:          new Date().toISOString(),
+                })
+                .eq('id', contactData.id);
+              if (updErr) {
+                console.error('[photoSync:webhook] erro ao atualizar contato:', updErr.message);
+              } else {
+                console.log('[photoSync:webhook] foto salva permanentemente, contato:', contactData.id);
+              }
+            })
+            .catch((err) => {
+              // Download direto falhou (URL expirada ou erro de rede) → fallback
+              console.error('[photoSync:webhook] download direto falhou, usando syncContactPhoto:', err.message);
+              syncContactPhoto(supabase, contactData, instance, company).catch(() => {});
+            });
+        } else {
+          // Sem imagePreview fresco ou foto já é permanente → fallback com throttle 24h
+          syncContactPhoto(supabase, contactData, instance, company)
+            .then(result => {
+              if (result.updated) {
+                console.log('[photoSync:webhook] sincronizado via Uazapi, contato:', contactData.id);
+              } else {
+                console.log('[photoSync:webhook] sem atualização necessária:', result.reason);
+              }
+            })
+            .catch((err) => {
+              console.error('[photoSync:webhook] syncContactPhoto falhou:', err.message);
+            });
+        }
       }
     } catch (photoSyncError) {
-      console.error('📸 ❌ EXCEPTION na sincronização de foto:', photoSyncError);
-      // Não falhar o webhook por causa disso - apenas log
+      console.error('[photoSync:webhook] exception no bloco de foto:', photoSyncError.message);
+      // Não falhar o webhook por causa do sync de foto
     }
 
     // �💬 SINCRONIZAR COM BIBLIOTECA DE MÍDIAS - CORREÇÃO CRÍTICA
