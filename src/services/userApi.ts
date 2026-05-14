@@ -113,41 +113,55 @@ export const getUserById = async (userId: string): Promise<CompanyUser | null> =
 
 /**
  * Valida se o usuário atual pode criar usuários na empresa.
- * Usa caller_has_permission (lê company_users.permissions do banco).
- * Não depende do role — enforcement RBAC real.
+ * Trilha 1: membership direto — lê company_users.permissions via caller_has_permission.
+ * Trilha 2: super_admin ou system_admin da empresa pai — via auth_user_is_parent_admin.
  */
 export const canCreateUser = async (companyId: string): Promise<boolean> => {
   try {
+    // Trilha 1: membership direto com permissão create_users
     const { data, error } = await supabase
       .rpc('caller_has_permission', {
         p_company_id:     companyId,
         p_permission_key: 'create_users',
       });
 
+    if (!error && data === true) return true;
+
     if (error) {
       console.warn('UserAPI: Error checking create_users permission:', error);
+    }
+
+    // Trilha 2: super_admin ou system_admin da empresa pai
+    const { data: isParentAdmin, error: parentError } = await supabase
+      .rpc('auth_user_is_parent_admin', { p_company_id: companyId });
+
+    if (parentError) {
+      console.warn('UserAPI: Error checking parent admin:', parentError);
       return false;
     }
 
-    return data === true;
-  } catch (error) {
-    console.error('UserAPI: Error in canCreateUser:', error);
+    return isParentAdmin === true;
+  } catch (err) {
+    console.error('UserAPI: Error in canCreateUser:', err);
     return false;
   }
 };
 
 /**
- * Valida se o role é válido para o tipo de empresa
+ * Valida se o role é válido para o tipo de empresa.
+ * Alinhado com a constraint do banco: apenas empresas 'client' restringem roles
+ * (não podem ter 'super_admin', 'system_admin' ou 'partner').
+ * Empresas 'parent' aceitam qualquer role — consistente com getAssignableRoles e create_company_user_safe.
  */
 export const validateRoleForCompany = (role: UserRole, companyType: 'parent' | 'client'): boolean => {
-  const parentRoles: UserRole[] = ['super_admin', 'system_admin', 'admin', 'partner'];
   const clientRoles: UserRole[] = ['admin', 'manager', 'seller'];
 
-  if (companyType === 'parent') {
-    return parentRoles.includes(role);
-  } else {
+  if (companyType === 'client') {
     return clientRoles.includes(role);
   }
+
+  // Empresas pai: qualquer role é válido
+  return true;
 };
 
 // =====================================================
@@ -457,7 +471,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     }
 
     // Criar registro usando função SECURITY DEFINER (bypassa RLS de forma segura)
-
     let { data: functionResult, error } = await supabase.rpc('create_company_user_safe', {
       p_company_id: request.companyId,
       p_user_id: finalUserId,
@@ -465,7 +478,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
       p_permissions: permissions,
       p_created_by: currentUser.id
     });
-
 
     if (error) {
       console.error('UserAPI: Error calling create_company_user_safe:', error);
@@ -499,9 +511,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
     // Aplicar senha inicial se fornecida
     if (request.initialPassword && finalUserId) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'aplicando senha inicial ao usuário criado',data:{userId:finalUserId,companyId:request.companyId,force:request.forceInitialPasswordChange},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const { changePassword } = await import('./authAdmin');
         const pwResult = await changePassword(
           finalUserId,
@@ -509,9 +518,6 @@ export const createCompanyUser = async (request: CreateUserRequest): Promise<Com
           request.companyId,
           request.forceInitialPasswordChange ?? true
         );
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'56e383'},body:JSON.stringify({sessionId:'56e383',location:'userApi.ts:createCompanyUser',message:'resultado aplicação senha inicial',data:{success:pwResult.success,error:pwResult.error??null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!pwResult.success) {
           // Não bloqueia a criação — loga o erro e continua
           console.warn('UserAPI: Usuário criado, mas não foi possível definir a senha inicial:', pwResult.error);
