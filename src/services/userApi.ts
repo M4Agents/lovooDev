@@ -113,25 +113,36 @@ export const getUserById = async (userId: string): Promise<CompanyUser | null> =
 
 /**
  * Valida se o usuário atual pode criar usuários na empresa.
- * Usa caller_has_permission (lê company_users.permissions do banco).
- * Não depende do role — enforcement RBAC real.
+ * Trilha 1: membership direto — lê company_users.permissions via caller_has_permission.
+ * Trilha 2: super_admin ou system_admin da empresa pai — via auth_user_is_parent_admin.
  */
 export const canCreateUser = async (companyId: string): Promise<boolean> => {
   try {
+    // Trilha 1: membership direto com permissão create_users
     const { data, error } = await supabase
       .rpc('caller_has_permission', {
         p_company_id:     companyId,
         p_permission_key: 'create_users',
       });
 
+    if (!error && data === true) return true;
+
     if (error) {
       console.warn('UserAPI: Error checking create_users permission:', error);
+    }
+
+    // Trilha 2: super_admin ou system_admin da empresa pai
+    const { data: isParentAdmin, error: parentError } = await supabase
+      .rpc('auth_user_is_parent_admin', { p_company_id: companyId });
+
+    if (parentError) {
+      console.warn('UserAPI: Error checking parent admin:', parentError);
       return false;
     }
 
-    return data === true;
-  } catch (error) {
-    console.error('UserAPI: Error in canCreateUser:', error);
+    return isParentAdmin === true;
+  } catch (err) {
+    console.error('UserAPI: Error in canCreateUser:', err);
     return false;
   }
 };
