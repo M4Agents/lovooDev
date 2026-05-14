@@ -20,7 +20,7 @@
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
 // =====================================================
 
-import { resolveLeadId } from './contextUtils.js'
+import { resolveLeadId, resolveOpportunityId } from './contextUtils.js'
 
 // ---------------------------------------------------------------------------
 // Utilitário: validar membership do usuário na empresa
@@ -45,10 +45,10 @@ async function validateMembership(userId, companyId, supabase) {
 // ---------------------------------------------------------------------------
 
 async function moveOpportunity(config, context, supabase) {
-  const opportunityId = context.opportunityId
+  const opportunityId = await resolveOpportunityId(context, supabase)
   const stageId = config.stageId
 
-  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto e nenhuma oportunidade ativa encontrada para o lead')
   if (!stageId)       throw new Error('stageId não configurado na ação move_opportunity')
 
   const { data: position, error: posError } = await supabase
@@ -129,8 +129,8 @@ async function assignLeadOwner(config, context, supabase) {
 // ---------------------------------------------------------------------------
 
 async function assignOpportunityOwner(config, context, supabase) {
-  const opportunityId = context.opportunityId
-  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+  const opportunityId = await resolveOpportunityId(context, supabase)
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto e nenhuma oportunidade ativa encontrada para o lead')
 
   const ownerId = config.userId
   if (!ownerId) throw new Error('userId não configurado na ação assign_opportunity_owner')
@@ -278,8 +278,8 @@ async function removeTag(config, context, supabase) {
 // ---------------------------------------------------------------------------
 
 async function winOpportunity(config, context, supabase) {
-  const opportunityId = context.opportunityId
-  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+  const opportunityId = await resolveOpportunityId(context, supabase)
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto e nenhuma oportunidade ativa encontrada para o lead')
 
   const now  = new Date()
   const updates = {
@@ -310,8 +310,8 @@ async function winOpportunity(config, context, supabase) {
 // ---------------------------------------------------------------------------
 
 async function loseOpportunity(config, context, supabase) {
-  const opportunityId = context.opportunityId
-  if (!opportunityId) throw new Error('opportunityId ausente no contexto')
+  const opportunityId = await resolveOpportunityId(context, supabase)
+  if (!opportunityId) throw new Error('opportunityId ausente no contexto e nenhuma oportunidade ativa encontrada para o lead')
 
   const now = new Date()
   const updates = {
