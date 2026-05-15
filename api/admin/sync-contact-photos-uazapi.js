@@ -189,10 +189,10 @@ export default async function handler(req, res) {
     try {
       const probePhone = batch[0].phone_number
       const probeUrl   = `https://lovoo.uazapi.com/chat/GetNameAndImageURL/${instanceRow.provider_instance_id}`
-      const probeRes   = await fetch(probeUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'token': instanceRow.provider_token },
-        body:    JSON.stringify({ phone: probePhone }),
+      const cleanProbePhone = String(probePhone || '').split('@')[0].replace(/\D/g, '')
+      const probeRes   = await fetch(`${probeUrl}?phone=${encodeURIComponent(cleanProbePhone)}`, {
+        method:  'GET',
+        headers: { 'token': instanceRow.provider_token },
       })
       const probeBody = await probeRes.json().catch(() => null)
 
