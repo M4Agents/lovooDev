@@ -198,23 +198,31 @@ export default async function handler(req: any, res: any): Promise<void> {
       last_inbound_message_id:  lastInboundId ?? undefined,
     }
 
-    const conflictColumns =
-      alertKind === 'sla_unanswered'
-        ? 'company_id,dismissed_by,last_inbound_message_id'
-        : 'company_id,dismissed_by,entity_id'
-
-    const { data: inserted, error: insertError } = await svc
+    // --------------------------------------------------
+    // 6. INSERT — idempotência tratada na camada de aplicação.
+    //
+    //    Supabase JS v2 não suporta .onConflict().ignoreDuplicates()
+    //    com índices únicos PARCIAIS (WHERE predicate).
+    //    PostgreSQL retorna 23505 (unique_violation) quando a linha
+    //    já existe — tratamos isso como caso idempotente sem erro.
+    //
+    //    Os índices únicos parciais continuam garantindo unicidade no banco:
+    //      uq_dismissal_sla_per_user (WHERE entity_type = 'conversation')
+    //      uq_dismissal_opp_per_user (WHERE entity_type = 'opportunity')
+    // --------------------------------------------------
+    const { data: insertedData, error: insertError } = await svc
       .from('dashboard_alert_dismissals')
       .insert(insertPayload)
-      .onConflict(conflictColumns)
-      .ignoreDuplicates()
       .select('id, dismissed_at')
       .maybeSingle()
 
-    if (insertError) {
+    if (insertError && insertError.code !== '23505') {
       logDashboardError('dashboard.alert-dismissals.post', insertError, { companyId })
       jsonError(res, 500, 'Erro ao registrar dispensa'); return
     }
+
+    // 23505 = unique_violation: linha já existe → idempotente
+    const inserted = insertError?.code === '23505' ? null : insertedData
 
     // --------------------------------------------------
     // 7. Idempotência: se INSERT não inseriu (conflito),
