@@ -38,7 +38,7 @@ const COMMON_TIMEZONE_DEFS = [
 export const SystemSettings: React.FC = () => {
   const { t } = useTranslation('settings.system')
   const { company, refreshCompany } = useAuth()
-  const { isAdmin } = useAccessControl()
+  const { isMaster } = useAccessControl()
 
   const [timezone, setTimezone] = useState(company?.timezone || 'America/Sao_Paulo')
   const [defaultCurrency, setDefaultCurrency] = useState(company?.default_currency ?? 'BRL')
@@ -328,8 +328,8 @@ export const SystemSettings: React.FC = () => {
           <select
             value={alertDismissalScope}
             onChange={e => setAlertDismissalScope(e.target.value as 'company' | 'user')}
-            disabled={!isAdmin}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!isMaster}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="company">
               Empresa — todos os membros veem os mesmos alertas dispensados
@@ -338,14 +338,14 @@ export const SystemSettings: React.FC = () => {
               Individual — cada usuário gerencia suas próprias dispensas
             </option>
           </select>
-          {!isAdmin && (
+          {!isMaster && (
             <p className="text-xs text-gray-500 mt-1">
               Apenas administradores podem alterar esta configuração.
             </p>
           )}
         </div>
 
-        {isAdmin && (
+          {isMaster && (
           <div className="flex gap-3">
             <button
               onClick={handleSaveDismissalScope}
