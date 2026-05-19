@@ -687,7 +687,15 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         </label>
         <select
           value={config.comparisonType || 'contains'}
-          onChange={(e) => setConfig({ ...config, comparisonType: e.target.value })}
+          onChange={(e) => {
+            const newType = e.target.value
+            // Ao mudar para regex: manter apenas o primeiro padrão (se houver)
+            const updatedKeywords =
+              newType === 'regex' && Array.isArray(config.keywords) && config.keywords.length > 1
+                ? [config.keywords[0]]
+                : config.keywords
+            setConfig({ ...config, comparisonType: newType, keywords: updatedKeywords })
+          }}
           className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
         >
           {comparisonTypes.map(type => (
@@ -698,13 +706,13 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         </select>
       </div>
 
-      {/* Palavras-chave */}
+      {/* Palavras-chave / Expressão regular */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Palavras-chave
+          {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavras-chave'}
         </label>
         <div className="space-y-2">
-          {/* Lista de palavras-chave */}
+          {/* Lista de padrões — para regex mostra apenas o primeiro */}
           {(config.keywords || []).length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {config.keywords.map((keyword: string, index: number) => (
@@ -724,25 +732,33 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             </div>
           )}
           
-          {/* Input para adicionar */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={currentKeyword}
-              onChange={(e) => setCurrentKeyword(e.target.value)}
-              onKeyPress={handleKeywordKeyPress}
-              placeholder="Digite uma palavra-chave e pressione Enter"
-              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-            />
-            <button
-              onClick={addKeyword}
-              className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Input para adicionar — oculto em regex quando já há 1 padrão */}
+          {!(config.comparisonType === 'regex' && (config.keywords || []).length >= 1) && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={currentKeyword}
+                onChange={(e) => setCurrentKeyword(e.target.value)}
+                onKeyPress={handleKeywordKeyPress}
+                placeholder={
+                  config.comparisonType === 'regex'
+                    ? 'Ex: (?i)^(oi|olá|menu)$'
+                    : 'Digite uma palavra-chave e pressione Enter'
+                }
+                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              />
+              <button
+                onClick={addKeyword}
+                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           <p className="text-xs text-gray-500">
-            Deixe vazio para disparar em qualquer mensagem
+            {config.comparisonType === 'regex'
+              ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas. Apenas um padrão é suportado.'
+              : 'Deixe vazio para disparar em qualquer mensagem'}
           </p>
         </div>
       </div>

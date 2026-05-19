@@ -101,6 +101,20 @@ function normalizeText(text) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+// Extrai flags PCRE inline do início do padrão para uso em RegExp do JavaScript.
+// Suporta apenas flags válidas no JS: i, m, s.
+// Ex: "(?i)padrão"  → { cleanPattern: "padrão", flags: "i" }
+// Ex: "(?im)padrão" → { cleanPattern: "padrão", flags: "im" }
+// Ex: "padrão"      → { cleanPattern: "padrão", flags: "" }
+function extractInlineFlags(pattern) {
+  const match = pattern.match(/^\(\?([ims]+)\)([\s\S]*)$/)
+  if (!match) return { cleanPattern: pattern, flags: '' }
+  const rawFlags = match[1]
+  const cleanPattern = match[2]
+  const flags = [...new Set(rawFlags.split('').filter(f => 'ims'.includes(f)))].join('')
+  return { cleanPattern, flags }
+}
+
 function matchesMessageReceived(trigger, eventData) {
   const config = trigger.config || {}
 
@@ -120,18 +134,47 @@ function matchesMessageReceived(trigger, eventData) {
   // Somente bloqueia se o dispatcher explicitamente marcou is_new_conversation = false
   if (config.sessionControl === 'new_conversation' && eventData.is_new_conversation === false) return false
 
-  // Filtro por palavras-chave
-  const keywords = config.keywords || []
-  if (keywords.length > 0) {
-    const text = normalizeText(eventData.text || eventData.message_text || '')
-    const normalizedKeywords = keywords.map(normalizeText)
-    const matchMode = config.keywordMatch || config.comparisonType || 'any'
+  // Filtro por palavras-chave / expressão regular
+  // Fallback hardened: Array.isArray evita aceitar objeto ou string corrompida do JSONB
+  const keywords = Array.isArray(config.keywords)
+    ? config.keywords
+    : config.keyword
+      ? [config.keyword]
+      : []
 
-    if (matchMode === 'all') {
-      if (!normalizedKeywords.every(kw => text.includes(kw))) return false
+  if (keywords.length > 0) {
+    const rawText = String(eventData.text || eventData.message_text || '')
+    const comparisonType = config.comparisonType || config.keywordMatch || 'contains'
+
+    if (comparisonType === 'regex') {
+      // Regex: testar contra texto bruto (não normalizado) para respeitar acentos da expressão.
+      // keywords[0] é o único padrão — múltiplos padrões regex não são suportados.
+      const pattern = keywords[0] || ''
+      if (!pattern) return true
+      if (pattern.length > 500) return false
+      try {
+        const { cleanPattern, flags } = extractInlineFlags(pattern)
+        const re = new RegExp(cleanPattern, flags)
+        if (!re.test(rawText)) return false
+      } catch (_e) {
+        // Regex inválida: não disparar (fail-safe)
+        return false
+      }
     } else {
-      // 'any', 'contains' e demais modos: ao menos uma palavra deve estar presente
-      if (!normalizedKeywords.some(kw => text.includes(kw))) return false
+      // Para contains / equals / all: normalizar texto e keywords (lowercase + sem acentos)
+      const text = normalizeText(rawText)
+      const normalizedKeywords = keywords.map(normalizeText)
+
+      if (comparisonType === 'equals') {
+        // Mensagem deve ser exatamente igual a pelo menos uma keyword
+        if (!normalizedKeywords.some(kw => text === kw)) return false
+      } else if (comparisonType === 'all') {
+        // Mensagem deve conter TODAS as keywords
+        if (!normalizedKeywords.every(kw => text.includes(kw))) return false
+      } else {
+        // 'contains' e qualquer outro valor: mensagem deve conter ao menos uma keyword
+        if (!normalizedKeywords.some(kw => text.includes(kw))) return false
+      }
     }
   }
 
@@ -148,5 +191,6 @@ export {
   matchesOpportunityOwner,
   matchesTag,
   matchesMessageReceived,
-  normalizeText
+  normalizeText,
+  extractInlineFlags,
 }

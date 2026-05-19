@@ -246,23 +246,37 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
               >
                 <option value="contains">Contém</option>
                 <option value="equals">Igual</option>
+                <option value="regex">Regex</option>
               </select>
             </div>
 
-            {/* 3. PALAVRA-CHAVE */}
+            {/* 3. PALAVRA-CHAVE / EXPRESSÃO REGULAR */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Palavra-chave
+                {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavra-chave'}
               </label>
               <input
                 type="text"
                 value={config.keyword || ''}
-                onChange={(e) => setConfig({ ...config, keyword: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setConfig({
+                    ...config,
+                    keyword:  value,
+                    keywords: value ? [value] : [],
+                  })
+                }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Ex: oi, olá, menu"
+                placeholder={
+                  config.comparisonType === 'regex'
+                    ? 'Ex: (?i)^(oi|olá|menu)$'
+                    : 'Ex: oi, olá, menu'
+                }
               />
               <p className="text-xs text-gray-500 mt-1">
-                {config.comparisonType === 'equals' 
+                {config.comparisonType === 'regex'
+                  ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas.'
+                  : config.comparisonType === 'equals'
                   ? 'A mensagem deve ser exatamente igual à palavra-chave'
                   : 'A mensagem deve conter a palavra-chave'}
               </p>
