@@ -81,7 +81,9 @@ export default async function handler(req: any, res: any): Promise<void> {
       ctx,
     )
 
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120')
+    // Alertas em tempo real — dispensas individuais invalidam o cache imediatamente.
+    // CDN-cache aqui causaria reexibição de alertas já dispensados após page refresh.
+    res.setHeader('Cache-Control', 'no-store')
 
     return res.status(200).json({
       ok:   true,
