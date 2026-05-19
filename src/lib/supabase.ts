@@ -33,6 +33,8 @@ export type Company = {
   opportunity_items_enabled?: boolean;
   /** ISO 3166-1 alpha-2 — opcional; contexto; não define moeda */
   country_code?: string | null;
+  /** Escopo de dispensa de alertas do dashboard: 'company' = compartilhada, 'user' = individual */
+  alert_dismissal_scope?: 'company' | 'user';
   created_at: string;
   updated_at: string;
   

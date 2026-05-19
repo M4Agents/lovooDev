@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Clock, Save, Coins, Globe2 } from 'lucide-react'
+import { Clock, Save, Coins, Globe2, Bell } from 'lucide-react'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import { TimezoneSelector } from './TimezoneSelector'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import { LeadReentryConfigSection } from './LeadReentryConfigSection'
@@ -37,11 +38,18 @@ const COMMON_TIMEZONE_DEFS = [
 export const SystemSettings: React.FC = () => {
   const { t } = useTranslation('settings.system')
   const { company, refreshCompany } = useAuth()
+  const { isAdmin } = useAccessControl()
+
   const [timezone, setTimezone] = useState(company?.timezone || 'America/Sao_Paulo')
   const [defaultCurrency, setDefaultCurrency] = useState(company?.default_currency ?? 'BRL')
   const [countryCode, setCountryCode] = useState((company?.country_code ?? '').trim())
   const [saving, setSaving] = useState(false)
   const [showAllTimezones, setShowAllTimezones] = useState(false)
+
+  const [alertDismissalScope, setAlertDismissalScope] = useState<'company' | 'user'>(
+    company?.alert_dismissal_scope ?? 'company'
+  )
+  const [savingScope, setSavingScope] = useState(false)
 
   const commonTimezones = useMemo(
     () =>
@@ -58,6 +66,7 @@ export const SystemSettings: React.FC = () => {
     setTimezone(company.timezone || 'America/Sao_Paulo')
     setDefaultCurrency(company.default_currency ?? 'BRL')
     setCountryCode((company.country_code ?? '').trim())
+    setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
   }, [company])
 
   const normalizedCountry = countryCode.trim().toUpperCase() || null
@@ -105,6 +114,50 @@ export const SystemSettings: React.FC = () => {
     timezone !== (company?.timezone || 'America/Sao_Paulo') ||
     defaultCurrency !== (company?.default_currency ?? 'BRL') ||
     (normalizedCountry ?? '') !== (companyCountryNorm ?? '')
+
+  const hasChangesDismissalScope =
+    alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company')
+
+  const handleSaveDismissalScope = async () => {
+    if (!company?.id) {
+      alert(t('alerts.companyNotFound'))
+      return
+    }
+    try {
+      setSavingScope(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        alert(t('alerts.companyNotFound'))
+        return
+      }
+      const res = await fetch('/api/companies/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          companyId: company.id,
+          updates: { alert_dismissal_scope: alertDismissalScope },
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const msg = res.status === 403
+          ? 'Permissão insuficiente para alterar esta configuração.'
+          : (body.error ?? t('alerts.saveError'))
+        alert(msg)
+        setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
+        return
+      }
+      await refreshCompany()
+      alert('Configuração de escopo salva com sucesso.')
+    } catch (err) {
+      console.error('[SystemSettings] Erro ao salvar escopo de dispensa:', err)
+      alert(t('alerts.saveError'))
+      setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
+    } finally {
+      setSavingScope(false)
+    }
+  }
 
   const groupedCommonTimezones = commonTimezones.reduce((groups, tz) => {
     if (!groups[tz.region]) {
@@ -255,6 +308,64 @@ export const SystemSettings: React.FC = () => {
 
       {/* Seção: Leads Duplicados e Reentrada */}
       <LeadReentryConfigSection />
+
+      {/* Seção: Escopo de Dispensa de Alertas */}
+      <div className="border-t border-gray-200 pt-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Bell className="w-6 h-6 text-indigo-600" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Escopo de Dispensa de Alertas</h3>
+            <p className="text-sm text-gray-600">
+              Define se um alerta dispensado por um membro é ocultado para toda a equipe ou apenas para quem o dispensou.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Comportamento das dispensas
+          </label>
+          <select
+            value={alertDismissalScope}
+            onChange={e => setAlertDismissalScope(e.target.value as 'company' | 'user')}
+            disabled={!isAdmin}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="company">
+              Empresa — todos os membros veem os mesmos alertas dispensados
+            </option>
+            <option value="user">
+              Individual — cada usuário gerencia suas próprias dispensas
+            </option>
+          </select>
+          {!isAdmin && (
+            <p className="text-xs text-gray-500 mt-1">
+              Apenas administradores podem alterar esta configuração.
+            </p>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="flex gap-3">
+            <button
+              onClick={handleSaveDismissalScope}
+              disabled={savingScope || !hasChangesDismissalScope}
+              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              {savingScope ? t('actions.saving') : t('actions.save')}
+            </button>
+            {hasChangesDismissalScope && (
+              <button
+                onClick={() => setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {t('actions.cancel')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Botão Salvar */}
       <div className="flex gap-3">
