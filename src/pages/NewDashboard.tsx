@@ -6,9 +6,11 @@
 // =====================================================
 
 import React, { useMemo, useEffect, useState } from 'react'
+import { Settings2 } from 'lucide-react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { FunnelSelector }             from '../components/Dashboard/filters/FunnelSelector'
 import { UserSelector }               from '../components/Dashboard/filters/UserSelector'
+import { AlertSettingsModal }         from '../components/Dashboard/settings/AlertSettingsModal'
 import { ExecutiveSummary }           from '../components/Dashboard/sections/ExecutiveSummary'
 import { IntelligenceCentral }        from '../components/Dashboard/sections/IntelligenceCentral'
 import { ActionCenter }               from '../components/Dashboard/sections/ActionCenter'
@@ -33,6 +35,7 @@ import { ForecastSection }            from '../components/Dashboard/sections/For
 import { PriorityAlertsSection }      from '../components/Dashboard/sections/PriorityAlertsSection'
 import { FunnelExecutiveSection }     from '../components/Dashboard/sections/FunnelExecutiveSection'
 import { useAuth }                    from '../contexts/AuthContext'
+import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
 import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
 import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
@@ -107,6 +110,11 @@ function SectionEmpty({ message }: { message: string }) {
 export const NewDashboard: React.FC = () => {
   const { company } = useAuth()
   const companyId = company?.id ?? null
+
+  const { canManageConversationalAgents } = useAccessControl()
+
+  // Modal de configuração dos alertas
+  const [alertSettingsOpen, setAlertSettingsOpen] = useState(false)
 
   // Filtros globais — fonte única de verdade
   const { period, funnelId, userId, setPeriod, setFunnelId, setUserId } = useDashboardFilters()
@@ -253,6 +261,18 @@ export const NewDashboard: React.FC = () => {
                 MoM
               </button>
             </div>
+          )}
+
+          {/* Engrenagem — configurar alertas (apenas admin+) */}
+          {canManageConversationalAgents && (
+            <button
+              onClick={() => setAlertSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+              title="Configurar regras dos alertas"
+            >
+              <Settings2 size={14} />
+              Alertas
+            </button>
           )}
         </div>
       </div>
@@ -483,6 +503,17 @@ export const NewDashboard: React.FC = () => {
           <span>Funis: <strong>{summary.data.funnel_mode}</strong></span>
         </div>
       )}
+
+      {/* ── Modal de configuração dos alertas ──────────────────────────── */}
+      <AlertSettingsModal
+        isOpen={alertSettingsOpen}
+        onClose={() => setAlertSettingsOpen(false)}
+        onSaved={() => {
+          priorityAlerts.refetch()
+          slaAlerts.refetch()
+        }}
+        companyId={companyId}
+      />
 
     </div>
   )
