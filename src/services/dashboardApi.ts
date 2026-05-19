@@ -114,6 +114,12 @@ export type {
   DismissAlertPayload,
   DismissalResult,
   DismissAlertResponse,
+  // Configurações de Alertas
+  SlaSettings,
+  StalledSettings,
+  SellerRiskSettings,
+  AlertSettings,
+  AlertSettingsResponse,
 } from '../types/dashboard'
 
 // Importação local dos tipos necessários para as assinaturas das funções
@@ -143,6 +149,8 @@ import type {
   FunnelExecutiveResponse,
   DismissAlertPayload,
   DismissAlertResponse,
+  AlertSettings,
+  AlertSettingsResponse,
 } from '../types/dashboard'
 
 // ---------------------------------------------------------------------------
@@ -843,6 +851,49 @@ export const dashboardApi = {
     return apiDelete<{ ok: boolean }>(
       `/api/dashboard/alert-dismissals/${dismissalId}`,
       { company_id: companyId },
+    )
+  },
+
+  // ── Configurações de Alertas ──────────────────────────────────────────────
+
+  /**
+   * Carrega configurações personalizadas de alertas da empresa.
+   *
+   * Quando a empresa não tem linha em dashboard_alert_settings,
+   * o backend retorna os GLOBAL_DEFAULTS com meta.is_default = true.
+   * O campo data nunca é null — sempre vem populado com valores operacionais.
+   *
+   * Requer membership ativo (qualquer role).
+   */
+  async getAlertSettings(
+    companyId: string,
+    signal?:   AbortSignal,
+  ): Promise<AlertSettingsResponse> {
+    return apiFetch<AlertSettingsResponse>(
+      '/api/dashboard/alert-settings',
+      { company_id: companyId },
+      signal,
+    )
+  },
+
+  /**
+   * Salva configurações personalizadas de alertas (upsert por company_id).
+   *
+   * Aceita qualquer subconjunto das 3 seções — cada seção ausente mantém
+   * o valor atual no banco (merge seguro feito pelo backend).
+   * Cada seção presente deve conter todos os campos obrigatórios.
+   *
+   * updated_by é sempre user.id do JWT no backend — nunca enviado pelo frontend.
+   * Requer role admin / system_admin / super_admin.
+   */
+  async saveAlertSettings(
+    companyId: string,
+    settings:  Partial<AlertSettings>,
+  ): Promise<AlertSettingsResponse> {
+    return apiPost<AlertSettingsResponse>(
+      '/api/dashboard/alert-settings',
+      {},
+      { company_id: companyId, ...settings },
     )
   },
 }

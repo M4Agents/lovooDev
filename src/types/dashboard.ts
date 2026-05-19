@@ -823,3 +823,45 @@ export interface SnapshotHealthData {
     blocker: string | null
   }
 }
+
+// ---------------------------------------------------------------------------
+// Configurações Personalizadas de Alertas do Dashboard (Fase Alert Settings)
+// ---------------------------------------------------------------------------
+
+export interface SlaSettings {
+  enabled:          boolean
+  min_minutes:      number
+  critical_minutes: number
+  limit:            number
+}
+
+export interface StalledSettings {
+  enabled:         boolean
+  idle_minutes:    number
+  min_probability: number
+  limit:           number
+}
+
+export interface SellerRiskSettings {
+  enabled:         boolean
+  waiting_minutes: number
+  min_leads:       number
+  limit:           number
+}
+
+export interface AlertSettings {
+  sla_settings:         SlaSettings
+  stalled_settings:     StalledSettings
+  seller_risk_settings: SellerRiskSettings
+}
+
+/** Resposta do GET /api/dashboard/alert-settings */
+export interface AlertSettingsResponse {
+  ok:   boolean
+  data: AlertSettings
+  meta: {
+    is_default:  boolean
+    /** Presente apenas quando há linha salva no banco (is_default = false) */
+    updated_at?: string
+  }
+}
