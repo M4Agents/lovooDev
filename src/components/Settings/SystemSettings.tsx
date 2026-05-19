@@ -49,7 +49,6 @@ export const SystemSettings: React.FC = () => {
   const [alertDismissalScope, setAlertDismissalScope] = useState<'company' | 'user'>(
     company?.alert_dismissal_scope ?? 'company'
   )
-  const [savingScope, setSavingScope] = useState(false)
 
   const commonTimezones = useMemo(
     () =>
@@ -87,24 +86,54 @@ export const SystemSettings: React.FC = () => {
     try {
       setSaving(true)
 
+      const scopeChanged =
+        isMaster &&
+        alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company')
+
+      // 1. Salva timezone, moeda e país via Supabase client
       const { error } = await supabase
         .from('companies')
-        .update({ 
+        .update({
           timezone,
           default_currency: defaultCurrency,
           country_code: normalizedCountry,
-          updated_at: new Date().toISOString() 
+          updated_at: new Date().toISOString(),
         })
         .eq('id', company.id)
 
       if (error) throw error
 
-      await refreshCompany()
+      // 2. Salva alert_dismissal_scope via API (com validação RBAC no backend)
+      if (scopeChanged) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (!token) throw new Error(t('alerts.companyNotFound'))
 
+        const res = await fetch('/api/companies/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            companyId: company.id,
+            updates: { alert_dismissal_scope: alertDismissalScope },
+          }),
+        })
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(
+            res.status === 403
+              ? 'Permissão insuficiente para alterar o escopo de dispensa.'
+              : (body.error ?? t('alerts.saveError'))
+          )
+        }
+      }
+
+      await refreshCompany()
       alert(t('alerts.saveSuccess'))
     } catch (error) {
       console.error('Erro ao salvar configurações do sistema:', error)
-      alert(t('alerts.saveError'))
+      setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
+      alert(error instanceof Error ? error.message : t('alerts.saveError'))
     } finally {
       setSaving(false)
     }
@@ -113,51 +142,8 @@ export const SystemSettings: React.FC = () => {
   const hasChanges =
     timezone !== (company?.timezone || 'America/Sao_Paulo') ||
     defaultCurrency !== (company?.default_currency ?? 'BRL') ||
-    (normalizedCountry ?? '') !== (companyCountryNorm ?? '')
-
-  const hasChangesDismissalScope =
-    alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company')
-
-  const handleSaveDismissalScope = async () => {
-    if (!company?.id) {
-      alert(t('alerts.companyNotFound'))
-      return
-    }
-    try {
-      setSavingScope(true)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        alert(t('alerts.companyNotFound'))
-        return
-      }
-      const res = await fetch('/api/companies/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          companyId: company.id,
-          updates: { alert_dismissal_scope: alertDismissalScope },
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        const msg = res.status === 403
-          ? 'Permissão insuficiente para alterar esta configuração.'
-          : (body.error ?? t('alerts.saveError'))
-        alert(msg)
-        setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
-        return
-      }
-      await refreshCompany()
-      alert('Configuração de escopo salva com sucesso.')
-    } catch (err) {
-      console.error('[SystemSettings] Erro ao salvar escopo de dispensa:', err)
-      alert(t('alerts.saveError'))
-      setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
-    } finally {
-      setSavingScope(false)
-    }
-  }
+    (normalizedCountry ?? '') !== (companyCountryNorm ?? '') ||
+    (isMaster && alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company'))
 
   const groupedCommonTimezones = commonTimezones.reduce((groups, tz) => {
     if (!groups[tz.region]) {
@@ -345,26 +331,6 @@ export const SystemSettings: React.FC = () => {
           )}
         </div>
 
-          {isMaster && (
-          <div className="flex gap-3">
-            <button
-              onClick={handleSaveDismissalScope}
-              disabled={savingScope || !hasChangesDismissalScope}
-              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              {savingScope ? t('actions.saving') : t('actions.save')}
-            </button>
-            {hasChangesDismissalScope && (
-              <button
-                onClick={() => setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                {t('actions.cancel')}
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Botão Salvar */}
@@ -384,6 +350,7 @@ export const SystemSettings: React.FC = () => {
               setTimezone(company?.timezone || 'America/Sao_Paulo')
               setDefaultCurrency(company?.default_currency ?? 'BRL')
               setCountryCode((company?.country_code ?? '').trim())
+              setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
             }}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
