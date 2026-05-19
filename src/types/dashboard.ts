@@ -402,6 +402,10 @@ export interface SlaAlertItem {
   last_in_at:          string
   hours_waiting:       number
   severity:            SlaAlertSeverity
+  /** ID da última mensagem inbound que gerou o alerta.
+   *  Necessário para vincular a dispensa à mensagem específica.
+   *  Opcional para compatibilidade com dados em cache antes da Fase 3. */
+  last_inbound_message_id?: string | null
 }
 
 export interface SlaAlertsMeta {
@@ -464,7 +468,14 @@ export interface ForecastResponse {
 // ---------------------------------------------------------------------------
 
 export type PriorityAlertSeverity = 'critical' | 'high'
+
+/**
+ * PriorityAlertType canônico.
+ * 'sla_unanswered' é o valor atual retornado pela RPC (unifica sla_critical e sla_high).
+ * 'sla_critical' e 'sla_high' mantidos para compatibilidade com código já existente.
+ */
 export type PriorityAlertType =
+  | 'sla_unanswered'
   | 'sla_critical'
   | 'sla_high'
   | 'stalled_opportunity'
@@ -481,6 +492,10 @@ export interface PriorityAlertItem {
   description:  string
   value:        number
   reference_id: string
+  /** ID da última mensagem inbound que gerou o alerta (sla_unanswered).
+   *  Necessário para vincular a dispensa à mensagem específica.
+   *  Ausente em stalled_opportunity e seller_risk. */
+  last_inbound_message_id?: string | null
 }
 
 export interface PriorityAlertsData {
@@ -559,6 +574,46 @@ export interface LeadOriginsResponse {
   ok:   boolean
   data: LeadOriginItem[]
   meta: LeadOriginsMeta
+}
+
+// ---------------------------------------------------------------------------
+// Dispensa de Alertas do Dashboard (Fase Dismissal)
+// ---------------------------------------------------------------------------
+
+/** Escopo de visibilidade de dispensas configurado por empresa.
+ *  'company' → dispensa visível para todos os membros.
+ *  'user'    → cada usuário gerencia suas próprias dispensas. */
+export type AlertDismissalScope = 'company' | 'user'
+
+/** Tipo de alerta que pode ser dispensado.
+ *  Espelha o CHECK constraint da tabela dashboard_alert_dismissals. */
+export type AlertKind = 'sla_unanswered' | 'stalled_opportunity'
+
+/**
+ * Payload enviado ao POST /api/dashboard/alert-dismissals.
+ * company_id não faz parte deste payload; o service recebe companyId
+ * como argumento e monta o body final enviado à API.
+ */
+export interface DismissAlertPayload {
+  entity_type:              'conversation' | 'opportunity'
+  entity_id:                string
+  alert_kind:               AlertKind
+  /** Obrigatório para sla_unanswered; deve ser null/omitido para stalled_opportunity. */
+  last_inbound_message_id?: string | null
+}
+
+/** Registro de dispensa retornado pela API após criação (201) ou conflito idempotente (200). */
+export interface DismissalResult {
+  id:           string   // UUID da dispensa — necessário para o undo (DELETE)
+  dismissed_at: string   // ISO 8601 timestamp
+}
+
+/** Resposta completa do POST /api/dashboard/alert-dismissals. */
+export interface DismissAlertResponse {
+  ok:          boolean
+  data:        DismissalResult
+  /** Presente e true quando o registro já existia (idempotência). */
+  idempotent?: true
 }
 
 // ---------------------------------------------------------------------------

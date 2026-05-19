@@ -108,6 +108,12 @@ export type {
   FunnelExecutiveData,
   FunnelExecutiveMeta,
   FunnelExecutiveResponse,
+  // Dispensa de Alertas
+  AlertDismissalScope,
+  AlertKind,
+  DismissAlertPayload,
+  DismissalResult,
+  DismissAlertResponse,
 } from '../types/dashboard'
 
 // Importação local dos tipos necessários para as assinaturas das funções
@@ -135,6 +141,8 @@ import type {
   ForecastResponse,
   PriorityAlertsResponse,
   FunnelExecutiveResponse,
+  DismissAlertPayload,
+  DismissAlertResponse,
 } from '../types/dashboard'
 
 // ---------------------------------------------------------------------------
@@ -289,6 +297,31 @@ async function apiFetch<T>(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body?.error ?? `Erro ${res.status} em ${path}`)
+  }
+
+  return res.json() as Promise<T>
+}
+
+async function apiDelete<T>(path: string, queryParams: Record<string, string>): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  const url = new URL(path, window.location.origin)
+  Object.entries(queryParams).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v)
+  })
+
+  const res = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error(json?.error ?? `Erro ${res.status} em ${path}`)
   }
 
   return res.json() as Promise<T>
@@ -769,4 +802,47 @@ export const dashboardApi = {
    * Nunca lança erro — não bloqueia UX.
    */
   reportSnapshotFallback,
+
+  // ── Dispensa de Alertas ───────────────────────────────────────────────────
+
+  /**
+   * Registra a dispensa de um alerta do dashboard.
+   *
+   * A dispensa SLA é vinculada à mensagem específica (last_inbound_message_id)
+   * que gerou o alerta. Se chegar uma nova inbound, o alerta reaparece.
+   *
+   * company_id não faz parte de DismissAlertPayload; é recebido como argumento
+   * separado e incluído no body montado aqui — nunca vem direto do estado de UI.
+   *
+   * Retorna DismissalResult.id — necessário para o undo (undoDismissal).
+   * Lança Error com mensagem do backend em caso de falha (4xx/5xx).
+   */
+  async dismissAlert(
+    companyId: string,
+    payload:   DismissAlertPayload,
+  ): Promise<DismissAlertResponse> {
+    return apiPost<DismissAlertResponse>(
+      '/api/dashboard/alert-dismissals',
+      {},
+      { company_id: companyId, ...payload },
+    )
+  },
+
+  /**
+   * Desfaz (undo) uma dispensa de alerta do dashboard.
+   *
+   * O alerta volta a aparecer na próxima chamada às RPCs.
+   * dismissalId é o UUID retornado por dismissAlert.
+   *
+   * Lança Error com mensagem do backend em caso de falha (4xx/5xx).
+   */
+  async undoDismissal(
+    companyId:   string,
+    dismissalId: string,
+  ): Promise<{ ok: boolean }> {
+    return apiDelete<{ ok: boolean }>(
+      `/api/dashboard/alert-dismissals/${dismissalId}`,
+      { company_id: companyId },
+    )
+  },
 }

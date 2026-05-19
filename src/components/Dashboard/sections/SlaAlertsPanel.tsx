@@ -3,20 +3,48 @@
 // Lista acionável ordenada por urgência crescente.
 // Paginação incremental: "Carregar mais".
 //
-// Ação por linha: Chat (MessageCircle) → ChatModalSimple.
-// Sem botão de oportunidade — SLA representa conversa
-// sem resposta, não necessariamente oportunidade comercial.
+// Ação por linha:
+//   Chat (MessageCircle)        → ChatModalSimple
+//   Marcar como analisado (✓)   → dismiss via useDismissAlert
 //
-// Padrão de referência: IntelligenceCentral + useDashboardEntityActions.
+// Dispensa:
+//   Chave: `${conversation_id}:${last_inbound_message_id}`
+//   Botão oculto se last_inbound_message_id ausente (sem dado para vincular a dispensa).
+//   Optimistic update local — não altera estado global.
 // =====================================================
 
-import React, { useState } from 'react'
-import { Clock, AlertTriangle, RefreshCw, ChevronDown, MessageCircle, TrendingDown } from 'lucide-react'
+import React, { useState, useCallback } from 'react'
+import toast                             from 'react-hot-toast'
+import {
+  Clock, AlertTriangle, RefreshCw, ChevronDown,
+  MessageCircle, TrendingDown, CheckCircle, Loader2,
+} from 'lucide-react'
 import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
+import { useDismissAlert }           from '../../../hooks/dashboard/useDismissAlert'
 import ChatModalSimple               from '../../SalesFunnel/ChatModalSimple'
 import { TrendChart }                from '../historical/TrendChart'
 import { SnapshotDataGuard }         from '../historical/SnapshotDataGuard'
-import type { SlaAlertItem, SlaAlertsMeta, SlaAlertSeverity, SnapshotTrendsData } from '../../../types/dashboard'
+import type {
+  SlaAlertItem,
+  SlaAlertsMeta,
+  SlaAlertSeverity,
+  SnapshotTrendsData,
+  DismissAlertPayload,
+} from '../../../types/dashboard'
+
+// ---------------------------------------------------------------------------
+// Chave de optimistic update
+// Composição conversation_id + last_inbound_message_id evita ocultar um novo
+// alerta da mesma conversa quando uma nova inbound gerar outro message_id.
+// ---------------------------------------------------------------------------
+
+function makeDismissKey(conversationId: string, lastInboundId: string | null | undefined): string {
+  return `${conversationId}:${lastInboundId ?? ''}`
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface Props {
   data:                SlaAlertItem[]
@@ -31,6 +59,10 @@ interface Props {
   snapshotTrendPoints?: number
 }
 
+// ---------------------------------------------------------------------------
+// Configuração visual por severidade
+// ---------------------------------------------------------------------------
+
 const SEVERITY_CONFIG: Record<SlaAlertSeverity, { label: string; cls: string; bg: string }> = {
   critical: { label: 'Crítico',  cls: 'text-red-700 bg-red-50 border-red-200',         bg: 'border-l-red-500' },
   high:     { label: 'Alto',     cls: 'text-orange-700 bg-orange-50 border-orange-200', bg: 'border-l-orange-400' },
@@ -42,6 +74,10 @@ function fmtHours(h: number): string {
   if (h < 24) return `${h.toFixed(0)}h`
   return `${(h / 24).toFixed(1)}d`
 }
+
+// ---------------------------------------------------------------------------
+// SlaAlertsPanel
+// ---------------------------------------------------------------------------
 
 export function SlaAlertsPanel({
   data,
@@ -59,13 +95,108 @@ export function SlaAlertsPanel({
 
   const [showTrend, setShowTrend] = useState(false)
 
-  const actions = useDashboardEntityActions({ companyId })
+  const actions           = useDashboardEntityActions({ companyId })
+  const { dismiss, undo } = useDismissAlert()
+
+  // dismissKey → id do registro de dispensa (para o undo via DELETE)
+  const [dismissedKeys,    setDismissedKeys]    = useState<Set<string>>(new Set())
+  const [pendingDismissals, setPendingDismissals] = useState<Map<string, string>>(new Map())
+  // Durante chamada à API: guarda a dismissKey da operação em curso (spinner individual)
+  const [dismissingKey, setDismissingKey] = useState<string | null>(null)
+
+  const handleDismiss = useCallback(async (item: SlaAlertItem) => {
+    // Só dispensa se a mensagem de referência estiver presente
+    if (!item.last_inbound_message_id) return
+
+    const dismissKey = makeDismissKey(item.conversation_id, item.last_inbound_message_id)
+
+    const payload: DismissAlertPayload = {
+      entity_type:             'conversation',
+      entity_id:               item.conversation_id,
+      alert_kind:              'sla_unanswered',
+      last_inbound_message_id: item.last_inbound_message_id,
+    }
+
+    // 1. Optimistic remove
+    setDismissedKeys(prev => new Set([...prev, dismissKey]))
+    setDismissingKey(dismissKey)
+
+    // 2. Chamada à API
+    const result = await dismiss(payload)
+
+    setDismissingKey(null)
+
+    if (!result) {
+      // 3a. Erro → rollback visual
+      setDismissedKeys(prev => {
+        const next = new Set(prev)
+        next.delete(dismissKey)
+        return next
+      })
+      toast.error('Não foi possível dispensar o alerta')
+      return
+    }
+
+    // 3b. Sucesso → guardar dismissalId e exibir toast com undo
+    const dismissalId = result.id
+    setPendingDismissals(prev => new Map([...prev, [dismissKey, dismissalId]]))
+
+    toast(
+      (t) => (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-gray-700">Alerta dispensado</span>
+          <button
+            className="text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+            onClick={() => {
+              toast.dismiss(t.id)
+              void handleUndo(dismissKey, dismissalId)
+            }}
+          >
+            Desfazer
+          </button>
+        </div>
+      ),
+      { duration: 5000 },
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dismiss])
+
+  const handleUndo = useCallback(async (dismissKey: string, dismissalId: string) => {
+    // 1. Optimistic restore
+    setDismissedKeys(prev => {
+      const next = new Set(prev)
+      next.delete(dismissKey)
+      return next
+    })
+
+    // 2. Chamada à API
+    const ok = await undo(dismissalId)
+
+    if (!ok) {
+      // 3a. Erro → re-ocultar
+      setDismissedKeys(prev => new Set([...prev, dismissKey]))
+      toast.error('Não foi possível desfazer a dispensa')
+      return
+    }
+
+    // 3b. Sucesso → limpar pendingDismissals
+    setPendingDismissals(prev => {
+      const next = new Map(prev)
+      next.delete(dismissKey)
+      return next
+    })
+  }, [undo])
 
   function handleOpenChat(leadId: string) {
     const id = Number(leadId)
     if (!Number.isFinite(id)) return
     actions.openChat(id)
   }
+
+  // Filtragem dos alertas dispensados otimisticamente
+  const visibleData = data.filter(
+    item => !dismissedKeys.has(makeDismissKey(item.conversation_id, item.last_inbound_message_id)),
+  )
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -117,7 +248,7 @@ export function SlaAlertsPanel({
           </div>
         )}
 
-        {!loading && !error && data.length === 0 && (
+        {!loading && !error && visibleData.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center">
               <span className="text-emerald-600 text-lg">✓</span>
@@ -128,10 +259,14 @@ export function SlaAlertsPanel({
           </div>
         )}
 
-        {data.length > 0 && (
+        {visibleData.length > 0 && (
           <div className="space-y-2">
-            {data.map(item => {
-              const cfg = SEVERITY_CONFIG[item.severity]
+            {visibleData.map(item => {
+              const cfg        = SEVERITY_CONFIG[item.severity]
+              const dismissKey = makeDismissKey(item.conversation_id, item.last_inbound_message_id)
+              const canDismiss = !!item.last_inbound_message_id
+              const isDismissing = dismissingKey === dismissKey
+
               return (
                 <div
                   key={item.conversation_id}
@@ -165,6 +300,21 @@ export function SlaAlertsPanel({
                     >
                       <MessageCircle size={14} />
                     </button>
+
+                    {canDismiss && (
+                      <button
+                        type="button"
+                        title="Marcar como analisado"
+                        disabled={isDismissing}
+                        onClick={() => void handleDismiss(item)}
+                        className="p-1 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isDismissing
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <CheckCircle size={14} />
+                        }
+                      </button>
+                    )}
                   </div>
                 </div>
               )
