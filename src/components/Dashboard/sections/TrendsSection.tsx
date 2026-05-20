@@ -1,12 +1,11 @@
 // =====================================================
 // TrendsSection — seção de gráficos de tendência.
-// Layout: dois gráficos lado a lado (responsivo).
-//   [Novos Leads por Dia] [Atendimentos + Tempo de Resposta]
+// Layout: gráfico combinado em largura total.
+//   [Leads e Atendimentos por Dia]
 // =====================================================
 
 import React from 'react'
-import { LeadsTrendChart }      from '../charts/LeadsTrendChart'
-import { AttendanceTrendChart } from '../charts/AttendanceTrendChart'
+import { CombinedTrendsChart } from '../charts/CombinedTrendsChart'
 import type { TrendsData } from '../../../types/dashboard'
 
 interface TrendsSectionProps {
@@ -18,15 +17,10 @@ interface TrendsSectionProps {
 
 export function TrendsSection({ data, loading, error, onRetry }: TrendsSectionProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <LeadsTrendChart
-        data={data?.leads_by_day}
-        loading={loading}
-        error={error}
-        onRetry={onRetry}
-      />
-      <AttendanceTrendChart
-        data={data?.attendance_by_day}
+    <div className="w-full">
+      <CombinedTrendsChart
+        leadsData={data?.leads_by_day}
+        attendanceData={data?.attendance_by_day}
         totalUnanswered={data?.total_unanswered ?? 0}
         loading={loading}
         error={error}

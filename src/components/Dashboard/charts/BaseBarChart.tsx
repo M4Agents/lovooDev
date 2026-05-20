@@ -12,6 +12,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   Cell,
 } from 'recharts'
@@ -35,6 +36,8 @@ interface BaseBarChartProps {
   yFormatter?: (value: number) => string
   /** Destaca a barra mais alta com tonalidade mais forte */
   highlightMax?: boolean
+  /** Exibe legenda abaixo do gráfico (default: false) */
+  showLegend?: boolean
 }
 
 const DEFAULT_HEIGHT = 200
@@ -47,6 +50,7 @@ export function BaseBarChart({
   xFormatter,
   yFormatter,
   highlightMax = false,
+  showLegend = false,
 }: BaseBarChartProps) {
   if (!data || data.length === 0) return null
 
@@ -88,6 +92,13 @@ export function BaseBarChart({
           )}
           cursor={{ fill: 'rgba(99,102,241,0.05)' }}
         />
+        {showLegend && (
+          <Legend
+            iconSize={8}
+            iconType="circle"
+            wrapperStyle={{ fontSize: 11, color: '#6b7280' }}
+          />
+        )}
         {bars.map((bar) => (
           <Bar key={bar.key} dataKey={bar.key} name={bar.name} fill={bar.color} radius={[3, 3, 0, 0]}>
             {highlightMax && maxVal != null
