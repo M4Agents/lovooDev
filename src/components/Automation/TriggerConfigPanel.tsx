@@ -100,7 +100,8 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         source: nodeConfig.source || 'any',
         tagId: nodeConfig.tagId || '',
         tagName: nodeConfig.tagName || '',
-        keywordMatch: nodeConfig.keywordMatch || 'any'
+        keywordMatch: nodeConfig.keywordMatch || 'any',
+        linkOriginFilter: nodeConfig.linkOriginFilter || 'any',
       })
     }
   }, [selectedNode])
@@ -792,6 +793,25 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             Atenção: este modo dispara em toda mensagem recebida. Para ativar agente de IA, prefira "Nova conversa" para evitar execuções repetidas.
           </div>
         )}
+      </div>
+
+      {/* Origem da Mensagem (click-to-chat link) */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Origem da mensagem
+        </label>
+        <select
+          value={config.linkOriginFilter || 'any'}
+          onChange={(e) => setConfig({ ...config, linkOriginFilter: e.target.value })}
+          className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+        >
+          <option value="any">Qualquer origem</option>
+          <option value="from_link">Gerada por link (Click-to-chat)</option>
+          <option value="not_from_link">Não gerada por link</option>
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          Filtre se a mensagem veio de um link click-to-chat do WhatsApp. "Qualquer origem" é o padrão e mantém o comportamento atual.
+        </p>
       </div>
 
       {/* Opções Avançadas */}

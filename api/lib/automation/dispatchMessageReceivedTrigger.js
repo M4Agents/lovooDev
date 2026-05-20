@@ -53,6 +53,11 @@
  *     - true  → mensagem enviada pela própria plataforma (outbound)
  *     - false → mensagem recebida externamente (inbound)
  *
+ *   @param {string|null} entry_point_source
+ *     - 'click_to_chat_link' → mensagem originada via link click-to-chat
+ *     - null                 → mensagem normal ou integração sem suporte ao campo
+ *     Versões antigas da Uazapi não enviam contextInfo; null é o valor seguro.
+ *
  * Comportamento do triggerEvaluator com esses campos:
  *   - Se direction === 'outbound'   → automação NÃO dispara
  *   - Se from_agent === true        → automação NÃO dispara
@@ -85,16 +90,20 @@ const DEDUP_WINDOW_MS = 60 * 1000  // 60 s — mesma janela de trigger-event.ts
 export async function dispatchMessageReceivedTrigger(
   {
     companyId,
-    leadId       = null,
-    conversationId = null,
-    instanceId   = null,
-    messageId    = null,
-    text         = null,
-    direction    = null,
-    from_agent   = null,
-    sender_type  = null,
-    origin       = null,
-    is_from_me   = null,
+    leadId             = null,
+    conversationId     = null,
+    instanceId         = null,
+    messageId          = null,
+    text               = null,
+    direction          = null,
+    from_agent         = null,
+    sender_type        = null,
+    origin             = null,
+    is_from_me         = null,
+    // Fonte de origem da mensagem (ex: 'click_to_chat_link').
+    // null quando o campo não existe no payload — versões antigas da Uazapi
+    // ou integrações que não suportam esse metadata.
+    entry_point_source = null,
   },
   supabaseOverride
 ) {
@@ -129,12 +138,12 @@ export async function dispatchMessageReceivedTrigger(
     const event = {
       type: 'message.received',
       data: {
-        lead_id:         leadId,
-        conversation_id: conversationId,
-        instance_id:     instanceId,
-        message_id:      messageId,
+        lead_id:             leadId,
+        conversation_id:     conversationId,
+        instance_id:         instanceId,
+        message_id:          messageId,
         text,
-        channel:         'whatsapp',
+        channel:             'whatsapp',
         // Campos de origem — permitem que triggerEvaluator filtre loops
         // independentemente de quem chamar este dispatcher no futuro
         direction,
@@ -142,6 +151,10 @@ export async function dispatchMessageReceivedTrigger(
         sender_type,
         origin,
         is_from_me,
+        // Origem da mensagem: 'click_to_chat_link' ou null.
+        // null = mensagem normal OU integração sem suporte a esse metadata.
+        // O triggerEvaluator usa esse campo para o filtro linkOriginFilter.
+        entry_point_source,
       },
     }
 

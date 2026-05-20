@@ -283,6 +283,25 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                   : 'A mensagem deve conter a palavra-chave'}
               </p>
             </div>
+
+            {/* 4. ORIGEM DA MENSAGEM */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Origem da mensagem
+              </label>
+              <select
+                value={config.linkOriginFilter || 'any'}
+                onChange={(e) => setConfig({ ...config, linkOriginFilter: e.target.value })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="any">Qualquer origem</option>
+                <option value="from_link">Gerada por link (Click-to-chat)</option>
+                <option value="not_from_link">Não gerada por link</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Filtre se a mensagem veio de um link click-to-chat do WhatsApp. "Qualquer origem" mantém o comportamento atual.
+              </p>
+            </div>
           </div>
         )
 

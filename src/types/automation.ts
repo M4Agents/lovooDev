@@ -324,6 +324,14 @@ export interface MessageReceivedTriggerConfig {
   sessionControl: SessionControl
   listenGroups: boolean
   receiveMetadata: boolean
+  /**
+   * Filtro por origem da mensagem (click-to-chat link).
+   * - 'any'          → sem filtro (padrão, retrocompatível)
+   * - 'from_link'    → apenas mensagens geradas via link click-to-chat
+   * - 'not_from_link'→ mensagens normais e integrações sem metadata de link
+   * Ausente ou undefined é equivalente a 'any'.
+   */
+  linkOriginFilter?: 'any' | 'from_link' | 'not_from_link'
 }
 
 /**
@@ -394,6 +402,14 @@ export interface MessageReceivedEventData {
    * false se recebida externamente (inbound).
    */
   is_from_me?: boolean | null
+
+  /**
+   * Fonte de origem da mensagem vinda do payload da Uazapi.
+   * - 'click_to_chat_link' → mensagem iniciada via link click-to-chat
+   * - null                 → mensagem normal OU versão da Uazapi sem suporte ao campo
+   * Avaliado pelo triggerEvaluator quando config.linkOriginFilter está definido.
+   */
+  entry_point_source?: string | null
 }
 
 // Gatilho: Oportunidade Criada

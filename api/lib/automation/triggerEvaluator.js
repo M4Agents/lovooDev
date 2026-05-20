@@ -4,6 +4,10 @@
 // Sem Supabase, sem estado, sem efeitos colaterais.
 // =====================================================
 
+// Valor canônico do campo entryPointConversionSource da Uazapi para mensagens
+// geradas via link click-to-chat. Centralizado aqui para evitar hardcode repetido.
+const CLICK_TO_CHAT_LINK_SOURCE = 'click_to_chat_link'
+
 function matchesTriggerConditions(flow, event) {
   const startNode = (flow.nodes || []).find(node => node.type === 'start')
   if (!startNode) return false
@@ -178,10 +182,30 @@ function matchesMessageReceived(trigger, eventData) {
     }
   }
 
+  // Filtro por origem da mensagem (click-to-chat link).
+  //
+  // Semântica intencional de null:
+  //   entry_point_source === null significa "mensagem normal" OU "integração
+  //   sem suporte ao campo" (ex: versões antigas da Uazapi). Ambos os casos
+  //   são tratados como "não veio de link" para manter retrocompatibilidade.
+  //
+  // Comportamento por valor de config.linkOriginFilter:
+  //   'any' ou ausente  → sem filtro (comportamento padrão, retrocompatível)
+  //   'from_link'       → apenas mensagens com entry_point_source === CLICK_TO_CHAT_LINK_SOURCE passam
+  //   'not_from_link'   → mensagens normais, null e integrações sem metadata passam
+  if (config.linkOriginFilter && config.linkOriginFilter !== 'any') {
+    if (config.linkOriginFilter === 'from_link') {
+      if (eventData.entry_point_source !== CLICK_TO_CHAT_LINK_SOURCE) return false
+    } else if (config.linkOriginFilter === 'not_from_link') {
+      if (eventData.entry_point_source === CLICK_TO_CHAT_LINK_SOURCE) return false
+    }
+  }
+
   return true
 }
 
 export {
+  CLICK_TO_CHAT_LINK_SOURCE,
   matchesTriggerConditions,
   matchesLeadCreated,
   matchesOpportunityStageChanged,

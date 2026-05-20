@@ -1302,21 +1302,30 @@ async function processMessage(payload) {
     // message.received inicia nova execução de automação.
     // =====================================================
     if (direction === 'inbound' && conversationId) {
+      // Extração fail-safe do campo de origem click-to-chat.
+      // A Uazapi pode entregar o campo em dois níveis distintos dependendo da versão.
+      // Null propagado quando o campo não existe (mensagens normais ou integrações sem metadata).
+      const entryPointSource =
+        message?.content?.contextInfo?.entryPointConversionSource ||
+        message?.contextInfo?.entryPointConversionSource ||
+        null
+
       // #region agent log
       console.log(`[DEBUG-275bca][webhook] dispatch instanceId=${instance.id} leadId=${inboundLeadId} conversationId=${conversationId} direction=${direction}`)
       // #endregion
       await dispatchMessageReceivedTrigger({
-        companyId:      company.id,
-        leadId:         inboundLeadId,
+        companyId:           company.id,
+        leadId:              inboundLeadId,
         conversationId,
-        instanceId:     instance.id,
-        messageId:      savedMessageId,
-        text:           messageText,
+        instanceId:          instance.id,
+        messageId:           savedMessageId,
+        text:                messageText,
         direction,
-        from_agent:     false,
-        sender_type:    'lead',
-        origin:         'whatsapp',
-        is_from_me:     false,
+        from_agent:          false,
+        sender_type:         'lead',
+        origin:              'whatsapp',
+        is_from_me:          false,
+        entry_point_source:  entryPointSource,
       }).catch(err => console.error('[uazapi-webhook-final] message.received trigger failed:', err));
     }
 
