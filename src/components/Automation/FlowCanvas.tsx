@@ -174,6 +174,18 @@ function FlowCanvasInner({
         x: rect.right - 4,
         y: rect.bottom - 35 // Aproximadamente onde está a bolinha "Próximo"
       }
+    } else if (handleId === 'true') {
+      // ConditionNode: handle "Sim" — primeiro no lado direito
+      return {
+        x: rect.right - 4,
+        y: rect.top + rect.height * 0.62
+      }
+    } else if (handleId === 'false') {
+      // ConditionNode: handle "Não" — segundo no lado direito
+      return {
+        x: rect.right - 4,
+        y: rect.top + rect.height * 0.75
+      }
     }
     
     return { x: rect.right, y: rect.top }
@@ -297,7 +309,12 @@ function FlowCanvasInner({
   const onConnectStart = useCallback(
     (_: any, params: any) => {
       // Detectar arrasto de handles que devem abrir menu de ações
-      if (params.handleId === 'trigger-output' || params.handleId === 'next') {
+      if (
+        params.handleId === 'trigger-output' ||
+        params.handleId === 'next' ||
+        params.handleId === 'true' ||
+        params.handleId === 'false'
+      ) {
         setConnectingFromNode({
           nodeId: params.nodeId,
           handleId: params.handleId

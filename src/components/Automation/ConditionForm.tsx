@@ -382,6 +382,13 @@ export function ConditionForm({ config, setConfig }: ConditionFormProps) {
       return `Se: ${typeLabel} ${operatorLabel} ${value} ${unit}`
     }
 
+    if ((selectedType === 'time_of_day' || selectedType === 'day_of_month') && typeof value === 'object' && value !== null) {
+      if (operator === 'is_between') {
+        return `Se: ${typeLabel} ${operatorLabel} ${value.start ?? '?'} e ${value.end ?? '?'}`
+      }
+      valueLabel = value.start ?? value.end ?? JSON.stringify(value)
+    }
+
     return `Se: ${typeLabel} ${operatorLabel} ${valueLabel}`
   }
 
