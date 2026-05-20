@@ -242,66 +242,55 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
               </label>
               <select
                 value={config.comparisonType || 'contains'}
-                onChange={(e) => setConfig({ ...config, comparisonType: e.target.value })}
+                onChange={(e) => setConfig({ ...config, comparisonType: e.target.value, keyword: '', keywords: [] })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="contains">Contém</option>
                 <option value="equals">Igual</option>
                 <option value="regex">Regex</option>
+                <option value="link_origin">Gerada por link</option>
               </select>
+              {config.comparisonType === 'link_origin' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  A automação será executada apenas quando a mensagem for iniciada via link click-to-chat do WhatsApp.
+                </p>
+              )}
             </div>
 
-            {/* 3. PALAVRA-CHAVE / EXPRESSÃO REGULAR */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavra-chave'}
-              </label>
-              <input
-                type="text"
-                value={config.keyword || ''}
-                onChange={(e) => {
-                  const value = e.target.value
-                  setConfig({
-                    ...config,
-                    keyword:  value,
-                    keywords: value ? [value] : [],
-                  })
-                }}
-                onKeyDown={(e) => e.stopPropagation()}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder={
-                  config.comparisonType === 'regex'
-                    ? 'Ex: (?i)^(oi|olá|menu)$'
-                    : 'Ex: oi, olá, menu'
-                }
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {config.comparisonType === 'regex'
-                  ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas.'
-                  : config.comparisonType === 'equals'
-                  ? 'A mensagem deve ser exatamente igual à palavra-chave'
-                  : 'A mensagem deve conter a palavra-chave'}
-              </p>
-            </div>
-
-            {/* 4. ORIGEM DA MENSAGEM */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Origem da mensagem
-              </label>
-              <select
-                value={config.linkOriginFilter || 'any'}
-                onChange={(e) => setConfig({ ...config, linkOriginFilter: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="any">Qualquer origem</option>
-                <option value="from_link">Gerada por link (Click-to-chat)</option>
-                <option value="not_from_link">Não gerada por link</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Filtre se a mensagem veio de um link click-to-chat do WhatsApp. "Qualquer origem" mantém o comportamento atual.
-              </p>
-            </div>
+            {/* 3. PALAVRA-CHAVE / EXPRESSÃO REGULAR — oculto em modo link_origin */}
+            {config.comparisonType !== 'link_origin' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavra-chave'}
+                </label>
+                <input
+                  type="text"
+                  value={config.keyword || ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setConfig({
+                      ...config,
+                      keyword:  value,
+                      keywords: value ? [value] : [],
+                    })
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={
+                    config.comparisonType === 'regex'
+                      ? 'Ex: (?i)^(oi|olá|menu)$'
+                      : 'Ex: oi, olá, menu'
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {config.comparisonType === 'regex'
+                    ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas.'
+                    : config.comparisonType === 'equals'
+                    ? 'A mensagem deve ser exatamente igual à palavra-chave'
+                    : 'A mensagem deve conter a palavra-chave'}
+                </p>
+              </div>
+            )}
           </div>
         )
 

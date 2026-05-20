@@ -138,6 +138,16 @@ function matchesMessageReceived(trigger, eventData) {
   // Somente bloqueia se o dispatcher explicitamente marcou is_new_conversation = false
   if (config.sessionControl === 'new_conversation' && eventData.is_new_conversation === false) return false
 
+  const comparisonType = config.comparisonType || config.keywordMatch || 'contains'
+
+  // Filtro especial: mensagem gerada por link click-to-chat.
+  // Não usa keywords — dispara apenas quando entry_point_source === CLICK_TO_CHAT_LINK_SOURCE.
+  // null é tratado como "não veio de link" (versões antigas da Uazapi ou integrações sem metadata).
+  if (comparisonType === 'link_origin') {
+    if (eventData.entry_point_source !== CLICK_TO_CHAT_LINK_SOURCE) return false
+    return true
+  }
+
   // Filtro por palavras-chave / expressão regular
   // Fallback hardened: Array.isArray evita aceitar objeto ou string corrompida do JSONB
   const keywords = Array.isArray(config.keywords)
@@ -148,7 +158,6 @@ function matchesMessageReceived(trigger, eventData) {
 
   if (keywords.length > 0) {
     const rawText = String(eventData.text || eventData.message_text || '')
-    const comparisonType = config.comparisonType || config.keywordMatch || 'contains'
 
     if (comparisonType === 'regex') {
       // Regex: testar contra texto bruto (não normalizado) para respeitar acentos da expressão.
@@ -170,34 +179,13 @@ function matchesMessageReceived(trigger, eventData) {
       const normalizedKeywords = keywords.map(normalizeText)
 
       if (comparisonType === 'equals') {
-        // Mensagem deve ser exatamente igual a pelo menos uma keyword
         if (!normalizedKeywords.some(kw => text === kw)) return false
       } else if (comparisonType === 'all') {
-        // Mensagem deve conter TODAS as keywords
         if (!normalizedKeywords.every(kw => text.includes(kw))) return false
       } else {
         // 'contains' e qualquer outro valor: mensagem deve conter ao menos uma keyword
         if (!normalizedKeywords.some(kw => text.includes(kw))) return false
       }
-    }
-  }
-
-  // Filtro por origem da mensagem (click-to-chat link).
-  //
-  // Semântica intencional de null:
-  //   entry_point_source === null significa "mensagem normal" OU "integração
-  //   sem suporte ao campo" (ex: versões antigas da Uazapi). Ambos os casos
-  //   são tratados como "não veio de link" para manter retrocompatibilidade.
-  //
-  // Comportamento por valor de config.linkOriginFilter:
-  //   'any' ou ausente  → sem filtro (comportamento padrão, retrocompatível)
-  //   'from_link'       → apenas mensagens com entry_point_source === CLICK_TO_CHAT_LINK_SOURCE passam
-  //   'not_from_link'   → mensagens normais, null e integrações sem metadata passam
-  if (config.linkOriginFilter && config.linkOriginFilter !== 'any') {
-    if (config.linkOriginFilter === 'from_link') {
-      if (eventData.entry_point_source !== CLICK_TO_CHAT_LINK_SOURCE) return false
-    } else if (config.linkOriginFilter === 'not_from_link') {
-      if (eventData.entry_point_source === CLICK_TO_CHAT_LINK_SOURCE) return false
     }
   }
 

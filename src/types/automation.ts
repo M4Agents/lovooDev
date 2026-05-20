@@ -302,6 +302,7 @@ export type ComparisonType =
   | 'regex'
   | 'not_contains'
   | 'not_equals'
+  | 'link_origin'
 
 export type SessionControl = 
   | 'always'
@@ -319,19 +320,17 @@ export interface MessageReceivedTriggerConfig {
   triggerType: 'message.received'
   instanceId?: string
   instanceName?: string
+  /**
+   * Tipo de comparação da mensagem.
+   * - 'contains' / 'equals' / 'regex' / 'all' → filtra por texto (keywords obrigatórias)
+   * - 'link_origin' → dispara apenas quando a mensagem veio de link click-to-chat;
+   *   keywords são ignoradas neste modo
+   */
   comparisonType: ComparisonType
   keywords: string[]
   sessionControl: SessionControl
   listenGroups: boolean
   receiveMetadata: boolean
-  /**
-   * Filtro por origem da mensagem (click-to-chat link).
-   * - 'any'          → sem filtro (padrão, retrocompatível)
-   * - 'from_link'    → apenas mensagens geradas via link click-to-chat
-   * - 'not_from_link'→ mensagens normais e integrações sem metadata de link
-   * Ausente ou undefined é equivalente a 'any'.
-   */
-  linkOriginFilter?: 'any' | 'from_link' | 'not_from_link'
 }
 
 /**

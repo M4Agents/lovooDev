@@ -101,7 +101,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         tagId: nodeConfig.tagId || '',
         tagName: nodeConfig.tagName || '',
         keywordMatch: nodeConfig.keywordMatch || 'any',
-        linkOriginFilter: nodeConfig.linkOriginFilter || 'any',
       })
     }
   }, [selectedNode])
@@ -175,6 +174,7 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     { value: 'not_contains', label: 'Não contém' },
     { value: 'not_equals', label: 'Diferente de' },
     { value: 'regex', label: 'Regex (avançado)' },
+    { value: 'link_origin', label: 'Gerada por link' },
   ]
 
   const sessionControls: { value: SessionControl; label: string; description: string }[] = [
@@ -690,6 +690,12 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           value={config.comparisonType || 'contains'}
           onChange={(e) => {
             const newType = e.target.value
+            // link_origin não usa keywords — limpar ao selecionar
+            if (newType === 'link_origin') {
+              setConfig({ ...config, comparisonType: newType, keywords: [], keyword: '' })
+              setCurrentKeyword('')
+              return
+            }
             // Ao mudar para regex: manter apenas o primeiro padrão (se houver)
             const updatedKeywords =
               newType === 'regex' && Array.isArray(config.keywords) && config.keywords.length > 1
@@ -705,64 +711,71 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             </option>
           ))}
         </select>
+        {config.comparisonType === 'link_origin' && (
+          <p className="text-xs text-gray-500 mt-1">
+            A automação será executada apenas quando a mensagem for iniciada via link click-to-chat do WhatsApp.
+          </p>
+        )}
       </div>
 
-      {/* Palavras-chave / Expressão regular */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavras-chave'}
-        </label>
-        <div className="space-y-2">
-          {/* Lista de padrões — para regex mostra apenas o primeiro */}
-          {(config.keywords || []).length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {config.keywords.map((keyword: string, index: number) => (
-                <div
-                  key={index}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
-                >
-                  <span>{keyword}</span>
-                  <button
-                    onClick={() => removeKeyword(index)}
-                    className="hover:bg-green-200 rounded-full p-0.5"
+      {/* Palavras-chave / Expressão regular — oculto em modo link_origin */}
+      {config.comparisonType !== 'link_origin' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavras-chave'}
+          </label>
+          <div className="space-y-2">
+            {/* Lista de padrões — para regex mostra apenas o primeiro */}
+            {(config.keywords || []).length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {config.keywords.map((keyword: string, index: number) => (
+                  <div
+                    key={index}
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {/* Input para adicionar — oculto em regex quando já há 1 padrão */}
-          {!(config.comparisonType === 'regex' && (config.keywords || []).length >= 1) && (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={currentKeyword}
-                onChange={(e) => setCurrentKeyword(e.target.value)}
-                onKeyPress={handleKeywordKeyPress}
-                placeholder={
-                  config.comparisonType === 'regex'
-                    ? 'Ex: (?i)^(oi|olá|menu)$'
-                    : 'Digite uma palavra-chave e pressione Enter'
-                }
-                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-              />
-              <button
-                onClick={addKeyword}
-                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          <p className="text-xs text-gray-500">
-            {config.comparisonType === 'regex'
-              ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas. Apenas um padrão é suportado.'
-              : 'Deixe vazio para disparar em qualquer mensagem'}
-          </p>
+                    <span>{keyword}</span>
+                    <button
+                      onClick={() => removeKeyword(index)}
+                      className="hover:bg-green-200 rounded-full p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input para adicionar — oculto em regex quando já há 1 padrão */}
+            {!(config.comparisonType === 'regex' && (config.keywords || []).length >= 1) && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={currentKeyword}
+                  onChange={(e) => setCurrentKeyword(e.target.value)}
+                  onKeyPress={handleKeywordKeyPress}
+                  placeholder={
+                    config.comparisonType === 'regex'
+                      ? 'Ex: (?i)^(oi|olá|menu)$'
+                      : 'Digite uma palavra-chave e pressione Enter'
+                  }
+                  className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                />
+                <button
+                  onClick={addKeyword}
+                  className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-gray-500">
+              {config.comparisonType === 'regex'
+                ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas. Apenas um padrão é suportado.'
+                : 'Deixe vazio para disparar em qualquer mensagem'}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Controle de Sessão */}
       <div>
@@ -793,25 +806,6 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             Atenção: este modo dispara em toda mensagem recebida. Para ativar agente de IA, prefira "Nova conversa" para evitar execuções repetidas.
           </div>
         )}
-      </div>
-
-      {/* Origem da Mensagem (click-to-chat link) */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Origem da mensagem
-        </label>
-        <select
-          value={config.linkOriginFilter || 'any'}
-          onChange={(e) => setConfig({ ...config, linkOriginFilter: e.target.value })}
-          className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-        >
-          <option value="any">Qualquer origem</option>
-          <option value="from_link">Gerada por link (Click-to-chat)</option>
-          <option value="not_from_link">Não gerada por link</option>
-        </select>
-        <p className="text-xs text-gray-500 mt-1">
-          Filtre se a mensagem veio de um link click-to-chat do WhatsApp. "Qualquer origem" é o padrão e mantém o comportamento atual.
-        </p>
       </div>
 
       {/* Opções Avançadas */}
