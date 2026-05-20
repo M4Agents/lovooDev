@@ -62,6 +62,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 type="text"
                 value={config.tagName || ''}
                 onChange={(e) => setConfig({ ...config, tagName: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Nome da tag"
               />
@@ -266,6 +267,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                     keywords: value ? [value] : [],
                   })
                 }}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder={
                   config.comparisonType === 'regex'
@@ -334,6 +336,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 type="text"
                 value={config.keyword || ''}
                 onChange={(e) => setConfig({ ...config, keyword: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Ex: oi, olá, menu"
               />
@@ -490,6 +493,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 type="text"
                 value={config.lossReason || ''}
                 onChange={(e) => setConfig({ ...config, lossReason: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Ex: Preço alto, Concorrência"
               />
@@ -539,6 +543,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 type="text"
                 value={config.userId || ''}
                 onChange={(e) => setConfig({ ...config, userId: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="ID do vendedor"
               />
