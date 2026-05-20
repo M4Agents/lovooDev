@@ -319,18 +319,14 @@ export const NewDashboard: React.FC = () => {
         />
       </section>
 
-      {/* ── Gráficos de Tendência (Fase 1) ─────────────────────────────── */}
-      <section>
+      {/* ── Inbound por Dia + Ranking Comercial (lado a lado) ──────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TrendsSection
           data={trends.data}
           loading={trends.loading}
           error={trends.error}
           onRetry={trends.refetch}
         />
-      </section>
-
-      {/* ── Ranking Comercial (Fase 2) ──────────────────────────────────── */}
-      <section>
         <SellerRankingSection
           data={sellerRanking.data}
           meta={sellerRanking.meta}
@@ -340,7 +336,7 @@ export const NewDashboard: React.FC = () => {
           sellerDeltas={flags.snapshotDelta ? sellerDeltas.byUserId : undefined}
           comparisonMode={comparisonMode}
         />
-      </section>
+      </div>
 
       {/* ── Forecast Comercial (Fase 3A) ────────────────────────────────── */}
       <section>
