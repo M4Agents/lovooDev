@@ -9,7 +9,7 @@
 // Compatível com PeriodFilter.tsx — usa o mesmo tipo PeriodFilter.
 // =====================================================
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { PREDEFINED_PERIODS } from '../../types/analytics'
 import type { PeriodFilter } from '../../types/analytics'
@@ -109,28 +109,33 @@ export function useDashboardFilters(): DashboardFiltersState {
     ? `${STORAGE_KEY_PREFIX}_${companyId}`
     : STORAGE_KEY_PREFIX
 
-  const [period,   setPeriodState]   = useState<PeriodFilter>(() => loadFromStorage(storageKey).period)
-  const [funnelId, setFunnelIdState] = useState<string | null>(() => loadFromStorage(storageKey).funnelId)
-  const [userId,   setUserIdState]   = useState<string | null>(() => loadFromStorage(storageKey).userId)
+  const [period,         setPeriodState]   = useState<PeriodFilter>(() => loadFromStorage(storageKey).period)
+  const [funnelId,       setFunnelIdState] = useState<string | null>(() => loadFromStorage(storageKey).funnelId)
+  const [userId,         setUserIdState]   = useState<string | null>(() => loadFromStorage(storageKey).userId)
 
-  // Rastreia a chave anterior para detectar troca de empresa
-  const prevKeyRef = useRef(storageKey)
+  // Padrão React de estado derivado: detecta troca de empresa DURANTE o render,
+  // antes que qualquer hook de dados dispare chamadas de API.
+  // Isso garante que nenhum dado de uma empresa vaze para outra na interpolação.
+  const [prevStorageKey, setPrevStorageKey] = useState(storageKey)
 
-  // Quando a empresa muda: carrega os filtros da nova empresa.
-  // Quando filtros mudam: persiste no storage.
+  if (prevStorageKey !== storageKey) {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'useDashboardFilters.ts:companySwitch',message:'Company switched — resetting filters synchronously',data:{prevKey:prevStorageKey,nextKey:storageKey,oldFunnelId:funnelId,oldUserId:userId},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const saved = loadFromStorage(storageKey)
+    setPrevStorageKey(storageKey)
+    setPeriodState(saved.period)
+    setFunnelIdState(saved.funnelId)
+    setUserIdState(saved.userId)
+  }
+
+  // Persiste filtros no storage sempre que mudarem (troca de empresa tratada acima)
   useEffect(() => {
-    const keyChanged = prevKeyRef.current !== storageKey
-    prevKeyRef.current = storageKey
-
-    if (keyChanged) {
-      const saved = loadFromStorage(storageKey)
-      setPeriodState(saved.period)
-      setFunnelIdState(saved.funnelId)
-      setUserIdState(saved.userId)
-    } else {
+    if (prevStorageKey === storageKey) {
       saveToStorage(storageKey, period, funnelId, userId)
     }
-  }, [storageKey, period, funnelId, userId])
+  }, [storageKey, prevStorageKey, period, funnelId, userId])
 
   const setPeriod = useCallback((next: PeriodFilter) => {
     setPeriodState(() => {
