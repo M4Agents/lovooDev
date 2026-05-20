@@ -178,34 +178,64 @@ export default async function handler(req: any, res: any) {
 
     const supabase = getSupabaseAdmin()
 
-    // 2. Resolver company_id via membership (multi-tenant obrigatório)
-    const { data: membership, error: membershipError } = await supabase
-      .from('company_users')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-
-    if (membershipError || !membership?.company_id) {
-      console.warn('[executions/flowId] membership não encontrada — userId:', user.id, 'err:', membershipError?.message)
-      return res.status(403).json({ error: 'Acesso negado' })
-    }
-    console.log('[executions/flowId] company_id:', membership.company_id)
-
-    const companyId = membership.company_id
-
-    // 3. Confirmar que o flow pertence à empresa (evita enumeration cross-tenant)
+    // 2. Resolver o flow PRIMEIRO para obter o company_id real.
+    //    Usar service_role sem filtro de empresa — a validação de acesso vem depois.
     const { data: flow, error: flowErr } = await supabase
       .from('automation_flows')
-      .select('id, name')
+      .select('id, name, company_id')
       .eq('id', flowId)
-      .eq('company_id', companyId)
       .maybeSingle()
 
     if (flowErr || !flow) {
       return res.status(404).json({ error: 'Flow não encontrado' })
     }
+
+    const companyId = flow.company_id
+
+    // 3. Validar que o usuário tem acesso à empresa dona do flow (multi-tenant obrigatório).
+    //
+    //    Trilha 1: membership direta na empresa do flow.
+    //    Trilha 2: super_admin/system_admin de uma empresa pai que possui o flow como filha.
+    //
+    //    Usar `.limit(1)` com filtro explícito de company_id — nunca depender de ordem de retorno.
+    const { data: directMembership } = await supabase
+      .from('company_users')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    let hasAccess = !!directMembership
+
+    // Trilha 2: checar se o usuário é super_admin/system_admin de uma empresa pai
+    if (!hasAccess) {
+      const { data: parentCompany } = await supabase
+        .from('companies')
+        .select('parent_id')
+        .eq('id', companyId)
+        .maybeSingle()
+
+      if (parentCompany?.parent_id) {
+        const { data: parentMembership } = await supabase
+          .from('company_users')
+          .select('company_id')
+          .eq('user_id', user.id)
+          .eq('company_id', parentCompany.parent_id)
+          .eq('is_active', true)
+          .in('role', ['super_admin', 'system_admin'])
+          .maybeSingle()
+
+        hasAccess = !!parentMembership
+      }
+    }
+
+    if (!hasAccess) {
+      console.warn('[executions/flowId] acesso negado — userId:', user.id, '| companyId:', companyId)
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    console.log('[executions/flowId] acesso validado — userId:', user.id, '| companyId:', companyId, '| trilha:', directMembership ? '1' : '2')
 
     // 4. Buscar execuções do flow com todos os campos relevantes
     const { data: executions, error: execErr } = await supabase
