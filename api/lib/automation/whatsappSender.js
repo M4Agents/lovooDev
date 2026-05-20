@@ -2,7 +2,7 @@
 // WHATSAPP SENDER — Etapa 2 do núcleo mínimo backend
 //
 // Responsabilidade:
-//   - Resolver lead a partir de opportunity_id
+//   - Resolver lead a partir de opportunity_id (ou leadId como fallback)
 //   - Resolver conversa (chat_conversations)
 //   - Substituir variáveis na mensagem
 //   - Criar registro em chat_messages (RPC)
@@ -17,35 +17,62 @@ const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 // Resolução de dados via banco
 // ---------------------------------------------------------------------------
 
-async function resolveLead(opportunityId, companyId, supabase) {
-  if (!opportunityId) return null
+/**
+ * Resolve o lead a partir de opportunityId (prioritário) ou leadId (fallback).
+ * O fallback via leadId permite que gatilhos sem oportunidade (ex: message.received)
+ * também consigam enviar mensagens ao lead correto.
+ */
+async function resolveLead(opportunityId, companyId, supabase, leadId) {
+  const LEAD_SELECT = 'id, name, phone, email, company_name, cidade, estado'
 
-  const { data: opp, error: oppError } = await supabase
-    .from('opportunities')
-    .select('lead_id')
-    .eq('id', opportunityId)
-    .eq('company_id', companyId)
-    .maybeSingle()
+  // Prioridade 1: resolver via oportunidade
+  if (opportunityId) {
+    const { data: opp, error: oppError } = await supabase
+      .from('opportunities')
+      .select('lead_id')
+      .eq('id', opportunityId)
+      .eq('company_id', companyId)
+      .maybeSingle()
 
-  if (oppError) {
-    console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
-    return null
+    if (oppError) {
+      console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, oppError?.message, oppError?.code)
+      return null
+    }
+
+    if (!opp?.lead_id) return null
+
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select(LEAD_SELECT)
+      .eq('id', opp.lead_id)
+      .maybeSingle()
+
+    if (leadError) {
+      console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
+      return null
+    }
+
+    return lead || null
   }
 
-  if (!opp?.lead_id) return null
+  // Fallback: resolver diretamente pelo leadId (gatilhos sem oportunidade, ex: message.received)
+  if (leadId) {
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select(LEAD_SELECT)
+      .eq('id', leadId)
+      .eq('company_id', companyId)
+      .maybeSingle()
 
-  const { data: lead, error: leadError } = await supabase
-    .from('leads')
-    .select('id, name, phone, email, company_name, cidade, estado')
-    .eq('id', opp.lead_id)
-    .maybeSingle()
+    if (leadError) {
+      console.error(`[whatsappSender] erro ao buscar lead ${leadId} (fallback):`, leadError?.message, leadError?.code)
+      return null
+    }
 
-  if (leadError) {
-    console.error(`[whatsappSender] erro ao buscar lead ${opp.lead_id}:`, leadError?.message, leadError?.code)
-    return null
+    return lead || null
   }
 
-  return lead || null
+  return null
 }
 
 async function resolveConversation(phone, leadName, instanceId, companyId, supabase) {
@@ -237,11 +264,12 @@ export async function sendMessageNode(node, context, supabase) {
     : messageType === 'audio' ? 'audio' : 'text'
 
   // 1. Resolver lead via opportunity_id
-  const lead = await resolveLead(context.opportunityId, context.companyId, supabase)
+  // 1. Resolver lead via opportunity_id (prioritário) ou lead_id (fallback para gatilhos sem oportunidade)
+  const lead = await resolveLead(context.opportunityId, context.companyId, supabase, context.leadId)
   if (!lead?.phone) {
     return {
       skipped: true,
-      reason: `Lead não encontrado ou sem telefone (opportunity_id: ${context.opportunityId})`,
+      reason: `Lead não encontrado ou sem telefone (opportunity_id: ${context.opportunityId ?? null}, lead_id: ${context.leadId ?? null})`,
     }
   }
 
