@@ -250,18 +250,45 @@ async function pruneOperationalTables(svc, jobDate) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
+  // #region agent log — diagnóstico Sprint 0
+  console.log('[DIAG:ENTRY] method:', req.method,
+    '| hasAuth:', !!req.headers.authorization,
+    '| CRON_SECRET_SET:', !!process.env.CRON_SECRET,
+    '| CRON_SECRET_LEN:', process.env.CRON_SECRET?.length ?? 0,
+    '| SUPABASE_URL_SET:', !!process.env.VITE_SUPABASE_URL,
+    '| SERVICE_ROLE_SET:', !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  )
+  // #endregion
+
+  // Aceita GET (Vercel Cron trigger automático) e POST (chamadas manuais / testes)
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }
 
+  // #region agent log — diagnóstico Sprint 0
+  const _cronSecretSet  = !!process.env.CRON_SECRET
+  const _cronSecretLen  = process.env.CRON_SECRET?.length ?? 0
+  const _authHeader     = req.headers.authorization ?? ''
+  const _authMatch      = _authHeader === `Bearer ${process.env.CRON_SECRET ?? ''}`
+  console.log('[DIAG:AUTH] secret_set:', _cronSecretSet, '| secret_len:', _cronSecretLen,
+    '| auth_present:', !!_authHeader, '| auth_match:', _authMatch)
+  // #endregion
+
   if (!validateCronAuth(req)) {
-    console.warn('[cron/generate-dashboard-snapshots] Acesso sem CRON_SECRET válido')
+    console.warn('[cron/generate-dashboard-snapshots] Acesso sem CRON_SECRET válido',
+      '| CRON_SECRET_SET:', !!process.env.CRON_SECRET,
+      '| CRON_SECRET_LEN:', process.env.CRON_SECRET?.length ?? 0,
+      '| AUTH_HEADER_PRESENT:', !!req.headers.authorization
+    )
     return res.status(401).json({ ok: false, error: 'Unauthorized' })
   }
 
   const svc = getServiceSupabase()
   if (!svc) {
-    console.error('[cron/generate-dashboard-snapshots] service_role não configurado')
+    console.error('[cron/generate-dashboard-snapshots] service_role não configurado',
+      '| VITE_SUPABASE_URL_SET:', !!process.env.VITE_SUPABASE_URL,
+      '| SERVICE_ROLE_SET:', !!process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
     return res.status(500).json({ ok: false, error: 'service_role não configurado' })
   }
 
@@ -270,11 +297,14 @@ export default async function handler(req, res) {
   const dates     = getTargetDates(DATES_BACK)
 
   console.log('[cron/generate-dashboard-snapshots] Iniciando | jobDate:', jobDate, '| datas:', dates)
+  // #region agent log — diagnóstico Sprint 0
+  console.log('[DIAG:STARTED] jobDate:', jobDate, '| dates:', dates, '| svc_ok: true')
+  // #endregion
 
   // ── 0. Criar registro de execução global (cron_runs header) ───────────────
   let cronRunId = null
   try {
-    const { data: cronRun } = await svc
+    const { data: cronRun, error: cronRunErr } = await svc
       .from('dashboard_snapshot_cron_runs')
       .insert({
         run_date:    jobDate,
@@ -285,9 +315,16 @@ export default async function handler(req, res) {
       .single()
 
     cronRunId = cronRun?.id ?? null
+    // #region agent log — diagnóstico Sprint 0
+    console.log('[DIAG:CRON_RUN_INSERT] cronRunId:', cronRunId,
+      '| insertError:', cronRunErr?.message ?? cronRunErr?.code ?? null)
+    // #endregion
   } catch (err) {
     // Não falhar o cron por causa do registro de monitoramento
     console.warn('[cron] Falha ao criar cron_run header:', err?.message)
+    // #region agent log — diagnóstico Sprint 0
+    console.warn('[DIAG:CRON_RUN_EXCEPTION] err:', err?.message)
+    // #endregion
   }
 
   // ── 1. Pruning das tabelas de log operacionais ────────────────────────────
