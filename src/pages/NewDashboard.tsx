@@ -18,6 +18,8 @@ import { TrendsSection }              from '../components/Dashboard/sections/Tre
 import { SellerRankingSection }       from '../components/Dashboard/sections/SellerRankingSection'
 import { SlaAlertsPanel }             from '../components/Dashboard/sections/SlaAlertsPanel'
 import { LeadOriginsSection }         from '../components/Dashboard/sections/LeadOriginsSection'
+import { ActivationSection }          from '../components/Dashboard/sections/ActivationSection'
+import { DashboardTabs }              from '../components/Dashboard/navigation/DashboardTabs'
 import { useDashboardFilters }        from '../hooks/dashboard/useDashboardFilters'
 import { useDashboardSummary }        from '../hooks/dashboard/useDashboardSummary'
 import { useDashboardInsights }       from '../hooks/dashboard/useDashboardInsights'
@@ -31,6 +33,7 @@ import { useLeadOrigins }             from '../hooks/dashboard/useLeadOrigins'
 import { useDashboardForecast }       from '../hooks/dashboard/useDashboardForecast'
 import { usePriorityAlerts }          from '../hooks/dashboard/usePriorityAlerts'
 import { useFunnelExecutive }         from '../hooks/dashboard/useFunnelExecutive'
+import { useDashboardActivation }     from '../hooks/dashboard/useDashboardActivation'
 import { ForecastSection }            from '../components/Dashboard/sections/ForecastSection'
 import { PriorityAlertsSection }      from '../components/Dashboard/sections/PriorityAlertsSection'
 import { FunnelExecutiveSection }     from '../components/Dashboard/sections/FunnelExecutiveSection'
@@ -42,6 +45,7 @@ import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends
 import { useSnapshotSellerDeltas }    from '../hooks/dashboard/useSnapshotSellerDeltas'
 import type { DashboardFilters }      from '../services/dashboardApi'
 import type { ComparisonMode }        from '../lib/snapshotPeriods'
+import type { DashboardTab }          from '../components/Dashboard/navigation/DashboardTabs'
 
 // ---------------------------------------------------------------------------
 // Sub-componentes auxiliares do layout de funil
@@ -116,6 +120,9 @@ export const NewDashboard: React.FC = () => {
   // Modal de configuração dos alertas
   const [alertSettingsOpen, setAlertSettingsOpen] = useState(false)
 
+  // Aba ativa do dashboard
+  const [activeTab, setActiveTab] = useState<DashboardTab>('operation')
+
   // Filtros globais — fonte única de verdade
   const { period, funnelId, userId, setPeriod, setFunnelId, setUserId } = useDashboardFilters()
 
@@ -175,6 +182,9 @@ export const NewDashboard: React.FC = () => {
   // Label do período ativo para exibir no header
   const periodLabel = period.label ?? 'Período selecionado'
 
+  // Ativação Comercial — hook isolado, roda sempre para evitar delay na troca de aba
+  const activation = useDashboardActivation(filters)
+
   // FASE 4.1 — Dados históricos (snapshot) — todos gateados por feature flags
   const snapshotComparison = useSnapshotComparison({
     companyId,
@@ -205,11 +215,12 @@ export const NewDashboard: React.FC = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="flex flex-col gap-2">
           <h1 className="text-xl font-bold text-gray-900">Inteligência Comercial</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-gray-500">
             No período: <span className="font-medium text-gray-700">{periodLabel}</span>
           </p>
+          <DashboardTabs activeTab={activeTab} onChange={setActiveTab} />
         </div>
 
         {/* Filtros: Período + Funil + Vendedor + Toggle histórico */}
@@ -276,6 +287,12 @@ export const NewDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          ABA: Operação
+          Conteúdo idêntico ao original — NÃO alterar a semântica interna.
+         ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'operation' && (<>
 
       {/* ── KPIs executivos ────────────────────────────────────────────── */}
       <section>
@@ -503,6 +520,23 @@ export const NewDashboard: React.FC = () => {
           <span>Funis: <strong>{summary.data.funnel_mode}</strong></span>
         </div>
       )}
+
+      </>)}
+      {/* ══ fim aba Operação ══════════════════════════════════════════════ */}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          ABA: Ativação Comercial
+          Stack isolada — não compartilha dados com a aba Operação.
+         ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'activation' && (
+        <ActivationSection
+          data={activation.data}
+          loading={activation.loading}
+          error={activation.error}
+          onRetry={activation.refetch}
+        />
+      )}
+      {/* ══ fim aba Ativação Comercial ════════════════════════════════════ */}
 
       {/* ── Modal de configuração dos alertas ──────────────────────────── */}
       <AlertSettingsModal
