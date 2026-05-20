@@ -9,6 +9,10 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
  * Valida que o usuário autenticado é membro ativo da empresa solicitada.
  * Retorna o role do membro para uso posterior (ex: verificação de permissão).
  *
+ * Trilha 1: membership direto em company_users (qualquer role ativo).
+ * Trilha 2: super_admin / system_admin ativo na empresa PAI da empresa solicitada.
+ *           Espelha auth_user_is_parent_admin() do banco — mesmos critérios.
+ *
  * Usa o service_role client (svc) para evitar dependência de RLS na consulta
  * de membership — o próprio filtro user_id + company_id + is_active é a barreira.
  */
@@ -17,7 +21,8 @@ export async function assertMembership(
   userId: string,
   companyId: string,
 ): Promise<{ role: string } | null> {
-  const { data } = await svc
+  // ── Trilha 1: membership direto ──────────────────────────────────────────
+  const { data: direct } = await svc
     .from('company_users')
     .select('role')
     .eq('user_id', userId)
@@ -25,7 +30,42 @@ export async function assertMembership(
     .eq('is_active', true)
     .maybeSingle()
 
-  return data ?? null
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail1',message:'Trilha 1 result',data:{userId,companyId,found:!!direct,role:direct?.role??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  if (direct) return direct
+
+  // ── Trilha 2: super_admin / system_admin da empresa pai ──────────────────
+  // Espelha exatamente auth_user_is_parent_admin() do banco:
+  //   1. empresa alvo deve ter parent_company_id
+  //   2. usuário deve ser super_admin ou system_admin ativo nessa empresa pai
+  const { data: company } = await svc
+    .from('companies')
+    .select('parent_company_id')
+    .eq('id', companyId)
+    .maybeSingle()
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail2_parent',message:'Trilha 2 parent lookup',data:{companyId,parentCompanyId:company?.parent_company_id??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  if (!company?.parent_company_id) return null
+
+  const { data: parentMember } = await svc
+    .from('company_users')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('company_id', company.parent_company_id)
+    .eq('is_active', true)
+    .in('role', ['super_admin', 'system_admin'])
+    .maybeSingle()
+
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail2_result',message:'Trilha 2 result',data:{userId,parentCompanyId:company.parent_company_id,found:!!parentMember,role:parentMember?.role??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  return parentMember ?? null
 }
 
 // ---------------------------------------------------------------------------
