@@ -67,7 +67,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     // Busca todos os registros dos últimos 2 * days dias
     const { data: rows, error: dbErr } = await withTiming(
       'snapshot.seller_deltas.query',
-      () => svc
+      async () => await svc
         .from('dashboard_seller_snapshots')
         .select('user_id, display_name, period_start, attendance_rate, avg_response_min, won_value')
         .eq('company_id', companyId)
