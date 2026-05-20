@@ -263,7 +263,6 @@ export async function sendMessageNode(node, context, supabase) {
     ? (config.fileType || 'document')
     : messageType === 'audio' ? 'audio' : 'text'
 
-  // 1. Resolver lead via opportunity_id
   // 1. Resolver lead via opportunity_id (prioritário) ou lead_id (fallback para gatilhos sem oportunidade)
   const lead = await resolveLead(context.opportunityId, context.companyId, supabase, context.leadId)
   if (!lead?.phone) {
