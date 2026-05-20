@@ -9,8 +9,8 @@ import { Trash2, Copy, FolderOpen } from 'lucide-react'
 
 interface NodeToolbarProps {
   onDelete: () => void
-  onDuplicate: () => void
-  onOpen: () => void
+  onDuplicate?: () => void
+  onOpen?: () => void
 }
 
 export default function NodeToolbar({ onDelete, onDuplicate, onOpen }: NodeToolbarProps) {
@@ -26,22 +26,26 @@ export default function NodeToolbar({ onDelete, onDuplicate, onOpen }: NodeToolb
       </button>
 
       {/* Duplicar */}
-      <button
-        onClick={onDuplicate}
-        className="p-0.5 hover:bg-blue-50 rounded transition-colors group"
-        title="Duplicar"
-      >
-        <Copy className="w-3 h-3 text-gray-600 group-hover:text-blue-600" />
-      </button>
+      {onDuplicate && (
+        <button
+          onClick={onDuplicate}
+          className="p-0.5 hover:bg-blue-50 rounded transition-colors group"
+          title="Duplicar"
+        >
+          <Copy className="w-3 h-3 text-gray-600 group-hover:text-blue-600" />
+        </button>
+      )}
 
       {/* Abrir/Configurar */}
-      <button
-        onClick={onOpen}
-        className="p-0.5 hover:bg-gray-100 rounded transition-colors group"
-        title="Configurar"
-      >
-        <FolderOpen className="w-3 h-3 text-gray-600 group-hover:text-gray-900" />
-      </button>
+      {onOpen && (
+        <button
+          onClick={onOpen}
+          className="p-0.5 hover:bg-gray-100 rounded transition-colors group"
+          title="Configurar"
+        >
+          <FolderOpen className="w-3 h-3 text-gray-600 group-hover:text-gray-900" />
+        </button>
+      )}
     </div>
   )
 }
