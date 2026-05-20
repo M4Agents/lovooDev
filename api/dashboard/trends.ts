@@ -122,7 +122,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         if (error) throw new Error(`get_dashboard_trends: ${error.message}`)
         return data as {
           leads_by_day:      Array<{ date: string; count: number }>
-          attendance_by_day: Array<{ date: string; attended: number; avg_response_minutes: number | null; sum_response_minutes: number | null }>
+          attendance_by_day: Array<{ date: string; attended: number; avg_response_minutes: number | null; sum_response_minutes: number | null; unanswered: number; inbound_total: number }>
           total_unanswered:  number
         }
       },

@@ -316,6 +316,8 @@ export interface AttendanceDay {
   attended:              number        // conversas com primeira resposta humana neste dia
   avg_response_minutes:  number | null // média do tempo de resposta (null se attended = 0)
   sum_response_minutes:  number | null // soma bruta para cálculo de média ponderada no frontend
+  unanswered?:           number        // inbounds sem resposta humana no dia (v3+)
+  inbound_total?:        number        // total inbound recebido = attended + unanswered (v3+)
 }
 
 export interface TrendsData {

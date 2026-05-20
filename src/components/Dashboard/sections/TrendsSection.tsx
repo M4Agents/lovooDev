@@ -1,7 +1,9 @@
 // =====================================================
-// TrendsSection — seção de gráficos de tendência.
+// TrendsSection — seção de operação inbound diária.
 // Layout: gráfico combinado em largura total.
-//   [Leads e Atendimentos por Dia]
+//   [Inbound por Dia]
+//
+// Novos leads não fazem parte desta seção (v3).
 // =====================================================
 
 import React from 'react'
@@ -19,7 +21,6 @@ export function TrendsSection({ data, loading, error, onRetry }: TrendsSectionPr
   return (
     <div className="w-full">
       <CombinedTrendsChart
-        leadsData={data?.leads_by_day}
         attendanceData={data?.attendance_by_day}
         totalUnanswered={data?.total_unanswered ?? 0}
         loading={loading}
