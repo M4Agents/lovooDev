@@ -520,7 +520,7 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
       companyId:      execution.company_id,
       triggerData:    execution.trigger_data   || {},
       variables:      execution.variables      || {},
-      leadId:         execution.lead_id        || null,
+      leadId:         execution.lead_id        || execution.trigger_data?.lead_id || null,
       opportunityId:  execution.opportunity_id  || null,
       instanceId:     resolveInstanceId(execution, pausedNode),
       // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
@@ -626,7 +626,7 @@ export async function processFlowAsync(flow, execution, supabase) {
       companyId:      execution.company_id,
       triggerData:    execution.trigger_data   || {},
       variables:      execution.variables      || {},
-      leadId:         execution.lead_id        || null,
+      leadId:         execution.lead_id        || execution.trigger_data?.lead_id || null,
       opportunityId:  execution.opportunity_id  || null,
       instanceId:     resolveInstanceId(execution, triggerNode),
       // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
