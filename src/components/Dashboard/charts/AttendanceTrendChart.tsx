@@ -5,6 +5,9 @@
 // Gráfico combo:
 //   Barra  (eixo esquerdo)  → atendimentos por dia
 //   Linha  (eixo direito)   → avg_response_minutes
+//
+// Subtítulo: média ponderada real (sum_response_minutes / attended)
+// em vez de média das médias diárias.
 // =====================================================
 
 import React, { useMemo } from 'react'
@@ -13,10 +16,11 @@ import { BaseComboChart } from './BaseComboChart'
 import type { AttendanceDay } from '../../../types/dashboard'
 
 interface AttendanceTrendChartProps {
-  data:     AttendanceDay[] | null | undefined
-  loading:  boolean
-  error:    string | null
-  onRetry?: () => void
+  data:              AttendanceDay[] | null | undefined
+  totalUnanswered?:  number
+  loading:           boolean
+  error:             string | null
+  onRetry?:          () => void
 }
 
 const BAR  = { key: 'attended',             name: 'Atendimentos', color: '#10b981' }
@@ -29,7 +33,13 @@ function fmtDate(iso: string): string {
   return `${parts[2]}/${parts[1]}`
 }
 
-export function AttendanceTrendChart({ data, loading, error, onRetry }: AttendanceTrendChartProps) {
+export function AttendanceTrendChart({
+  data,
+  totalUnanswered = 0,
+  loading,
+  error,
+  onRetry,
+}: AttendanceTrendChartProps) {
   const chartData = useMemo(
     () => (data ?? []).map((d) => ({
       date:                  fmtDate(d.date),
@@ -44,16 +54,25 @@ export function AttendanceTrendChart({ data, loading, error, onRetry }: Attendan
     [data],
   )
 
+  // Média ponderada real: soma total de minutos / total de atendimentos.
+  // Substitui a média das médias diárias (matematicamente incorreta).
+  // Protegido contra divisão por zero.
   const avgResponse = useMemo(() => {
-    const valid = (data ?? []).filter((d) => d.avg_response_minutes != null)
-    if (valid.length === 0) return null
-    const sum = valid.reduce((acc, d) => acc + (d.avg_response_minutes ?? 0), 0)
-    return Math.round(sum / valid.length)
-  }, [data])
+    const totalMinutes = (data ?? []).reduce(
+      (acc, d) => acc + (d.sum_response_minutes ?? 0),
+      0,
+    )
+    return totalAttended > 0 ? Math.round(totalMinutes / totalAttended) : null
+  }, [data, totalAttended])
 
-  const subtitle = !loading && !error && totalAttended > 0
-    ? `${totalAttended} atendimentos${avgResponse != null ? ` · avg ${avgResponse}min` : ''}`
-    : undefined
+  // "157 atendimentos · 42 sem resposta · avg 125min"
+  const subtitle = useMemo(() => {
+    if (loading || error || totalAttended === 0) return undefined
+    let s = `${totalAttended} atendimentos`
+    if (totalUnanswered > 0) s += ` · ${totalUnanswered} sem resposta`
+    if (avgResponse != null) s += ` · avg ${avgResponse}min`
+    return s
+  }, [loading, error, totalAttended, totalUnanswered, avgResponse])
 
   return (
     <ChartCard

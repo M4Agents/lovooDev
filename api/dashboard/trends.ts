@@ -92,7 +92,20 @@ export default async function handler(req: any, res: any): Promise<void> {
     catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
 
     // ------------------------------------------------------------------
-    // 5. RPC get_dashboard_trends
+    // 5. Timezone da empresa
+    // Busca após validação de auth + membership (passos 1-3).
+    // service_role só é usado com companyId já autorizado.
+    // ------------------------------------------------------------------
+    const { data: co } = await svc
+      .from('companies')
+      .select('timezone')
+      .eq('id', companyId)
+      .maybeSingle()
+
+    const timezone = co?.timezone || 'America/Sao_Paulo'
+
+    // ------------------------------------------------------------------
+    // 6. RPC get_dashboard_trends
     // ------------------------------------------------------------------
     const ctx = { companyId, period }
 
@@ -104,11 +117,13 @@ export default async function handler(req: any, res: any): Promise<void> {
           p_start_date: resolvedRange.start,
           p_end_date:   resolvedRange.end,
           p_user_id:    effectiveUserId ?? null,
+          p_timezone:   timezone,
         })
         if (error) throw new Error(`get_dashboard_trends: ${error.message}`)
         return data as {
           leads_by_day:      Array<{ date: string; count: number }>
-          attendance_by_day: Array<{ date: string; attended: number; avg_response_minutes: number | null }>
+          attendance_by_day: Array<{ date: string; attended: number; avg_response_minutes: number | null; sum_response_minutes: number | null }>
+          total_unanswered:  number
         }
       },
       ctx,
@@ -119,6 +134,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       data: {
         leads_by_day:      result.leads_by_day      ?? [],
         attendance_by_day: result.attendance_by_day ?? [],
+        total_unanswered:  result.total_unanswered  ?? 0,
       },
       meta: {
         period,

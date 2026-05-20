@@ -312,14 +312,16 @@ export interface TrendDay {
 }
 
 export interface AttendanceDay {
-  date:                  string   // "YYYY-MM-DD"
-  attended:              number
-  avg_response_minutes:  number | null
+  date:                  string        // "YYYY-MM-DD" — dia do inbound no timezone da empresa
+  attended:              number        // conversas com primeira resposta humana neste dia
+  avg_response_minutes:  number | null // média do tempo de resposta (null se attended = 0)
+  sum_response_minutes:  number | null // soma bruta para cálculo de média ponderada no frontend
 }
 
 export interface TrendsData {
   leads_by_day:      TrendDay[]
   attendance_by_day: AttendanceDay[]
+  total_unanswered:  number            // total do período sem resposta humana (escalar)
 }
 
 export interface TrendsMeta {

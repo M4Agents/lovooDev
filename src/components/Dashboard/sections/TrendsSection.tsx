@@ -27,6 +27,7 @@ export function TrendsSection({ data, loading, error, onRetry }: TrendsSectionPr
       />
       <AttendanceTrendChart
         data={data?.attendance_by_day}
+        totalUnanswered={data?.total_unanswered ?? 0}
         loading={loading}
         error={error}
         onRetry={onRetry}
