@@ -5,11 +5,13 @@
 // =====================================================
 
 import React from 'react'
-import { AlertCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, RefreshCw, Info } from 'lucide-react'
 
 interface ChartCardProps {
   title:      string
   subtitle?:  string
+  /** Texto exibido no tooltip do ícone de informação ao lado do título */
+  info?:      string
   loading?:   boolean
   error?:     string | null
   empty?:     boolean
@@ -24,6 +26,7 @@ interface ChartCardProps {
 export function ChartCard({
   title,
   subtitle,
+  info,
   loading,
   error,
   empty,
@@ -37,7 +40,17 @@ export function ChartCard({
     <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden ${className}`}>
       {/* Header */}
       <div className="px-5 pt-4 pb-2">
-        <h3 className="text-sm font-semibold text-gray-800 leading-tight">{title}</h3>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-gray-800 leading-tight">{title}</h3>
+          {info && (
+            <div className="group relative flex items-center">
+              <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help flex-shrink-0" />
+              <div className="absolute left-0 top-5 z-10 hidden group-hover:block w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg leading-relaxed pointer-events-none">
+                {info}
+              </div>
+            </div>
+          )}
+        </div>
         {subtitle && (
           <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
         )}

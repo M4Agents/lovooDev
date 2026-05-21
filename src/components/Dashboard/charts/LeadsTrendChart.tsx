@@ -41,10 +41,11 @@ export function LeadsTrendChart({ data, loading, error, onRetry }: LeadsTrendCha
     <ChartCard
       title="Novos Leads por Dia"
       subtitle={!loading && !error && totalLeads > 0 ? `${totalLeads} no período` : undefined}
+      info="Leads inseridos via importação de planilha ou CSV. Não inclui leads do WhatsApp, webhook ou prospecção ativa."
       loading={loading}
       error={error}
       empty={!loading && !error && chartData.length === 0}
-      emptyText="Nenhum lead novo no período selecionado"
+      emptyText="Nenhum lead importado no período selecionado"
       onRetry={onRetry}
       minHeight={220}
     >

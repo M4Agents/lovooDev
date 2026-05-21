@@ -108,6 +108,7 @@ export function CombinedTrendsChart({
     <ChartCard
       title="Inbound por Dia"
       subtitle={subtitle}
+      info="Leads recebidos via WhatsApp (cliente iniciou contato) e integrações webhook externas. Não inclui importações de planilha nem prospecção ativa."
       loading={loading}
       error={error}
       empty={!loading && !error && chartData.length === 0}
