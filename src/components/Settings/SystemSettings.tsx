@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Clock, Save, Coins, Globe2, Bell } from 'lucide-react'
+import { Clock, Save, Coins, Globe2, Bell, ShoppingBag } from 'lucide-react'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { TimezoneSelector } from './TimezoneSelector'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import { LeadReentryConfigSection } from './LeadReentryConfigSection'
+import { catalogApi } from '../../services/catalogApi'
 
 const COMMON_TIMEZONE_DEFS = [
   { value: 'America/Sao_Paulo', labelKey: 'timezones.labels.saoPaulo', regionKey: 'timezones.regions.brazil' },
@@ -50,6 +51,12 @@ export const SystemSettings: React.FC = () => {
     company?.alert_dismissal_scope ?? 'company'
   )
 
+  // Produtos e Serviços nas Oportunidades
+  const [useCatalogItems, setUseCatalogItems] = useState(
+    company?.opportunity_items_enabled ?? false
+  )
+  const [catalogItemsPlanOk, setCatalogItemsPlanOk] = useState(false)
+
   const commonTimezones = useMemo(
     () =>
       COMMON_TIMEZONE_DEFS.map((def) => ({
@@ -66,7 +73,16 @@ export const SystemSettings: React.FC = () => {
     setDefaultCurrency(company.default_currency ?? 'BRL')
     setCountryCode((company.country_code ?? '').trim())
     setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
+    setUseCatalogItems(company.opportunity_items_enabled ?? false)
   }, [company])
+
+  // Verifica suporte do plano para composição por itens (uma vez por empresa)
+  useEffect(() => {
+    if (!company?.id) return
+    catalogApi.getOpportunityItemsEntitlement(company.id)
+      .then(e => setCatalogItemsPlanOk(Boolean(e.plan_ok)))
+      .catch(() => setCatalogItemsPlanOk(false))
+  }, [company?.id])
 
   const normalizedCountry = countryCode.trim().toUpperCase() || null
   const countryInvalid =
@@ -90,13 +106,14 @@ export const SystemSettings: React.FC = () => {
         isMaster &&
         alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company')
 
-      // 1. Salva timezone, moeda e país via Supabase client
+      // 1. Salva timezone, moeda, país e flag de catálogo via Supabase client
       const { error } = await supabase
         .from('companies')
         .update({
           timezone,
           default_currency: defaultCurrency,
           country_code: normalizedCountry,
+          opportunity_items_enabled: useCatalogItems,
           updated_at: new Date().toISOString(),
         })
         .eq('id', company.id)
@@ -143,6 +160,7 @@ export const SystemSettings: React.FC = () => {
     timezone !== (company?.timezone || 'America/Sao_Paulo') ||
     defaultCurrency !== (company?.default_currency ?? 'BRL') ||
     (normalizedCountry ?? '') !== (companyCountryNorm ?? '') ||
+    useCatalogItems !== (company?.opportunity_items_enabled ?? false) ||
     (isMaster && alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company'))
 
   const groupedCommonTimezones = commonTimezones.reduce((groups, tz) => {
@@ -292,6 +310,51 @@ export const SystemSettings: React.FC = () => {
         </div>
       </div>
 
+      {/* Seção: Produtos e Serviços nas Oportunidades */}
+      <div className="border-t border-gray-200 pt-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <ShoppingBag className="w-6 h-6 text-indigo-600" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Produtos e Serviços nas Oportunidades</h3>
+            <p className="text-sm text-gray-600">
+              Quando ativo, permite compor o valor da oportunidade a partir do catálogo de produtos e serviços.
+              Quando inativo, o valor é informado manualmente.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between py-3 border border-gray-200 rounded-lg px-4">
+          <div>
+            <p className="text-sm font-medium text-gray-800">
+              Usar catálogo de produtos e serviços nas oportunidades
+            </p>
+            {catalogItemsPlanOk ? (
+              <p className="text-xs text-gray-500 mt-0.5">
+                Disponível conforme o plano contratado.
+              </p>
+            ) : (
+              <p className="text-xs text-amber-600 mt-0.5">
+                Seu plano atual não possui este recurso.
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={!catalogItemsPlanOk}
+            onClick={() => setUseCatalogItems(v => !v)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              useCatalogItems && catalogItemsPlanOk ? 'bg-indigo-600' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                useCatalogItems && catalogItemsPlanOk ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
       {/* Seção: Leads Duplicados e Reentrada */}
       <LeadReentryConfigSection />
 
@@ -351,6 +414,7 @@ export const SystemSettings: React.FC = () => {
               setDefaultCurrency(company?.default_currency ?? 'BRL')
               setCountryCode((company?.country_code ?? '').trim())
               setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
+              setUseCatalogItems(company?.opportunity_items_enabled ?? false)
             }}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >

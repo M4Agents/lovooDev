@@ -39,7 +39,6 @@ export const CatalogSettings: React.FC<Props> = ({
 }) => {
   const [loading, setLoading] = useState(true)
   const [entitled, setEntitled] = useState(false)
-  const [companyEnabled, setCompanyEnabled] = useState(false)
   const [planOk, setPlanOk] = useState(false)
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [services, setServices] = useState<CatalogService[]>([])
@@ -48,7 +47,6 @@ export const CatalogSettings: React.FC<Props> = ({
   const [subTab, setSubTab] = useState<'products' | 'services' | 'categories'>('products')
   const [categories, setCategories] = useState<CatalogCategory[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [savingFlag, setSavingFlag] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -56,7 +54,6 @@ export const CatalogSettings: React.FC<Props> = ({
     try {
       const e = await catalogApi.getOpportunityItemsEntitlement(companyId)
       setEntitled(e.allowed)
-      setCompanyEnabled(Boolean(e.company_enabled))
       setPlanOk(Boolean(e.plan_ok))
       if (e.allowed) {
         const [p, s, pt, st, cats] = await Promise.all([
@@ -82,21 +79,6 @@ export const CatalogSettings: React.FC<Props> = ({
   useEffect(() => {
     load()
   }, [load])
-
-  const toggleFeature = async () => {
-    if (!planOk) return
-    setSavingFlag(true)
-    try {
-      await catalogApi.setCompanyOpportunityItemsEnabled(companyId, !companyEnabled)
-      setCompanyEnabled(!companyEnabled)
-      onCompanyFlagChange?.()
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar')
-    } finally {
-      setSavingFlag(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -125,17 +107,6 @@ export const CatalogSettings: React.FC<Props> = ({
           <p className="text-sm text-slate-600 mt-1">
             Cadastre itens para compor o valor das oportunidades. A moeda segue a configuração da empresa.
           </p>
-          <div className="mt-3 flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={companyEnabled}
-                disabled={savingFlag || !planOk}
-                onChange={() => toggleFeature()}
-              />
-              <span>Habilitar composição por itens nesta empresa</span>
-            </label>
-          </div>
         </div>
       </div>
 
@@ -145,7 +116,8 @@ export const CatalogSettings: React.FC<Props> = ({
 
       {!entitled && planOk && (
         <p className="text-sm text-slate-600">
-          Ative a opção acima para usar o catálogo e os itens nas oportunidades.
+          Para usar o catálogo nas oportunidades, ative a opção em{' '}
+          <strong>Configurações → Sistema → Produtos e Serviços nas Oportunidades</strong>.
         </p>
       )}
 
