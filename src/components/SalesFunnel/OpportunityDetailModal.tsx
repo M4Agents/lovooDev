@@ -20,6 +20,7 @@ import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { getCompanyUsers } from '../../services/userApi'
+import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
@@ -197,6 +198,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   // Edição geral
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState<UpdateOpportunityForm>({})
+  const [valueDisplay, setValueDisplay] = useState('0,00')
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState<string | null>(null)
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
@@ -209,10 +211,13 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const lastEventRef = useRef<HTMLDivElement>(null)
 
   const handleEditStart = useCallback(() => {
+    const initValue = opportunity.value ?? 0
+    const { display } = parsePtBrMoneyInput(String(Math.round(initValue * 100)))
+    setValueDisplay(display)
     setForm({
       title:               opportunity.title,
       description:         opportunity.description ?? '',
-      value:               opportunity.value,
+      value:               initValue,
       probability:         probDraft,
       expected_close_date: opportunity.expected_close_date ?? '',
       loss_reason:         opportunity.loss_reason ?? '',
@@ -500,11 +505,14 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                   </label>
                   {editMode ? (
                     <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={form.value ?? 0}
-                      onChange={e => setForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
+                      type="text"
+                      inputMode="numeric"
+                      value={valueDisplay}
+                      onChange={e => {
+                        const { numeric, display } = parsePtBrMoneyInput(e.target.value)
+                        setValueDisplay(display)
+                        setForm(f => ({ ...f, value: numeric }))
+                      }}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (
