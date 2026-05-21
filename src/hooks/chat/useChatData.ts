@@ -28,9 +28,18 @@ export const useChatData = (
   // Estados principais
   const [instances, setInstances] = useState<any[]>([])
   const [conversations, setConversations] = useState<ChatConversation[]>([])
-  const [selectedInstance, setSelectedInstance] = useState<string>()
+  const [selectedInstance, setSelectedInstance] = useState<string>(() => {
+    const saved = localStorage.getItem(`chat_selected_instance_${userId}`)
+    return saved || 'all'
+  })
   const [selectedConversation, setSelectedConversation] = useState<string>()
-  const [filter, setFilter] = useState<ConversationFilter>({ type: 'all' })
+  const [filter, setFilter] = useState<ConversationFilter>(() => {
+    const saved = localStorage.getItem(`chat_filter_state_${userId}`)
+    if (saved) {
+      try { return JSON.parse(saved) } catch { /* ignore */ }
+    }
+    return { type: 'all' }
+  })
 
   // Estados de loading
   const [instancesLoading, setInstancesLoading] = useState(true)
@@ -47,19 +56,13 @@ export const useChatData = (
       setInstancesLoading(true)
       const instancesData = await chatApi.getCompanyInstances(companyId)
       setInstances(instancesData)
-
-      // NÃO auto-selecionar instância - deixar 'all' como padrão
-      // Isso permite mostrar todas as conversas de todas as instâncias
-      if (instancesData.length > 0 && !selectedInstance) {
-        setSelectedInstance('all')
-      }
     } catch (error) {
       console.error('Error fetching instances:', error)
       setInstances([])
     } finally {
       setInstancesLoading(false)
     }
-  }, [companyId, selectedInstance])
+  }, [companyId])
 
   // =====================================================
   // BUSCAR CONVERSAS
@@ -202,9 +205,9 @@ export const useChatData = (
     setSelectedInstance(instanceId)
     setSelectedConversation(undefined) // Limpar conversa selecionada
     
-    // Salvar no localStorage
-    localStorage.setItem('chat_selected_instance', instanceId)
-  }, [])
+    // Salvar no localStorage escopado por usuário
+    localStorage.setItem(`chat_selected_instance_${userId}`, instanceId)
+  }, [userId])
 
   const handleSetSelectedConversation = useCallback((conversationId: string) => {
     setSelectedConversation(conversationId)
@@ -214,36 +217,28 @@ export const useChatData = (
     setFilter(newFilter)
     setSelectedConversation(undefined) // Limpar conversa selecionada
     
-    // Salvar no localStorage
-    localStorage.setItem('chat_filter_state', JSON.stringify(newFilter))
-  }, [])
+    // Salvar no localStorage escopado por usuário
+    localStorage.setItem(`chat_filter_state_${userId}`, JSON.stringify(newFilter))
+  }, [userId])
 
   const refreshConversations = useCallback(() => {
     fetchConversations()
   }, [fetchConversations])
 
   // =====================================================
-  // RESTAURAR ESTADO DO LOCALSTORAGE
+  // VALIDAR INSTÂNCIA SALVA QUANDO AS INSTÂNCIAS CARREGAM
   // =====================================================
 
+  // Se a instância salva foi deletada ou não existe mais, faz fallback para 'all'
   useEffect(() => {
-    // Restaurar instância selecionada
-    const savedInstance = localStorage.getItem('chat_selected_instance')
-    if (savedInstance && instances.some(inst => inst.id === savedInstance)) {
-      setSelectedInstance(savedInstance)
+    if (instances.length === 0) return
+    if (selectedInstance === 'all') return
+    const stillExists = instances.some(inst => inst.id === selectedInstance)
+    if (!stillExists) {
+      setSelectedInstance('all')
+      localStorage.removeItem(`chat_selected_instance_${userId}`)
     }
-
-    // Restaurar filtro
-    const savedFilter = localStorage.getItem('chat_filter_state')
-    if (savedFilter) {
-      try {
-        const parsedFilter = JSON.parse(savedFilter)
-        setFilter(parsedFilter)
-      } catch (error) {
-        console.error('Error parsing saved filter:', error)
-      }
-    }
-  }, [instances])
+  }, [instances, selectedInstance, userId])
 
   // =====================================================
   // CONVERSAS FILTRADAS E ORDENADAS
