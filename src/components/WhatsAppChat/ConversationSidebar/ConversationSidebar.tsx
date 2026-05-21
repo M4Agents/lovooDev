@@ -247,6 +247,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 isSelected={conversation.id === selectedConversation}
                 onClick={() => onSelectConversation(conversation.id)}
                 photoUrl={conversation.profile_picture_url}
+                showInstanceBadge={!selectedInstance || selectedInstance === 'all'}
               />
             ))}
           </div>
@@ -265,13 +266,15 @@ interface ConversationItemProps {
   isSelected: boolean
   onClick: () => void
   photoUrl?: string
+  showInstanceBadge?: boolean
 }
 
 const ConversationItem: React.FC<ConversationItemProps> = ({
   conversation,
   isSelected,
   onClick,
-  photoUrl
+  photoUrl,
+  showInstanceBadge = false
 }) => {
   const { t } = useTranslation('chat')
   const formatTime = (date?: Date) => {
@@ -342,9 +345,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
                 }`}>
                   {conversation.contact_name || t('conversationItem.leadNoName')}
                 </h4>
-                {/* Badge da Instância */}
-                {conversation.instance_name && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">
+                {/* Badge da Instância — só exibe em "Todas as instâncias" */}
+                {showInstanceBadge && conversation.instance_name && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 flex-shrink-0 max-w-[90px] truncate">
                     {conversation.instance_name}
                   </span>
                 )}
