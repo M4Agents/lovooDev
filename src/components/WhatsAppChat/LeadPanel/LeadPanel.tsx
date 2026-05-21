@@ -159,7 +159,8 @@ const convertChatContactToLead = (
 export const LeadPanel: React.FC<LeadPanelProps> = ({
   conversationId,
   companyId,
-  userId
+  userId,
+  onLeadSaved
 }) => {
   const { t } = useTranslation('chat')
   const [contact, setContact] = useState<ChatContact | null>(null)
@@ -537,8 +538,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             setLeadForEdit(null)
           }}
           lead={leadForEdit}
-          onSave={() => {
-            fetchData() // Recarregar dados do chat
+          onSave={async () => {
+            await fetchData()
+            onLeadSaved?.()
             setShowLeadModal(false)
             setLeadForEdit(null)
           }}

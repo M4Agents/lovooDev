@@ -211,6 +211,7 @@ export interface LeadPanelProps {
   conversationId: string
   companyId: string
   userId: string
+  onLeadSaved?: () => void
 }
 
 export interface MessageBubbleProps {
