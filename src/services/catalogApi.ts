@@ -148,6 +148,24 @@ export const catalogApi = {
     return data as CatalogService
   },
 
+  async deleteProduct(id: string, companyId: string): Promise<void> {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+      .eq('company_id', companyId)
+    if (error) throw error
+  },
+
+  async deleteService(id: string, companyId: string): Promise<void> {
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', id)
+      .eq('company_id', companyId)
+    if (error) throw error
+  },
+
   async getOpportunityItemsEntitlement(companyId: string): Promise<{
     allowed: boolean
     plan?: string

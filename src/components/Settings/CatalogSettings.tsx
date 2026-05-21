@@ -14,6 +14,7 @@ import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
 import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
 import type { CatalogCategory, CatalogProduct, CatalogService } from '../../types/sales-funnel'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
 import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
@@ -221,6 +222,7 @@ const CatalogProductList: React.FC<{
   categories: CatalogCategory[]
   onRefresh: () => void
 }> = ({ companyId, defaultCurrency, thumbnails, allServices, categories, onRefresh }) => {
+  const { isMaster } = useAccessControl()
   const [listItems, setListItems] = useState<CatalogProduct[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -281,6 +283,23 @@ const CatalogProductList: React.FC<{
     if (wasCreate) setPostCreateHint(true)
     setRefreshKey((k) => k + 1)
     void onRefresh()
+  }
+
+  const handleDeleteProduct = async (p: CatalogProduct) => {
+    if (!window.confirm(`Excluir permanentemente o produto "${p.name}"?\n\nMídias e vínculos associados também serão removidos. Esta ação não pode ser desfeita.\n\nSe o produto estiver vinculado a oportunidades, a exclusão será bloqueada e você poderá apenas inativá-lo.`)) return
+    try {
+      await catalogApi.deleteProduct(p.id, companyId)
+      if (editing?.id === p.id) setEditing(null)
+      setRefreshKey((k) => k + 1)
+      void onRefresh()
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === '23503') {
+        alert('Este produto não pode ser excluído pois está vinculado a oportunidades.\nPara removê-lo do catálogo, inative-o em "Editar".')
+      } else {
+        alert('Erro ao excluir o produto. Tente novamente.')
+      }
+    }
   }
 
   return (
@@ -476,6 +495,16 @@ const CatalogProductList: React.FC<{
                   >
                     <Pencil className="w-3.5 h-3.5" />Editar
                   </button>
+                  {isMaster && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProduct(p)}
+                      className="ml-3 text-red-600 hover:underline inline-flex items-center gap-1"
+                      title="Excluir produto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />Excluir
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -880,6 +909,7 @@ const CatalogServiceList: React.FC<{
   categories: CatalogCategory[]
   onRefresh: () => void
 }> = ({ companyId, defaultCurrency, thumbnails, allProducts, categories, onRefresh }) => {
+  const { isMaster } = useAccessControl()
   const [listItems, setListItems] = useState<CatalogService[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -933,6 +963,23 @@ const CatalogServiceList: React.FC<{
     if (wasCreate) setPostCreateHint(true)
     setRefreshKey((k) => k + 1)
     void onRefresh()
+  }
+
+  const handleDeleteService = async (s: CatalogService) => {
+    if (!window.confirm(`Excluir permanentemente o serviço "${s.name}"?\n\nMídias e vínculos associados também serão removidos. Esta ação não pode ser desfeita.\n\nSe o serviço estiver vinculado a oportunidades, a exclusão será bloqueada e você poderá apenas inativá-lo.`)) return
+    try {
+      await catalogApi.deleteService(s.id, companyId)
+      if (editing?.id === s.id) setEditing(null)
+      setRefreshKey((k) => k + 1)
+      void onRefresh()
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === '23503') {
+        alert('Este serviço não pode ser excluído pois está vinculado a oportunidades.\nPara removê-lo do catálogo, inative-o em "Editar".')
+      } else {
+        alert('Erro ao excluir o serviço. Tente novamente.')
+      }
+    }
   }
 
   return (
@@ -1099,6 +1146,16 @@ const CatalogServiceList: React.FC<{
                   >
                     <Pencil className="w-3.5 h-3.5" />Editar
                   </button>
+                  {isMaster && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteService(s)}
+                      className="ml-3 text-red-600 hover:underline inline-flex items-center gap-1"
+                      title="Excluir serviço"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />Excluir
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
