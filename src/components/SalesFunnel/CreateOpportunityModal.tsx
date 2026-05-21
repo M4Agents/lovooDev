@@ -29,7 +29,7 @@ import {
   parseOpportunityCompositionError,
   resolveOpportunityCompositionErrorMessage
 } from '../../utils/opportunityCompositionErrors'
-import { estimateDraftLinesTotal } from '../../utils/opportunityDraftPricing'
+import { estimateDraftLinesTotal, resolveUnitPrice } from '../../utils/opportunityDraftPricing'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { formatMoney } from '../../lib/formatMoney'
 
@@ -358,6 +358,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                 productId: line.productId ?? null,
                 serviceId: line.serviceId ?? null,
                 quantity: line.quantity,
+                unitPrice: line.unitPrice,
                 discountType: line.discountType,
                 discountValue: line.discountValue,
               })
@@ -527,7 +528,20 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
                               {draftLineLabel(line, catalogProducts, catalogServices)}
                             </div>
                             <div className="text-gray-500">
-                              Qtd {line.quantity} ·{' '}
+                              {formatCurrency(
+                                line.unitPrice != null &&
+                                Number.isFinite(line.unitPrice) &&
+                                line.unitPrice >= 0
+                                  ? line.unitPrice
+                                  : resolveUnitPrice(
+                                      line.productId,
+                                      line.serviceId,
+                                      catalogProducts,
+                                      catalogServices
+                                    ),
+                                companyCurrency
+                              )}{' '}
+                              × Qtd {line.quantity} ·{' '}
                               {line.discountType === 'percent'
                                 ? `Desc. ${line.discountValue}%`
                                 : `Desc. ${formatCurrency(line.discountValue, companyCurrency)}`}

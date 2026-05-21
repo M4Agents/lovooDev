@@ -60,6 +60,12 @@ export type DraftLineLike = {
   quantity: number
   discountType: DiscountType
   discountValue: number
+  /**
+   * Preço unitário customizado (override do usuário).
+   * Quando presente e válido, sobrescreve o default_price do catálogo no preview local.
+   * Após salvar, é persistido em opportunity_items.unit_price pelo backend.
+   */
+  unitPrice?: number
 }
 
 export function estimateDraftLinesTotal(
@@ -69,7 +75,12 @@ export function estimateDraftLinesTotal(
 ): number {
   let sum = 0
   for (const line of lines) {
-    const unit = resolveUnitPrice(line.productId, line.serviceId, products, services)
+    const unit =
+      line.unitPrice != null &&
+      Number.isFinite(line.unitPrice) &&
+      line.unitPrice >= 0
+        ? line.unitPrice
+        : resolveUnitPrice(line.productId, line.serviceId, products, services)
     sum += computeLineTotalPreview(
       unit,
       line.quantity,

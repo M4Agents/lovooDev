@@ -114,6 +114,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
     quantity: number
     discountType: DiscountType
     discountValue: number
+    unitPrice?: number
   }) => {
     setBusy(true)
     setError(null)
@@ -125,6 +126,7 @@ export const OpportunityItemsSection: React.FC<Props> = ({
         productId: payload.productId,
         serviceId: payload.serviceId,
         quantity: payload.quantity,
+        unitPrice: payload.unitPrice,
         discountType: payload.discountType,
         discountValue: payload.discountValue,
       })
