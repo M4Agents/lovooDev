@@ -65,9 +65,12 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   return { Authorization: `Bearer ${session.access_token}` }
 }
 
-async function fetchBillingUsage(period: number): Promise<BillingUsage> {
+async function fetchBillingUsage(period: number, companyId: string): Promise<BillingUsage> {
   const headers = await getAuthHeaders()
-  const res  = await fetch(`/api/agents/logs/summary?mode=billing&period=${period}`, { headers })
+  const res  = await fetch(
+    `/api/agents/logs/summary?mode=billing&period=${period}&company_id=${companyId}`,
+    { headers },
+  )
   const json = await res.json().catch(() => ({})) as Record<string, unknown>
 
   if (!res.ok || !json.ok) {
@@ -208,9 +211,9 @@ export function AiCreditsPanel({ companyId }: Props) {
         .from('company_credits')
         .select('plan_credits, extra_credits, plan_credits_total, last_renewed_at')
         .eq('company_id', companyId)
-        .single()
+        .maybeSingle()
       if (error) throw error
-      setCreditsData(data as CompanyCreditsData)
+      setCreditsData(data as CompanyCreditsData | null)
     } catch (err) {
       setErrorCredits(err instanceof Error ? err.message : 'Erro ao carregar saldo de créditos')
     } finally {
@@ -224,14 +227,14 @@ export function AiCreditsPanel({ companyId }: Props) {
     setLoadingUsage(true)
     setErrorUsage(null)
     try {
-      const data = await fetchBillingUsage(p)
+      const data = await fetchBillingUsage(p, companyId)
       setUsage(data)
     } catch (err) {
       setErrorUsage(err instanceof Error ? err.message : 'Erro ao carregar consumo do período')
     } finally {
       setLoadingUsage(false)
     }
-  }, [])
+  }, [companyId])
 
   // ── Carregamento: histórico de transações ─────────────────────────────────
 
