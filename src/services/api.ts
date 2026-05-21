@@ -807,7 +807,13 @@ export const api = {
     
     try {
       const { custom_fields, ...leadData } = data;
-      
+
+      // Sanitizar email vazio para evitar violação da constraint valid_email
+      if ((leadData as any).email === '') delete (leadData as any).email;
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'api.ts:createLead',message:'createLead chamado — verificar se deveria ser updateLead',data:{email:(leadData as any).email,emailAfterSanitize:(leadData as any).email ?? 'removido'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       const { data: lead, error } = await supabase
         .from('leads')
         .insert(leadData)

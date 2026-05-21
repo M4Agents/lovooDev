@@ -98,12 +98,16 @@ interface Lead {
 // =====================================================
 
 const convertChatContactToLead = (
-  contact: ChatContact | null, 
+  contact: ChatContact | null,
   phoneNumber: string,
-  conversationData?: any
+  conversationData?: any,
+  associatedLeadId?: number | null
 ): Lead => {
   return {
-    id: contact?.id ? parseInt(contact.id) : undefined,
+    // Usa o ID real da tabela leads — contact.id é um identificador de chat,
+    // não o PK da tabela leads, e parseInt de UUID retorna NaN (falsy),
+    // fazendo LeadModal chamar createLead ao invés de updateLead.
+    id: associatedLeadId ?? undefined,
     name: contact?.name || conversationData?.contact_name || '',
     email: contact?.email || '',
     phone: phoneNumber || contact?.phone_number || '',
@@ -885,7 +889,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <button
               onClick={() => {
                 if (contact && conversation) {
-                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation)
+                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation, associatedLeadId)
+                  // #region agent log
+                  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'LeadPanel.tsx:openModal',message:'lead aberto para edição',data:{leadId:leadData.id,associatedLeadId,contactId:contact?.id,idIsValid:typeof leadData.id === 'number' && !isNaN(leadData.id)},timestamp:Date.now()})}).catch(()=>{});
+                  // #endregion
                   onOpenLeadModal(leadData)
                 }
               }}
