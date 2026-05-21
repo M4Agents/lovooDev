@@ -54,6 +54,9 @@ export const OpportunityItemsSection: React.FC<Props> = ({
     setError(null)
     try {
       const e = await catalogApi.getOpportunityItemsEntitlement(companyId)
+      // #region agent log
+      console.log('[DBG-da6971] entitlement-check', {companyId, opportunityId: opportunity.id, opportunityCompanyId: (opportunity as Record<string,unknown>).company_id, entitlementResult: e})
+      // #endregion
       setEntitled(e.allowed)
       if (e.allowed) {
         const [list, p, s, full] = await Promise.all([
@@ -120,6 +123,9 @@ export const OpportunityItemsSection: React.FC<Props> = ({
     setError(null)
     const wasManual = (opportunity.value_mode ?? 'manual') === 'manual'
     try {
+      // #region agent log
+      console.log('[DBG-da6971] addLine-before', {companyId, opportunityId: opportunity.id, opportunityCompanyId: (opportunity as Record<string,unknown>).company_id, payload})
+      // #endregion
       await funnelApi.opportunityAddItem({
         companyId,
         opportunityId: opportunity.id,
@@ -135,6 +141,9 @@ export const OpportunityItemsSection: React.FC<Props> = ({
       }
       await reload()
     } catch (err) {
+      // #region agent log
+      console.log('[DBG-da6971] addLine-error', {companyId, opportunityId: opportunity.id, opportunityCompanyId: (opportunity as Record<string,unknown>).company_id, errorMsg: (err as {message?:string})?.message, errorHint: (err as {hint?:string})?.hint, errorCode: (err as {code?:string})?.code, rawErr: JSON.stringify(err)})
+      // #endregion
       setError(resolveOpportunityCompositionErrorMessage(err, t, 'opportunityComposition.errors.generic'))
     } finally {
       setBusy(false)
