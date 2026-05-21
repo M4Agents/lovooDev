@@ -488,23 +488,25 @@ const CatalogProductList: React.FC<{
                 <td className="px-3 py-2">{p.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{p.availability_status}</td>
                 <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => { setFormSessionKey(`product-edit-${p.id}`); setEditing(p); setCreating(false); setPostCreateHint(false) }}
-                    className="text-indigo-600 hover:underline inline-flex items-center gap-1"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />Editar
-                  </button>
-                  {isMaster && (
+                  <div className="inline-flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleDeleteProduct(p)}
-                      className="ml-3 text-red-600 hover:underline inline-flex items-center gap-1"
-                      title="Excluir produto"
+                      onClick={() => { setFormSessionKey(`product-edit-${p.id}`); setEditing(p); setCreating(false); setPostCreateHint(false) }}
+                      className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />Excluir
+                      <Pencil className="w-3.5 h-3.5" />Editar
                     </button>
-                  )}
+                    {isMaster && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(p)}
+                        className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors"
+                        title="Excluir produto"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1139,23 +1141,25 @@ const CatalogServiceList: React.FC<{
                 <td className="px-3 py-2">{s.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{s.availability_status}</td>
                 <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => { setFormSessionKey(`service-edit-${s.id}`); setEditing(s); setCreating(false); setPostCreateHint(false) }}
-                    className="text-indigo-600 hover:underline inline-flex items-center gap-1"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />Editar
-                  </button>
-                  {isMaster && (
+                  <div className="inline-flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleDeleteService(s)}
-                      className="ml-3 text-red-600 hover:underline inline-flex items-center gap-1"
-                      title="Excluir serviço"
+                      onClick={() => { setFormSessionKey(`service-edit-${s.id}`); setEditing(s); setCreating(false); setPostCreateHint(false) }}
+                      className="text-indigo-600 hover:underline inline-flex items-center gap-1"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />Excluir
+                      <Pencil className="w-3.5 h-3.5" />Editar
                     </button>
-                  )}
+                    {isMaster && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteService(s)}
+                        className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 transition-colors"
+                        title="Excluir serviço"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
